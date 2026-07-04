@@ -8,6 +8,8 @@ build/
 .next/
 out/
 coverage/
+playwright-report/
+test-results/
 
 # turbo
 .turbo/
@@ -39,3 +41,6 @@ Thumbs.db
 
 # docker volumes (local dev data)
 infra/docker/.data/
+
+# local database backups
+backups/

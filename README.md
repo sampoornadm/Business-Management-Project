@@ -101,6 +101,11 @@ http://localhost:8080. Run `pnpm db:migrate` and `pnpm db:seed` once against the
 database before first use (or `docker compose exec server node apps/server/dist/... ` equivalents in
 a pure-container workflow).
 
+For a real deployment beyond a local Docker Compose run — TLS, environment variables, zero-downtime
+redeploys, backups — see [`docs/deployment.md`](./docs/deployment.md),
+[`docs/environment-variables.md`](./docs/environment-variables.md), and
+[`docs/backup-recovery.md`](./docs/backup-recovery.md).
+
 ## Common commands
 
 ```bash
@@ -119,6 +124,11 @@ pnpm db:seed         # seed roles/permissions/sample users
   required). Integration tests (`*.integration.spec.ts`) require a real Postgres/Redis reachable via
   `.env.test` — run `docker compose up -d postgres redis minio minio-init mailhog` first, then apply
   migrations against the test database (`bmp_test`) before running `pnpm --filter @bmp/server test`.
+- `pnpm --filter @bmp/server test:coverage` / `pnpm --filter @bmp/web test:coverage` run the same
+  suites with coverage thresholds enforced (see each app's `vitest.config.ts`).
+- `apps/web` also has a Playwright E2E suite (`apps/web/e2e/`) covering real user flows across page
+  boundaries (auth, tenders, reports/search) — run `pnpm --filter @bmp/web test:e2e` against a
+  running dev stack (`pnpm dev` + `docker compose up`).
 
 ## Architecture notes
 
