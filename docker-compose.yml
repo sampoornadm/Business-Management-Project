@@ -97,7 +97,7 @@ services:
     build:
       context: .
       dockerfile: apps/server/Dockerfile
-    command: ["node", "apps/server/dist/worker.js"]
+    command: ["./apps/server/node_modules/.bin/tsx", "apps/server/dist/worker.js"]
     restart: unless-stopped
     env_file:
       - .env

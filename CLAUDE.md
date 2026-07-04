@@ -1,12 +1,12 @@
 # Business Management Platform (BMP)
 
 ERP for a construction contractor/tendering company, built incrementally per `spec.md`'s 8-phase
-roadmap. **Phase 1 (Foundation)**, **Phase 2 (Core Tender Management)**, **Phase 3 (BOQ &
-Estimation)**, **Phase 4 (Procurement)**, **Phase 5 (Project Execution)**, **Phase 6 (Finance)**, and
-**Phase 7 (Reporting & Intelligence)** are complete and verified. Plans for each phase live in
-`.claude/plans/` (`phase-1-foundation.md`, `phase-2-tenders.md`, `phase-3-boq-estimation.md`,
-`phase-4-procurement.md`, `phase-5-project-execution.md`, `phase-6-finance.md`,
-`phase-7-reporting.md`).
+roadmap. **All 8 phases are complete and verified**: Foundation, Core Tender Management, BOQ &
+Estimation, Procurement, Project Execution, Finance, Reporting & Intelligence, and Production
+Readiness. Plans for each phase live in `.claude/plans/` (`phase-1-foundation.md`,
+`phase-2-tenders.md`, `phase-3-boq-estimation.md`, `phase-4-procurement.md`,
+`phase-5-project-execution.md`, `phase-6-finance.md`, `phase-7-reporting.md`,
+`phase-8-production-readiness.md`). Production deployment/environment/backup docs live in `docs/`.
 
 ## Stack
 
@@ -125,3 +125,16 @@ receiving status.
   `purchase-orders/new`); otherwise just bind directly to the empty-string state.
 - shadcn `Badge` renders a `<div>` — never nest it inside a `<p>` (invalid HTML → React hydration
   warning). Wrap the label+badge pair in a `<div>` instead.
+- `.dockerignore` is **not** `.gitignore` syntax: a bare `node_modules/` only matches a top-level
+  path, it does NOT recurse into `packages/*/node_modules` in a monorepo — every pattern needs an
+  explicit `**/` prefix (`**/node_modules/`) or nested node_modules dirs get copied into the Docker
+  build context and clobber the image's own `pnpm install` output (`prisma generate` failing with
+  `MODULE_NOT_FOUND` is the symptom). Also: a Dockerfile's `deps` stage must `COPY` **every**
+  workspace member's `package.json` (not just the ones that specific image builds) before `pnpm
+  install --frozen-lockfile` — a partial manifest set resolves a different, broken `.pnpm`
+  virtual-store layout than the lockfile expects.
+- `@bmp/database` (like `@bmp/types`/`@bmp/ui`) is an intentionally unbuilt raw-TS workspace
+  package. Production containers must run the server/worker via `tsx` (`apps/server/package.json`'s
+  `start`/`worker:start` scripts, and both Dockerfiles' `CMD`), never plain `node dist/index.js` —
+  plain `node` can't load the `.ts` files that `import ... from "@bmp/database"` resolves to
+  (`Unknown file extension ".ts"`).

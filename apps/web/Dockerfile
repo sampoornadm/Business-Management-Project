@@ -5,9 +5,14 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+# pnpm needs every workspace member's manifest present to resolve --frozen-lockfile against the
+# lockfile's full dependency graph correctly (even members this image never builds) — a partial
+# set here produces a different, incompatible virtual-store layout than the lockfile expects.
 COPY packages/config/package.json ./packages/config/package.json
 COPY packages/types/package.json ./packages/types/package.json
 COPY packages/ui/package.json ./packages/ui/package.json
+COPY packages/database/package.json ./packages/database/package.json
+COPY apps/server/package.json ./apps/server/package.json
 COPY apps/web/package.json ./apps/web/package.json
 RUN pnpm install --frozen-lockfile
 

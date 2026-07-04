@@ -1,0 +1,45 @@
+# Without this, `COPY packages ./packages` / `COPY apps/* ./apps/*` in the Dockerfiles pull the
+# host's locally pnpm-installed node_modules (with real files, not the container's symlinked pnpm
+# store) into the build context and silently clobber the image's own `pnpm install` output —
+# breaks module resolution (e.g. `prisma generate` failing with MODULE_NOT_FOUND).
+#
+# IMPORTANT: unlike .gitignore, a bare `node_modules/` here only matches a TOP-LEVEL match —
+# it does NOT recurse into nested paths like packages/*/node_modules. Every pattern below needs
+# the `**/` prefix to actually exclude nested directories throughout the monorepo.
+**/node_modules/
+**/.pnpm-store/
+
+# build outputs
+**/dist/
+**/build/
+**/.next/
+**/out/
+**/coverage/
+**/playwright-report/
+**/test-results/
+
+# turbo
+**/.turbo/
+
+# env
+.env*
+!.env.example
+
+# prisma
+packages/database/generated/
+
+# logs
+**/*.log
+
+# os
+**/.DS_Store
+
+# editor
+.vscode/
+.idea/
+
+# misc
+**/*.tsbuildinfo
+**/.eslintcache
+.git/
+backups/

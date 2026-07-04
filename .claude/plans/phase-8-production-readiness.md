@@ -153,3 +153,48 @@ specs run against a fully seeded local stack.
 - `docs/deployment.md`, `docs/environment-variables.md`, `docs/backup-recovery.md`
 
 This is the eighth and final phase per `spec.md`'s roadmap. No further phases follow.
+
+## Pre-existing Dockerfile bugs found and fixed while verifying the `docker-build` CI job
+
+Neither Dockerfile had ever actually been built or run end-to-end before this phase (confirmed by
+the Phase 8 audit — no CI step, no manual note anywhere). Adding the CI `docker-build` job and
+smoke-testing it surfaced two real, independent, production-blocking bugs:
+
+1. **No `.dockerignore` existed.** `COPY packages ./packages` / `COPY apps/server ./apps/server` in
+   each Dockerfile's `build` stage pulled the *host's* locally pnpm-installed `node_modules`
+   (real files/symlinks resolved against the host's `.pnpm` store) into the build context, silently
+   clobbering the image's own freshly-`pnpm install`-ed `node_modules` from the `deps` stage —
+   breaking module resolution (`prisma generate` failing with `MODULE_NOT_FOUND`). Added
+   `.dockerignore` at the repo root. **Non-obvious gotcha**: unlike `.gitignore`, a bare
+   `node_modules/` pattern in `.dockerignore` only matches a *top-level* path — it does not
+   recurse into nested paths like `packages/*/node_modules`. Every exclusion needs an explicit
+   `**/` prefix (`**/node_modules/`) to actually apply throughout a monorepo.
+2. **The `deps` stage only copied a subset of workspace `package.json` files** (e.g. the server
+   Dockerfile never copied `packages/ui/package.json` or `apps/web/package.json`). `pnpm install
+   --frozen-lockfile` needs every workspace member's manifest present to resolve the lockfile's
+   full dependency graph deterministically — a partial set produced a different (and broken)
+   `.pnpm` virtual-store layout than a full-workspace install would. Fixed by copying all six
+   workspace manifests in both Dockerfiles' `deps` stage, regardless of which app is actually built.
+3. **The runner stage ran compiled output via plain `node`**, but `@bmp/database` (like
+   `@bmp/types`/`@bmp/ui`) is an intentionally unbuilt raw-TS workspace package — `tsc` compiles
+   `apps/server`'s own code but leaves `import ... from "@bmp/database"` pointing at raw `.ts`
+   source, which plain `node` cannot load (`Unknown file extension ".ts"`). Fixed by running the
+   production server/worker via `tsx` (the same loader `pnpm dev` already uses successfully) instead
+   of plain `node` — updated both Dockerfiles' `CMD`, `docker-compose.yml`'s `worker` service
+   `command`, and `apps/server/package.json`'s `start`/`worker:start` scripts.
+
+Verified after the fix: both `docker build`s succeed from a clean `--no-cache` build, and the built
+server image was smoke-tested with `docker run` against the real `docker-compose` Postgres/Redis/
+MinIO — `GET /health/ready` returned all four checks (`postgres`, `redis`, `s3`, `queue`) healthy.
+
+## Known follow-up (not fixed in this phase)
+
+`pnpm audit --audit-level=high` currently reports 9 high + 1 critical findings, all requiring
+**major** version bumps to remediate (`nodemailer` 6→9, `vitest` 2→3, plus transitive `vite`/`tar`).
+Per this project's established convention (see the `pdf-parse` gotcha in `CLAUDE.md` — don't
+"helpfully" upgrade a working, tested dependency across a major version without dedicated
+regression testing), these were deliberately left alone rather than bumped as a drive-by fix within
+an unrelated hardening pass. The `dependency-audit` CI job runs with `continue-on-error: true` so it
+reports findings without blocking the pipeline; flip it to blocking once these are triaged and
+upgraded with real regression testing (nodemailer's bump in particular changes major API surface
+used by the email queue).

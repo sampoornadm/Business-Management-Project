@@ -21,6 +21,7 @@ env:
   ACCESS_TOKEN_SECRET: ci_access_token_secret_change_me
   WEB_APP_URL: http://localhost:3000
   NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+  SEED_USER_PASSWORD: ChangeMe123!
 
 jobs:
   build-and-test:
@@ -85,5 +86,149 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Test
-        run: pnpm turbo run test
+      - name: Test with coverage (server)
+        run: pnpm --filter @bmp/server test:coverage
+
+      - name: Test with coverage (web)
+        run: pnpm --filter @bmp/web test:coverage
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            apps/server/coverage
+            apps/web/coverage
+          retention-days: 14
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Non-blocking: current findings (nodemailer 6->9, vitest 2->3) require major-version
+      # bumps that need dedicated regression testing before adopting — this step gives
+      # visibility now; see docs/deployment.md's security-hardening section for the tracked
+      # follow-up. Flip to blocking once those are triaged.
+      - name: pnpm audit (high + critical)
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build server image
+        run: docker build -f apps/server/Dockerfile -t bmp-server:ci .
+
+      - name: Build web image
+        run: docker build -f apps/web/Dockerfile -t bmp-web:ci .
+
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: bmp
+          POSTGRES_PASSWORD: bmp_test_password
+          POSTGRES_DB: bmp_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U bmp"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      minio:
+        image: bitnami/minio:latest
+        env:
+          MINIO_ROOT_USER: bmp_minio
+          MINIO_ROOT_PASSWORD: bmp_minio_password
+          MINIO_DEFAULT_BUCKETS: bmp-attachments-test
+        ports: ["9000:9000"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @bmp/web exec playwright install --with-deps chromium
+
+      - name: Generate Prisma client
+        run: pnpm --filter @bmp/database generate
+
+      - name: Run database migrations
+        run: pnpm --filter @bmp/database migrate:deploy
+
+      - name: Seed database
+        run: pnpm --filter @bmp/database seed
+
+      - name: Build server and web
+        run: pnpm build
+
+      - name: Start server
+        run: nohup pnpm --filter @bmp/server start > server.log 2>&1 &
+
+      - name: Start web
+        run: nohup pnpm --filter @bmp/web start > web.log 2>&1 &
+
+      - name: Wait for stack to be ready
+        run: |
+          npx wait-on -t 60000 http://localhost:4000/api/v1/health/live http://localhost:3000
+
+      - name: Run Playwright E2E suite
+        env:
+          CI: "true"
+        run: pnpm --filter @bmp/web test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 14
+
+      - name: Upload server/web logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-server-logs
+          path: |
+            server.log
+            web.log
+          retention-days: 14
