@@ -28,7 +28,8 @@ A modular ERP for construction contractors/tendering companies. This repository 
   turnaround, goods-receipt lead time, receivables DSO), Excel/PDF export for every report, and
   global full-text search across tenders, organizations, vendors, and projects.
 
-See [`spec.md`](./spec.md) for the full product specification and phase roadmap.
+See [`spec.md`](./spec.md) for the full product specification and phase roadmap, or
+[`docs/user-guide.md`](./docs/user-guide.md) for a walkthrough of how to actually use the app.
 
 ## Stack
 
