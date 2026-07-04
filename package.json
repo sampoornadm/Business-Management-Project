@@ -1,0 +1,32 @@
+{
+  "name": "bmp",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "dotenv -e .env -- turbo run dev",
+    "build": "dotenv -e .env -- turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "dotenv -e .env.test -- turbo run test",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "db:generate": "dotenv -e .env -- pnpm --filter @bmp/database generate",
+    "db:migrate": "dotenv -e .env -- pnpm --filter @bmp/database migrate:dev",
+    "db:seed": "dotenv -e .env -- pnpm --filter @bmp/database seed",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
+  },
+  "devDependencies": {
+    "dotenv-cli": "^8.0.0",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "ioredis": "5.11.1"
+    }
+  }
+}
