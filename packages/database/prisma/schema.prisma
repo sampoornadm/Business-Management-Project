@@ -1,0 +1,1091 @@
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../generated/client"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity & access control
+// ---------------------------------------------------------------------------
+
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  passwordHash    String
+  firstName       String
+  lastName        String
+  phone           String?
+  isActive        Boolean   @default(true)
+  isEmailVerified Boolean   @default(false)
+  lastLoginAt     DateTime?
+  createdById     String?
+  createdBy       User?     @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers    User[]    @relation("UserCreatedBy")
+
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  avatarAttachmentId String?     @unique
+  avatarAttachment   Attachment? @relation("UserAvatar", fields: [avatarAttachmentId], references: [id], onDelete: SetNull)
+
+  refreshTokens           RefreshToken[]
+  passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  auditLogs               AuditLog[]               @relation("AuditLogActor")
+  uploadedAttachments     Attachment[]             @relation("AttachmentUploadedBy")
+
+  createdTenders         Tender[]               @relation("TenderCreatedBy")
+  tenderAssignments      TenderAssignee[]       @relation("TenderAssignee")
+  tenderAssignmentsGiven TenderAssignee[]       @relation("TenderAssignedBy")
+  createdOrganizations   Organization[]         @relation("OrganizationCreatedBy")
+  notifications          Notification[]         @relation("NotificationRecipient")
+  createdBoqs            Boq[]                  @relation("BoqCreatedBy")
+  createdHistoricalRates HistoricalRate[]       @relation("HistoricalRateCreatedBy")
+  createdVendors         Vendor[]               @relation("VendorCreatedBy")
+  createdRfqs            Rfq[]                  @relation("RfqCreatedBy")
+  createdPurchaseOrders  PurchaseOrder[]        @relation("PurchaseOrderCreatedBy")
+  receivedGoodsReceipts  GoodsReceipt[]         @relation("GoodsReceiptReceivedBy")
+  givenVendorRatings     VendorRating[]         @relation("VendorRatingRatedBy")
+  createdProjects        Project[]              @relation("ProjectCreatedBy")
+  recordedMaterialUsages ProjectMaterialUsage[] @relation("ProjectMaterialRecordedBy")
+  recordedLaborEntries   ProjectLaborEntry[]    @relation("ProjectLaborRecordedBy")
+  createdProjectBills    ProjectBill[]          @relation("ProjectBillCreatedBy")
+  createdBankAccounts    BankAccount[]          @relation("BankAccountCreatedBy")
+  createdInvoices        Invoice[]              @relation("InvoiceCreatedBy")
+  createdExpenses        Expense[]              @relation("ExpenseCreatedBy")
+  recordedPayments       Payment[]              @relation("PaymentRecordedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([roleId])
+  @@index([createdById])
+  @@map("users")
+}
+
+model Role {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+  isSystem    Boolean @default(true)
+
+  users           User[]
+  rolePermissions RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(uuid())
+  resource    String
+  action      String
+  key         String  @unique
+  description String?
+
+  rolePermissions RolePermission[]
+
+  createdAt DateTime @default(now())
+
+  @@index([resource])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// Auth tokens
+// ---------------------------------------------------------------------------
+
+model RefreshToken {
+  id                  String   @id @default(uuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash           String   @unique
+  family              String
+  deviceInfo          String?
+  ipAddress           String?
+  isRevoked           Boolean  @default(false)
+  replacedByTokenHash String?
+  expiresAt           DateTime
+  createdAt           DateTime @default(now())
+
+  @@index([userId])
+  @@index([family])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("email_verification_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         String  @id @default(uuid())
+  actorId    String?
+  actor      User?   @relation("AuditLogActor", fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Generic file attachments (reused by every future module)
+// ---------------------------------------------------------------------------
+
+enum AttachmentVariant {
+  ORIGINAL
+  THUMBNAIL
+}
+
+model Attachment {
+  id            String            @id @default(uuid())
+  originalName  String
+  storedName    String
+  mimeType      String
+  sizeBytes     Int
+  hash          String
+  storageBucket String
+  storagePath   String
+  entityType    String?
+  entityId      String?
+  variant       AttachmentVariant @default(ORIGINAL)
+  parentId      String?
+  parent        Attachment?       @relation("AttachmentVariants", fields: [parentId], references: [id], onDelete: Cascade)
+  variants      Attachment[]      @relation("AttachmentVariants")
+  version       Int               @default(1)
+
+  // Document-slot versioning (e.g. re-uploading "the BOQ document" for a
+  // tender). Distinct from parentId above, which is reserved for image
+  // original->thumbnail variant grouping only.
+  documentType     String?
+  documentGroupId  String?
+  documentGroup    Attachment?  @relation("AttachmentVersions", fields: [documentGroupId], references: [id], onDelete: SetNull)
+  documentVersions Attachment[] @relation("AttachmentVersions")
+  isCurrent        Boolean      @default(true)
+
+  uploadedById String
+  uploadedBy   User   @relation("AttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  userAvatarOf User? @relation("UserAvatar")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityType, entityId])
+  @@index([hash])
+  @@index([parentId])
+  @@index([documentGroupId])
+  @@index([entityType, entityId, documentType])
+  @@map("attachments")
+}
+
+// ---------------------------------------------------------------------------
+// Organizations (tender clients)
+// ---------------------------------------------------------------------------
+
+enum OrganizationType {
+  GOVERNMENT
+  PRIVATE
+}
+
+model Organization {
+  id        String           @id @default(uuid())
+  name      String
+  type      OrganizationType
+  address   String?
+  city      String?
+  state     String?
+  pincode   String?
+  gstNumber String?
+  website   String?
+  notes     String?
+
+  createdById String
+  createdBy   User   @relation("OrganizationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  contacts OrganizationContact[]
+  tenders  Tender[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@map("organizations")
+}
+
+model OrganizationContact {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  designation    String?
+  email          String?
+  phone          String?
+  isPrimary      Boolean      @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@map("organization_contacts")
+}
+
+// ---------------------------------------------------------------------------
+// Tags (generic, reusable across future modules)
+// ---------------------------------------------------------------------------
+
+model Tag {
+  id    String  @id @default(uuid())
+  name  String  @unique
+  color String?
+
+  tenderTags TenderTag[]
+
+  createdAt DateTime @default(now())
+
+  @@map("tags")
+}
+
+model TenderTag {
+  id       String @id @default(uuid())
+  tenderId String
+  tender   Tender @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  tagId    String
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([tenderId, tagId])
+  @@index([tagId])
+  @@map("tender_tags")
+}
+
+// ---------------------------------------------------------------------------
+// Tenders
+// ---------------------------------------------------------------------------
+
+enum TenderStatus {
+  DRAFT
+  UPCOMING
+  DOCUMENT_COLLECTION
+  UNDER_STUDY
+  BOQ_PREPARATION
+  RATE_ANALYSIS
+  APPROVAL_PENDING
+  SUBMITTED
+  TECHNICALLY_QUALIFIED
+  FINANCIALLY_QUALIFIED
+  WON
+  LOST
+  CANCELLED
+  ARCHIVED
+}
+
+enum TenderPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TenderAssigneeRole {
+  OWNER
+  ESTIMATOR
+  REVIEWER
+  OTHER
+}
+
+model Tender {
+  id                 String         @id @default(uuid())
+  tenderNumber       String         @unique
+  title              String
+  department         String
+  clientId           String
+  client             Organization   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  type               String
+  category           String
+  location           String
+  state              String
+  estimatedCost      Float
+  emdAmount          Float?
+  tenderFee          Float?
+  documentFee        Float?
+  submissionDate     DateTime
+  openingDate        DateTime?
+  validityPeriodDays Int?
+  status             TenderStatus   @default(DRAFT)
+  statusChangedAt    DateTime       @default(now())
+  priority           TenderPriority @default(MEDIUM)
+  description        String?
+  remarks            String?
+  winnerName         String?
+  winningBidAmount   Float?
+  lossReason         String?
+
+  createdById String
+  createdBy   User   @relation("TenderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  assignees      TenderAssignee[]
+  competitors    TenderCompetitor[]
+  tags           TenderTag[]
+  boqs           Boq[]
+  rfqs           Rfq[]
+  purchaseOrders PurchaseOrder[]
+  project        Project?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([status])
+  @@index([submissionDate])
+  @@map("tenders")
+}
+
+model TenderAssignee {
+  id           String             @id @default(uuid())
+  tenderId     String
+  tender       Tender             @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User               @relation("TenderAssignee", fields: [userId], references: [id], onDelete: Cascade)
+  role         TenderAssigneeRole @default(OTHER)
+  assignedById String
+  assignedBy   User               @relation("TenderAssignedBy", fields: [assignedById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@unique([tenderId, userId])
+  @@index([userId])
+  @@map("tender_assignees")
+}
+
+model TenderCompetitor {
+  id             String  @id @default(uuid())
+  tenderId       String
+  tender         Tender  @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  competitorName String
+  bidAmount      Float?
+  isWinningBid   Boolean @default(false)
+  remarks        String?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenderId])
+  @@map("tender_competitors")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  type       String
+  title      String
+  body       String?
+  entityType String?
+  entityId   String?
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  metadata   Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead, createdAt])
+  @@index([entityType, entityId])
+  @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// BOQ & Estimation
+// ---------------------------------------------------------------------------
+
+enum BoqStatus {
+  DRAFT
+  FINALIZED
+}
+
+model Boq {
+  id                 String    @id @default(uuid())
+  tenderId           String
+  tender             Tender    @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  sourceAttachmentId String?
+  // Version-chain pattern, mirrors Attachment.documentGroupId: version 1 sets
+  // groupId to its own id, so "all versions" is always `WHERE groupId = X`.
+  groupId            String?
+  version            Int       @default(1)
+  isCurrent          Boolean   @default(true)
+  status             BoqStatus @default(DRAFT)
+
+  createdById String
+  createdBy   User   @relation("BoqCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  items BoqItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenderId])
+  @@index([groupId])
+  @@map("boqs")
+}
+
+model BoqItem {
+  id       String    @id @default(uuid())
+  boqId    String
+  boq      Boq       @relation(fields: [boqId], references: [id], onDelete: Cascade)
+  parentId String?
+  parent   BoqItem?  @relation("BoqItemChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children BoqItem[] @relation("BoqItemChildren")
+
+  itemCode    String?
+  description String
+  category    String?
+  unit        String?
+  quantity    Float?
+  rate        Float?
+  amount      Float?
+  remarks     String?
+  sortOrder   Int     @default(0)
+
+  rateBreakdown BoqItemRateBreakdown?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([boqId])
+  @@index([parentId])
+  @@map("boq_items")
+}
+
+model BoqItemRateBreakdown {
+  id        String  @id @default(uuid())
+  boqItemId String  @unique
+  boqItem   BoqItem @relation(fields: [boqItemId], references: [id], onDelete: Cascade)
+
+  materialCost    Float @default(0)
+  laborCost       Float @default(0)
+  machineryCost   Float @default(0)
+  transportCost   Float @default(0)
+  overheadPercent Float @default(0)
+  profitPercent   Float @default(0)
+  taxPercent      Float @default(0)
+  computedRate    Float @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("boq_item_rate_breakdowns")
+}
+
+enum HistoricalRateCategory {
+  MATERIAL
+  LABOR
+  MACHINERY
+  TRANSPORT
+}
+
+model HistoricalRate {
+  id             String                 @id @default(uuid())
+  category       HistoricalRateCategory
+  itemName       String
+  unit           String
+  rate           Float
+  location       String?
+  effectiveDate  DateTime
+  sourceTenderId String?
+  notes          String?
+
+  createdById String
+  createdBy   User   @relation("HistoricalRateCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([category, itemName])
+  @@map("historical_rates")
+}
+
+// ---------------------------------------------------------------------------
+// Procurement (Vendors, RFQ, Purchase Orders, Goods Receipt)
+// ---------------------------------------------------------------------------
+
+enum VendorCategory {
+  MATERIAL_SUPPLIER
+  SERVICE_PROVIDER
+  SUBCONTRACTOR
+  EQUIPMENT_RENTAL
+}
+
+model Vendor {
+  id        String         @id @default(uuid())
+  name      String
+  category  VendorCategory
+  gstNumber String?
+  panNumber String?
+  address   String?
+  city      String?
+  state     String?
+
+  bankAccountName   String?
+  bankAccountNumber String?
+  bankIfscCode      String?
+
+  notes    String?
+  isActive Boolean @default(true)
+
+  createdById String
+  createdBy   User   @relation("VendorCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  contacts       VendorContact[]
+  rfqInvites     RfqVendor[]
+  quotes         RfqQuote[]
+  awardedRfqs    Rfq[]           @relation("RfqAwardedVendor")
+  purchaseOrders PurchaseOrder[]
+  ratings        VendorRating[]
+  expenses       Expense[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@map("vendors")
+}
+
+model VendorContact {
+  id          String  @id @default(uuid())
+  vendorId    String
+  vendor      Vendor  @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  name        String
+  designation String?
+  email       String?
+  phone       String?
+  isPrimary   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([vendorId])
+  @@map("vendor_contacts")
+}
+
+enum RfqStatus {
+  DRAFT
+  SENT
+  CLOSED
+  AWARDED
+  CANCELLED
+}
+
+model Rfq {
+  id       String    @id @default(uuid())
+  tenderId String?
+  tender   Tender?   @relation(fields: [tenderId], references: [id], onDelete: SetNull)
+  title    String
+  status   RfqStatus @default(DRAFT)
+  dueDate  DateTime?
+
+  awardedVendorId String?
+  awardedVendor   Vendor? @relation("RfqAwardedVendor", fields: [awardedVendorId], references: [id], onDelete: SetNull)
+
+  createdById String
+  createdBy   User   @relation("RfqCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  items          RfqItem[]
+  vendorInvites  RfqVendor[]
+  purchaseOrders PurchaseOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenderId])
+  @@map("rfqs")
+}
+
+model RfqItem {
+  id          String  @id @default(uuid())
+  rfqId       String
+  rfq         Rfq     @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  boqItemId   String?
+  description String
+  unit        String?
+  quantity    Float
+  sortOrder   Int     @default(0)
+
+  quotes RfqQuote[]
+
+  @@index([rfqId])
+  @@map("rfq_items")
+}
+
+enum RfqVendorStatus {
+  INVITED
+  RESPONDED
+  DECLINED
+}
+
+model RfqVendor {
+  id       String          @id @default(uuid())
+  rfqId    String
+  rfq      Rfq             @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  vendorId String
+  vendor   Vendor          @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  status   RfqVendorStatus @default(INVITED)
+
+  createdAt DateTime @default(now())
+
+  @@unique([rfqId, vendorId])
+  @@index([vendorId])
+  @@map("rfq_vendors")
+}
+
+model RfqQuote {
+  id        String  @id @default(uuid())
+  rfqItemId String
+  rfqItem   RfqItem @relation(fields: [rfqItemId], references: [id], onDelete: Cascade)
+  vendorId  String
+  vendor    Vendor  @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  rate      Float
+  remarks   String?
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([rfqItemId, vendorId])
+  @@index([vendorId])
+  @@map("rfq_quotes")
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id                   String              @id @default(uuid())
+  poNumber             String              @unique
+  vendorId             String
+  vendor               Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  tenderId             String?
+  tender               Tender?             @relation(fields: [tenderId], references: [id], onDelete: SetNull)
+  sourceRfqId          String?
+  sourceRfq            Rfq?                @relation(fields: [sourceRfqId], references: [id], onDelete: SetNull)
+  status               PurchaseOrderStatus @default(DRAFT)
+  expectedDeliveryDate DateTime?
+  notes                String?
+
+  createdById String
+  createdBy   User   @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  items         PurchaseOrderItem[]
+  goodsReceipts GoodsReceipt[]
+  vendorRating  VendorRating?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([vendorId])
+  @@index([tenderId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id               String        @id @default(uuid())
+  purchaseOrderId  String
+  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  description      String
+  unit             String?
+  quantity         Float
+  rate             Float
+  amount           Float
+  receivedQuantity Float         @default(0)
+  sortOrder        Int           @default(0)
+
+  goodsReceiptItems GoodsReceiptItem[]
+
+  @@index([purchaseOrderId])
+  @@map("purchase_order_items")
+}
+
+model GoodsReceipt {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  receivedDate    DateTime      @default(now())
+  remarks         String?
+
+  receivedById String
+  receivedBy   User   @relation("GoodsReceiptReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
+
+  items GoodsReceiptItem[]
+
+  createdAt DateTime @default(now())
+
+  @@index([purchaseOrderId])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptItem {
+  id                  String            @id @default(uuid())
+  goodsReceiptId      String
+  goodsReceipt        GoodsReceipt      @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  purchaseOrderItemId String
+  purchaseOrderItem   PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Cascade)
+  quantityReceived    Float
+  remarks             String?
+
+  @@index([goodsReceiptId])
+  @@index([purchaseOrderItemId])
+  @@map("goods_receipt_items")
+}
+
+model VendorRating {
+  id              String        @id @default(uuid())
+  vendorId        String
+  vendor          Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  purchaseOrderId String        @unique
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  rating          Int
+  remarks         String?
+
+  ratedById String
+  ratedBy   User   @relation("VendorRatingRatedBy", fields: [ratedById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([vendorId])
+  @@map("vendor_ratings")
+}
+
+// ---------------------------------------------------------------------------
+// Project Execution
+// ---------------------------------------------------------------------------
+
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+model Project {
+  id            String        @id @default(uuid())
+  tenderId      String        @unique
+  tender        Tender        @relation(fields: [tenderId], references: [id], onDelete: Restrict)
+  name          String
+  status        ProjectStatus @default(ACTIVE)
+  budget        Float
+  startDate     DateTime
+  endDate       DateTime?
+  actualEndDate DateTime?
+  location      String?
+  notes         String?
+
+  createdById String
+  createdBy   User   @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  milestones     ProjectMilestone[]
+  materialUsages ProjectMaterialUsage[]
+  laborEntries   ProjectLaborEntry[]
+  bills          ProjectBill[]
+  invoices       Invoice[]
+  expenses       Expense[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("projects")
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  DELAYED
+}
+
+model ProjectMilestone {
+  id            String          @id @default(uuid())
+  projectId     String
+  project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title         String
+  plannedDate   DateTime?
+  completedDate DateTime?
+  status        MilestoneStatus @default(PENDING)
+  weightPercent Float           @default(0)
+  sortOrder     Int             @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@map("project_milestones")
+}
+
+model ProjectMaterialUsage {
+  id           String   @id @default(uuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  boqItemId    String?
+  materialName String
+  unit         String?
+  quantityUsed Float
+  usageDate    DateTime @default(now())
+  remarks      String?
+
+  recordedById String
+  recordedBy   User   @relation("ProjectMaterialRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+  @@map("project_material_usages")
+}
+
+enum LaborCategory {
+  SKILLED
+  UNSKILLED
+  SUPERVISORY
+}
+
+model ProjectLaborEntry {
+  id          String        @id @default(uuid())
+  projectId   String
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category    LaborCategory
+  description String
+  workerCount Int
+  units       Float
+  ratePerUnit Float
+  amount      Float
+  entryDate   DateTime      @default(now())
+  remarks     String?
+
+  recordedById String
+  recordedBy   User   @relation("ProjectLaborRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+  @@map("project_labor_entries")
+}
+
+enum BillStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  PAID
+}
+
+model ProjectBill {
+  id                String     @id @default(uuid())
+  projectId         String
+  project           Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  billNumber        String
+  billDate          DateTime   @default(now())
+  cumulativeAmount  Float
+  currentBillAmount Float
+  status            BillStatus @default(DRAFT)
+  remarks           String?
+
+  createdById String
+  createdBy   User   @relation("ProjectBillCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  invoice Invoice?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, billNumber])
+  @@index([projectId])
+  @@map("project_bills")
+}
+
+// ---------------------------------------------------------------------------
+// Finance
+// ---------------------------------------------------------------------------
+
+model BankAccount {
+  id             String  @id @default(uuid())
+  name           String
+  accountNumber  String?
+  bankName       String?
+  ifscCode       String?
+  openingBalance Float   @default(0)
+  isActive       Boolean @default(true)
+
+  createdById String
+  createdBy   User   @relation("BankAccountCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("bank_accounts")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique
+  projectId     String?
+  project       Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  sourceBillId  String?       @unique
+  sourceBill    ProjectBill?  @relation(fields: [sourceBillId], references: [id], onDelete: SetNull)
+  clientName    String
+  subtotal      Float
+  gstPercent    Float         @default(18)
+  gstAmount     Float
+  totalAmount   Float
+  status        InvoiceStatus @default(DRAFT)
+  invoiceDate   DateTime      @default(now())
+  dueDate       DateTime?
+  notes         String?
+
+  createdById String
+  createdBy   User   @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("invoices")
+}
+
+enum ExpenseCategory {
+  MATERIAL
+  LABOR
+  TRANSPORT
+  EQUIPMENT
+  OFFICE
+  OTHER
+}
+
+enum ExpenseStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+}
+
+model Expense {
+  id          String          @id @default(uuid())
+  category    ExpenseCategory
+  description String
+  amount      Float
+  expenseDate DateTime        @default(now())
+  projectId   String?
+  project     Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  vendorId    String?
+  vendor      Vendor?         @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  status      ExpenseStatus   @default(UNPAID)
+  notes       String?
+
+  createdById String
+  createdBy   User   @relation("ExpenseCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("expenses")
+}
+
+enum PaymentDirection {
+  RECEIVED
+  PAID
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CHEQUE
+  UPI
+  CARD
+}
+
+model Payment {
+  id              String           @id @default(uuid())
+  direction       PaymentDirection
+  amount          Float
+  paymentDate     DateTime         @default(now())
+  method          PaymentMethod
+  bankAccountId   String?
+  bankAccount     BankAccount?     @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  referenceNumber String?
+  entityType      String
+  entityId        String
+  remarks         String?
+
+  recordedById String
+  recordedBy   User   @relation("PaymentRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([bankAccountId])
+  @@map("payments")
+}
