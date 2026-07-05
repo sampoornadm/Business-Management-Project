@@ -8,6 +8,7 @@ import type {
   BoqParsePreviewDto,
   BulkUpdateBoqItemsInput,
   CommitBoqInput,
+  CreateBoqItemInput,
   UpdateBoqItemInput,
   UpsertBoqItemRateAnalysisInput,
 } from "@bmp/types";
@@ -82,11 +83,33 @@ export function useFinalizeBoq(tenderId: string) {
   });
 }
 
+export function useAddBoqItem(tenderId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateBoqItemInput) => {
+      const response = await apiClient.post<ApiResponse<BoqDto>>(`/tenders/${tenderId}/boq/items`, input);
+      return unwrap(response.data);
+    },
+    onSuccess: () => invalidateBoq(queryClient, tenderId),
+  });
+}
+
 export function useUpdateBoqItem(tenderId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ itemId, input }: { itemId: string; input: UpdateBoqItemInput }) => {
       const response = await apiClient.patch<ApiResponse<BoqDto>>(`/boq-items/${itemId}`, input);
+      return unwrap(response.data);
+    },
+    onSuccess: () => invalidateBoq(queryClient, tenderId),
+  });
+}
+
+export function useDeleteBoqItem(tenderId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (itemId: string) => {
+      const response = await apiClient.delete<ApiResponse<BoqDto>>(`/boq-items/${itemId}`);
       return unwrap(response.data);
     },
     onSuccess: () => invalidateBoq(queryClient, tenderId),

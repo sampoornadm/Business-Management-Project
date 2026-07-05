@@ -2,7 +2,7 @@
 
 import { TENDER_STATUS_LABELS, type TenderStatus } from "@bmp/types";
 import { Badge, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@bmp/ui";
-import { Activity, AlertCircle, Database, FileClock, FileText, HardDrive, Users2 } from "lucide-react";
+import { Activity, Database, FileClock, FileText, HardDrive, Users2 } from "lucide-react";
 import Link from "next/link";
 import {
   Bar,
@@ -88,22 +88,6 @@ export default function DashboardPage() {
                 <Skeleton className="h-8 w-16" />
               ) : (
                 <div className="text-2xl font-bold">{tenderStatsQuery.data?.totalActive ?? 0}</div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {canReadTenders && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Approvals</CardTitle>
-              <AlertCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {tenderStatsQuery.isLoading ? (
-                <Skeleton className="h-8 w-16" />
-              ) : (
-                <div className="text-2xl font-bold">{tenderStatsQuery.data?.pendingApprovalCount ?? 0}</div>
               )}
             </CardContent>
           </Card>

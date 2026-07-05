@@ -403,7 +403,7 @@ export class TendersService {
     let totalActive = 0;
     for (const { status, count } of statusCounts) {
       byStatus[status] = count;
-      if (!["WON", "LOST", "CANCELLED", "ARCHIVED"].includes(status)) {
+      if (!["WON", "LOST", "CANCELLED"].includes(status)) {
         totalActive += count;
       }
     }
@@ -411,7 +411,6 @@ export class TendersService {
     return {
       totalActive,
       byStatus,
-      pendingApprovalCount: byStatus.APPROVAL_PENDING ?? 0,
       upcomingDeadlines: upcoming.map(toTenderListItemDto),
     };
   }

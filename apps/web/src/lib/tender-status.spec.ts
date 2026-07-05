@@ -3,9 +3,8 @@ import { describe, expect, it } from "vitest";
 import { tenderPriorityBadgeVariant, tenderStatusBadgeVariant } from "./tender-status";
 
 describe("tenderStatusBadgeVariant", () => {
-  it("returns outline for draft/archived states", () => {
+  it("returns outline for draft", () => {
     expect(tenderStatusBadgeVariant("DRAFT")).toBe("outline");
-    expect(tenderStatusBadgeVariant("ARCHIVED")).toBe("outline");
   });
 
   it("returns destructive for lost/cancelled states", () => {
@@ -16,10 +15,6 @@ describe("tenderStatusBadgeVariant", () => {
   it("returns default for submitted-and-beyond states", () => {
     expect(tenderStatusBadgeVariant("SUBMITTED")).toBe("default");
     expect(tenderStatusBadgeVariant("WON")).toBe("default");
-  });
-
-  it("returns secondary for in-progress states", () => {
-    expect(tenderStatusBadgeVariant("UNDER_STUDY")).toBe("secondary");
   });
 });
 

@@ -66,6 +66,13 @@ dev placeholder committed in `.env.example`.
 | `SEED_USER_PASSWORD` | Dev/CI only | **Yes** | Password assigned to all seeded demo users (`pnpm db:seed`). **Never run the seed script against a production database** — it's for local dev and CI fixtures only. |
 | `BACKUP_RETENTION_DAYS` | No (default `14`) | No | Read by `infra/scripts/backup-db.sh`. |
 
+## Ollama (local LLM — tender document auto-extraction)
+
+| Variable | Required | Sensitive | Notes |
+|---|---|---|---|
+| `OLLAMA_BASE_URL` | No (default `http://localhost:11434`) | No | Only used by the "extract from document" upload on the New Tender page. Requires `ollama serve` running locally with the configured model pulled. If the server itself runs inside Docker, use `http://host.docker.internal:11434` to reach an Ollama instance on the host. |
+| `OLLAMA_MODEL` | No (default `llama3.1:8b`) | No | Pull with `ollama pull llama3.1:8b`. If unreachable/misconfigured, the upload returns a clear error — no other functionality is affected. |
+
 ## Web (Next.js)
 
 | Variable | Required | Sensitive | Notes |

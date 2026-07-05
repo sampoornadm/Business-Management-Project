@@ -5,18 +5,13 @@ export type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
 export function tenderStatusBadgeVariant(status: TenderStatus): BadgeVariant {
   switch (status) {
     case "DRAFT":
-    case "ARCHIVED":
       return "outline";
     case "LOST":
     case "CANCELLED":
       return "destructive";
     case "SUBMITTED":
-    case "TECHNICALLY_QUALIFIED":
-    case "FINANCIALLY_QUALIFIED":
     case "WON":
       return "default";
-    default:
-      return "secondary";
   }
 }
 

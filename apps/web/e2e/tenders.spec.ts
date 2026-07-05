@@ -46,15 +46,15 @@ test.describe("Tenders", () => {
     await page.waitForURL(/\/tenders\/(?!new)[a-f0-9-]+$/, { timeout: 15_000 });
     await expect(page.getByRole("heading", { name: tenderTitle })).toBeVisible();
 
-    // DRAFT -> UPCOMING is the tender's first allowed status transition.
+    // DRAFT -> SUBMITTED is the tender's first allowed status transition.
     const headerRow = page.locator("div.flex.items-center.gap-2", {
       has: page.getByRole("heading", { name: tenderTitle }),
     });
     await page.click('button:has-text("Change status")');
     await page.locator('div[role="dialog"] button[role="combobox"]').click();
-    await page.getByRole("option", { name: "Upcoming" }).click();
+    await page.getByRole("option", { name: "Submitted" }).click();
     await page.click('div[role="dialog"] button:text-is("Confirm")');
-    await expect(headerRow.getByText("Upcoming")).toBeVisible({ timeout: 10_000 });
+    await expect(headerRow.getByText("Submitted")).toBeVisible({ timeout: 10_000 });
 
     await page.goto("/tenders");
     await expect(page.getByText(tenderTitle)).toBeVisible();

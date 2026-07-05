@@ -102,6 +102,17 @@ export interface CommitBoqInput {
   items: CommitBoqItemInput[];
 }
 
+export interface CreateBoqItemInput {
+  parentId?: string;
+  itemCode?: string;
+  description: string;
+  category?: string;
+  unit?: string;
+  quantity?: number;
+  rate?: number;
+  remarks?: string;
+}
+
 export interface UpdateBoqItemInput {
   itemCode?: string;
   description?: string;

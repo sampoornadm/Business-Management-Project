@@ -31,6 +31,9 @@ const envSchema = z.object({
   SMTP_FROM: z.string().default("Business Management Platform <no-reply@bmp.local>"),
 
   SEED_USER_PASSWORD: z.string().optional(),
+
+  OLLAMA_BASE_URL: z.string().default("http://localhost:11434"),
+  OLLAMA_MODEL: z.string().default("llama3.1:8b"),
 });
 
 export type Env = z.infer<typeof envSchema>;

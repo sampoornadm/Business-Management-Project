@@ -11,6 +11,7 @@ import {
   bulkUpdateBoqItemsSchema,
   commitBoqSchema,
   compareBoqQuerySchema,
+  createBoqItemSchema,
   updateBoqItemSchema,
   upsertRateAnalysisSchema,
 } from "./boq.validation.js";
@@ -87,6 +88,29 @@ export function createBoqRouter(controller: BoqController): Router {
     requirePermission("boq:create"),
     validate(commitBoqSchema),
     controller.commit,
+  );
+
+  /**
+   * @openapi
+   * /tenders/{id}/boq/items:
+   *   post:
+   *     tags: [BOQ]
+   *     summary: Add a single item to the tender's current BOQ (creates an empty version 1 first if none exists yet)
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       201: { description: Item added }
+   */
+  router.post(
+    "/:id/boq/items",
+    authenticateMiddleware,
+    requirePermission("boq:create"),
+    validate(createBoqItemSchema),
+    controller.addItem,
   );
 
   /**
@@ -206,6 +230,28 @@ export function createBoqItemsRouter(controller: BoqController): Router {
     requirePermission("boq:update"),
     validate(updateBoqItemSchema),
     controller.updateItem,
+  );
+
+  /**
+   * @openapi
+   * /boq-items/{itemId}:
+   *   delete:
+   *     tags: [BOQ]
+   *     summary: Delete a single BOQ item
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: itemId
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Updated BOQ }
+   */
+  router.delete(
+    "/:itemId",
+    authenticateMiddleware,
+    requirePermission("boq:update"),
+    controller.deleteItem,
   );
 
   /**

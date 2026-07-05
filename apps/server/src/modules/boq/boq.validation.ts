@@ -20,6 +20,18 @@ export const commitBoqSchema = z.object({
 });
 export type CommitBoqBody = z.infer<typeof commitBoqSchema>;
 
+export const createBoqItemSchema = z.object({
+  parentId: z.string().uuid().optional(),
+  itemCode: z.string().max(100).optional(),
+  description: z.string().min(1).max(1000),
+  category: z.string().max(200).optional(),
+  unit: z.string().max(50).optional(),
+  quantity: z.number().nonnegative().optional(),
+  rate: z.number().nonnegative().optional(),
+  remarks: z.string().max(1000).optional(),
+});
+export type CreateBoqItemBody = z.infer<typeof createBoqItemSchema>;
+
 export const updateBoqItemSchema = z
   .object({
     itemCode: z.string().max(100).optional(),

@@ -3,6 +3,7 @@ import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 import { resolvePagination } from "../../shared/utils/pagination.js";
 
+import type { TenderExtractionService } from "./tender-extraction.service.js";
 import type { TendersService } from "./tenders.service.js";
 import type {
   AddAssigneeBody,
@@ -17,7 +18,10 @@ import type {
 } from "./tenders.validation.js";
 
 export class TendersController {
-  constructor(private readonly tendersService: TendersService) {}
+  constructor(
+    private readonly tendersService: TendersService,
+    private readonly tenderExtractionService: TenderExtractionService,
+  ) {}
 
   list = asyncHandler(async (req, res) => {
     const query = req.query as unknown as ListTendersQueryParsed;
@@ -34,6 +38,15 @@ export class TendersController {
   getById = asyncHandler(async (req, res) => {
     const tender = await this.tendersService.getById(req.params.id!);
     sendSuccess(res, tender, "Tender retrieved");
+  });
+
+  extractFromDocument = asyncHandler(async (req, res) => {
+    if (!req.file) throw new BadRequestError("No file provided");
+    const result = await this.tenderExtractionService.extractFromDocument(
+      req.file.buffer,
+      req.file.mimetype,
+    );
+    sendSuccess(res, result, "Fields extracted from document");
   });
 
   create = asyncHandler(async (req, res) => {

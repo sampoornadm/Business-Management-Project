@@ -1,6 +1,6 @@
 import { Router } from "express";
 
-import { GENERIC_UPLOAD_LIMITS } from "../../config/constants.js";
+import { GENERIC_UPLOAD_LIMITS, TENDER_EXTRACTION_UPLOAD_LIMITS } from "../../config/constants.js";
 import { authenticateMiddleware } from "../../shared/middleware/authenticate.middleware.js";
 import { requirePermission } from "../../shared/middleware/requirePermission.middleware.js";
 import { validate } from "../../shared/middleware/validate.middleware.js";
@@ -25,6 +25,11 @@ export function createTendersRouter(controller: TendersController): Router {
     "file",
     GENERIC_UPLOAD_LIMITS.MAX_SIZE_BYTES,
     GENERIC_UPLOAD_LIMITS.ALLOWED_MIME_TYPES,
+  );
+  const uploadForExtraction = createUploadMiddleware(
+    "file",
+    TENDER_EXTRACTION_UPLOAD_LIMITS.MAX_SIZE_BYTES,
+    TENDER_EXTRACTION_UPLOAD_LIMITS.ALLOWED_MIME_TYPES,
   );
 
   /**
@@ -56,6 +61,31 @@ export function createTendersRouter(controller: TendersController): Router {
     requirePermission("tenders:create"),
     validate(createTenderSchema),
     controller.create,
+  );
+
+  /**
+   * @openapi
+   * /tenders/extract:
+   *   post:
+   *     tags: [Tenders]
+   *     summary: Extract tender fields from an uploaded document (PDF/DOCX) via a local LLM — preview only, nothing is persisted
+   *     security: [{ bearerAuth: [] }]
+   *     requestBody:
+   *       content:
+   *         multipart/form-data:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               file: { type: string, format: binary }
+   *     responses:
+   *       200: { description: Extracted field preview }
+   */
+  router.post(
+    "/extract",
+    authenticateMiddleware,
+    requirePermission("tenders:create"),
+    uploadForExtraction,
+    controller.extractFromDocument,
   );
 
   /**

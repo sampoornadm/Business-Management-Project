@@ -261,7 +261,7 @@ export class TendersRepository implements ITendersRepository {
     return this.prisma.tender.findMany({
       where: {
         submissionDate: { gte: now, lte: until },
-        status: { notIn: ["WON", "LOST", "CANCELLED", "ARCHIVED"] },
+        status: { notIn: ["WON", "LOST", "CANCELLED"] },
       },
       ...tenderListArgs,
       orderBy: { submissionDate: "asc" },

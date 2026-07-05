@@ -24,7 +24,7 @@ import {
   TabsTrigger,
   useToast,
 } from "@bmp/ui";
-import { FileSpreadsheet, Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
@@ -34,6 +34,7 @@ import { TenderAssigneesTab } from "@/components/tenders/tender-assignees-tab";
 import { TenderCompetitorsTab } from "@/components/tenders/tender-competitors-tab";
 import { TenderDocumentsTab } from "@/components/tenders/tender-documents-tab";
 import { TenderHistoryTab } from "@/components/tenders/tender-history-tab";
+import { TenderItemsTab } from "@/components/tenders/tender-items-tab";
 import { useTags } from "@/hooks/use-tags";
 import { useChangeTenderStatus, useDeleteTender, useSetTenderTags, useTender } from "@/hooks/use-tenders";
 import { useAuthStore } from "@/lib/auth-store";
@@ -113,13 +114,6 @@ export default function TenderDetailPage() {
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
-          {canViewBoq && (
-            <Button variant="outline" asChild>
-              <Link href={`/tenders/${tender.id}/boq`}>
-                <FileSpreadsheet className="mr-2 h-4 w-4" /> BOQ
-              </Link>
-            </Button>
-          )}
           {canCreateProject && tender.status === "WON" && (
             <ConvertToProjectDialog tenderId={tender.id} />
           )}
@@ -166,6 +160,7 @@ export default function TenderDetailPage() {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          {canViewBoq && <TabsTrigger value="items">Items</TabsTrigger>}
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="assignees">Assignees ({tender.assigneeCount})</TabsTrigger>
           <TabsTrigger value="competitors">Competitors</TabsTrigger>
@@ -253,6 +248,12 @@ export default function TenderDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {canViewBoq && (
+          <TabsContent value="items">
+            <TenderItemsTab tender={tender} />
+          </TabsContent>
+        )}
 
         <TabsContent value="documents">
           <TenderDocumentsTab tenderId={tender.id} />

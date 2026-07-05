@@ -7,6 +7,7 @@ import type {
   BulkUpdateBoqItemsBody,
   CommitBoqBody,
   CompareBoqQueryParsed,
+  CreateBoqItemBody,
   UpdateBoqItemBody,
   UpsertRateAnalysisBody,
 } from "./boq.validation.js";
@@ -54,10 +55,21 @@ export class BoqController {
     sendSuccess(res, result, "BOQ comparison retrieved");
   });
 
+  addItem = asyncHandler(async (req, res) => {
+    const body = req.body as CreateBoqItemBody;
+    const boq = await this.boqService.addItem(req.params.id!, body, req.user!.id);
+    sendSuccess(res, boq, "BOQ item added", 201);
+  });
+
   updateItem = asyncHandler(async (req, res) => {
     const body = req.body as UpdateBoqItemBody;
     const boq = await this.boqService.updateItem(req.params.itemId!, body, req.user!.id);
     sendSuccess(res, boq, "BOQ item updated");
+  });
+
+  deleteItem = asyncHandler(async (req, res) => {
+    const boq = await this.boqService.deleteItem(req.params.itemId!, req.user!.id);
+    sendSuccess(res, boq, "BOQ item deleted");
   });
 
   bulkUpdate = asyncHandler(async (req, res) => {

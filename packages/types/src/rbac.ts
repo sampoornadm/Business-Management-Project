@@ -120,6 +120,13 @@ const TENDER_MANAGER_PERMISSIONS: PermissionKey[] = [
   "organizations:update",
   "tags:create",
   "tags:update",
+  // The tender detail view's Items tab is a unified CRUD surface for the
+  // Tender Manager persona (add/edit/delete line items inline, not just lay
+  // down the initial list from a document upload) — full boq:* here.
+  // Estimators still own rate analysis (rates:*) separately.
+  "boq:create",
+  "boq:update",
+  "boq:delete",
 ];
 
 // Estimators fill in tender details/upload documents but don't own

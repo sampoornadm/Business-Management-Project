@@ -23,17 +23,7 @@ describe("Project execution workflow (integration)", () => {
   let tenderId: string;
   let projectId: string;
 
-  const WON_TRANSITION_CHAIN = [
-    "UPCOMING",
-    "DOCUMENT_COLLECTION",
-    "UNDER_STUDY",
-    "BOQ_PREPARATION",
-    "RATE_ANALYSIS",
-    "APPROVAL_PENDING",
-    "SUBMITTED",
-    "TECHNICALLY_QUALIFIED",
-    "FINANCIALLY_QUALIFIED",
-  ];
+  const WON_TRANSITION_CHAIN = ["SUBMITTED"];
 
   beforeAll(async () => {
     const permission = await prisma.permission.upsert({
