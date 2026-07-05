@@ -52,6 +52,21 @@ export interface UpdateBoqItemData {
   sortOrder?: number;
 }
 
+export interface CreateBoqItemData {
+  id: string;
+  boqId: string;
+  parentId: string | null;
+  itemCode: string | null;
+  description: string;
+  category: string | null;
+  unit: string | null;
+  quantity: number | null;
+  rate: number | null;
+  amount: number | null;
+  remarks: string | null;
+  sortOrder: number;
+}
+
 export interface BulkRateUpdate {
   id: string;
   rate: number | null;
@@ -78,6 +93,8 @@ export interface IBoqRepository {
   findItemById(id: string): Promise<BoqItemWithBreakdown | null>;
   findItemsByIds(ids: string[]): Promise<BoqItemWithBreakdown[]>;
   updateItem(id: string, data: UpdateBoqItemData): Promise<void>;
+  createItem(data: CreateBoqItemData): Promise<BoqItemWithBreakdown>;
+  deleteItem(id: string): Promise<void>;
   bulkUpdateRates(updates: BulkRateUpdate[]): Promise<void>;
   upsertRateBreakdown(itemId: string, data: UpsertRateBreakdownData): Promise<void>;
   sumAmountByBoqId(boqId: string): Promise<number>;
@@ -144,6 +161,14 @@ export class BoqRepository implements IBoqRepository {
 
   async updateItem(id: string, data: UpdateBoqItemData): Promise<void> {
     await this.prisma.boqItem.update({ where: { id }, data });
+  }
+
+  createItem(data: CreateBoqItemData): Promise<BoqItemWithBreakdown> {
+    return this.prisma.boqItem.create({ data, ...boqItemWithBreakdownArgs });
+  }
+
+  async deleteItem(id: string): Promise<void> {
+    await this.prisma.boqItem.delete({ where: { id } });
   }
 
   async bulkUpdateRates(updates: BulkRateUpdate[]): Promise<void> {

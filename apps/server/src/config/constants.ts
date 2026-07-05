@@ -34,6 +34,14 @@ export const BOQ_UPLOAD_LIMITS = {
   ] as const,
 };
 
+export const TENDER_EXTRACTION_UPLOAD_LIMITS = {
+  MAX_SIZE_BYTES: 25 * 1024 * 1024,
+  ALLOWED_MIME_TYPES: [
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ] as const,
+};
+
 export const RATE_LIMITS = {
   LOGIN: { windowMs: 15 * 60 * 1000, max: 10 },
   REFRESH: { windowMs: 15 * 60 * 1000, max: 30 },

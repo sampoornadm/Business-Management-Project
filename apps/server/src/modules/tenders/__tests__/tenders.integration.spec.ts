@@ -99,21 +99,21 @@ describe("Tender workflow (integration)", () => {
     const firstTransition = await request(app)
       .patch(`/api/v1/tenders/${tenderId}/status`)
       .set("Authorization", `Bearer ${accessToken}`)
-      .send({ status: "UPCOMING" });
+      .send({ status: "SUBMITTED" });
     expect(firstTransition.status).toBe(200);
-    expect(firstTransition.body.data.status).toBe("UPCOMING");
+    expect(firstTransition.body.data.status).toBe("SUBMITTED");
 
     const secondTransition = await request(app)
       .patch(`/api/v1/tenders/${tenderId}/status`)
       .set("Authorization", `Bearer ${accessToken}`)
-      .send({ status: "DOCUMENT_COLLECTION" });
+      .send({ status: "WON" });
     expect(secondTransition.status).toBe(200);
-    expect(secondTransition.body.data.status).toBe("DOCUMENT_COLLECTION");
+    expect(secondTransition.body.data.status).toBe("WON");
 
     const illegalTransition = await request(app)
       .patch(`/api/v1/tenders/${tenderId}/status`)
       .set("Authorization", `Bearer ${accessToken}`)
-      .send({ status: "WON" });
+      .send({ status: "CANCELLED" });
     expect(illegalTransition.status).toBe(400);
 
     const historyResponse = await request(app)
@@ -123,7 +123,7 @@ describe("Tender workflow (integration)", () => {
 
     const entries = historyResponse.body.data.items as Array<{ toStatus: string }>;
     expect(entries).toHaveLength(2);
-    expect(entries.map((entry) => entry.toStatus)).toEqual(["DOCUMENT_COLLECTION", "UPCOMING"]);
+    expect(entries.map((entry) => entry.toStatus)).toEqual(["WON", "SUBMITTED"]);
   });
 
   it("rejects deleting a tender that is no longer in Draft status", async () => {
@@ -147,7 +147,7 @@ describe("Tender workflow (integration)", () => {
     await request(app)
       .patch(`/api/v1/tenders/${tenderId}/status`)
       .set("Authorization", `Bearer ${accessToken}`)
-      .send({ status: "UPCOMING" });
+      .send({ status: "SUBMITTED" });
 
     const deleteResponse = await request(app)
       .delete(`/api/v1/tenders/${tenderId}`)

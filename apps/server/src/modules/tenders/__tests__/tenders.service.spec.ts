@@ -283,8 +283,8 @@ describe("TendersService", () => {
 
   it("allows a valid status transition", async () => {
     const created = await service.create(baseInput);
-    const updated = await service.changeStatus(created.id, { status: "UPCOMING" }, actorId);
-    expect(updated.status).toBe("UPCOMING");
+    const updated = await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId);
+    expect(updated.status).toBe("SUBMITTED");
   });
 
   it("rejects an illegal status transition", async () => {
@@ -296,12 +296,12 @@ describe("TendersService", () => {
 
   it("notifies assignees and the creator on status change, excluding the actor", async () => {
     const created = await service.create(baseInput);
-    await service.changeStatus(created.id, { status: "UPCOMING" }, actorId);
+    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId);
     // actorId === createdById here, and there are no other assignees, so no notification is sent
     expect(notificationsService.createMany).not.toHaveBeenCalled();
 
     const otherActor = randomUUID();
-    await service.changeStatus(created.id, { status: "DOCUMENT_COLLECTION" }, otherActor);
+    await service.changeStatus(created.id, { status: "WON" }, otherActor);
     expect(notificationsService.createMany).toHaveBeenCalledWith(
       [actorId],
       expect.objectContaining({ type: "TENDER_STATUS_CHANGED" }),
@@ -310,7 +310,7 @@ describe("TendersService", () => {
 
   it("only allows deleting a tender while it is in Draft status", async () => {
     const created = await service.create(baseInput);
-    await service.changeStatus(created.id, { status: "UPCOMING" }, actorId);
+    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId);
     await expect(service.delete(created.id, actorId)).rejects.toThrow(ConflictError);
   });
 

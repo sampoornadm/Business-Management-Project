@@ -2,9 +2,10 @@
 
 import type { BoqDto, BoqItemDto } from "@bmp/types";
 import { Button, EditableTreeTable, Input, useToast, type EditableTreeColumn } from "@bmp/ui";
+import { Trash2 } from "lucide-react";
 import { useState } from "react";
 
-import { useBulkUpdateBoqItems, useUpdateBoqItem } from "@/hooks/use-boq";
+import { useBulkUpdateBoqItems, useDeleteBoqItem, useUpdateBoqItem } from "@/hooks/use-boq";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
 
@@ -29,24 +30,53 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
   const canEdit = hasPermission(roleName, "boq:update") && boq.isCurrent;
 
   const updateItem = useUpdateBoqItem(tenderId);
+  const deleteItem = useDeleteBoqItem(tenderId);
   const bulkUpdate = useBulkUpdateBoqItems(tenderId);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [percentAdjustment, setPercentAdjustment] = useState("");
 
-  async function commitField(item: BoqItemDto, field: "quantity" | "rate", value: string) {
-    const parsed = value === "" ? undefined : Number(value);
-    if (value !== "" && Number.isNaN(parsed)) {
-      toast({ variant: "destructive", title: "Enter a valid number" });
+  async function commitField(
+    item: BoqItemDto,
+    field: "description" | "unit" | "quantity" | "rate",
+    value: string,
+  ) {
+    if (field === "quantity" || field === "rate") {
+      const parsed = value === "" ? undefined : Number(value);
+      if (value !== "" && Number.isNaN(parsed)) {
+        toast({ variant: "destructive", title: "Enter a valid number" });
+        return;
+      }
+      await commitUpdate(item, field === "quantity" ? { quantity: parsed } : { rate: parsed });
       return;
     }
-    const input = field === "quantity" ? { quantity: parsed } : { rate: parsed };
+    if (field === "description" && value.trim() === "") {
+      toast({ variant: "destructive", title: "Description cannot be empty" });
+      return;
+    }
+    await commitUpdate(item, field === "description" ? { description: value } : { unit: value || undefined });
+  }
+
+  async function commitUpdate(item: BoqItemDto, input: Parameters<typeof updateItem.mutateAsync>[0]["input"]) {
     try {
       await updateItem.mutateAsync({ itemId: item.id, input });
     } catch (error) {
       toast({
         variant: "destructive",
         title: "Could not update item",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  async function handleDelete(item: BoqItemDto) {
+    if (!window.confirm(`Delete "${item.description}"?`)) return;
+    try {
+      await deleteItem.mutateAsync(item.id);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not delete item",
         description: error instanceof Error ? error.message : "Please try again.",
       });
     }
@@ -73,8 +103,20 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
   }
 
   const columns: EditableTreeColumn<BoqItemDto>[] = [
-    { key: "description", header: "Description", getValue: (item) => item.description },
-    { key: "unit", header: "Unit", getValue: (item) => item.unit ?? "-" },
+    {
+      key: "description",
+      header: "Description",
+      editable: canEdit,
+      getValue: (item) => item.description,
+      onCommit: (item, value) => void commitField(item, "description", value),
+    },
+    {
+      key: "unit",
+      header: "Unit",
+      editable: canEdit,
+      getValue: (item) => item.unit ?? "",
+      onCommit: (item, value) => void commitField(item, "unit", value),
+    },
     {
       key: "quantity",
       header: "Quantity",
@@ -130,7 +172,24 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
         isRowSelectable={isLeaf}
-        renderRowActions={canEdit ? (item) => <RateAnalysisDialog tenderId={tenderId} item={item} /> : undefined}
+        renderRowActions={
+          canEdit
+            ? (item) => (
+                <div className="flex items-center gap-1">
+                  <RateAnalysisDialog tenderId={tenderId} item={item} />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8"
+                    onClick={() => void handleDelete(item)}
+                    disabled={deleteItem.isPending}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              )
+            : undefined
+        }
         emptyMessage="No BOQ items yet."
       />
 

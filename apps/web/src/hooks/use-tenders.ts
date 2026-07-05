@@ -10,6 +10,7 @@ import type {
   ListTendersQuery,
   PaginatedResult,
   TenderDto,
+  TenderExtractionResultDto,
   TenderListItemDto,
   TenderStatusHistoryEntryDto,
   UpdateTenderCompetitorInput,
@@ -41,6 +42,21 @@ export function useTender(id: string | undefined) {
       return unwrap(response.data);
     },
     enabled: Boolean(id),
+  });
+}
+
+export function useExtractTenderFromDocument() {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await apiClient.post<ApiResponse<TenderExtractionResultDto>>(
+        "/tenders/extract",
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } },
+      );
+      return unwrap(response.data);
+    },
   });
 }
 

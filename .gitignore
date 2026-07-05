@@ -44,3 +44,16 @@ infra/docker/.data/
 
 # local database backups
 backups/
+
+# sample client documents (real procurement data, not for version control)
+/examples/
+sample-bid.pdf
+
+#Notes
+Notes.txt
+
+# graphify knowledge-graph cache (generated, can be large)
+graphify-out/
+
+# local Claude Code permission config
+.claude/settings.json

@@ -41,3 +41,9 @@ export class TooManyRequestsError extends AppError {
     super({ statusCode: 429, code: "TOO_MANY_REQUESTS", message });
   }
 }
+
+export class ServiceUnavailableError extends AppError {
+  constructor(message = "Service unavailable") {
+    super({ statusCode: 503, code: "SERVICE_UNAVAILABLE", message });
+  }
+}

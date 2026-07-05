@@ -8,7 +8,7 @@ import { redis } from "../../redis/client.js";
 import { TENDER_REMINDER_QUEUE_NAME } from "../queues.js";
 
 const REMINDER_THRESHOLD_DAYS = [1, 3, 7];
-const TERMINAL_STATUSES = ["WON", "LOST", "CANCELLED", "ARCHIVED"] as const;
+const TERMINAL_STATUSES = ["WON", "LOST", "CANCELLED"] as const;
 
 function dayBounds(daysFromNow: number): { start: Date; end: Date } {
   const target = new Date();

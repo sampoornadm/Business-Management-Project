@@ -138,3 +138,27 @@ receiving status.
   `start`/`worker:start` scripts, and both Dockerfiles' `CMD`), never plain `node dist/index.js` —
   plain `node` can't load the `.ts` files that `import ... from "@bmp/database"` resolves to
   (`Unknown file extension ".ts"`).
+- The New Tender page's "extract from document" upload (`tender-extraction.service.ts`) is the
+  only part of this app with an LLM dependency — it calls a **local** Ollama instance
+  (`OLLAMA_BASE_URL`/`OLLAMA_MODEL`, see `environment-variables.md`), not a hosted API. No key, no
+  cost. If Ollama isn't running, the upload returns a clear `ServiceUnavailableError`; every other
+  tender-creation path (manual entry, `POST /tenders`) is completely unaffected.
+- `docker compose up -d` with no service names starts **everything** in `docker-compose.yml`,
+  including the containerized `server`/`web`/`worker`/`nginx` app images — not just the infra
+  services (postgres/redis/minio/mailhog). Local day-to-day dev uses `pnpm dev` (tsx/next running
+  directly on the host) instead, so running a bare `docker compose up -d` alongside `pnpm dev`
+  double-starts the app and both instances race for ports 3000/4000. This also silently breaks the
+  Ollama tender-extraction feature: a containerized server can't reach the host's Ollama via
+  `localhost` (needs `host.docker.internal`), so it fails with a confusing `SERVICE_UNAVAILABLE`
+  even when Ollama is running fine on the host. If you only need infra for `pnpm dev`, run
+  `docker compose up -d postgres redis minio minio-init mailhog` instead.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

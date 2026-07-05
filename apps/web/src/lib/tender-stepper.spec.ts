@@ -4,7 +4,7 @@ import { buildTenderSteps, isOnHappyPath, TENDER_HAPPY_PATH } from "./tender-ste
 
 describe("isOnHappyPath", () => {
   it("returns true for a status on the linear happy path", () => {
-    expect(isOnHappyPath("BOQ_PREPARATION")).toBe(true);
+    expect(isOnHappyPath("SUBMITTED")).toBe(true);
   });
 
   it("returns false for a terminal off-path status", () => {
@@ -15,8 +15,8 @@ describe("isOnHappyPath", () => {
 
 describe("buildTenderSteps", () => {
   it("marks steps before the current status as complete, the current as current, and the rest upcoming", () => {
-    const steps = buildTenderSteps("UNDER_STUDY");
-    const currentIndex = TENDER_HAPPY_PATH.indexOf("UNDER_STUDY");
+    const steps = buildTenderSteps("SUBMITTED");
+    const currentIndex = TENDER_HAPPY_PATH.indexOf("SUBMITTED");
 
     expect(steps).toHaveLength(TENDER_HAPPY_PATH.length);
     steps.forEach((step, index) => {

@@ -19,6 +19,7 @@ import type {
 import type {
   BulkUpdateBoqItemsBody,
   CommitBoqBody,
+  CreateBoqItemBody,
   UpdateBoqItemBody,
   UpsertRateAnalysisBody,
 } from "./boq.validation.js";
@@ -214,6 +215,74 @@ export class BoqService {
       entityType: "BoqItem",
       entityId: itemId,
       metadata: { boqId: existing.boqId, changes: data },
+    });
+    return this.buildBoqDto(existing.boqId);
+  }
+
+  async addItem(tenderId: string, data: CreateBoqItemBody, actorId: string): Promise<BoqDto> {
+    await this.assertTenderExists(tenderId);
+
+    let boq = await this.boqRepository.findCurrentBoq(tenderId);
+    if (!boq) {
+      // A from-scratch tender (no document upload, no prior BOQ) still needs
+      // somewhere for its first manually-added item to live — create an
+      // empty version 1 rather than requiring the upload/commit flow first.
+      const boqId = randomUUID();
+      await this.boqRepository.createBoq({
+        id: boqId,
+        tenderId,
+        createdById: actorId,
+        sourceAttachmentId: null,
+        groupId: boqId,
+        version: 1,
+        items: [],
+      });
+      boq = await this.boqRepository.findBoqById(boqId);
+    }
+    if (!boq) throw new NotFoundError("BOQ not found");
+
+    const quantity = data.quantity ?? null;
+    const rate = data.rate ?? null;
+    const amount = quantity !== null && rate !== null ? round2(quantity * rate) : null;
+    const existingItems = await this.boqRepository.findItemsByBoqId(boq.id);
+    const nextSortOrder = existingItems.reduce((max, item) => Math.max(max, item.sortOrder), -1) + 1;
+
+    const item = await this.boqRepository.createItem({
+      id: randomUUID(),
+      boqId: boq.id,
+      parentId: data.parentId ?? null,
+      itemCode: data.itemCode ?? null,
+      description: data.description,
+      category: data.category ?? null,
+      unit: data.unit ?? null,
+      quantity,
+      rate,
+      amount,
+      remarks: data.remarks ?? null,
+      sortOrder: nextSortOrder,
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: "BOQ_ITEM_ADDED",
+      entityType: "BoqItem",
+      entityId: item.id,
+      metadata: { boqId: boq.id, description: data.description },
+    });
+    return this.buildBoqDto(boq.id);
+  }
+
+  async deleteItem(itemId: string, actorId: string): Promise<BoqDto> {
+    const existing = await this.boqRepository.findItemById(itemId);
+    if (!existing) throw new NotFoundError("BOQ item not found");
+
+    await this.boqRepository.deleteItem(itemId);
+    await this.auditService.log({
+      actorId,
+      action: "BOQ_ITEM_DELETED",
+      entityType: "BoqItem",
+      entityId: itemId,
+      metadata: { boqId: existing.boqId, description: existing.description },
     });
     return this.buildBoqDto(existing.boqId);
   }

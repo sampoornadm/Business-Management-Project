@@ -49,10 +49,10 @@ export default function BoqComparePage() {
     <div className="max-w-6xl space-y-6">
       <div>
         <Link
-          href={`/tenders/${params.id}/boq`}
+          href={`/tenders/${params.id}`}
           className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="h-3 w-3" /> Back to BOQ
+          <ArrowLeft className="h-3 w-3" /> Back to tender
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">
           Compare BOQ — {tenderQuery.data.title}
