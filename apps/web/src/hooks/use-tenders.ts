@@ -271,3 +271,15 @@ export function useTenderDocumentVersions(id: string | undefined, documentGroupI
     enabled: Boolean(id) && Boolean(documentGroupId),
   });
 }
+
+export function useDeleteTenderDocument(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (documentGroupId: string) => {
+      await apiClient.delete(`/tenders/${id}/documents/${documentGroupId}`);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["tenders", id, "documents"] });
+    },
+  });
+}
