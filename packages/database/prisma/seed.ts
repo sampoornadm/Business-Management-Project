@@ -113,12 +113,44 @@ async function seedUsers(roleByName: Map<string, string>) {
   }
 }
 
+// Attribution user for apps/server/src/modules/tenders/local-docs/docs-watcher.service.ts
+// (the local-folder-sync feature) — keep this email in sync with that file.
+// Deactivated (isActive: false) and given a random, unshared password so it
+// can never actually log in; it exists purely as a valid uploadedById FK
+// target so watcher-imported documents show a clear, honest "uploaded by"
+// name instead of being misattributed to whoever created the tender.
+const LOCAL_DOCS_SYNC_USER_EMAIL = "local-sync@bmp.local";
+
+async function seedLocalDocsSyncUser(roleByName: Map<string, string>) {
+  const roleId = roleByName.get("VIEWER");
+  if (!roleId) return;
+
+  const passwordHash = await bcrypt.hash(randomUUID(), 12);
+  await prisma.user.upsert({
+    where: { email: LOCAL_DOCS_SYNC_USER_EMAIL },
+    update: {},
+    create: {
+      id: randomUUID(),
+      email: LOCAL_DOCS_SYNC_USER_EMAIL,
+      passwordHash,
+      firstName: "Local Folder",
+      lastName: "Sync",
+      roleId,
+      isActive: false,
+      isEmailVerified: true,
+    },
+  });
+}
+
 async function main() {
   console.warn("Seeding roles and permissions...");
   const roleByName = await seedRolesAndPermissions();
 
   console.warn("Seeding sample users...");
   await seedUsers(roleByName);
+
+  console.warn("Seeding local docs sync system user...");
+  await seedLocalDocsSyncUser(roleByName);
 
   console.warn(`Done. Seeded ${SAMPLE_USERS.length} users with password "${SEED_PASSWORD}".`);
 }
