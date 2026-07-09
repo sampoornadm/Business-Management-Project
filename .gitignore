@@ -57,3 +57,6 @@ graphify-out/
 
 # local Claude Code permission config
 .claude/settings.json
+
+# superpowers subagent-driven-development scratch state (progress ledger, task briefs/reports)
+.superpowers/
