@@ -35,6 +35,12 @@ brainstorming — approved by the user.
   separate, single-purpose dropzone — not part of this complaint).
 - No change to `AttachmentsService`, the upload API, S3 storage, or the
   `Attachment`/`documentGroupId`/`isCurrent` versioning model.
+  **Amendment (discovered during implementation):** this assumed delete-a-document
+  already worked end-to-end, based on reading the working tree at design time — but the
+  frontend delete hook and a matching `DELETE /tenders/:id/documents/:documentGroupId`
+  backend route existed only in the developer's uncommitted local changes, not in
+  committed history. Confirmed with the user, who chose to add the backend route now
+  (see the implementation plan) rather than drop delete from this task's scope.
 - No Vitest component-test setup for `apps/web`/`packages/ui` — explicitly decided
   against for this task, since it would fight the repo's existing documented convention
   of using Playwright for page/component coverage (see Testing section).
