@@ -36,7 +36,11 @@ export async function toUserDto(
     isActive: user.isActive,
     isEmailVerified: user.isEmailVerified,
     lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
-    role: { id: user.role.id, name: user.role.name as UserDto["role"]["name"], description: user.role.description },
+    role: {
+      id: user.userBusinesses[0]!.role.id,
+      name: user.userBusinesses[0]!.role.name as UserDto["role"]["name"],
+      description: user.userBusinesses[0]!.role.description,
+    },
     avatar,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),

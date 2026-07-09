@@ -15,7 +15,9 @@ const ROLE_NAMES_BY_ID: Record<string, string> = {
   "role-viewer": "VIEWER",
 };
 
-function roleFor(roleId: string, now: Date): UserWithRole["role"] {
+const BUSINESS_ID = "business-1";
+
+function roleFor(roleId: string, now: Date): UserWithRole["userBusinesses"][number]["role"] {
   return {
     id: roleId,
     name: ROLE_NAMES_BY_ID[roleId] ?? "VIEWER",
@@ -26,11 +28,15 @@ function roleFor(roleId: string, now: Date): UserWithRole["role"] {
   };
 }
 
-function buildUser(overrides: Partial<UserWithRole> = {}): UserWithRole {
+function buildUser(
+  overrides: Partial<UserWithRole> & { roleId?: string; businessId?: string } = {},
+): UserWithRole {
   const now = new Date();
   const roleId = overrides.roleId ?? "role-viewer";
+  const businessId = overrides.businessId ?? BUSINESS_ID;
+  const id = overrides.id ?? randomUUID();
   return {
-    id: randomUUID(),
+    id,
     email: "existing@example.com",
     passwordHash: "hash",
     firstName: "Existing",
@@ -40,10 +46,18 @@ function buildUser(overrides: Partial<UserWithRole> = {}): UserWithRole {
     isEmailVerified: true,
     lastLoginAt: null,
     createdById: null,
-    roleId,
     avatarAttachmentId: null,
     avatarAttachment: null,
-    role: roleFor(roleId, now),
+    userBusinesses: [
+      {
+        id: randomUUID(),
+        userId: id,
+        businessId,
+        roleId,
+        role: roleFor(roleId, now),
+        createdAt: now,
+      },
+    ],
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -53,10 +67,10 @@ function buildUser(overrides: Partial<UserWithRole> = {}): UserWithRole {
 class FakeUsersRepository implements Partial<IUsersRepository> {
   users = new Map<string, UserWithRole>();
 
-  async findByEmail(email: string) {
+  async findByEmail(email: string, _businessId: string) {
     return [...this.users.values()].find((u) => u.email === email) ?? null;
   }
-  async findById(id: string) {
+  async findById(id: string, _businessId: string) {
     return this.users.get(id) ?? null;
   }
   async create(data: CreateUserData) {
@@ -67,6 +81,7 @@ class FakeUsersRepository implements Partial<IUsersRepository> {
       firstName: data.firstName,
       lastName: data.lastName,
       roleId: data.roleId,
+      businessId: data.businessId,
       passwordHash: data.passwordHash,
       createdAt: now,
       updatedAt: now,
@@ -80,11 +95,19 @@ class FakeUsersRepository implements Partial<IUsersRepository> {
     Object.assign(user, data);
     return user;
   }
-  async assignRole(id: string, roleId: string) {
+  async assignRole(id: string, businessId: string, roleId: string) {
     const user = this.users.get(id);
     if (!user) throw new Error("not found");
-    user.roleId = roleId;
-    user.role = roleFor(roleId, new Date());
+    user.userBusinesses = [
+      {
+        id: randomUUID(),
+        userId: id,
+        businessId,
+        roleId,
+        role: roleFor(roleId, new Date()),
+        createdAt: new Date(),
+      },
+    ];
     return user;
   }
 }
@@ -135,6 +158,7 @@ describe("UsersService", () => {
     const dto = await usersService.createUser(
       { email: "new@example.com", firstName: "New", lastName: "Person", roleId: "role-admin" },
       existing.id,
+      BUSINESS_ID,
     );
     expect(dto.email).toBe("new@example.com");
     expect(dto.role.name).toBe("ADMIN");
@@ -145,6 +169,7 @@ describe("UsersService", () => {
       usersService.createUser(
         { email: existing.email, firstName: "Dup", lastName: "User", roleId: "role-admin" },
         existing.id,
+        BUSINESS_ID,
       ),
     ).rejects.toThrow(ConflictError);
   });
@@ -154,18 +179,19 @@ describe("UsersService", () => {
       usersService.createUser(
         { email: "another@example.com", firstName: "A", lastName: "B", roleId: "role-unknown" },
         existing.id,
+        BUSINESS_ID,
       ),
     ).rejects.toThrow(BadRequestError);
   });
 
   it("throws NotFoundError when assigning a role to a missing user", async () => {
-    await expect(usersService.assignRole(randomUUID(), "role-admin", existing.id)).rejects.toThrow(
-      NotFoundError,
-    );
+    await expect(
+      usersService.assignRole(randomUUID(), "role-admin", existing.id, BUSINESS_ID),
+    ).rejects.toThrow(NotFoundError);
   });
 
   it("assigns a valid role to an existing user", async () => {
-    const dto = await usersService.assignRole(existing.id, "role-admin", existing.id);
+    const dto = await usersService.assignRole(existing.id, "role-admin", existing.id, BUSINESS_ID);
     expect(dto.role.name).toBe("ADMIN");
   });
 });
