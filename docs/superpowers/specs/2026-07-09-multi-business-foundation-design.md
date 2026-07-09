@@ -23,12 +23,12 @@ entity, not a hardcoded pair.
 - A `Business` entity (with registration/contact details: GST, Udyam, MSME, PAN,
   address, contacts) that scopes the operational data of the platform.
 - Row-level data isolation: `businessId` added to Tender, Project, Boq, Rfq,
-  PurchaseOrder, GoodsReceipt, BankAccount, Invoice, Expense, Payment. Attachments,
-  AuditLog, and Notifications inherit scope implicitly through their parent entity —
-  no new column needed on those.
-- Vendors, Client Organizations, and the Historical Rate database stay shared/global
-  across businesses (single list, no duplicate data entry) — only transactional
-  records (POs, RFQs, tenders) scope to a business.
+  PurchaseOrder, GoodsReceipt, BankAccount, Invoice, Expense, Payment, and
+  HistoricalRate. Attachments, AuditLog, and Notifications inherit scope implicitly
+  through their parent entity — no new column needed on those.
+- Vendors and Client Organizations stay shared/global across businesses (single list,
+  no duplicate data entry) — only transactional and estimation records (POs, RFQs,
+  tenders, historical rates) scope to a business.
 - Regular staff belong to exactly one business (enforced via login); the owner's
   account belongs to multiple, with an in-app switcher to set the active one.
 - Permission *definitions* (the `resource:action` catalog) stay global; a user's role
@@ -46,6 +46,11 @@ entity, not a hardcoded pair.
 - **Combined cross-business dashboard/reporting** — deferred. Nothing here blocks it
   (it's "drop the businessId filter, group by business" on the same tables later), but
   it isn't built in this phase.
+- **Cross-business historical rate lookups** — each business's rate history is scoped
+  and separate for now. Pulling rates across businesses (e.g. "show me this item's rate
+  across all my companies" for estimation) is a real future use case, structurally
+  unblocked by giving `HistoricalRate` its own `businessId` (same "drop the filter"
+  pattern as the combined dashboard), but not built in this phase.
 - **Self-service tenant onboarding or billing** for productizing to other companies —
   explicitly deferred ("if I ever choose to ship it as a product").
 - **Per-business branding/theming.**
@@ -117,13 +122,13 @@ model UserBusiness {
 
 - `businessId String` (required, indexed) added directly to: `Tender`, `Project`,
   `Boq`, `Rfq`, `PurchaseOrder`, `GoodsReceipt`, `BankAccount`, `Invoice`, `Expense`,
-  `Payment`.
-- `Vendor`, `Organization` (and their child tables), and `HistoricalRate` get **no**
-  `businessId` — they stay global, mirroring today's behavior. `HistoricalRate` in
-  particular has no enforced relation to `Tender` (`sourceTenderId` is an optional,
-  unenforced `String` reference, not a Prisma `@relation`), so it already functions as
-  a shared market-rate reference database rather than tender-owned data — treating it
-  as global is a continuation of its current shape, not a new decision.
+  `Payment`, `HistoricalRate`. For `HistoricalRate` this is a new column despite its
+  weak current coupling to `Tender` (`sourceTenderId` is an optional, unenforced
+  `String` reference, not a Prisma `@relation`) — rates are scoped to whichever
+  business recorded them. Cross-business rate lookups are future work (see Non-goals),
+  and will be a straightforward filter-drop on top of this column when built.
+- `Vendor` and `Organization` (and their child tables) get **no** `businessId` — they
+  stay global, mirroring today's behavior.
 - `Role`/`Permission`/`RolePermission` are unchanged (still global catalog). `User`
   drops its single `roleId` FK; role is now per-`UserBusiness` row.
 
