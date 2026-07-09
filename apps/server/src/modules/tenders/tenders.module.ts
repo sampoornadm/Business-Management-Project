@@ -15,7 +15,7 @@ import { TendersRepository } from "./tenders.repository.js";
 import { createTendersRouter } from "./tenders.routes.js";
 import { TendersService } from "./tenders.service.js";
 
-const tendersRepository = new TendersRepository(prisma);
+export const tendersRepository = new TendersRepository(prisma);
 const tagsRepository = new TagsRepository(prisma);
 const emailService = new EmailService();
 

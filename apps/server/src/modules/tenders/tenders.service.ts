@@ -10,9 +10,11 @@ import {
 } from "@bmp/types";
 
 import { GENERIC_UPLOAD_LIMITS } from "../../config/constants.js";
+import { env } from "../../config/env.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
 import type { EmailService } from "../../infra/mailer/email.service.js";
+import { logger } from "../../shared/logger/logger.js";
 import { toAttachmentDto } from "../attachments/attachments.mapper.js";
 import type { AttachmentsService } from "../attachments/attachments.service.js";
 import type { AuditService } from "../audit/audit.service.js";
@@ -21,6 +23,7 @@ import type { IOrganizationsRepository } from "../organizations/organizations.re
 import type { ITagsRepository } from "../tags/tags.repository.js";
 import type { IUsersRepository } from "../users/users.repository.js";
 
+import { ensureTenderFolders } from "./local-docs/folder-naming.js";
 import { toTenderDto, toTenderListItemDto } from "./tenders.mapper.js";
 import type {
   CreateCompetitorData,
@@ -83,6 +86,18 @@ export class TendersService {
     if (!client) throw new BadRequestError("Invalid client");
 
     const tender = await this.tendersRepository.create(data);
+
+    // Fire-and-forget: a failure to create the local folder tree shouldn't
+    // fail tender creation, and the watcher's startup reconciliation
+    // self-heals this anyway if it's ever missing.
+    if (env.LOCAL_DOCS_SYNC_ENABLED) {
+      void ensureTenderFolders(env.LOCAL_DOCS_ROOT_DIR, tender).catch((error: unknown) => {
+        logger.warn(
+          `Could not create local docs folder for tender ${tender.tenderNumber}: ${error instanceof Error ? error.message : error}`,
+        );
+      });
+    }
+
     await this.auditService.log({
       actorId: data.createdById,
       action: "TENDER_CREATED",

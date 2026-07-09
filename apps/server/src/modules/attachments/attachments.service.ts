@@ -40,6 +40,7 @@ const EXTENSION_BY_MIME: Record<string, string> = {
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
   "application/vnd.ms-excel": "xls",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "text/plain": "txt",
 };
 
 function extensionFor(mimeType: string): string {
