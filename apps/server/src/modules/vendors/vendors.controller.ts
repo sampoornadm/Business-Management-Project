@@ -1,3 +1,4 @@
+import { BadRequestError } from "../../core/errors/HttpErrors.js";
 import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 import { resolvePagination } from "../../shared/utils/pagination.js";
@@ -6,6 +7,7 @@ import type { VendorsService } from "./vendors.service.js";
 import type {
   CreateContactBody,
   CreateVendorBody,
+  CreateVendorItemTagBody,
   ListVendorsQuery,
   UpdateContactBody,
   UpdateVendorBody,
@@ -85,5 +87,22 @@ export class VendorsController {
   getPerformance = asyncHandler(async (req, res) => {
     const performance = await this.vendorsService.getPerformance(req.params.id!);
     sendSuccess(res, performance, "Vendor performance retrieved");
+  });
+
+  addItemTag = asyncHandler(async (req, res) => {
+    const body = req.body as CreateVendorItemTagBody;
+    const vendor = await this.vendorsService.addItemTag(req.params.id!, body, req.user!.id);
+    sendSuccess(res, vendor, "Item tag added", 201);
+  });
+
+  deleteItemTag = asyncHandler(async (req, res) => {
+    const vendor = await this.vendorsService.removeItemTag(req.params.id!, req.params.tagId!, req.user!.id);
+    sendSuccess(res, vendor, "Item tag removed");
+  });
+
+  importItemTags = asyncHandler(async (req, res) => {
+    if (!req.file) throw new BadRequestError("No file provided");
+    const result = await this.vendorsService.importItemTags(req.file.buffer, req.user!.id);
+    sendSuccess(res, result, "Item tags imported");
   });
 }

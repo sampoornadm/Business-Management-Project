@@ -43,3 +43,9 @@ export type CreateContactBody = z.infer<typeof createContactSchema>;
 
 export const updateContactSchema = createContactSchema.partial();
 export type UpdateContactBody = z.infer<typeof updateContactSchema>;
+
+export const createVendorItemTagSchema = z.object({
+  itemType: z.string().min(1).max(100),
+  make: z.string().max(100).optional(),
+});
+export type CreateVendorItemTagBody = z.infer<typeof createVendorItemTagSchema>;

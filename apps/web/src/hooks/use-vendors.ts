@@ -4,6 +4,8 @@ import type {
   ApiResponse,
   CreateVendorContactInput,
   CreateVendorInput,
+  CreateVendorItemTagInput,
+  ImportVendorItemTagsResult,
   ListVendorsQuery,
   PaginatedResult,
   UpdateVendorContactInput,
@@ -135,6 +137,56 @@ export function useDeleteVendorContact(vendorId: string) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["vendors", vendorId] });
+    },
+  });
+}
+
+export function useAddVendorItemTag(vendorId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateVendorItemTagInput) => {
+      const response = await apiClient.post<ApiResponse<VendorDto>>(
+        `/vendors/${vendorId}/item-tags`,
+        input,
+      );
+      return unwrap(response.data);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["vendors", vendorId] });
+    },
+  });
+}
+
+export function useDeleteVendorItemTag(vendorId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (tagId: string) => {
+      const response = await apiClient.delete<ApiResponse<VendorDto>>(
+        `/vendors/${vendorId}/item-tags/${tagId}`,
+      );
+      return unwrap(response.data);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["vendors", vendorId] });
+    },
+  });
+}
+
+export function useImportVendorItemTags() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await apiClient.post<ApiResponse<ImportVendorItemTagsResult>>(
+        "/vendors/item-tags/import",
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } },
+      );
+      return unwrap(response.data);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["vendors"] });
     },
   });
 }

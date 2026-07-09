@@ -23,6 +23,7 @@ export const GENERIC_UPLOAD_LIMITS = {
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/zip",
+    "text/plain",
   ] as const,
 };
 
@@ -40,6 +41,11 @@ export const TENDER_EXTRACTION_UPLOAD_LIMITS = {
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ] as const,
+};
+
+export const VENDOR_ITEM_TAGS_IMPORT_LIMITS = {
+  MAX_SIZE_BYTES: 5 * 1024 * 1024,
+  ALLOWED_MIME_TYPES: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"] as const,
 };
 
 export const RATE_LIMITS = {

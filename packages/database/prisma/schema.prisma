@@ -587,6 +587,7 @@ model Vendor {
   createdBy   User   @relation("VendorCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   contacts       VendorContact[]
+  itemTags       VendorItemTag[]
   rfqInvites     RfqVendor[]
   quotes         RfqQuote[]
   awardedRfqs    Rfq[]           @relation("RfqAwardedVendor")
@@ -599,6 +600,24 @@ model Vendor {
 
   @@index([name])
   @@map("vendors")
+}
+
+// What a vendor sells, for RFQ vendor-suggestion matching. Deliberately flat
+// (many rows per vendor, one spreadsheet row = one tag) rather than a rigid
+// item catalog — BOQ item descriptions are far too varied for exact-SKU
+// matching; itemType is a coarser, user-curated vocabulary that descriptions
+// get keyword-matched against.
+model VendorItemTag {
+  id        String   @id @default(uuid())
+  vendorId  String
+  vendor    Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  itemType  String
+  make      String?
+  createdAt DateTime @default(now())
+
+  @@index([vendorId])
+  @@index([itemType])
+  @@map("vendor_item_tags")
 }
 
 model VendorContact {

@@ -8,6 +8,7 @@ import { toSkipTake } from "../../shared/utils/pagination.js";
 const vendorWithContacts = {
   include: {
     contacts: { orderBy: { isPrimary: "desc" } },
+    itemTags: { orderBy: { createdAt: "desc" } },
     ratings: { select: { rating: true } },
     _count: { select: { ratings: true } },
   },
@@ -55,8 +56,22 @@ export interface CreateContactData {
 
 export type UpdateContactData = Partial<Omit<CreateContactData, "vendorId">>;
 
+export interface CreateItemTagData {
+  vendorId: string;
+  itemType: string;
+  make?: string | null;
+}
+
+export interface VendorItemTypeMatch {
+  vendorId: string;
+  vendorName: string;
+  itemType: string;
+  make: string | null;
+}
+
 export interface IVendorsRepository {
   findById(id: string): Promise<VendorWithContacts | null>;
+  findByNameExact(name: string): Promise<{ id: string; name: string } | null>;
   findMany(
     pagination: PaginationParams,
     filters: VendorFilters,
@@ -69,6 +84,10 @@ export interface IVendorsRepository {
   updateContact(id: string, data: UpdateContactData): Promise<void>;
   deleteContact(id: string): Promise<void>;
   findRatings(vendorId: string): Promise<VendorRatingWithRater[]>;
+  createItemTag(data: CreateItemTagData): Promise<void>;
+  deleteItemTag(id: string): Promise<void>;
+  findDistinctItemTypes(): Promise<string[]>;
+  findActiveVendorsByItemTypes(itemTypes: string[]): Promise<VendorItemTypeMatch[]>;
 }
 
 export class VendorsRepository implements IVendorsRepository {
@@ -76,6 +95,13 @@ export class VendorsRepository implements IVendorsRepository {
 
   findById(id: string): Promise<VendorWithContacts | null> {
     return this.prisma.vendor.findUnique({ where: { id }, ...vendorWithContacts });
+  }
+
+  findByNameExact(name: string): Promise<{ id: string; name: string } | null> {
+    return this.prisma.vendor.findFirst({
+      where: { name: { equals: name, mode: "insensitive" } },
+      select: { id: true, name: true },
+    });
   }
 
   async findMany(
@@ -135,5 +161,35 @@ export class VendorsRepository implements IVendorsRepository {
       orderBy: { createdAt: "desc" },
       ...vendorRatingWithRater,
     });
+  }
+
+  async createItemTag(data: CreateItemTagData): Promise<void> {
+    await this.prisma.vendorItemTag.create({ data: { id: randomUUID(), ...data } });
+  }
+
+  async deleteItemTag(id: string): Promise<void> {
+    await this.prisma.vendorItemTag.delete({ where: { id } });
+  }
+
+  async findDistinctItemTypes(): Promise<string[]> {
+    const rows = await this.prisma.vendorItemTag.findMany({
+      distinct: ["itemType"],
+      select: { itemType: true },
+    });
+    return rows.map((row) => row.itemType);
+  }
+
+  async findActiveVendorsByItemTypes(itemTypes: string[]): Promise<VendorItemTypeMatch[]> {
+    if (itemTypes.length === 0) return [];
+    const rows = await this.prisma.vendorItemTag.findMany({
+      where: { itemType: { in: itemTypes }, vendor: { isActive: true } },
+      select: { itemType: true, make: true, vendor: { select: { id: true, name: true } } },
+    });
+    return rows.map((row) => ({
+      vendorId: row.vendor.id,
+      vendorName: row.vendor.name,
+      itemType: row.itemType,
+      make: row.make,
+    }));
   }
 }

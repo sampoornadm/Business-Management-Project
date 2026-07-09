@@ -27,6 +27,13 @@ export interface VendorListItemDto {
   createdAt: string;
 }
 
+export interface VendorItemTagDto {
+  id: string;
+  itemType: string;
+  make: string | null;
+  createdAt: string;
+}
+
 export interface VendorDto extends VendorListItemDto {
   gstNumber: string | null;
   panNumber: string | null;
@@ -36,6 +43,7 @@ export interface VendorDto extends VendorListItemDto {
   bankIfscCode: string | null;
   notes: string | null;
   contacts: VendorContactDto[];
+  itemTags: VendorItemTagDto[];
   updatedAt: string;
 }
 
@@ -64,6 +72,22 @@ export interface CreateVendorContactInput {
 }
 
 export type UpdateVendorContactInput = Partial<CreateVendorContactInput>;
+
+export interface CreateVendorItemTagInput {
+  itemType: string;
+  make?: string;
+}
+
+export interface ImportVendorItemTagsSkippedRow {
+  row: number;
+  vendorName: string;
+  reason: string;
+}
+
+export interface ImportVendorItemTagsResult {
+  imported: number;
+  skipped: ImportVendorItemTagsSkippedRow[];
+}
 
 export interface ListVendorsQuery {
   page?: number;

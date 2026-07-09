@@ -1,6 +1,7 @@
 import type {
   VendorContactDto,
   VendorDto,
+  VendorItemTagDto,
   VendorListItemDto,
   VendorPerformanceDto,
   VendorRatingDto,
@@ -17,6 +18,15 @@ function toContactDto(contact: VendorWithContacts["contacts"][number]): VendorCo
     phone: contact.phone,
     isPrimary: contact.isPrimary,
     createdAt: contact.createdAt.toISOString(),
+  };
+}
+
+function toItemTagDto(tag: VendorWithContacts["itemTags"][number]): VendorItemTagDto {
+  return {
+    id: tag.id,
+    itemType: tag.itemType,
+    make: tag.make,
+    createdAt: tag.createdAt.toISOString(),
   };
 }
 
@@ -50,6 +60,7 @@ export function toVendorDto(entity: VendorWithContacts): VendorDto {
     bankIfscCode: entity.bankIfscCode,
     notes: entity.notes,
     contacts: entity.contacts.map(toContactDto),
+    itemTags: entity.itemTags.map(toItemTagDto),
     updatedAt: entity.updatedAt.toISOString(),
   };
 }
