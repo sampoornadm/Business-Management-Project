@@ -1,4 +1,5 @@
 export * from "./lib/utils";
+export * from "./lib/india-locations";
 
 export * from "./components/button";
 export * from "./components/input";
