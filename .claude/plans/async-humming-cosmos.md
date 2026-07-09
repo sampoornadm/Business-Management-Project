@@ -1,185 +1,161 @@
-# Integrate BOQ items into the tender view, add item CRUD, reduce statuses
+# Tender documents: local-folder auto-sync, multi-file per type, filename overflow fix
 
 ## Context
 
-Three related pain points surfaced after using the app for real tenders:
+Tender documents currently go through the generic `AttachmentsService`
+(`apps/server/src/modules/attachments/`), uploaded one at a time through the Documents tab's file
+picker. Three problems surfaced:
 
-1. **No way to add items when creating a tender manually** (without uploading a
-   document) — items only ever get in via the document-extraction flow built
-   earlier, or the separate BOQ upload/parse/commit flow. There's no direct
-   "type in an item" path at all.
-2. **BOQ lives on a separate page reached via a header button**
-   (`/tenders/[id]/boq`), not alongside the tender detail view's
-   Overview/Documents/Assignees/Competitors/History tabs. It should be one of
-   those tabs, and that panel should support ad-hoc add/edit/delete of
-   individual items — not just the existing "upload a spreadsheet and commit
-   a whole new version" flow.
-3. **14 tender statuses is too many** for how this business actually works.
-   Reduce to 5: **Draft, Submitted, Won, Lost, Cancelled** — collapsing every
-   internal prep stage (Upcoming/Document Collection/Under Study/BOQ
-   Preparation/Rate Analysis/Approval Pending) into Draft, and both
-   post-submission qualification stages (Technically/Financially Qualified)
-   into Submitted. No separate Archived — Won/Lost/Cancelled are already
-   terminal.
+1. Long filenames overflow the Documents tab's cards instead of truncating.
+2. Each document type (NIT, BOQ, Technical Specs, Drawings, ...) is treated as a single "slot" —
+   uploading a second file for a type is only ever a *version replacement* of the first, never an
+   independent additional file. The user needs to dump multiple files (photos, docs) under one type.
+3. The user wants to manage tender documents primarily as local files/folders on their own machine —
+   dropping files into a folder and having them appear in the app automatically — rather than
+   uploading one at a time through a browser file picker.
 
-Items #1 and #2 are the same underlying gap: once a proper "Items" tab with
-real add/edit/delete exists, the answer to "how do I add items from scratch"
-is simply "create the tender, then add items one by one in its Items tab" —
-no change needed to the New Tender page itself.
+Confirmed with the user (via AskUserQuestion): the local-folder sync should be a **continuous
+background watcher** (not a manual "sync" button), the **app auto-creates the folder tree** per
+tender (not user-managed folder names), local file **deletions are ignored** (one-way, append-only
+sync — deleting from the app's UI is the way to actually remove a document), and **Tender Manager
+gets `attachments:delete`** so they can remove a mis-uploaded file without an Admin.
 
-## What already exists (confirmed by reading the code — reuse, don't rebuild)
-
-- `PATCH /boq-items/:itemId` (`boq.routes.ts:203-209`, `updateBoqItemSchema` in
-  `boq.validation.ts:23-34`) **already accepts itemCode/description/category/
-  unit/quantity/rate/remarks** — the backend already supports editing every
-  field. Only the frontend (`boq-item-grid.tsx`) currently wires up
-  `quantity`/`rate` as editable columns; description/unit just aren't marked
-  `editable: true` yet.
-- `BoqItemGrid` (`apps/web/src/components/boq/boq-item-grid.tsx`) already uses
-  `EditableTreeTable` with inline-editable cells, row selection, and a
-  `renderRowActions` slot (currently the rate-analysis dialog button) — the
-  natural place to add a delete button.
-- `TenderBoqPage` (`apps/web/src/app/(dashboard)/tenders/[id]/boq/page.tsx`)
-  already has all the display logic (status badge, version count, total,
-  compare link, finalize button, upload-new-version) — this content moves
-  into a new tab component, not rebuilt.
-- `boq.service.ts`'s existing mutations (`updateItem`, `bulkUpdateItems`) all
-  follow the same pattern: mutate via `boqRepository`, `auditService.log(...)`,
-  return `this.buildBoqDto(boqId)` (the full item tree) — `addItem`/
-  `deleteItem` follow this exact pattern.
-- `tender-stepper.ts`'s `buildTenderSteps`/`isOnHappyPath` are already fully
-  generic over whatever `TENDER_HAPPY_PATH` array they're given — just needs
-  the array updated to the new 5-status set, no logic changes.
-
-## What's missing (net-new)
-
-- No single-item **create** or **delete** endpoint — only `findItemById`/
-  `updateItem`/`bulkUpdateRates` exist on `IBoqRepository`
-  (`boq.repository.ts:72-85`). Adding or deleting one item today means
-  re-committing the entire item list as a new BOQ *version*, which would
-  version-bomb the BOQ history for what should be lightweight edits.
+This only makes sense while the app's server/worker process runs on the same machine as the watched
+folder — true for the current local dev setup (`pnpm dev`). It's opt-in via an env flag so it's a
+no-op for any environment that doesn't set it (e.g. a future remote deployment).
 
 ## Design
 
-### 1. Item-level create/delete (server)
+### 1. Filename overflow fix (small, standalone)
 
-- `IBoqRepository` (`boq.repository.ts`): add `createItem(boqId, data):
-  Promise<BoqItemWithBreakdown>` and `deleteItem(id): Promise<void>` —
-  same shape/style as the existing `updateItem`.
-- `boq.validation.ts`: add `createBoqItemSchema` (same fields as
-  `updateBoqItemSchema` minus the "at least one field" refinement;
-  `description` required, everything else optional — mirrors
-  `CommitBoqItemInput`'s shape).
-- `boq.service.ts`: add `addItem(tenderId, data, actorId)` — asserts the
-  tender has a current BOQ (reuse `getCurrentBoq`'s not-found message if it
-  doesn't — a tender needs *some* BOQ to add into; if none exists yet, the
-  first "add item" call also creates BOQ version 1 via the existing
-  `boqRepository.createBoq`, so a from-scratch tender never needs the
-  upload/commit flow at all), computes `amount` the same way `updateItem`
-  does, logs `BOQ_ITEM_ADDED`, returns `buildBoqDto`. Add
-  `deleteItem(itemId, actorId)` — same pattern, logs `BOQ_ITEM_DELETED`.
-- `boq.routes.ts`: `POST /tenders/:id/boq/items` (permission `boq:create`,
-  nested like `/parse`/commit) and `DELETE /boq-items/:itemId` (permission
-  `boq:update`, alongside the existing single-item routes on
-  `createBoqItemsRouter`).
-- `boq.controller.ts`: `addItem`/`deleteItem` actions, same
-  `asyncHandler`/`sendSuccess` shape as every other action in the file.
+Root cause: `DocumentUpload`'s card (`packages/ui/src/components/document-upload.tsx`) is placed as a
+grid item inside `tender-documents-tab.tsx`'s `grid md:grid-cols-2` without `min-w-0`. The filename
+`<a>` already has `truncate`, and its immediate flex parent already has `min-w-0 flex-1` — but
+`white-space: nowrap` (from `truncate`) makes the anchor's min-content width equal its full
+unwrapped text width, and with no `min-w-0` on the Card (the grid item), that width bubbles up and
+forces the card/grid to overflow instead of clipping.
 
-### 2. Frontend: fold BOQ into a tender-detail tab with full CRUD
+Fix: change the Card's root className in `document-upload.tsx` from `cn("w-full", className)` to
+`cn("w-full min-w-0", className)` — self-contained so this can't recur wherever the component is
+embedded next.
 
-- New `apps/web/src/components/tenders/tender-items-tab.tsx`, following the
-  exact convention of `tender-documents-tab.tsx`/`tender-assignees-tab.tsx`
-  (self-contained, takes `tenderId`/`tender` props, owns its own queries).
-  Body is `TenderBoqPage`'s current content (status badge, version/total,
-  compare link, finalize, upload-new-version, `BoqItemGrid`) — moved, not
-  rewritten. Add an "Add item" row above the grid (inline form: description
-  input + unit/quantity, submits via a new `useAddBoqItem(tenderId)` hook).
-- `boq-item-grid.tsx`: mark `description`/`unit` columns `editable: true`
-  (wired through the same `commitField`-style pattern already used for
-  quantity/rate — no backend change needed, per above). Add a delete button
-  to `renderRowActions` next to the existing rate-analysis button, calling a
-  new `useDeleteBoqItem(tenderId)` hook.
-- `use-boq.ts`: add `useAddBoqItem(tenderId)` (`POST
-  /tenders/:id/boq/items`) and `useDeleteBoqItem(tenderId)` (`DELETE
-  /boq-items/:itemId`), both invalidating the same `["tenders", tenderId,
-  "boq"]` query key `useCommitBoq`/`useUpdateBoqItem` already use.
-- `apps/web/src/app/(dashboard)/tenders/[id]/page.tsx`: add an `"items"`
-  `TabsTrigger`/`TabsContent` next to Overview/Documents/Assignees/
-  Competitors/History, rendering `<TenderItemsTab tender={tender} />`.
-  Remove the standalone header "BOQ" button (`Link` to `/tenders/:id/boq`)
-  — the tab replaces it.
-- Delete `apps/web/src/app/(dashboard)/tenders/[id]/boq/page.tsx` (content
-  now lives in the tab). **Keep** `boq/compare/page.tsx` as-is — comparing
-  against another tender is a distinct, occasional action, not part of the
-  everyday items panel; link to it from inside the new tab exactly like
-  today.
-- This directly answers "how do I add items from scratch": create the
-  tender (any path, no document needed), open its **Items** tab, use "Add
-  item" — no separate upload required. The document-upload one-shot flow
-  from earlier is now just a shortcut that pre-populates this same tab.
+### 2. Multiple independent files per document type
 
-### 3. Status reduction: 14 → 5
+The DB already supports this — `Attachment` has no uniqueness constraint on
+`(entityType, entityId, documentType)` (confirmed in `packages/database/prisma/schema.prisma`); the
+"one file per type" behavior is purely a frontend convention (`tender-documents-tab.tsx`'s
+`currentByType.get(documentType)` picks a single current attachment per type). So this is a
+**frontend-only redesign**, plus wiring up delete:
 
-**New set**: `DRAFT`, `SUBMITTED`, `WON`, `LOST`, `CANCELLED`.
+- `apps/web/src/components/tenders/tender-documents-tab.tsx`: for each `documentType`, instead of
+  picking one current attachment, group all of that type's attachments by `documentGroupId` (each
+  group = one independent file lineage, versions-of-each-other). Render one `DocumentUpload` card per
+  lineage (unchanged single-lineage semantics: shows current version + "Replace" + version history),
+  plus a trailing "+ Add another file" control that uploads a brand-new file for that type with no
+  `replacesAttachmentId` — which, since there's no DB constraint, simply becomes a second independent
+  lineage under the same type.
+- `packages/ui/src/components/document-upload.tsx`: add an optional `onDelete` prop — a small trash
+  icon next to "Replace" — so a whole lineage (a specific file, all its versions) can be removed.
+- Backend: add `DELETE /tenders/:id/documents/:documentGroupId` (new route in `tenders.routes.ts`,
+  gated by `requirePermission("attachments:delete")`) → `TendersService.deleteDocument(tenderId,
+  documentGroupId, actorId)`, which loads all versions via the existing
+  `attachmentsService.listVersions(documentGroupId)`, calls the existing
+  `attachmentsService.deleteById(id)` (already handles S3 object removal, `attachments.service.ts:174`)
+  for each, and logs one `TENDER_DOCUMENT_DELETED` audit entry — reusing existing primitives, no new
+  attachment-layer code needed.
+- `apps/web/src/hooks/use-tenders.ts`: add `useDeleteTenderDocument(tenderId)` mirroring the existing
+  `useUploadTenderDocument(tenderId)` hook shape, invalidating the same query keys.
+- RBAC: add `"attachments:delete"` to `TENDER_MANAGER_PERMISSIONS` in `packages/types/src/rbac.ts`
+  (confirmed with the user) — needs a reseed (`pnpm db:seed`) + Redis flush to take effect, same as
+  every prior RBAC grant this session.
 
-- `packages/database/prisma/schema.prisma`: shrink the `TenderStatus` enum to
-  the 5 values.
-- **Migration** (`prisma migrate dev --create-only`, then hand-edit the SQL —
-  Postgres can't drop enum values in place, and live data uses removed
-  values today: verified via `docker compose exec postgres psql` — current
-  DB has rows in `UPCOMING`(4), `BOQ_PREPARATION`(1), `RATE_ANALYSIS`(1)
-  alongside `DRAFT`(3)/`WON`(3)). Migration must, in order: (1) `UPDATE
-  tenders SET status = 'DRAFT' WHERE status IN ('UPCOMING',
-  'DOCUMENT_COLLECTION','UNDER_STUDY','BOQ_PREPARATION','RATE_ANALYSIS',
-  'APPROVAL_PENDING')`, (2) `UPDATE tenders SET status = 'SUBMITTED' WHERE
-  status IN ('TECHNICALLY_QUALIFIED','FINANCIALLY_QUALIFIED')`, (3) `UPDATE
-  tenders SET status = 'CANCELLED' WHERE status = 'ARCHIVED'` (defensive;
-  0 rows today), all while the column is still `text`/old enum — then the
-  standard Postgres rename-recreate-cast dance to shrink the enum type
-  itself. Same treatment for `TenderStatusHistory.status` if that table
-  stores the enum too (check during implementation).
-- `packages/types/src/tender.ts`: `TENDER_STATUSES` → 5 values;
-  `TENDER_STATUS_LABELS` trimmed to match; `TENDER_STATUS_TRANSITIONS`
-  simplified to `DRAFT: [SUBMITTED, CANCELLED]`, `SUBMITTED: [WON, LOST,
-  CANCELLED]`, `WON: []`, `LOST: []`, `CANCELLED: []`; drop
-  `TENDER_TERMINAL_STATUSES`'s `ARCHIVED` entry.
-- `apps/web/src/lib/tender-stepper.ts`: `TENDER_HAPPY_PATH` → `[DRAFT,
-  SUBMITTED, WON]` (unchanged logic, per above).
-- `apps/web/src/lib/tender-status.ts`: drop the removed-status `case`s from
-  `tenderStatusBadgeVariant`'s switch (the `default` already covers it
-  safely, this is just cleanup for clarity).
-- `apps/web/src/components/tenders/status-change-dialog.tsx`: no logic
-  change expected (verify during implementation) — it already derives its
-  options from `TENDER_STATUS_TRANSITIONS`/`TENDER_STATUS_LABELS`.
-- RBAC (`rbac.ts`), seed script: scan for any hardcoded references to a
-  removed status value (e.g. a seed fixture explicitly using
-  `BOQ_PREPARATION`) and update to a kept one.
+### 3. Local-folder auto-sync (new: continuous watcher)
 
-## Non-goals
-
-- Not rebuilding the BOQ versioning/finalize/compare mechanics — untouched.
-- Not adding a generic "archive" flag/filter to replace the dropped
-  `ARCHIVED` status — not requested; Won/Lost/Cancelled are sufficient
-  terminal states for now.
-- Not touching the document-upload one-shot extraction flow from the
-  previous change — it still works exactly as before, just now feeds into
-  the relocated Items tab instead of a standalone BOQ page after redirect.
+**Folder layout** (auto-created by the app, one tree per tender):
+```
+<LOCAL_DOCS_ROOT_DIR>/
+  1400013124 - MJ-C06-2025-3063-FLENGE/
+    NIT/
+    BOQ/
+    Technical Specs/
+    Drawings/
+    Corrigendum/
+    Tender Notice/
+    Addendum/
+    General/
+  ABC123 - Test Tender with 2 Items/
+    NIT/
+    BOQ/
+    ...
+```
+- New shared constant `TENDER_DOCUMENT_TYPE_FOLDER_NAMES: Record<TenderDocumentType, string>` in
+  `packages/types/src/tender.ts` (short, filesystem-friendly labels: "NIT", "BOQ", "Technical Specs",
+  "Drawings", "Corrigendum", "Tender Notice", "Addendum", "General") — used both to create the
+  subfolders and, reversed, to map a subfolder name back to a `documentType` when a file is dropped in.
+  Files dropped directly in the tender's root folder (not in any subfolder), or in an unrecognized
+  subfolder name, default to `GENERAL`.
+- **Folder naming**: `"${tender.tenderNumber} - ${sanitizedTitle}"`. Since `Tender.tenderNumber` is
+  already `@unique` (schema confirmed) and, in practice, plain alphanumeric (no path-illegal
+  characters in any real tender seen so far), it's used as-is; only `title` is sanitized (strip
+  `/ \ : * ? " < > |`, trim, cap length). **No new DB column needed** — resolving a folder back to a
+  tender is just `folderName.split(" - ")[0]` → the existing `ITendersRepository.findByTenderNumber`
+  (`tenders.repository.ts:99`, already implemented). This is also rename-safe: if a tender's title is
+  edited later, the on-disk folder name goes stale but the leading tender-number token still resolves
+  correctly, so sync doesn't silently break.
+- **Folder creation**: new pure helper module `apps/server/src/modules/tenders/local-docs/folder-naming.ts`
+  (`tenderFolderName(tender)`, `documentTypeForFolder(name)`, `ensureTenderFolders(rootDir, tender)` —
+  `fs.mkdir(..., { recursive: true })` per subfolder, idempotent). Called from
+  `TendersService.create` right after the tender row is created (fire-and-forget is fine — a failure
+  to create local folders shouldn't fail tender creation; log and continue). For tenders that already
+  exist before this ships, the watcher's startup routine (below) reconciles every tender's folder tree
+  once on boot — no separate backfill migration needed, and it self-heals if a subfolder is ever
+  deleted locally by accident.
+- **Watcher**: new `apps/server/src/modules/tenders/local-docs/docs-watcher.service.ts` using
+  `chokidar` (new dependency, `apps/server/package.json`) watching `LOCAL_DOCS_ROOT_DIR/**` with
+  `awaitWriteFinish: { stabilityThreshold: 1500, pollInterval: 200 }` (avoids reading files mid-copy)
+  and `ignoreInitial: false` (also picks up files dropped while the process was down). On each `add`
+  event:
+  1. Parse the path relative to the root into `[tenderFolder, maybe-subfolder, ..., filename]`.
+  2. Resolve `tenderFolder` → tender via the tenderNumber-prefix lookup above; skip (log) if no match.
+  3. Resolve the subfolder segment (or lack of one) → `documentType` via
+     `TENDER_DOCUMENT_TYPE_FOLDER_NAMES` (case-insensitive), defaulting to `GENERAL`.
+  4. Read the file, hash it, and skip (already-imported, idempotent against restarts/initial scans) if
+     an attachment with that hash already exists for the tender (`attachments.repository.ts` already
+     indexes `hash`).
+  5. Otherwise call the exact same `attachmentsService.upload(...)` used by the manual upload path —
+     `entityType: "Tender"`, `entityId`, `documentType`, no `replacesAttachmentId` (always a new
+     independent lineage, consistent with part 2's multi-file model) — then
+     `auditService.log({ action: "TENDER_DOCUMENT_UPLOADED", metadata: { source: "local-folder-sync" } })`.
+  6. Attribution: uploads need a `uploadedById`. Add one seeded system user (`local-sync@bmp.local`,
+     no login-capable role / permissions) in `packages/database/prisma/seed.ts`, used only for this
+     `uploadedById` so the Documents tab clearly shows "Uploaded by Local Folder Sync" rather than
+     misattributing it to whoever happened to create the tender.
+- **Wiring**: started from `apps/server/src/worker.ts` (same place `startEmailWorker()` /
+  `startTenderReminderWorker()` already live), guarded by a new `LOCAL_DOCS_SYNC_ENABLED` env flag
+  (default `false` — opt-in, so this is a no-op everywhere except a dev machine that turns it on) and
+  `LOCAL_DOCS_ROOT_DIR` (default `~/BMP-Tenders`, `~` expanded via `os.homedir()`). Both added to the
+  `envSchema` in `apps/server/src/config/env.ts` following the existing `z.coerce.boolean()` /
+  `z.string().default(...)` conventions. On startup (before watching begins), reconcile folders for
+  every existing tender (the backfill/self-heal step mentioned above).
+- **Non-goals** (explicitly out of scope for this pass): two-way sync (files uploaded via the web UI
+  are not written back down to the local folder), mirroring local deletions into the app (confirmed
+  with the user), real-time push to an already-open browser tab (the Documents tab picks up
+  watcher-imported files on its next normal refetch, not instantly via websockets), and folder
+  renaming when a tender's title changes.
 
 ## Verification
 
-1. `pnpm --filter @bmp/server typecheck`/`test`, `pnpm --filter @bmp/web
-   typecheck`.
-2. Apply the new migration to the running dev Postgres; confirm via `psql`
-   that all previously-`UPCOMING`/`BOQ_PREPARATION`/`RATE_ANALYSIS` rows are
-   now `DRAFT` and no rows reference a dropped enum value.
-3. Real end-to-end: create a tender with no document, open its Items tab, add
-   two items by hand, edit one's description/quantity/rate inline, delete
-   one, confirm the BOQ total updates and no new BOQ *version* was created
-   for these single-item edits (still version 1).
-4. Confirm the header no longer has a separate "BOQ" button, the tab order is
-   Overview/Items/Documents/Assignees/Competitors/History (or similar), and
-   `/tenders/:id/boq` (old route) is gone while `/tenders/:id/boq/compare`
-   still works from a link inside the tab.
-5. Confirm `StatusChangeDialog` only offers Draft→Submitted/Cancelled and
-   Submitted→Won/Lost/Cancelled — no leftover 14-state options anywhere in
-   the UI (stepper, badges, filters on the tenders list page).
+1. `pnpm --filter @bmp/server typecheck/lint/test`, `pnpm --filter @bmp/web typecheck/lint/test` —
+   new unit tests for `folder-naming.ts` (folder name generation/sanitization, tenderNumber-prefix
+   resolution, document-type folder mapping including the `GENERAL` fallback) and for
+   `TendersService.deleteDocument`.
+2. Real e2e via the dev server (already running):
+   - Filename overflow: open the Documents tab on a tender, upload a file with a very long name,
+     confirm it truncates instead of overflowing the card.
+   - Multi-file: upload two different files under the same document type (e.g. Drawings) without
+     replacing, confirm both appear as independent cards; delete one via the new trash icon and
+     confirm only that lineage disappears.
+   - Folder sync: set `LOCAL_DOCS_SYNC_ENABLED=true` and `LOCAL_DOCS_ROOT_DIR`, restart the worker,
+     confirm the folder tree gets created for existing tenders (including the "MJ/C06/2025/3063-
+     FLENGE" one), drop a file into its `BOQ/` subfolder, and confirm it shows up in the Documents tab
+     within a couple seconds without any manual upload action.
