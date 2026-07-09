@@ -408,6 +408,25 @@ export class TendersService {
     return Promise.all(versions.map(toAttachmentDto));
   }
 
+  async deleteDocument(tenderId: string, documentGroupId: string, actorId: string): Promise<void> {
+    await this.assertTenderExists(tenderId);
+    const versions = await this.attachmentsService.listVersions(documentGroupId);
+    const belongsToTender = versions.every((v) => v.entityType === "Tender" && v.entityId === tenderId);
+    if (versions.length === 0 || !belongsToTender) {
+      throw new NotFoundError("Document group not found for this tender");
+    }
+
+    await Promise.all(versions.map((version) => this.attachmentsService.deleteById(version.id)));
+
+    await this.auditService.log({
+      actorId,
+      action: "TENDER_DOCUMENT_DELETED",
+      entityType: "Tender",
+      entityId: tenderId,
+      metadata: { documentGroupId, versionsDeleted: versions.length },
+    });
+  }
+
   async getDashboardStats(): Promise<TenderDashboardStatsDto> {
     const [statusCounts, upcoming] = await Promise.all([
       this.tendersRepository.countByStatus(),

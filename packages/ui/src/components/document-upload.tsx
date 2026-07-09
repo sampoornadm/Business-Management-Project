@@ -1,12 +1,11 @@
 "use client";
 
-import { Loader2, Upload } from "lucide-react";
+import { Loader2, Trash2, Upload } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "../lib/utils";
 
 import { Badge } from "./badge";
-import { Card, CardContent, CardHeader, CardTitle } from "./card";
 
 export interface DocumentVersion {
   id: string;
@@ -20,10 +19,11 @@ export interface DocumentVersion {
 }
 
 export interface DocumentUploadProps {
-  label: string;
   versions: DocumentVersion[];
   onUpload: (file: File) => void | Promise<void>;
+  onDelete?: () => void | Promise<void>;
   isUploading?: boolean;
+  isDeleting?: boolean;
   accept?: string;
   className?: string;
 }
@@ -43,10 +43,11 @@ function formatBytes(bytes: number): string {
 }
 
 export function DocumentUpload({
-  label,
   versions,
   onUpload,
+  onDelete,
   isUploading = false,
+  isDeleting = false,
   accept = DEFAULT_ACCEPT,
   className,
 }: DocumentUploadProps) {
@@ -72,111 +73,102 @@ export function DocumentUpload({
   };
 
   return (
-    <Card className={cn("w-full", className)}>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">{label}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <input
-          ref={inputRef}
-          type="file"
-          accept={accept}
-          onChange={handleFileChange}
-          className="hidden"
-        />
+    <div className={cn("w-full min-w-0 py-2", className)}>
+      <input ref={inputRef} type="file" accept={accept} onChange={handleFileChange} className="hidden" />
 
-        {!hasVersions ? (
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          {hasVersions ? (
+            <>
+              <a
+                href={currentVersion?.url}
+                target="_blank"
+                rel="noreferrer"
+                className="block truncate text-sm font-medium text-primary hover:underline"
+                title={currentVersion?.originalName}
+              >
+                {currentVersion?.originalName}
+              </a>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                {currentVersion ? formatBytes(currentVersion.sizeBytes) : ""}
+                {versions.length > 1 ? ` · v${currentVersion?.version}` : ""} · Uploaded by{" "}
+                {currentVersion?.uploadedByName}
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">No file uploaded</p>
+          )}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
           <button
             type="button"
             onClick={handleTriggerClick}
             disabled={isUploading}
             className={cn(
-              "flex w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-input bg-background px-4 py-8 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50",
+              "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-input bg-background px-2.5 text-xs font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
             )}
           >
-            {isUploading ? (
-              <Loader2 className="h-6 w-6 animate-spin" />
-            ) : (
-              <Upload className="h-6 w-6" />
-            )}
-            <span>{isUploading ? "Uploading..." : "No file uploaded yet"}</span>
-            {!isUploading ? <span className="text-xs">Click to upload file</span> : null}
+            {isUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            {hasVersions ? "Replace" : "Upload"}
           </button>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-4 rounded-md border p-3">
-              <div className="min-w-0 flex-1">
-                <a
-                  href={currentVersion?.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="truncate text-sm font-medium text-primary hover:underline"
-                >
-                  {currentVersion?.originalName}
-                </a>
-                <p className="mt-1 truncate text-xs text-muted-foreground">
-                  Uploaded by {currentVersion?.uploadedByName} on{" "}
-                  {currentVersion ? new Date(currentVersion.uploadedAt).toLocaleString() : ""} &middot;{" "}
-                  {currentVersion ? formatBytes(currentVersion.sizeBytes) : ""}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleTriggerClick}
-                disabled={isUploading}
-                className={cn(
-                  "inline-flex h-9 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-input bg-background px-3 text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
-                )}
-              >
-                {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                Replace
-              </button>
-            </div>
+          {onDelete && hasVersions ? (
+            <button
+              type="button"
+              onClick={() => void onDelete()}
+              disabled={isDeleting || isUploading}
+              aria-label="Delete file"
+              className={cn(
+                "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-input bg-background text-destructive ring-offset-background transition-colors hover:bg-destructive hover:text-destructive-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+              )}
+            >
+              {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            </button>
+          ) : null}
+        </div>
+      </div>
 
-            {versions.length > 1 ? (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowHistory((value) => !value)}
-                  className="text-xs font-medium text-muted-foreground hover:text-foreground"
+      {versions.length > 1 ? (
+        <div className="mt-1.5">
+          <button
+            type="button"
+            onClick={() => setShowHistory((value) => !value)}
+            className="text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            {showHistory ? "Hide" : "Show"} version history ({versions.length})
+          </button>
+          {showHistory ? (
+            <ul className="mt-2 space-y-2">
+              {historyVersions.map((version) => (
+                <li
+                  key={version.id}
+                  className="flex items-center justify-between gap-4 rounded-md border p-2 text-xs"
                 >
-                  {showHistory ? "Hide" : "Show"} version history ({versions.length})
-                </button>
-                {showHistory ? (
-                  <ul className="mt-2 space-y-2">
-                    {historyVersions.map((version) => (
-                      <li
-                        key={version.id}
-                        className="flex items-center justify-between gap-4 rounded-md border p-2 text-xs"
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Badge variant="secondary" className="shrink-0 font-semibold">
+                      v{version.version}
+                    </Badge>
+                    <div className="min-w-0">
+                      <a
+                        href={version.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block truncate font-medium text-primary hover:underline"
                       >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <Badge variant="secondary" className="shrink-0 font-semibold">
-                            v{version.version}
-                          </Badge>
-                          <div className="min-w-0">
-                            <a
-                              href={version.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="block truncate font-medium text-primary hover:underline"
-                            >
-                              {version.originalName}
-                            </a>
-                            <p className="truncate text-muted-foreground">
-                              {version.uploadedByName} &middot; {new Date(version.uploadedAt).toLocaleString()}{" "}
-                              &middot; {formatBytes(version.sizeBytes)}
-                            </p>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                        {version.originalName}
+                      </a>
+                      <p className="truncate text-muted-foreground">
+                        {version.uploadedByName} &middot; {new Date(version.uploadedAt).toLocaleString()} &middot;{" "}
+                        {formatBytes(version.sizeBytes)}
+                      </p>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
