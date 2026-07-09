@@ -211,6 +211,16 @@ export default function TenderDetailPage() {
                   {tender.createdBy.firstName} {tender.createdBy.lastName}
                 </p>
               </div>
+              {(tender.dealingOfficerName || tender.dealingOfficerEmail || tender.dealingOfficerPhone) && (
+                <div>
+                  <p className="text-muted-foreground">Dealing officer</p>
+                  <p>
+                    {[tender.dealingOfficerName, tender.dealingOfficerEmail, tender.dealingOfficerPhone]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                </div>
+              )}
               {tender.winnerName && (
                 <div>
                   <p className="text-muted-foreground">Winner</p>
