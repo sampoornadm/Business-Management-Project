@@ -22,7 +22,8 @@ export type EmailJobPayload =
       tenderTitle: string;
       daysRemaining: number;
       tenderUrl: string;
-    };
+    }
+  | { type: "rfq"; to: string; rfqTitle: string; bodyText: string };
 
 export const EMAIL_QUEUE_NAME = "email";
 

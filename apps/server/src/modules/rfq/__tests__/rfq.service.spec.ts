@@ -3,9 +3,12 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BadRequestError, ConflictError, NotFoundError } from "../../../core/errors/HttpErrors.js";
+import type { EmailService } from "../../../infra/mailer/email.service.js";
 import type { AuditService } from "../../audit/audit.service.js";
+import type { BoqItemWithBreakdown, IBoqRepository } from "../../boq/boq.repository.js";
 import type { ITendersRepository } from "../../tenders/tenders.repository.js";
-import type { IVendorsRepository } from "../../vendors/vendors.repository.js";
+import type { IUsersRepository } from "../../users/users.repository.js";
+import type { IVendorsRepository, VendorItemTypeMatch } from "../../vendors/vendors.repository.js";
 import type {
   CreateRfqData,
   IRfqRepository,
@@ -78,6 +81,13 @@ class FakeRfqRepository implements IRfqRepository {
     rfq.status = "AWARDED";
   }
 
+  async reopen(id: string, status: RfqDetail["status"]) {
+    const rfq = this.rfqs.get(id);
+    if (!rfq) throw new Error("not found");
+    rfq.status = status;
+    rfq.awardedVendorId = null;
+  }
+
   async findVendorInvite(rfqId: string, vendorId: string) {
     const rfq = this.rfqs.get(rfqId);
     const invite = rfq?.vendorInvites.find((v) => v.vendor.id === vendorId);
@@ -142,15 +152,52 @@ class FakeRfqRepository implements IRfqRepository {
 
 class FakeTendersRepository implements Partial<ITendersRepository> {
   tenderIds = new Set<string>();
+  tenderNumbers = new Map<string, string>();
+
   async findById(id: string) {
-    return this.tenderIds.has(id) ? ({ id } as never) : null;
+    if (!this.tenderIds.has(id)) return null;
+    return { id, tenderNumber: this.tenderNumbers.get(id) ?? "TND-0000" } as never;
   }
+}
+
+interface FakeVendorRecord {
+  id: string;
+  name: string;
+  contacts: { name: string; email: string | null; isPrimary: boolean }[];
 }
 
 class FakeVendorsRepository implements Partial<IVendorsRepository> {
   vendorIds = new Set<string>();
+  vendors = new Map<string, FakeVendorRecord>();
+  itemTags: VendorItemTypeMatch[] = [];
+
   async findById(id: string) {
-    return this.vendorIds.has(id) ? ({ id } as never) : null;
+    if (this.vendors.has(id)) return this.vendors.get(id) as never;
+    return this.vendorIds.has(id) ? ({ id, name: `Vendor ${id.slice(0, 4)}`, contacts: [] } as never) : null;
+  }
+
+  async findDistinctItemTypes() {
+    return [...new Set(this.itemTags.map((tag) => tag.itemType))];
+  }
+
+  async findActiveVendorsByItemTypes(itemTypes: string[]) {
+    return this.itemTags.filter((tag) => itemTypes.includes(tag.itemType));
+  }
+}
+
+class FakeUsersRepository implements Partial<IUsersRepository> {
+  users = new Map<string, { id: string; firstName: string; lastName: string; email: string }>();
+
+  async findById(id: string) {
+    return (this.users.get(id) ?? null) as never;
+  }
+}
+
+class FakeBoqRepository implements Partial<IBoqRepository> {
+  items = new Map<string, BoqItemWithBreakdown>();
+
+  async findItemsByIds(ids: string[]) {
+    return ids.map((id) => this.items.get(id)).filter((item): item is BoqItemWithBreakdown => Boolean(item));
   }
 }
 
@@ -158,6 +205,9 @@ describe("RfqService", () => {
   let repository: FakeRfqRepository;
   let tendersRepository: FakeTendersRepository;
   let vendorsRepository: FakeVendorsRepository;
+  let boqRepository: FakeBoqRepository;
+  let usersRepository: FakeUsersRepository;
+  let emailService: { queueRfqEmail: ReturnType<typeof vi.fn> };
   let auditService: AuditService;
   let service: RfqService;
   const actorId = randomUUID();
@@ -168,13 +218,25 @@ describe("RfqService", () => {
     repository = new FakeRfqRepository();
     tendersRepository = new FakeTendersRepository();
     vendorsRepository = new FakeVendorsRepository();
+    boqRepository = new FakeBoqRepository();
+    usersRepository = new FakeUsersRepository();
     vendorsRepository.vendorIds.add(vendorA);
     vendorsRepository.vendorIds.add(vendorB);
+    usersRepository.users.set(actorId, {
+      id: actorId,
+      firstName: "Priya",
+      lastName: "PurchaseManager",
+      email: "priya@bmp.local",
+    });
+    emailService = { queueRfqEmail: vi.fn().mockResolvedValue(undefined) };
     auditService = { log: vi.fn().mockResolvedValue(undefined) } as unknown as AuditService;
     service = new RfqService(
       repository as unknown as IRfqRepository,
       tendersRepository as unknown as ITendersRepository,
       vendorsRepository as unknown as IVendorsRepository,
+      boqRepository as unknown as IBoqRepository,
+      usersRepository as unknown as IUsersRepository,
+      emailService as unknown as EmailService,
       auditService,
     );
   });
@@ -274,5 +336,223 @@ describe("RfqService", () => {
 
   it("throws for an unknown RFQ id", async () => {
     await expect(service.getById(randomUUID())).rejects.toThrow(NotFoundError);
+  });
+
+  describe("reopen", () => {
+    it("reopens an AWARDED RFQ back to SENT and clears the awarded vendor", async () => {
+      const rfq = await createBasicRfq();
+      await service.addVendorInvite(rfq.id, vendorA, actorId);
+      const awarded = await service.award(rfq.id, vendorA, actorId);
+      expect(awarded.status).toBe("AWARDED");
+
+      const reopened = await service.reopen(rfq.id, actorId);
+      expect(reopened.status).toBe("SENT");
+      expect(reopened.awardedVendorId).toBeNull();
+    });
+
+    it("reopens a CLOSED RFQ with no vendor invites back to DRAFT", async () => {
+      const rfq = await createBasicRfq();
+      await service.close(rfq.id, actorId);
+
+      const reopened = await service.reopen(rfq.id, actorId);
+      expect(reopened.status).toBe("DRAFT");
+    });
+
+    it("reopens a CLOSED RFQ that already had vendor invites back to SENT", async () => {
+      const rfq = await createBasicRfq();
+      await service.addVendorInvite(rfq.id, vendorA, actorId);
+      await service.close(rfq.id, actorId);
+
+      const reopened = await service.reopen(rfq.id, actorId);
+      expect(reopened.status).toBe("SENT");
+    });
+
+    it("rejects reopening an RFQ that isn't finalized", async () => {
+      const rfq = await createBasicRfq();
+      await expect(service.reopen(rfq.id, actorId)).rejects.toThrow(BadRequestError);
+    });
+  });
+
+  describe("suggestVendors", () => {
+    function boqItem(id: string, description: string): BoqItemWithBreakdown {
+      return { id, description } as unknown as BoqItemWithBreakdown;
+    }
+
+    it("suggests vendors whose tagged item type appears in the item description", async () => {
+      const flangeItem = boqItem(randomUUID(), "FLANGE DESIGN SPECIFICATION : ASME B16.5 SLIP ON");
+      boqRepository.items.set(flangeItem.id, flangeItem);
+      vendorsRepository.itemTags = [
+        { vendorId: vendorA, vendorName: "Vendor A", itemType: "FLANGE", make: null },
+        { vendorId: vendorB, vendorName: "Vendor B", itemType: "GASKET", make: null },
+      ];
+
+      const result = await service.suggestVendors([flangeItem.id]);
+
+      expect(result.perItem).toHaveLength(1);
+      expect(result.perItem[0]!.suggestedVendors).toEqual([
+        { vendorId: vendorA, name: "Vendor A", itemType: "FLANGE" },
+      ]);
+      expect(result.recommended).toEqual([{ vendorId: vendorA, name: "Vendor A", coverageCount: 1 }]);
+    });
+
+    it("ranks the recommended vendor by how many selected items it covers", async () => {
+      const flangeItem = boqItem(randomUUID(), "FLANGE, MILD STEEL");
+      const gasketItem = boqItem(randomUUID(), "GASKET, RUBBER");
+      boqRepository.items.set(flangeItem.id, flangeItem);
+      boqRepository.items.set(gasketItem.id, gasketItem);
+      vendorsRepository.itemTags = [
+        { vendorId: vendorA, vendorName: "Vendor A", itemType: "FLANGE", make: null },
+        { vendorId: vendorA, vendorName: "Vendor A", itemType: "GASKET", make: null },
+        { vendorId: vendorB, vendorName: "Vendor B", itemType: "FLANGE", make: null },
+      ];
+
+      const result = await service.suggestVendors([flangeItem.id, gasketItem.id]);
+
+      expect(result.recommended[0]).toEqual({ vendorId: vendorA, name: "Vendor A", coverageCount: 2 });
+      expect(result.recommended[1]).toEqual({ vendorId: vendorB, name: "Vendor B", coverageCount: 1 });
+    });
+
+    it("orders a vendor whose make also appears in the item text first", async () => {
+      const item = boqItem(randomUUID(), "FLANGE, MAKE: ACME, MILD STEEL");
+      boqRepository.items.set(item.id, item);
+      vendorsRepository.itemTags = [
+        { vendorId: vendorA, vendorName: "Vendor A", itemType: "FLANGE", make: null },
+        { vendorId: vendorB, vendorName: "Vendor B", itemType: "FLANGE", make: "ACME" },
+      ];
+
+      const result = await service.suggestVendors([item.id]);
+
+      expect(result.perItem[0]!.suggestedVendors[0]!.vendorId).toBe(vendorB);
+    });
+
+    it("returns no suggestions when nothing in the description matches a tagged item type", async () => {
+      const item = boqItem(randomUUID(), "SOME UNRELATED ITEM");
+      boqRepository.items.set(item.id, item);
+      vendorsRepository.itemTags = [{ vendorId: vendorA, vendorName: "Vendor A", itemType: "FLANGE", make: null }];
+
+      const result = await service.suggestVendors([item.id]);
+
+      expect(result.perItem[0]!.suggestedVendors).toEqual([]);
+      expect(result.recommended).toEqual([]);
+    });
+
+    it("returns empty results when no item ids are given", async () => {
+      const result = await service.suggestVendors([]);
+      expect(result).toEqual({ perItem: [], recommended: [] });
+    });
+  });
+
+  describe("quick send", () => {
+    function boqItem(id: string, description: string, quantity: number, unit: string | null): BoqItemWithBreakdown {
+      return { id, description, quantity, unit } as unknown as BoqItemWithBreakdown;
+    }
+
+    beforeEach(() => {
+      vendorsRepository.vendors.set(vendorA, {
+        id: vendorA,
+        name: "Vendor A",
+        contacts: [
+          { name: "Raj Kumar", email: "raj@vendora.example", isPrimary: true },
+          { name: "Backup Contact", email: "backup@vendora.example", isPrimary: false },
+        ],
+      });
+    });
+
+    describe("previewQuickSend", () => {
+      it("generates preview text addressed to the vendor's primary contact", async () => {
+        const item = boqItem(randomUUID(), "OPC Cement", 500, "bag");
+        boqRepository.items.set(item.id, item);
+
+        const preview = await service.previewQuickSend(
+          { boqItemIds: [item.id], vendorId: vendorA },
+          actorId,
+        );
+
+        expect(preview.vendorContactEmail).toBe("raj@vendora.example");
+        expect(preview.text).toContain("Dear Raj Kumar,");
+        expect(preview.text).toContain("1. OPC Cement — Qty: 500 bag");
+        expect(preview.text).toContain("Priya PurchaseManager");
+        expect(emailService.queueRfqEmail).not.toHaveBeenCalled();
+      });
+
+      it("includes the tender number when a tenderId is given", async () => {
+        const item = boqItem(randomUUID(), "TMT Steel", 1200, "kg");
+        boqRepository.items.set(item.id, item);
+        const tenderId = randomUUID();
+        tendersRepository.tenderIds.add(tenderId);
+        tendersRepository.tenderNumbers.set(tenderId, "TND-0001");
+
+        const preview = await service.previewQuickSend(
+          { tenderId, boqItemIds: [item.id], vendorId: vendorA },
+          actorId,
+        );
+
+        expect(preview.text).toContain("against tender TND-0001");
+      });
+
+      it("rejects when the vendor has no contact email on file", async () => {
+        const item = boqItem(randomUUID(), "Item", 1, null);
+        boqRepository.items.set(item.id, item);
+        vendorsRepository.vendors.set(vendorB, { id: vendorB, name: "Vendor B", contacts: [] });
+
+        await expect(
+          service.previewQuickSend({ boqItemIds: [item.id], vendorId: vendorB }, actorId),
+        ).rejects.toThrow(BadRequestError);
+      });
+
+      it("rejects when no items are selected", async () => {
+        await expect(
+          service.previewQuickSend({ boqItemIds: [], vendorId: vendorA }, actorId),
+        ).rejects.toThrow(BadRequestError);
+      });
+    });
+
+    describe("quickSend", () => {
+      it("creates the RFQ, invites the vendor, and queues the email with the given text", async () => {
+        const item = boqItem(randomUUID(), "OPC Cement", 500, "bag");
+        boqRepository.items.set(item.id, item);
+
+        const rfq = await service.quickSend(
+          { boqItemIds: [item.id], vendorId: vendorA, text: "Custom edited body" },
+          actorId,
+        );
+
+        expect(rfq.status).toBe("SENT");
+        expect(rfq.items).toHaveLength(1);
+        expect(rfq.vendorInvites).toHaveLength(1);
+        expect(rfq.vendorInvites[0]!.vendor.id).toBe(vendorA);
+        expect(emailService.queueRfqEmail).toHaveBeenCalledWith({
+          to: "raj@vendora.example",
+          rfqTitle: rfq.title,
+          bodyText: "Custom edited body",
+        });
+      });
+
+      it("titles the RFQ using the tender number when a tenderId is given", async () => {
+        const item = boqItem(randomUUID(), "Item", 1, null);
+        boqRepository.items.set(item.id, item);
+        const tenderId = randomUUID();
+        tendersRepository.tenderIds.add(tenderId);
+        tendersRepository.tenderNumbers.set(tenderId, "TND-0002");
+
+        const rfq = await service.quickSend(
+          { tenderId, boqItemIds: [item.id], vendorId: vendorA, text: "Body" },
+          actorId,
+        );
+
+        expect(rfq.title).toBe("TND-0002 — RFQ for Vendor A");
+      });
+
+      it("rejects when the vendor has no contact email on file", async () => {
+        const item = boqItem(randomUUID(), "Item", 1, null);
+        boqRepository.items.set(item.id, item);
+        vendorsRepository.vendors.set(vendorB, { id: vendorB, name: "Vendor B", contacts: [] });
+
+        await expect(
+          service.quickSend({ boqItemIds: [item.id], vendorId: vendorB, text: "Body" }, actorId),
+        ).rejects.toThrow(BadRequestError);
+        expect(emailService.queueRfqEmail).not.toHaveBeenCalled();
+      });
+    });
   });
 });

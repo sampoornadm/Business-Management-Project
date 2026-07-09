@@ -1,15 +1,17 @@
 "use client";
 
-import type { BoqDto, BoqItemDto } from "@bmp/types";
-import { Button, EditableTreeTable, Input, useToast, type EditableTreeColumn } from "@bmp/ui";
-import { Trash2 } from "lucide-react";
-import { useState } from "react";
+import type { BoqDto, BoqItemDto, RfqVendorSuggestionsDto } from "@bmp/types";
+import { Badge, Button, EditableTreeTable, Input, useToast, type EditableTreeColumn } from "@bmp/ui";
+import { Send, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { useBulkUpdateBoqItems, useDeleteBoqItem, useUpdateBoqItem } from "@/hooks/use-boq";
+import { useSuggestRfqVendors } from "@/hooks/use-rfq";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
 
 import { RateAnalysisDialog } from "./rate-analysis-dialog";
+import { SendRfqDialog } from "./send-rfq-dialog";
 
 function isLeaf(item: BoqItemDto): boolean {
   return item.children.length === 0;
@@ -28,13 +30,31 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
   const { toast } = useToast();
   const roleName = useAuthStore((state) => state.user?.role.name);
   const canEdit = hasPermission(roleName, "boq:update") && boq.isCurrent;
+  const canSendRfq = hasPermission(roleName, "rfq:create");
 
   const updateItem = useUpdateBoqItem(tenderId);
   const deleteItem = useDeleteBoqItem(tenderId);
   const bulkUpdate = useBulkUpdateBoqItems(tenderId);
+  const suggestVendors = useSuggestRfqVendors();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [percentAdjustment, setPercentAdjustment] = useState("");
+  const [suggestions, setSuggestions] = useState<RfqVendorSuggestionsDto>();
+
+  useEffect(() => {
+    if (!canSendRfq || selectedIds.size === 0) {
+      setSuggestions(undefined);
+      return;
+    }
+    let cancelled = false;
+    suggestVendors.mutateAsync({ boqItemIds: [...selectedIds] }).then((result) => {
+      if (!cancelled) setSuggestions(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canSendRfq, [...selectedIds].join(",")]);
 
   async function commitField(
     item: BoqItemDto,
@@ -145,20 +165,47 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
 
   return (
     <div className="space-y-3">
-      {canEdit && selectedIds.size > 0 && (
-        <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3">
+      {(canEdit || canSendRfq) && selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-3">
           <span className="text-sm">{selectedIds.size} item(s) selected</span>
-          <Input
-            type="number"
-            step="0.01"
-            placeholder="% adjustment"
-            value={percentAdjustment}
-            onChange={(e) => setPercentAdjustment(e.target.value)}
-            className="h-8 w-40"
-          />
-          <Button size="sm" onClick={handleBulkApply} disabled={bulkUpdate.isPending}>
-            Apply to rates
-          </Button>
+          {canEdit && (
+            <>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="% adjustment"
+                value={percentAdjustment}
+                onChange={(e) => setPercentAdjustment(e.target.value)}
+                className="h-8 w-40"
+              />
+              <Button size="sm" onClick={handleBulkApply} disabled={bulkUpdate.isPending}>
+                Apply to rates
+              </Button>
+            </>
+          )}
+          {canSendRfq && (
+            <SendRfqDialog
+              trigger={
+                <Button size="sm" variant="outline">
+                  <Send className="mr-2 h-4 w-4" /> Send RFQ
+                </Button>
+              }
+              tenderId={tenderId}
+              boqItemIds={[...selectedIds]}
+              suggestedVendorId={suggestions?.recommended[0]?.vendorId}
+              onSent={() => setSelectedIds(new Set())}
+            />
+          )}
+          {canSendRfq && suggestions && suggestions.recommended.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-xs text-muted-foreground">Suggested:</span>
+              {suggestions.recommended.map((rec) => (
+                <Badge key={rec.vendorId} variant="outline" className="text-xs">
+                  {rec.name} · {rec.coverageCount}
+                </Badge>
+              ))}
+            </div>
+          )}
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
             Clear
           </Button>
@@ -168,7 +215,7 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
       <EditableTreeTable
         data={boq.items}
         columns={columns}
-        selectable={canEdit}
+        selectable={canEdit || canSendRfq}
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
         isRowSelectable={isLeaf}

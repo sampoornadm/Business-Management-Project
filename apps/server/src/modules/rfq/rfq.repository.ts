@@ -64,6 +64,7 @@ export interface IRfqRepository {
   update(id: string, data: UpdateRfqData): Promise<void>;
   updateStatus(id: string, status: RfqStatus): Promise<void>;
   setAwardedVendor(id: string, vendorId: string): Promise<void>;
+  reopen(id: string, status: RfqStatus): Promise<void>;
   findVendorInvite(rfqId: string, vendorId: string): Promise<{ id: string } | null>;
   addVendorInvite(rfqId: string, vendorId: string): Promise<void>;
   updateVendorInviteStatus(rfqId: string, vendorId: string, status: RfqVendorStatus): Promise<void>;
@@ -138,6 +139,10 @@ export class RfqRepository implements IRfqRepository {
       where: { id },
       data: { awardedVendorId: vendorId, status: "AWARDED" },
     });
+  }
+
+  async reopen(id: string, status: RfqStatus): Promise<void> {
+    await this.prisma.rfq.update({ where: { id }, data: { status, awardedVendorId: null } });
   }
 
   findVendorInvite(rfqId: string, vendorId: string): Promise<{ id: string } | null> {

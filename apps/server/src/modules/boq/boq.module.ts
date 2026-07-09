@@ -8,7 +8,7 @@ import { BoqRepository } from "./boq.repository.js";
 import { createBoqItemsRouter, createBoqRouter } from "./boq.routes.js";
 import { BoqService } from "./boq.service.js";
 
-const boqRepository = new BoqRepository(prisma);
+export const boqRepository = new BoqRepository(prisma);
 const tendersRepository = new TendersRepository(prisma);
 
 export const boqService = new BoqService(boqRepository, tendersRepository, attachmentsService, auditService);

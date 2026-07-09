@@ -54,6 +54,15 @@ export class EmailService {
     });
   }
 
+  async queueRfqEmail(params: { to: string; rfqTitle: string; bodyText: string }): Promise<void> {
+    await emailQueue.add("send-email", {
+      type: "rfq",
+      to: params.to,
+      rfqTitle: params.rfqTitle,
+      bodyText: params.bodyText,
+    });
+  }
+
   async queueTenderDeadlineReminderEmail(params: {
     to: string;
     firstName: string;

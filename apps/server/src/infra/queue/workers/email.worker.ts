@@ -6,6 +6,7 @@ import { mailer } from "../../mailer/mailer.js";
 import {
   buildInviteEmail,
   buildPasswordResetEmail,
+  buildRfqEmail,
   buildTenderAssignedEmail,
   buildTenderDeadlineReminderEmail,
   buildVerificationEmail,
@@ -26,6 +27,8 @@ function buildContent(payload: EmailJobPayload): EmailContent {
       return buildTenderAssignedEmail(payload);
     case "tender-deadline-reminder":
       return buildTenderDeadlineReminderEmail(payload);
+    case "rfq":
+      return buildRfqEmail(payload);
   }
 }
 

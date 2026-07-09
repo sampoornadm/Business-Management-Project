@@ -6,9 +6,14 @@ import type {
   CreateRfqInput,
   ListRfqsQuery,
   PaginatedResult,
+  QuickSendRfqInput,
+  QuickSendRfqPreviewDto,
+  QuickSendRfqPreviewInput,
   RfqComparisonDto,
   RfqDto,
   RfqListItemDto,
+  RfqVendorSuggestionsDto,
+  SuggestRfqVendorsInput,
   UpdateRfqInput,
   UpsertRfqQuoteInput,
 } from "@bmp/types";
@@ -42,6 +47,43 @@ export function useRfq(id: string | undefined) {
 
 function invalidateRfq(queryClient: ReturnType<typeof useQueryClient>, id: string) {
   void queryClient.invalidateQueries({ queryKey: ["rfqs", id] });
+}
+
+export function useSuggestRfqVendors() {
+  return useMutation({
+    mutationFn: async (input: SuggestRfqVendorsInput) => {
+      const response = await apiClient.post<ApiResponse<RfqVendorSuggestionsDto>>(
+        "/rfqs/suggest-vendors",
+        input,
+      );
+      return unwrap(response.data);
+    },
+  });
+}
+
+export function usePreviewQuickSendRfq() {
+  return useMutation({
+    mutationFn: async (input: QuickSendRfqPreviewInput) => {
+      const response = await apiClient.post<ApiResponse<QuickSendRfqPreviewDto>>(
+        "/rfqs/quick-send/preview",
+        input,
+      );
+      return unwrap(response.data);
+    },
+  });
+}
+
+export function useQuickSendRfq() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: QuickSendRfqInput) => {
+      const response = await apiClient.post<ApiResponse<RfqDto>>("/rfqs/quick-send", input);
+      return unwrap(response.data);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["rfqs"] });
+    },
+  });
 }
 
 export function useCreateRfq() {
@@ -142,6 +184,17 @@ export function useCloseRfq(id: string) {
   return useMutation({
     mutationFn: async () => {
       const response = await apiClient.post<ApiResponse<RfqDto>>(`/rfqs/${id}/close`);
+      return unwrap(response.data);
+    },
+    onSuccess: () => invalidateRfq(queryClient, id),
+  });
+}
+
+export function useReopenRfq(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await apiClient.post<ApiResponse<RfqDto>>(`/rfqs/${id}/reopen`);
       return unwrap(response.data);
     },
     onSuccess: () => invalidateRfq(queryClient, id),

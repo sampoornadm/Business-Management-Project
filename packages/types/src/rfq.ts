@@ -118,3 +118,44 @@ export interface ListRfqsQuery {
   status?: RfqStatus;
   tenderId?: string;
 }
+
+export interface SuggestRfqVendorsInput {
+  boqItemIds: string[];
+}
+
+export interface SuggestedVendorDto {
+  vendorId: string;
+  name: string;
+  itemType: string;
+}
+
+export interface RfqVendorSuggestionsPerItemDto {
+  boqItemId: string;
+  suggestedVendors: SuggestedVendorDto[];
+}
+
+export interface RecommendedVendorDto {
+  vendorId: string;
+  name: string;
+  coverageCount: number;
+}
+
+export interface RfqVendorSuggestionsDto {
+  perItem: RfqVendorSuggestionsPerItemDto[];
+  recommended: RecommendedVendorDto[];
+}
+
+export interface QuickSendRfqPreviewInput {
+  tenderId?: string;
+  boqItemIds: string[];
+  vendorId: string;
+}
+
+export interface QuickSendRfqPreviewDto {
+  text: string;
+  vendorContactEmail: string;
+}
+
+export interface QuickSendRfqInput extends QuickSendRfqPreviewInput {
+  text: string;
+}
