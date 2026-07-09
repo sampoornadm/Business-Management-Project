@@ -38,6 +38,7 @@ import { TenderItemsTab } from "@/components/tenders/tender-items-tab";
 import { useTags } from "@/hooks/use-tags";
 import { useChangeTenderStatus, useDeleteTender, useSetTenderTags, useTender } from "@/hooks/use-tenders";
 import { useAuthStore } from "@/lib/auth-store";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { hasPermission } from "@/lib/permissions";
 import { tenderPriorityBadgeVariant, tenderStatusBadgeVariant } from "@/lib/tender-status";
 import { buildTenderSteps, isOnHappyPath } from "@/lib/tender-stepper";
@@ -50,6 +51,7 @@ export default function TenderDetailPage() {
 
   const tenderQuery = useTender(params.id);
   const tagsQuery = useTags();
+  useBreadcrumbLabel(params.id, tenderQuery.data?.title);
   const changeStatus = useChangeTenderStatus(params.id);
   const deleteTender = useDeleteTender();
   const setTags = useSetTenderTags(params.id);

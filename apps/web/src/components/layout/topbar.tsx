@@ -18,6 +18,7 @@ import { Fragment } from "react";
 
 import { useLogout } from "@/hooks/use-auth";
 import { useAuthStore } from "@/lib/auth-store";
+import { useBreadcrumbStore } from "@/lib/breadcrumb-store";
 
 import { NotificationBell } from "./notification-bell";
 import { ThemeToggle } from "./theme-toggle";
@@ -32,23 +33,32 @@ function toTitleCase(segment: string): string {
 
 function Breadcrumbs() {
   const pathname = usePathname();
-  const segments = pathname.split("/").filter(Boolean);
+  const labels = useBreadcrumbStore((state) => state.labels);
+  const segments = pathname.split("/").filter((segment) => segment && segment !== "dashboard");
 
   return (
     <nav className="flex items-center gap-1 text-sm text-muted-foreground">
       <Link href="/dashboard" className="hover:text-foreground">
         Home
       </Link>
-      {segments
-        .filter((segment) => segment !== "dashboard")
-        .map((segment, index, arr) => (
+      {segments.map((segment, index, arr) => {
+        const href = `/${segments.slice(0, index + 1).join("/")}`;
+        const label = labels[segment] ?? toTitleCase(segment);
+        const isLast = index === arr.length - 1;
+
+        return (
           <Fragment key={segment}>
             <span>/</span>
-            <span className={index === arr.length - 1 ? "font-medium text-foreground" : ""}>
-              {toTitleCase(segment)}
-            </span>
+            {isLast ? (
+              <span className="font-medium text-foreground">{label}</span>
+            ) : (
+              <Link href={href} className="hover:text-foreground">
+                {label}
+              </Link>
+            )}
           </Fragment>
-        ))}
+        );
+      })}
     </nav>
   );
 }
