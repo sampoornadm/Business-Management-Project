@@ -7,6 +7,7 @@ export interface AccessTokenPayload {
   sub: string;
   roleId: string;
   roleName: string;
+  businessId: string;
 }
 
 export interface IssuedAccessToken {
@@ -29,6 +30,7 @@ export class TokenService {
         sub: decoded.sub as string,
         roleId: (decoded as jwt.JwtPayload & AccessTokenPayload).roleId,
         roleName: (decoded as jwt.JwtPayload & AccessTokenPayload).roleName,
+        businessId: (decoded as jwt.JwtPayload & AccessTokenPayload).businessId,
       };
     } catch {
       throw new UnauthorizedError("Invalid or expired access token");

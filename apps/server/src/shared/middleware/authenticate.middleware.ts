@@ -7,6 +7,7 @@ export interface AuthenticatedUser {
   id: string;
   roleId: string;
   roleName: string;
+  businessId: string;
 }
 
 declare module "express-serve-static-core" {
@@ -26,6 +27,6 @@ export function authenticateMiddleware(req: Request, _res: Response, next: NextF
 
   const token = header.slice("Bearer ".length);
   const payload = tokenService.verifyAccessToken(token);
-  req.user = { id: payload.sub, roleId: payload.roleId, roleName: payload.roleName };
+  req.user = { id: payload.sub, roleId: payload.roleId, roleName: payload.roleName, businessId: payload.businessId };
   next();
 }
