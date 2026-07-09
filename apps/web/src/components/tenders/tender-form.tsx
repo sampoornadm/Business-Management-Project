@@ -7,12 +7,14 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  CITIES_BY_STATE,
   Form,
   FormControl,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
+  INDIA_STATES,
   Input,
   Select,
   SelectContent,
@@ -20,11 +22,13 @@ import {
   SelectTrigger,
   SelectValue,
   Textarea,
+  type IndiaState,
 } from "@bmp/ui";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { CreateOrganizationDialog } from "@/components/organizations/create-organization-dialog";
 import { useOrganizations } from "@/hooks/use-organizations";
 
 const numericString = (label: string) =>
@@ -65,6 +69,9 @@ const tenderFormSchema = z.object({
   priority: z.enum(TENDER_PRIORITIES),
   description: z.string().optional(),
   remarks: z.string().optional(),
+  dealingOfficerName: z.string().optional(),
+  dealingOfficerEmail: z.string().optional(),
+  dealingOfficerPhone: z.string().optional(),
 });
 
 export type TenderFormValues = z.infer<typeof tenderFormSchema>;
@@ -82,6 +89,9 @@ export function toCreateTenderInput(values: TenderFormValues): CreateTenderInput
     documentFee: toOptionalNumber(values.documentFee),
     validityPeriodDays: toOptionalNumber(values.validityPeriodDays),
     openingDate: values.openingDate || undefined,
+    dealingOfficerName: values.dealingOfficerName || undefined,
+    dealingOfficerEmail: values.dealingOfficerEmail || undefined,
+    dealingOfficerPhone: values.dealingOfficerPhone || undefined,
   };
 }
 
@@ -90,20 +100,26 @@ const DEFAULT_VALUES: TenderFormValues = {
   title: "",
   department: "",
   clientId: "",
-  type: "",
+  // Most tenders on this system come through SAIL's registered-vendor
+  // SRM/e-Procurement process, not an open public tender — LIMITED is the
+  // common case, and it's still just a default the user can change.
+  type: "LIMITED",
   category: "",
-  location: "",
-  state: "",
-  estimatedCost: "",
-  emdAmount: "",
-  tenderFee: "",
-  documentFee: "",
+  location: "Kolkata",
+  state: "West Bengal",
+  estimatedCost: "0.00",
+  emdAmount: "0.00",
+  tenderFee: "0.00",
+  documentFee: "0.00",
   submissionDate: "",
   openingDate: "",
   validityPeriodDays: "",
   priority: "MEDIUM",
   description: "",
   remarks: "",
+  dealingOfficerName: "",
+  dealingOfficerEmail: "",
+  dealingOfficerPhone: "",
 };
 
 export interface TenderFormProps {
@@ -111,6 +127,8 @@ export interface TenderFormProps {
   onSubmit: (values: TenderFormValues) => Promise<void>;
   isSubmitting?: boolean;
   submitLabel?: string;
+  /** Client name detected from document extraction but not matched to an existing organization. */
+  suggestedClientName?: string;
 }
 
 export function TenderForm({
@@ -118,6 +136,7 @@ export function TenderForm({
   onSubmit,
   isSubmitting = false,
   submitLabel = "Save",
+  suggestedClientName,
 }: TenderFormProps) {
   const organizationsQuery = useOrganizations({ pageSize: 100 });
 
@@ -125,6 +144,7 @@ export function TenderForm({
     resolver: zodResolver(tenderFormSchema),
     defaultValues: { ...DEFAULT_VALUES, ...defaultValues },
   });
+  const watchedState = form.watch("state");
 
   return (
     <Form {...form}>
@@ -188,7 +208,18 @@ export function TenderForm({
               name="clientId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Client</FormLabel>
+                  <div className="flex items-center justify-between">
+                    <FormLabel>Client</FormLabel>
+                    <CreateOrganizationDialog
+                      trigger={
+                        <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs">
+                          + New organization
+                        </Button>
+                      }
+                      defaultName={suggestedClientName}
+                      onCreated={(organization) => field.onChange(organization.id)}
+                    />
+                  </div>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
@@ -284,31 +315,121 @@ export function TenderForm({
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="location"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Location</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                name="state"
+                render={({ field }) => {
+                  // Falls back to showing the raw value as its own option when
+                  // editing an existing tender whose state predates this
+                  // curated list — otherwise a Radix Select with no matching
+                  // SelectItem silently renders blank (see CLAUDE.md gotcha).
+                  const options =
+                    field.value && !(INDIA_STATES as readonly string[]).includes(field.value)
+                      ? [field.value, ...INDIA_STATES]
+                      : INDIA_STATES;
+                  return (
+                    <FormItem>
+                      <FormLabel>State</FormLabel>
+                      <Select
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          form.setValue("location", "");
+                        }}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select state" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {options.map((state) => (
+                            <SelectItem key={state} value={state}>
+                              {state}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
               <FormField
                 control={form.control}
-                name="state"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>State</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                name="location"
+                render={({ field }) => {
+                  const cities = CITIES_BY_STATE[watchedState as IndiaState] ?? [];
+                  const options =
+                    field.value && !cities.includes(field.value) ? [field.value, ...cities] : cities;
+                  return (
+                    <FormItem>
+                      <FormLabel>City</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={options.length === 0}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={options.length ? "Select city" : "Select a state first"} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {options.map((city) => (
+                            <SelectItem key={city} value={city}>
+                              {city}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Dealing officer</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-3 gap-4">
+            <FormField
+              control={form.control}
+              name="dealingOfficerName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="dealingOfficerEmail"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input type="email" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="dealingOfficerPhone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </CardContent>
         </Card>
 

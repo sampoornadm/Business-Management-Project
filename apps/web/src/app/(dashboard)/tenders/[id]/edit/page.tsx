@@ -63,6 +63,9 @@ export default function EditTenderPage() {
           priority: tender.priority,
           description: tender.description ?? "",
           remarks: tender.remarks ?? "",
+          dealingOfficerName: tender.dealingOfficerName ?? "",
+          dealingOfficerEmail: tender.dealingOfficerEmail ?? "",
+          dealingOfficerPhone: tender.dealingOfficerPhone ?? "",
         }}
         onSubmit={handleSubmit}
         isSubmitting={updateTender.isPending}

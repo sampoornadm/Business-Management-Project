@@ -6,7 +6,13 @@ import type { ExtractedTenderItem } from "@bmp/types";
 // stripping it first is required or those rows fail to parse (verified
 // against examples/RFx 1400012649.PDF, a 13-item document with two items
 // straddling a page break).
-const PAGE_BOILERPLATE = /ISP MATERIAL MANAGEMENT DEPARTMENT[\s\S]*?Page\s*\d+\s*\/\s*\d+\n?/g;
+// The page-count token isn't always a digit: the footer reads "Page 2 / *"
+// (total not yet known) until the total becomes fixed later in the document,
+// e.g. "Page 10 / 13" (verified against examples/BID1400013656.PDF, an
+// 18-item document where the "\d+" — digits-only — version of this pattern
+// silently failed to strip the boilerplate on 9 of 13 pages, dropping 12 of
+// 18 items). "\S+" matches "*", roman numerals, and digits alike.
+const PAGE_BOILERPLATE = /ISP MATERIAL MANAGEMENT DEPARTMENT[\s\S]*?Page\s+\S+\s*\/\s*\S+\n?/g;
 
 // This header line repeats verbatim before every item row in IISCO/SAIL's
 // "RFQ Item Details" table — it's the anchor that splits the text into one
@@ -18,7 +24,11 @@ const ITEM_ANCHOR = /Sl\s*No\s*Item\s*Code\s*Qty\s*UoM\s*Expected\s*Delivery\s*\
 // The item code is consistently 14 digits in every sample document, so a
 // non-greedy slNo capture followed by an exact 14-digit run reliably
 // separates the two via backtracking.
-const ITEM_ROW = /^\s*(\d{1,3}?)(\d{14})\s+([\d.]+)\s+([A-Za-z]+)(\d{2}\.\d{2}\.\d{4})/;
+// Qty can carry a thousands-separator comma (e.g. "1,200.000" — verified
+// against examples/RFx 1400012634.PDF, where the plain "[\d.]+" version of
+// this pattern failed to match the row at all, silently dropping the
+// document's only item).
+const ITEM_ROW = /^\s*(\d{1,3}?)(\d{14})\s+([\d,.]+)\s+([A-Za-z]+)(\d{2}\.\d{2}\.\d{4})/;
 
 const DESCRIPTION_BLOCK = /Material Long Description\s*:?\s*\n?([\s\S]*?)Item Additional/;
 
@@ -42,7 +52,7 @@ export function parseIiscoRfqItems(text: string): ExtractedTenderItem[] {
     items.push({
       itemCode: itemCode!,
       description,
-      quantity: Number(quantity),
+      quantity: Number(quantity!.replace(/,/g, "")),
       unit,
     });
   }

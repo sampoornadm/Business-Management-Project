@@ -105,7 +105,63 @@ const SAMPLE_PDF_TEXT_RESULT = {
   clientName: "IISCO Steel Plant",
 };
 
+const IISCO_TEMPLATE_TEXT = `IISCO STEEL PLANT
+ISP GST : 19AAACS7062F6Z6
+Corporate Identity No:
+L27109DL1973GOI006454
+BID INVITATION
+(Kindly scrutinize the dates carefully for timely response submission)
+ISP MATERIAL MANAGEMENT DEPARTMENT
+Amendment Date:Amendment No:
+Contracting Agency:30.06.2026TE Date:
+MJ/C06/2026/3776-FLANGE
+SLIP
+1400013656
+RFQ Title:
+TE No:
+Pur GrpCase FileDealing OfficerE-mailMobile No
+METAL PIPESMJ/C06/2026/3776-
+FLANGE SLIP
+ Paramita Sinhaparamita.sinha@mjunction.in
+Tender Header Information
+      Page i / *
+1Sources for Supply / Execution
+07.07.2026 15:00:00 HrsBid Submission Deadline
+60Quotation validity in daysTwo Part Bid ResponseBid Type
+RFQ Item Details
+RFQ Description :
+Procurement of FLANGE SLIP
+Instructions to Tenderers (ITT) :
+Deliver within 120 days.
+Sl No Item Code Qty UoM Expected Delivery
+Date
+ 171313000100594 30.000 EA30.10.2026`;
+
 describe("TenderExtractionService", () => {
+  it("extracts fields deterministically for a recognized template and never calls the LLM", async () => {
+    const organizationsRepository = new FakeOrganizationsRepository();
+    const org = buildOrganization({ name: "IISCO STEEL PLANT" });
+    organizationsRepository.organizations.set(org.id, org);
+
+    const generateJson: GenerateJsonFn = async () => {
+      throw new Error("LLM should not be called for a recognized template");
+    };
+    const extractText: ExtractTextFn = async () => IISCO_TEMPLATE_TEXT;
+    const service = new TenderExtractionService(organizationsRepository, generateJson, extractText);
+
+    const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
+
+    expect(result.fields.tenderNumber).toBe("1400013656");
+    expect(result.fields.title).toBe("MJ/C06/2026/3776-FLANGE SLIP");
+    expect(result.fields.dealingOfficerName).toBe("Paramita Sinha");
+    expect(result.fields.dealingOfficerEmail).toBe("paramita.sinha@mjunction.in");
+    expect(result.suggestedClientId).toBe(org.id);
+    expect(result.suggestedClientName).toBe("IISCO STEEL PLANT");
+    expect(result.items).toEqual([
+      { itemCode: "71313000100594", description: "", quantity: 30, unit: "EA" },
+    ]);
+  });
+
   it("extracts fields and resolves a confident client match", async () => {
     const organizationsRepository = new FakeOrganizationsRepository();
     const org = buildOrganization();

@@ -88,4 +88,72 @@ describe("parseIiscoRfqItems", () => {
 
     expect(items).toEqual([]);
   });
+
+  it("strips page boilerplate whose footer has no page-count yet (\"Page N / *\")", () => {
+    // Verified against examples/BID1400013656.PDF: pages before the total
+    // page count is known render "Page 2 / *" instead of "Page 2 / 13" —
+    // the boilerplate must still be stripped or the next item's row fails
+    // to match at all.
+    const text = `RFQ Item Details
+RFQ Description :
+Procurement of FLANGE SLIP
+Sl NoItem CodeQtyUoMExpected Delivery
+Date
+ 171313000100594 30.000 EA30.10.2026
+Material Long Description
+:
+FLANGE MATERIAL: MILD STEEL
+Item Additional
+Description:
+Sl NoItem CodeQtyUoMExpected Delivery
+Date
+
+ISP MATERIAL MANAGEMENT DEPARTMENT
+Amendment Date:Amendment No:
+Contracting Agency:30.06.2026TE Date:
+MJ/C06/2026/3776-FLANGE
+SLIP
+1400013656
+RFQ Title:
+TE No:
+IISCO STEEL PLANT
+ISP GST : 19AAACS7062F6Z6
+Corporate Identity No:
+L27109DL1973GOI006454
+BID INVITATION
+(Kindly scrutinize the dates carefully for timely response submission)
+      Page 2 / *
+271313000100601 30.000 EA30.10.2026
+Material Long Description
+:
+FLANGE MATERIAL: MILD STEEL
+Item Additional
+Description:`;
+
+    const items = parseIiscoRfqItems(text);
+
+    expect(items).toHaveLength(2);
+    expect(items[1]!.itemCode).toBe("71313000100601");
+  });
+
+  it("parses a quantity with a thousands-separator comma", () => {
+    // Verified against examples/RFx 1400012634.PDF, where "1,200.000" broke
+    // the plain "[\d.]+" quantity pattern and silently dropped the item.
+    const text = `RFQ Item Details
+RFQ Description :
+Procurement of NIPPLE MS
+Sl NoItem CodeQtyUoMExpected Delivery
+Date
+ 171308000100269       1,200.000 EA30.01.2026
+Material Long Description
+:
+NIPPLE MATERIAL: MILD STEEL
+Item Additional
+Description:`;
+
+    const items = parseIiscoRfqItems(text);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]!.quantity).toBe(1200);
+  });
 });

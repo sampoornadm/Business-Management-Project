@@ -16,10 +16,10 @@ export const TENDER_STATUS_LABELS: Record<TenderStatus, string> = {
  */
 export const TENDER_STATUS_TRANSITIONS: Record<TenderStatus, TenderStatus[]> = {
   DRAFT: ["SUBMITTED", "CANCELLED"],
-  SUBMITTED: ["WON", "LOST", "CANCELLED"],
-  WON: [],
-  LOST: [],
-  CANCELLED: [],
+  SUBMITTED: ["WON", "LOST", "CANCELLED", "DRAFT"],
+  WON: ["SUBMITTED"],
+  LOST: ["SUBMITTED"],
+  CANCELLED: ["DRAFT", "SUBMITTED"],
 };
 
 export const TENDER_TERMINAL_STATUSES: TenderStatus[] = ["WON", "LOST", "CANCELLED"];
@@ -56,6 +56,23 @@ export const TENDER_DOCUMENT_TYPES = [
   "GENERAL",
 ] as const;
 export type TenderDocumentType = (typeof TENDER_DOCUMENT_TYPES)[number];
+
+/**
+ * Short, filesystem-friendly subfolder names for the local-docs-sync feature
+ * (apps/server/src/modules/tenders/local-docs/). Used both to create the
+ * subfolder tree and, reversed case-insensitively, to map a subfolder name
+ * back to a documentType when a file is dropped in.
+ */
+export const TENDER_DOCUMENT_TYPE_FOLDER_NAMES: Record<TenderDocumentType, string> = {
+  NIT: "NIT",
+  BOQ: "BOQ",
+  TECHNICAL_SPECS: "Technical Specs",
+  DRAWINGS: "Drawings",
+  CORRIGENDUM: "Corrigendum",
+  TENDER_NOTICE: "Tender Notice",
+  ADDENDUM: "Addendum",
+  GENERAL: "General",
+};
 
 export interface TenderOrganizationSummaryDto {
   id: string;
@@ -113,6 +130,9 @@ export interface TenderDto extends TenderListItemDto {
   statusChangedAt: string;
   description: string | null;
   remarks: string | null;
+  dealingOfficerName: string | null;
+  dealingOfficerEmail: string | null;
+  dealingOfficerPhone: string | null;
   winnerName: string | null;
   winningBidAmount: number | null;
   lossReason: string | null;
@@ -142,6 +162,9 @@ export interface CreateTenderInput {
   priority?: TenderPriority;
   description?: string;
   remarks?: string;
+  dealingOfficerName?: string;
+  dealingOfficerEmail?: string;
+  dealingOfficerPhone?: string;
 }
 
 export type UpdateTenderInput = Partial<CreateTenderInput>;
@@ -163,6 +186,9 @@ export interface TenderExtractionFields {
   validityPeriodDays?: number;
   description?: string;
   remarks?: string;
+  dealingOfficerName?: string;
+  dealingOfficerEmail?: string;
+  dealingOfficerPhone?: string;
 }
 
 export interface ExtractedTenderItem {
