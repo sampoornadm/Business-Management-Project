@@ -8,6 +8,9 @@ import type {
   AwardRfqBody,
   CreateRfqBody,
   ListRfqsQueryParsed,
+  QuickSendBody,
+  QuickSendPreviewBody,
+  SuggestVendorsBody,
   UpdateRfqBody,
   UpsertRfqQuoteBody,
 } from "./rfq.validation.js";
@@ -96,5 +99,34 @@ export class RfqController {
   close = asyncHandler(async (req, res) => {
     const rfq = await this.rfqService.close(req.params.id!, req.user!.id);
     sendSuccess(res, rfq, "RFQ closed");
+  });
+
+  reopen = asyncHandler(async (req, res) => {
+    const rfq = await this.rfqService.reopen(req.params.id!, req.user!.id, {
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+    });
+    sendSuccess(res, rfq, "RFQ reopened");
+  });
+
+  suggestVendors = asyncHandler(async (req, res) => {
+    const body = req.body as SuggestVendorsBody;
+    const suggestions = await this.rfqService.suggestVendors(body.boqItemIds);
+    sendSuccess(res, suggestions, "Vendor suggestions retrieved");
+  });
+
+  quickSendPreview = asyncHandler(async (req, res) => {
+    const body = req.body as QuickSendPreviewBody;
+    const preview = await this.rfqService.previewQuickSend(body, req.user!.id);
+    sendSuccess(res, preview, "RFQ preview generated");
+  });
+
+  quickSend = asyncHandler(async (req, res) => {
+    const body = req.body as QuickSendBody;
+    const rfq = await this.rfqService.quickSend(body, req.user!.id, {
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+    });
+    sendSuccess(res, rfq, "RFQ sent", 201);
   });
 }

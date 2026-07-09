@@ -47,3 +47,20 @@ export const awardRfqSchema = z.object({
   vendorId: z.string().uuid(),
 });
 export type AwardRfqBody = z.infer<typeof awardRfqSchema>;
+
+export const suggestVendorsSchema = z.object({
+  boqItemIds: z.array(z.string().uuid()).min(1, "At least one item is required"),
+});
+export type SuggestVendorsBody = z.infer<typeof suggestVendorsSchema>;
+
+export const quickSendPreviewSchema = z.object({
+  tenderId: z.string().uuid().optional(),
+  boqItemIds: z.array(z.string().uuid()).min(1, "At least one item is required"),
+  vendorId: z.string().uuid(),
+});
+export type QuickSendPreviewBody = z.infer<typeof quickSendPreviewSchema>;
+
+export const quickSendSchema = quickSendPreviewSchema.extend({
+  text: z.string().min(1, "Text is required"),
+});
+export type QuickSendBody = z.infer<typeof quickSendSchema>;

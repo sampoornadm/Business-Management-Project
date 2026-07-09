@@ -32,6 +32,7 @@ import {
   useAddRfqVendor,
   useAwardRfq,
   useCloseRfq,
+  useReopenRfq,
   useRemoveRfqVendor,
   useRfq,
   useRfqComparison,
@@ -65,6 +66,7 @@ export default function RfqDetailPage() {
   const upsertQuote = useUpsertRfqQuote(params.id);
   const awardRfq = useAwardRfq(params.id);
   const closeRfq = useCloseRfq(params.id);
+  const reopenRfq = useReopenRfq(params.id);
   const createPoFromRfq = useCreatePurchaseOrderFromRfq();
 
   const [inviteVendorId, setInviteVendorId] = useState("");
@@ -107,6 +109,24 @@ export default function RfqDetailPage() {
       toast({
         variant: "destructive",
         title: "Could not close RFQ",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  async function handleReopen() {
+    const message =
+      rfq.status === "AWARDED"
+        ? "This will clear the current award and reopen the RFQ. Continue?"
+        : "This will reopen the RFQ for further quotes. Continue?";
+    if (!window.confirm(message)) return;
+    try {
+      await reopenRfq.mutateAsync();
+      toast({ title: "RFQ reopened" });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not reopen RFQ",
         description: error instanceof Error ? error.message : "Please try again.",
       });
     }
@@ -156,6 +176,11 @@ export default function RfqDetailPage() {
         {canUpdate && !isFinalized && (
           <Button variant="outline" onClick={handleClose} disabled={closeRfq.isPending}>
             Close RFQ
+          </Button>
+        )}
+        {canUpdate && isFinalized && (
+          <Button variant="outline" onClick={handleReopen} disabled={reopenRfq.isPending}>
+            Reopen RFQ
           </Button>
         )}
         {rfq.status === "AWARDED" && canCreatePo && (

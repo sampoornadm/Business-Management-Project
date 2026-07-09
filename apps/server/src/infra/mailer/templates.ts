@@ -77,6 +77,21 @@ export function buildTenderAssignedEmail(params: {
   };
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+export function buildRfqEmail(params: { rfqTitle: string; bodyText: string }): EmailContent {
+  const escapedBody = escapeHtml(params.bodyText).replace(/\n/g, "<br>");
+  return {
+    subject: `RFQ: ${params.rfqTitle}`,
+    html: layout(params.rfqTitle, `<div style="white-space:pre-wrap;">${escapedBody}</div>`),
+  };
+}
+
 export function buildTenderDeadlineReminderEmail(params: {
   firstName: string;
   tenderNumber: string;
