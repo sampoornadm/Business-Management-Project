@@ -2,6 +2,16 @@ import { expect, test } from "@playwright/test";
 
 import { API_BASE_URL, apiLogin, login } from "./helpers";
 
+// A minimal valid 1x1 PNG. `text/plain` is not in the server's
+// GENERIC_UPLOAD_LIMITS.ALLOWED_MIME_TYPES allowlist, and the upload service
+// sniffs real magic bytes (file-type) rather than trusting the declared
+// Content-Type, so fixtures need genuinely-valid image bytes, not just a
+// text buffer with an image mimeType label.
+const PNG_BUFFER = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
+
 test.describe("Tender documents", () => {
   let tenderId: string;
   let tenderTitle: string;
@@ -47,23 +57,27 @@ test.describe("Tender documents", () => {
     await expect(boqSection.getByText("No file uploaded")).toBeVisible();
 
     await boqSection.locator('input[type="file"]').setInputFiles({
-      name: "boq-v1.txt",
-      mimeType: "text/plain",
-      buffer: Buffer.from("first version"),
+      name: "boq-v1.png",
+      mimeType: "image/png",
+      buffer: PNG_BUFFER,
     });
-    await expect(boqSection.getByText("boq-v1.txt")).toBeVisible({ timeout: 10_000 });
+    await expect(boqSection.getByText("boq-v1.png")).toBeVisible({ timeout: 10_000 });
     await expect(boqSection.getByRole("button", { name: "Replace" })).toBeVisible();
 
-    // Replace with a second version.
-    await boqSection.locator('input[type="file"]').setInputFiles({
-      name: "boq-v2.txt",
-      mimeType: "text/plain",
-      buffer: Buffer.from("second version"),
+    // Replace with a second version. Once a type has a file, its section also renders
+    // an "Add another file" input alongside the existing lineage's replace input — the
+    // first input in DOM order is always the existing lineage's.
+    await boqSection.locator('input[type="file"]').first().setInputFiles({
+      name: "boq-v2.png",
+      mimeType: "image/png",
+      buffer: PNG_BUFFER,
     });
-    await expect(boqSection.getByText("boq-v2.txt")).toBeVisible({ timeout: 10_000 });
+    await expect(boqSection.getByText("boq-v2.png")).toBeVisible({ timeout: 10_000 });
     await boqSection.getByRole("button", { name: /version history/ }).click();
-    await expect(boqSection.getByText("v2")).toBeVisible();
-    await expect(boqSection.getByText("v1")).toBeVisible();
+    // exact: true — the filename ("boq-v2.png") and meta line ("... · v2 · ...") both
+    // contain "v2"/"v1" as substrings too; only the version Badge's text is exactly this.
+    await expect(boqSection.getByText("v2", { exact: true })).toBeVisible();
+    await expect(boqSection.getByText("v1", { exact: true })).toBeVisible();
 
     // Delete it — back to the empty-row state.
     page.once("dialog", (dialog) => dialog.accept());
@@ -73,19 +87,19 @@ test.describe("Tender documents", () => {
     // A type that already has a file shows "Add another file" instead of a second empty row.
     const drawingsSection = page.getByRole("group", { name: "Drawings" });
     await drawingsSection.locator('input[type="file"]').setInputFiles({
-      name: "drawing-1.txt",
-      mimeType: "text/plain",
-      buffer: Buffer.from("drawing one"),
+      name: "drawing-1.png",
+      mimeType: "image/png",
+      buffer: PNG_BUFFER,
     });
-    await expect(drawingsSection.getByText("drawing-1.txt")).toBeVisible({ timeout: 10_000 });
+    await expect(drawingsSection.getByText("drawing-1.png")).toBeVisible({ timeout: 10_000 });
 
     await expect(drawingsSection.getByRole("button", { name: "Add another file" })).toBeVisible();
     await drawingsSection.locator('input[type="file"]').last().setInputFiles({
-      name: "drawing-2.txt",
-      mimeType: "text/plain",
-      buffer: Buffer.from("drawing two"),
+      name: "drawing-2.png",
+      mimeType: "image/png",
+      buffer: PNG_BUFFER,
     });
-    await expect(drawingsSection.getByText("drawing-1.txt")).toBeVisible({ timeout: 10_000 });
-    await expect(drawingsSection.getByText("drawing-2.txt")).toBeVisible({ timeout: 10_000 });
+    await expect(drawingsSection.getByText("drawing-1.png")).toBeVisible({ timeout: 10_000 });
+    await expect(drawingsSection.getByText("drawing-2.png")).toBeVisible({ timeout: 10_000 });
   });
 });
