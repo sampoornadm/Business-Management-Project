@@ -1,12 +1,15 @@
 import { Router } from "express";
 
+import { VENDOR_ITEM_TAGS_IMPORT_LIMITS } from "../../config/constants.js";
 import { authenticateMiddleware } from "../../shared/middleware/authenticate.middleware.js";
 import { requirePermission } from "../../shared/middleware/requirePermission.middleware.js";
 import { validate } from "../../shared/middleware/validate.middleware.js";
+import { createUploadMiddleware } from "../attachments/upload.middleware.js";
 
 import type { VendorsController } from "./vendors.controller.js";
 import {
   createContactSchema,
+  createVendorItemTagSchema,
   createVendorSchema,
   listVendorsQuerySchema,
   updateContactSchema,
@@ -15,6 +18,29 @@ import {
 
 export function createVendorsRouter(controller: VendorsController): Router {
   const router = Router();
+  const uploadItemTagsFile = createUploadMiddleware(
+    "file",
+    VENDOR_ITEM_TAGS_IMPORT_LIMITS.MAX_SIZE_BYTES,
+    VENDOR_ITEM_TAGS_IMPORT_LIMITS.ALLOWED_MIME_TYPES,
+  );
+
+  /**
+   * @openapi
+   * /vendors/item-tags/import:
+   *   post:
+   *     tags: [Vendors]
+   *     summary: Bulk-import vendor item-type/make tags from an Excel file (columns Vendor Name, Item Type, Make)
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       200: { description: Import result (imported count + skipped rows) }
+   */
+  router.post(
+    "/item-tags/import",
+    authenticateMiddleware,
+    requirePermission("vendors:update"),
+    uploadItemTagsFile,
+    controller.importItemTags,
+  );
 
   /**
    * @openapi
@@ -185,6 +211,55 @@ export function createVendorsRouter(controller: VendorsController): Router {
     authenticateMiddleware,
     requirePermission("vendors:update"),
     controller.deleteContact,
+  );
+
+  /**
+   * @openapi
+   * /vendors/{id}/item-tags:
+   *   post:
+   *     tags: [Vendors]
+   *     summary: Tag a vendor with an item type (and optional make) it supplies, for RFQ vendor suggestions
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       201: { description: Item tag added }
+   */
+  router.post(
+    "/:id/item-tags",
+    authenticateMiddleware,
+    requirePermission("vendors:update"),
+    validate(createVendorItemTagSchema),
+    controller.addItemTag,
+  );
+
+  /**
+   * @openapi
+   * /vendors/{id}/item-tags/{tagId}:
+   *   delete:
+   *     tags: [Vendors]
+   *     summary: Remove an item tag from a vendor
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: path
+   *         name: tagId
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Item tag removed }
+   */
+  router.delete(
+    "/:id/item-tags/:tagId",
+    authenticateMiddleware,
+    requirePermission("vendors:update"),
+    controller.deleteItemTag,
   );
 
   return router;

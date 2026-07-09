@@ -16,18 +16,22 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  Input,
   Skeleton,
   useToast,
 } from "@bmp/ui";
 import { Pencil, Plus, Star, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { ContactDialog } from "@/components/vendors/contact-dialog";
 import {
   useAddVendorContact,
+  useAddVendorItemTag,
   useDeleteVendor,
   useDeleteVendorContact,
+  useDeleteVendorItemTag,
   useUpdateVendorContact,
   useVendor,
   useVendorPerformance,
@@ -54,6 +58,29 @@ export default function VendorDetailPage() {
   const updateContact = useUpdateVendorContact(params.id);
   const deleteContact = useDeleteVendorContact(params.id);
   const deleteVendor = useDeleteVendor();
+  const addItemTag = useAddVendorItemTag(params.id);
+  const deleteItemTag = useDeleteVendorItemTag(params.id);
+
+  const [itemType, setItemType] = useState("");
+  const [make, setMake] = useState("");
+
+  async function handleAddItemTag() {
+    if (!itemType.trim()) {
+      toast({ variant: "destructive", title: "Enter an item type" });
+      return;
+    }
+    try {
+      await addItemTag.mutateAsync({ itemType: itemType.trim(), make: make.trim() || undefined });
+      setItemType("");
+      setMake("");
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not add item tag",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
 
   const canUpdate = hasPermission(roleName, "vendors:update");
   const canDelete = hasPermission(roleName, "vendors:delete");
@@ -231,6 +258,52 @@ export default function VendorDetailPage() {
                 )}
               </div>
             ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Item tags</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            What this vendor sells — used to suggest them for RFQs on matching tender items.
+          </p>
+          {canUpdate && (
+            <div className="flex gap-2">
+              <Input
+                placeholder="Item type (e.g. FLANGE)"
+                value={itemType}
+                onChange={(e) => setItemType(e.target.value)}
+              />
+              <Input placeholder="Make (optional)" value={make} onChange={(e) => setMake(e.target.value)} />
+              <Button onClick={handleAddItemTag} disabled={addItemTag.isPending}>
+                <Plus className="mr-2 h-4 w-4" /> Add
+              </Button>
+            </div>
+          )}
+          {vendor.itemTags.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No item tags added yet.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {vendor.itemTags.map((tag) => (
+                <Badge key={tag.id} variant="outline" className="gap-1 py-1 pl-2.5 pr-1">
+                  {tag.itemType}
+                  {tag.make && <span className="text-muted-foreground">· {tag.make}</span>}
+                  {canUpdate && (
+                    <button
+                      type="button"
+                      onClick={() => deleteItemTag.mutate(tag.id)}
+                      className="ml-1 rounded-sm hover:bg-accent"
+                      aria-label={`Remove ${tag.itemType} tag`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
+                </Badge>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

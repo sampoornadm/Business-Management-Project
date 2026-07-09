@@ -3,10 +3,11 @@
 import type { VendorListItemDto } from "@bmp/types";
 import { Badge, Button, DataTable, Input } from "@bmp/ui";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
-import { Star, UserPlus } from "lucide-react";
+import { Star, Upload, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { ImportItemTagsDialog } from "@/components/vendors/import-item-tags-dialog";
 import { useVendors } from "@/hooks/use-vendors";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
@@ -86,11 +87,20 @@ export default function VendorsPage() {
           </p>
         </div>
         {canCreate && (
-          <Button asChild>
-            <Link href="/vendors/new">
-              <UserPlus className="mr-2 h-4 w-4" /> Add Vendor
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <ImportItemTagsDialog
+              trigger={
+                <Button variant="outline">
+                  <Upload className="mr-2 h-4 w-4" /> Import item tags
+                </Button>
+              }
+            />
+            <Button asChild>
+              <Link href="/vendors/new">
+                <UserPlus className="mr-2 h-4 w-4" /> Add Vendor
+              </Link>
+            </Button>
+          </div>
         )}
       </div>
 

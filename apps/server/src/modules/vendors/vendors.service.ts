@@ -1,9 +1,16 @@
-import type { PaginatedResult, VendorDto, VendorListItemDto, VendorPerformanceDto } from "@bmp/types";
+import type {
+  ImportVendorItemTagsResult,
+  PaginatedResult,
+  VendorDto,
+  VendorListItemDto,
+  VendorPerformanceDto,
+} from "@bmp/types";
 
 import { ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
 import type { AuditService } from "../audit/audit.service.js";
 
+import { parseVendorItemTagsFile } from "./vendor-item-tags.parser.js";
 import { toVendorDto, toVendorListItemDto, toVendorPerformanceDto } from "./vendors.mapper.js";
 import type {
   CreateContactData,
@@ -153,5 +160,77 @@ export class VendorsService {
     if (!vendor) throw new NotFoundError("Vendor not found");
     const ratings = await this.vendorsRepository.findRatings(vendorId);
     return toVendorPerformanceDto(vendorId, ratings);
+  }
+
+  private async assertItemTagBelongsToVendor(vendorId: string, tagId: string): Promise<void> {
+    const vendor = await this.vendorsRepository.findById(vendorId);
+    if (!vendor) throw new NotFoundError("Vendor not found");
+    if (!vendor.itemTags.some((tag) => tag.id === tagId)) {
+      throw new NotFoundError("Item tag not found for this vendor");
+    }
+  }
+
+  async addItemTag(
+    vendorId: string,
+    data: { itemType: string; make?: string },
+    actorId: string,
+  ): Promise<VendorDto> {
+    const vendor = await this.vendorsRepository.findById(vendorId);
+    if (!vendor) throw new NotFoundError("Vendor not found");
+
+    await this.vendorsRepository.createItemTag({ vendorId, ...data });
+    await this.auditService.log({
+      actorId,
+      action: "VENDOR_ITEM_TAG_ADDED",
+      entityType: "Vendor",
+      entityId: vendorId,
+      metadata: { itemType: data.itemType, make: data.make ?? null },
+    });
+    return this.getById(vendorId);
+  }
+
+  async removeItemTag(vendorId: string, tagId: string, actorId: string): Promise<VendorDto> {
+    await this.assertItemTagBelongsToVendor(vendorId, tagId);
+    await this.vendorsRepository.deleteItemTag(tagId);
+    await this.auditService.log({
+      actorId,
+      action: "VENDOR_ITEM_TAG_REMOVED",
+      entityType: "Vendor",
+      entityId: vendorId,
+    });
+    return this.getById(vendorId);
+  }
+
+  // Vendor is resolved by exact (case-insensitive) name match against
+  // existing vendors — a row whose name doesn't match anything is reported
+  // back as skipped rather than silently creating a new vendor from what
+  // could just be a typo.
+  async importItemTags(buffer: Buffer, actorId: string): Promise<ImportVendorItemTagsResult> {
+    const parsed = await parseVendorItemTagsFile(buffer);
+    const skipped = [...parsed.skipped];
+    let imported = 0;
+
+    for (const row of parsed.rows) {
+      const vendor = await this.vendorsRepository.findByNameExact(row.vendorName);
+      if (!vendor) {
+        skipped.push({ row: row.row, vendorName: row.vendorName, reason: "No vendor with this name exists" });
+        continue;
+      }
+      await this.vendorsRepository.createItemTag({
+        vendorId: vendor.id,
+        itemType: row.itemType,
+        make: row.make,
+      });
+      imported += 1;
+    }
+
+    await this.auditService.log({
+      actorId,
+      action: "VENDOR_ITEM_TAGS_IMPORTED",
+      entityType: "Vendor",
+      entityId: "bulk",
+      metadata: { imported, skippedCount: skipped.length },
+    });
+    return { imported, skipped };
   }
 }

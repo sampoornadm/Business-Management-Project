@@ -6,11 +6,13 @@ import { ConflictError, NotFoundError } from "../../../core/errors/HttpErrors.js
 import type { AuditService } from "../../audit/audit.service.js";
 import type {
   CreateContactData,
+  CreateItemTagData,
   CreateVendorData,
   IVendorsRepository,
   UpdateContactData,
   UpdateVendorData,
   VendorFilters,
+  VendorItemTypeMatch,
   VendorRatingWithRater,
   VendorWithContacts,
 } from "../vendors.repository.js";
@@ -34,6 +36,7 @@ function buildVendor(overrides: Partial<VendorWithContacts> = {}): VendorWithCon
     isActive: true,
     createdById: randomUUID(),
     contacts: [],
+    itemTags: [],
     ratings: [],
     _count: { ratings: 0 },
     createdAt: now,
@@ -108,6 +111,49 @@ class FakeVendorsRepository implements IVendorsRepository {
   async findRatings(_vendorId: string): Promise<VendorRatingWithRater[]> {
     return [];
   }
+
+  async findByNameExact(name: string) {
+    const vendor = [...this.vendors.values()].find((v) => v.name.toLowerCase() === name.toLowerCase());
+    return vendor ? { id: vendor.id, name: vendor.name } : null;
+  }
+
+  async createItemTag(data: CreateItemTagData) {
+    const vendor = this.vendors.get(data.vendorId);
+    if (!vendor) throw new Error("not found");
+    (vendor.itemTags as unknown[]).push({
+      id: randomUUID(),
+      itemType: data.itemType,
+      make: data.make ?? null,
+      createdAt: new Date(),
+    });
+  }
+
+  async deleteItemTag(id: string) {
+    for (const vendor of this.vendors.values()) {
+      vendor.itemTags = vendor.itemTags.filter((tag) => tag.id !== id) as never;
+    }
+  }
+
+  async findDistinctItemTypes(): Promise<string[]> {
+    const types = new Set<string>();
+    for (const vendor of this.vendors.values()) {
+      for (const tag of vendor.itemTags) types.add(tag.itemType);
+    }
+    return [...types];
+  }
+
+  async findActiveVendorsByItemTypes(itemTypes: string[]): Promise<VendorItemTypeMatch[]> {
+    const matches: VendorItemTypeMatch[] = [];
+    for (const vendor of this.vendors.values()) {
+      if (!vendor.isActive) continue;
+      for (const tag of vendor.itemTags) {
+        if (itemTypes.includes(tag.itemType)) {
+          matches.push({ vendorId: vendor.id, vendorName: vendor.name, itemType: tag.itemType, make: tag.make });
+        }
+      }
+    }
+    return matches;
+  }
 }
 
 describe("VendorsService", () => {
@@ -167,5 +213,58 @@ describe("VendorsService", () => {
 
     const afterDelete = await service.deleteContact(vendor.id, updated.contacts[0]!.id, actorId);
     expect(afterDelete.contacts).toHaveLength(0);
+  });
+
+  it("adds and removes an item tag", async () => {
+    const vendor = await service.create({
+      name: "Ace Steel Suppliers",
+      category: "MATERIAL_SUPPLIER",
+      createdById: actorId,
+    });
+    const updated = await service.addItemTag(vendor.id, { itemType: "FLANGE", make: "ACME" }, actorId);
+    expect(updated.itemTags).toEqual([
+      expect.objectContaining({ itemType: "FLANGE", make: "ACME" }),
+    ]);
+
+    const afterDelete = await service.removeItemTag(vendor.id, updated.itemTags[0]!.id, actorId);
+    expect(afterDelete.itemTags).toHaveLength(0);
+  });
+
+  it("rejects removing an item tag that doesn't belong to the vendor", async () => {
+    const vendorOne = await service.create({
+      name: "Ace Steel Suppliers",
+      category: "MATERIAL_SUPPLIER",
+      createdById: actorId,
+    });
+    const vendorTwo = await service.create({
+      name: "Beta Traders",
+      category: "MATERIAL_SUPPLIER",
+      createdById: actorId,
+    });
+    const tagged = await service.addItemTag(vendorOne.id, { itemType: "FLANGE" }, actorId);
+
+    await expect(
+      service.removeItemTag(vendorTwo.id, tagged.itemTags[0]!.id, actorId),
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  describe("importItemTags", () => {
+    it("imports tags for vendors matched by exact name and reports unmatched rows", async () => {
+      await service.create({ name: "Ace Steel Suppliers", category: "MATERIAL_SUPPLIER", createdById: actorId });
+
+      const workbook = new (await import("exceljs")).default.Workbook();
+      const sheet = workbook.addWorksheet("Tags");
+      sheet.addRow(["Vendor Name", "Item Type", "Make"]);
+      sheet.addRow(["Ace Steel Suppliers", "FLANGE", "ACME"]);
+      sheet.addRow(["Nonexistent Vendor Co", "GASKET", ""]);
+      const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+
+      const result = await service.importItemTags(buffer, actorId);
+
+      expect(result.imported).toBe(1);
+      expect(result.skipped).toEqual([
+        expect.objectContaining({ vendorName: "Nonexistent Vendor Co", reason: expect.any(String) }),
+      ]);
+    });
   });
 });
