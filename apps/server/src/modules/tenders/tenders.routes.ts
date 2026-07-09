@@ -433,5 +433,31 @@ export function createTendersRouter(controller: TendersController): Router {
     controller.listDocumentVersions,
   );
 
+  /**
+   * @openapi
+   * /tenders/{id}/documents/{documentGroupId}:
+   *   delete:
+   *     tags: [Tenders]
+   *     summary: Delete a tender document and all of its versions
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: path
+   *         name: documentGroupId
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Document deleted }
+   */
+  router.delete(
+    "/:id/documents/:documentGroupId",
+    authenticateMiddleware,
+    requirePermission("attachments:delete"),
+    controller.deleteDocument,
+  );
+
   return router;
 }
