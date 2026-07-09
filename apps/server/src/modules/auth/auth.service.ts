@@ -2,6 +2,7 @@ import type { LoginResponseDto, SessionDto, UserDto } from "@bmp/types";
 
 import { env } from "../../config/env.js";
 import { ConflictError, NotFoundError, UnauthorizedError } from "../../core/errors/HttpErrors.js";
+import type { RequestContext } from "../../core/interfaces/request-context.js";
 import type { EmailService } from "../../infra/mailer/email.service.js";
 import { comparePassword, hashPassword, sha256 } from "../../shared/utils/hash.js";
 import { generateOpaqueToken, generateTokenFamily } from "../../shared/utils/tokens.js";
@@ -12,11 +13,6 @@ import type { IUsersRepository } from "../users/users.repository.js";
 
 import type { IAuthRepository } from "./auth.repository.js";
 import type { TokenService } from "./token.service.js";
-
-export interface RequestContext {
-  ipAddress?: string;
-  userAgent?: string;
-}
 
 export interface LoginResult extends LoginResponseDto {
   refreshToken: string;

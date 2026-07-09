@@ -13,6 +13,7 @@ import { GENERIC_UPLOAD_LIMITS } from "../../config/constants.js";
 import { env } from "../../config/env.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
+import type { RequestContext } from "../../core/interfaces/request-context.js";
 import type { EmailService } from "../../infra/mailer/email.service.js";
 import { logger } from "../../shared/logger/logger.js";
 import { toAttachmentDto } from "../attachments/attachments.mapper.js";
@@ -37,11 +38,6 @@ import type {
   AddAssigneeBody,
   ChangeTenderStatusBody,
 } from "./tenders.validation.js";
-
-export interface RequestContext {
-  ipAddress?: string;
-  userAgent?: string;
-}
 
 export class TendersService {
   constructor(
