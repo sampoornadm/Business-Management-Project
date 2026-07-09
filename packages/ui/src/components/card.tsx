@@ -4,11 +4,17 @@ import * as React from "react";
 
 import { cn } from "../lib/utils";
 
+// Shadow stands in for a border: a hairline plus a soft, layered shadow reads
+// as more considered than a flat 1px border, and (unlike a border) adapts
+// naturally to whatever surface the card sits on.
 const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn("rounded-lg border bg-card text-card-foreground shadow-sm", className)}
+      className={cn(
+        "rounded-lg bg-card text-card-foreground shadow-[0_0_0_1px_hsl(var(--border)),0_1px_2px_rgba(15,23,42,0.04),0_2px_8px_rgba(15,23,42,0.04)]",
+        className,
+      )}
       {...props}
     />
   ),

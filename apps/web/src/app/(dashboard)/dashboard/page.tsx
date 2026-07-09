@@ -72,7 +72,7 @@ export default function DashboardPage() {
             {usersQuery.isLoading ? (
               <Skeleton className="h-8 w-16" />
             ) : (
-              <div className="text-2xl font-bold">{usersQuery.data?.totalItems ?? 0}</div>
+              <div className="font-mono text-2xl font-bold">{usersQuery.data?.totalItems ?? 0}</div>
             )}
           </CardContent>
         </Card>
@@ -87,7 +87,7 @@ export default function DashboardPage() {
               {tenderStatsQuery.isLoading ? (
                 <Skeleton className="h-8 w-16" />
               ) : (
-                <div className="text-2xl font-bold">{tenderStatsQuery.data?.totalActive ?? 0}</div>
+                <div className="font-mono text-2xl font-bold">{tenderStatsQuery.data?.totalActive ?? 0}</div>
               )}
             </CardContent>
           </Card>
@@ -182,17 +182,28 @@ export default function DashboardPage() {
                 <p className="text-sm text-muted-foreground">No submissions due in the next 7 days.</p>
               ) : (
                 <ul className="divide-y">
-                  {tenderStatsQuery.data?.upcomingDeadlines.map((tender) => (
-                    <li key={tender.id} className="flex items-center justify-between py-2 text-sm">
-                      <Link href={`/tenders/${tender.id}`} className="min-w-0 flex-1 hover:underline">
-                        <span className="block truncate font-medium">{tender.title}</span>
-                        <span className="text-xs text-muted-foreground">{tender.tenderNumber}</span>
-                      </Link>
-                      <span className="ml-2 shrink-0 text-xs text-muted-foreground">
-                        {new Date(tender.submissionDate).toLocaleDateString()}
-                      </span>
-                    </li>
-                  ))}
+                  {tenderStatsQuery.data?.upcomingDeadlines.map((tender) => {
+                    const daysLeft = Math.ceil(
+                      (new Date(tender.submissionDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+                    );
+                    const dueSoon = daysLeft <= 2;
+                    return (
+                      <li key={tender.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                        <Link href={`/tenders/${tender.id}`} className="min-w-0 flex-1 hover:underline">
+                          <span className="block truncate font-medium">{tender.title}</span>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {tender.tenderNumber}
+                          </span>
+                        </Link>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {dueSoon && <Badge variant="signal">Due soon</Badge>}
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(tender.submissionDate).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </CardContent>

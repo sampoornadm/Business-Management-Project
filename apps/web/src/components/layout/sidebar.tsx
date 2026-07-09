@@ -21,12 +21,16 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "flex h-screen flex-col border-r bg-card transition-all duration-200",
+        "flex h-screen flex-col border-r bg-card transition-[width] duration-200",
         collapsed ? "w-16" : "w-64",
       )}
     >
       <div className="flex h-14 items-center justify-between border-b px-4">
-        {!collapsed && <span className="truncate text-sm font-semibold">BMP</span>}
+        {!collapsed && (
+          <span className="truncate font-mono text-sm font-semibold tracking-wide text-foreground">
+            BM<span className="text-primary">·</span>P
+          </span>
+        )}
         <Button
           variant="ghost"
           size="icon"
@@ -46,10 +50,10 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-md border-l-2 py-2 pl-[10px] pr-3 text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  ? "border-l-primary bg-primary/10 text-primary"
+                  : "border-l-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
               )}
               title={collapsed ? item.label : undefined}
             >

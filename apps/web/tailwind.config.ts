@@ -1,7 +1,5 @@
+import basePreset from "@bmp/config/tailwind/preset";
 import type { Config } from "tailwindcss";
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const basePreset = require("@bmp/config/tailwind/preset");
 
 const config: Config = {
   darkMode: ["class"],
