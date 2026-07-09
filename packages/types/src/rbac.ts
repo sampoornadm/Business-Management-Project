@@ -111,6 +111,9 @@ const OPERATIONAL_ROLE_PERMISSIONS: PermissionKey[] = [
 
 const TENDER_MANAGER_PERMISSIONS: PermissionKey[] = [
   ...OPERATIONAL_ROLE_PERMISSIONS,
+  // Tender Manager owns the day-to-day Documents tab workflow, so they need
+  // to remove a mis-uploaded or duplicate file without an Admin/Super Admin.
+  "attachments:delete",
   "tenders:create",
   "tenders:update",
   "tenders:delete",
@@ -127,6 +130,10 @@ const TENDER_MANAGER_PERMISSIONS: PermissionKey[] = [
   "boq:create",
   "boq:update",
   "boq:delete",
+  // The Items tab's "Send RFQ" action creates and sends an RFQ directly from
+  // selected BOQ items — Tender Manager needs rfq:create to use it without
+  // requiring a separate Purchase Manager account for this one step.
+  "rfq:create",
 ];
 
 // Estimators fill in tender details/upload documents but don't own
