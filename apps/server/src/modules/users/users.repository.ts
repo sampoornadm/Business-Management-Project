@@ -3,17 +3,23 @@ import type { Prisma, PrismaClient } from "@bmp/database";
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
 
-const userWithRole = {
-  include: { role: true, avatarAttachment: true },
-} satisfies Prisma.UserDefaultArgs;
+function userWithRoleArgs(businessId: string) {
+  return {
+    include: {
+      avatarAttachment: true,
+      userBusinesses: { where: { businessId }, include: { role: true } },
+    },
+  } satisfies Prisma.UserDefaultArgs;
+}
 
-export type UserWithRole = Prisma.UserGetPayload<typeof userWithRole>;
+export type UserWithRole = Prisma.UserGetPayload<ReturnType<typeof userWithRoleArgs>>;
 
 export interface CreateUserData {
   email: string;
   firstName: string;
   lastName: string;
   phone?: string | null;
+  businessId: string;
   roleId: string;
   passwordHash: string;
   createdById?: string | null;
@@ -28,14 +34,15 @@ export interface UpdateUserData {
 }
 
 export interface UserFilters {
+  businessId: string;
   search?: string;
   roleId?: string;
   isActive?: boolean;
 }
 
 export interface IUsersRepository {
-  findById(id: string): Promise<UserWithRole | null>;
-  findByEmail(email: string): Promise<UserWithRole | null>;
+  findById(id: string, businessId: string): Promise<UserWithRole | null>;
+  findByEmail(email: string, businessId: string): Promise<UserWithRole | null>;
   findMany(
     pagination: PaginationParams,
     filters: UserFilters,
@@ -44,21 +51,21 @@ export interface IUsersRepository {
   update(id: string, data: UpdateUserData): Promise<UserWithRole>;
   updatePasswordHash(id: string, passwordHash: string): Promise<void>;
   updateAvatarAttachmentId(id: string, avatarAttachmentId: string | null): Promise<void>;
-  assignRole(id: string, roleId: string): Promise<UserWithRole>;
+  assignRole(id: string, businessId: string, roleId: string): Promise<UserWithRole>;
   updateLastLoginAt(id: string): Promise<void>;
   markEmailVerified(id: string): Promise<void>;
-  countTotal(): Promise<number>;
+  countTotal(businessId: string): Promise<number>;
 }
 
 export class UsersRepository implements IUsersRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  findById(id: string): Promise<UserWithRole | null> {
-    return this.prisma.user.findUnique({ where: { id }, ...userWithRole });
+  findById(id: string, businessId: string): Promise<UserWithRole | null> {
+    return this.prisma.user.findUnique({ where: { id }, ...userWithRoleArgs(businessId) });
   }
 
-  findByEmail(email: string): Promise<UserWithRole | null> {
-    return this.prisma.user.findUnique({ where: { email }, ...userWithRole });
+  findByEmail(email: string, businessId: string): Promise<UserWithRole | null> {
+    return this.prisma.user.findUnique({ where: { email }, ...userWithRoleArgs(businessId) });
   }
 
   async findMany(
@@ -66,7 +73,12 @@ export class UsersRepository implements IUsersRepository {
     filters: UserFilters,
   ): Promise<{ items: UserWithRole[]; totalItems: number }> {
     const where: Prisma.UserWhereInput = {
-      roleId: filters.roleId,
+      userBusinesses: {
+        some: {
+          businessId: filters.businessId,
+          ...(filters.roleId ? { roleId: filters.roleId } : {}),
+        },
+      },
       isActive: filters.isActive,
       ...(filters.search
         ? {
@@ -82,7 +94,7 @@ export class UsersRepository implements IUsersRepository {
     const [items, totalItems] = await Promise.all([
       this.prisma.user.findMany({
         where,
-        ...userWithRole,
+        ...userWithRoleArgs(filters.businessId),
         orderBy: { createdAt: "desc" },
         ...toSkipTake(pagination),
       }),
@@ -92,24 +104,33 @@ export class UsersRepository implements IUsersRepository {
     return { items, totalItems };
   }
 
-  create(data: CreateUserData): Promise<UserWithRole> {
-    return this.prisma.user.create({
+  async create(data: CreateUserData): Promise<UserWithRole> {
+    const user = await this.prisma.user.create({
       data: {
         email: data.email,
         firstName: data.firstName,
         lastName: data.lastName,
         phone: data.phone,
-        roleId: data.roleId,
         passwordHash: data.passwordHash,
         createdById: data.createdById,
         isEmailVerified: data.isEmailVerified ?? false,
+        userBusinesses: {
+          create: { businessId: data.businessId, roleId: data.roleId },
+        },
       },
-      ...userWithRole,
     });
+    return this.findById(user.id, data.businessId) as Promise<UserWithRole>;
   }
 
   update(id: string, data: UpdateUserData): Promise<UserWithRole> {
-    return this.prisma.user.update({ where: { id }, data, ...userWithRole });
+    // update() doesn't change role/business, so any existing membership's businessId works
+    // for the returned include — callers only read name/contact fields off the result.
+    return this.prisma.user
+      .update({ where: { id }, data })
+      .then(async (updated) => {
+        const membership = await this.prisma.userBusiness.findFirst({ where: { userId: id } });
+        return this.findById(updated.id, membership!.businessId) as Promise<UserWithRole>;
+      });
   }
 
   async updatePasswordHash(id: string, passwordHash: string): Promise<void> {
@@ -120,8 +141,13 @@ export class UsersRepository implements IUsersRepository {
     await this.prisma.user.update({ where: { id }, data: { avatarAttachmentId } });
   }
 
-  assignRole(id: string, roleId: string): Promise<UserWithRole> {
-    return this.prisma.user.update({ where: { id }, data: { roleId }, ...userWithRole });
+  async assignRole(id: string, businessId: string, roleId: string): Promise<UserWithRole> {
+    await this.prisma.userBusiness.upsert({
+      where: { userId_businessId: { userId: id, businessId } },
+      update: { roleId },
+      create: { userId: id, businessId, roleId },
+    });
+    return this.findById(id, businessId) as Promise<UserWithRole>;
   }
 
   async updateLastLoginAt(id: string): Promise<void> {
@@ -132,7 +158,7 @@ export class UsersRepository implements IUsersRepository {
     await this.prisma.user.update({ where: { id }, data: { isEmailVerified: true } });
   }
 
-  countTotal(): Promise<number> {
-    return this.prisma.user.count();
+  countTotal(businessId: string): Promise<number> {
+    return this.prisma.user.count({ where: { userBusinesses: { some: { businessId } } } });
   }
 }

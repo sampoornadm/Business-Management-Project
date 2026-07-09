@@ -16,7 +16,7 @@ import type { IAuthRepository } from "../auth/auth.repository.js";
 import type { IRolesRepository } from "../roles/roles.repository.js";
 
 import { toUserDto } from "./users.mapper.js";
-import type { IUsersRepository, UserFilters, UpdateUserData } from "./users.repository.js";
+import type { IUsersRepository, UserFilters, UpdateUserData, UserWithRole } from "./users.repository.js";
 
 export interface CreateUserInput {
   email: string;
@@ -46,6 +46,18 @@ export class UsersService {
     return toUserDto(user, this.attachmentsService);
   }
 
+  /**
+   * findById/findByEmail pre-filter the included `userBusinesses` relation to the queried
+   * business, but Prisma's findUnique still returns the User row even when that filtered
+   * relation comes back empty (e.g. an id that exists globally but has no membership in this
+   * business) — treat that the same as "not found" rather than let toUserDto crash reading
+   * `userBusinesses[0]!` off an empty array.
+   */
+  private assertMember(user: UserWithRole | null): UserWithRole {
+    if (!user || user.userBusinesses.length === 0) throw new NotFoundError("User not found");
+    return user;
+  }
+
   async listUsers(
     pagination: PaginationParams,
     filters: UserFilters,
@@ -55,18 +67,18 @@ export class UsersService {
     return buildPaginatedResult(dtos, totalItems, pagination);
   }
 
-  async getById(id: string): Promise<UserDto> {
-    const user = await this.usersRepository.findById(id);
-    if (!user) throw new NotFoundError("User not found");
+  async getById(id: string, businessId: string): Promise<UserDto> {
+    const user = this.assertMember(await this.usersRepository.findById(id, businessId));
     return this.toDto(user);
   }
 
   async createUser(
     input: CreateUserInput,
     actorId: string,
+    businessId: string,
     context: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<UserDto> {
-    const existing = await this.usersRepository.findByEmail(input.email);
+    const existing = await this.usersRepository.findByEmail(input.email, businessId);
     if (existing) throw new ConflictError("A user with this email already exists");
 
     const role = await this.rolesRepository.findById(input.roleId);
@@ -78,6 +90,7 @@ export class UsersService {
       firstName: input.firstName,
       lastName: input.lastName,
       phone: input.phone,
+      businessId,
       roleId: input.roleId,
       passwordHash: unusablePasswordHash,
       createdById: actorId,
@@ -109,10 +122,10 @@ export class UsersService {
     id: string,
     data: UpdateUserData,
     actorId: string,
+    businessId: string,
     context: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<UserDto> {
-    const existing = await this.usersRepository.findById(id);
-    if (!existing) throw new NotFoundError("User not found");
+    this.assertMember(await this.usersRepository.findById(id, businessId));
 
     const user = await this.usersRepository.update(id, data);
 
@@ -151,15 +164,15 @@ export class UsersService {
     id: string,
     roleId: string,
     actorId: string,
+    businessId: string,
     context: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<UserDto> {
-    const existing = await this.usersRepository.findById(id);
-    if (!existing) throw new NotFoundError("User not found");
+    this.assertMember(await this.usersRepository.findById(id, businessId));
 
     const role = await this.rolesRepository.findById(roleId);
     if (!role) throw new BadRequestError("Invalid role");
 
-    const user = await this.usersRepository.assignRole(id, roleId);
+    const user = await this.usersRepository.assignRole(id, businessId, roleId);
 
     await this.auditService.log({
       actorId,
@@ -177,14 +190,14 @@ export class UsersService {
   async deactivateUser(
     id: string,
     actorId: string,
+    businessId: string,
     context: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<UserDto> {
-    return this.updateUser(id, { isActive: false }, actorId, context);
+    return this.updateUser(id, { isActive: false }, actorId, businessId, context);
   }
 
-  async uploadAvatar(userId: string, file: UploadedAvatarFile): Promise<UserDto> {
-    const existing = await this.usersRepository.findById(userId);
-    if (!existing) throw new NotFoundError("User not found");
+  async uploadAvatar(userId: string, file: UploadedAvatarFile, businessId: string): Promise<UserDto> {
+    const existing = this.assertMember(await this.usersRepository.findById(userId, businessId));
 
     const previousAvatarId = existing.avatarAttachmentId;
 
@@ -215,7 +228,7 @@ export class UsersService {
       entityId: userId,
     });
 
-    const updated = await this.usersRepository.findById(userId);
+    const updated = await this.usersRepository.findById(userId, businessId);
     return this.toDto(updated!);
   }
 }
