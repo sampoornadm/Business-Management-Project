@@ -67,6 +67,11 @@ export const PERMISSION_KEYS = [
   "finance:update",
   "finance:delete",
   "reports:read",
+  "businesses:create",
+  "businesses:read",
+  "businesses:update",
+  "businesses:delete",
+  "businesses:manage_members",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -83,7 +88,9 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = PERMISSION_KEYS.ma
   return { key, resource, action, description: `Permission to ${action} ${resource}` };
 });
 
-const ALL_STANDARD_PERMISSIONS: PermissionKey[] = [...PERMISSION_KEYS];
+const ALL_STANDARD_PERMISSIONS: PermissionKey[] = PERMISSION_KEYS.filter(
+  (key) => !key.startsWith("businesses:"),
+);
 
 const TENDER_VIEW_BASELINE: PermissionKey[] = [
   "tenders:read",
