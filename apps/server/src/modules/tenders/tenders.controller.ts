@@ -168,4 +168,9 @@ export class TendersController {
     );
     sendSuccess(res, versions, "Document versions retrieved");
   });
+
+  deleteDocument = asyncHandler(async (req, res) => {
+    await this.tendersService.deleteDocument(req.params.id!, req.params.documentGroupId!, req.user!.id);
+    sendSuccess(res, null, "Document deleted");
+  });
 }
