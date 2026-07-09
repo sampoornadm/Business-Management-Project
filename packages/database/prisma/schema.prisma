@@ -27,8 +27,7 @@ model User {
   createdBy       User?     @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdUsers    User[]    @relation("UserCreatedBy")
 
-  roleId String
-  role   Role   @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  userBusinesses UserBusiness[]
 
   avatarAttachmentId String?     @unique
   avatarAttachment   Attachment? @relation("UserAvatar", fields: [avatarAttachmentId], references: [id], onDelete: SetNull)
@@ -63,7 +62,6 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([roleId])
   @@index([createdById])
   @@map("users")
 }
@@ -74,7 +72,7 @@ model Role {
   description String?
   isSystem    Boolean @default(true)
 
-  users           User[]
+  userBusinesses  UserBusiness[]
   rolePermissions RolePermission[]
 
   createdAt DateTime @default(now())
@@ -113,6 +111,83 @@ model RolePermission {
 }
 
 // ---------------------------------------------------------------------------
+// Businesses (tenants)
+// ---------------------------------------------------------------------------
+
+model Business {
+  id                      String  @id @default(uuid())
+  name                    String
+  code                    String  @unique
+  address                 String?
+  city                    String?
+  state                   String?
+  pincode                 String?
+  gstNumber               String?
+  udyamRegistrationNumber String?
+  msmeCategory            String?
+  panNumber               String?
+  website                 String?
+  notes                   String?
+  isActive                Boolean @default(true)
+
+  contacts       BusinessContact[]
+  userBusinesses UserBusiness[]
+  refreshTokens  RefreshToken[]
+
+  tenders         Tender[]
+  projects        Project[]
+  boqs            Boq[]
+  historicalRates HistoricalRate[]
+  rfqs            Rfq[]
+  purchaseOrders  PurchaseOrder[]
+  goodsReceipts   GoodsReceipt[]
+  bankAccounts    BankAccount[]
+  invoices        Invoice[]
+  expenses        Expense[]
+  payments        Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@map("businesses")
+}
+
+model BusinessContact {
+  id          String   @id @default(uuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name        String
+  designation String?
+  email       String?
+  phone       String?
+  isPrimary   Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId])
+  @@map("business_contacts")
+}
+
+model UserBusiness {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  roleId     String
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, businessId])
+  @@index([businessId])
+  @@index([roleId])
+  @@map("user_businesses")
+}
+
+// ---------------------------------------------------------------------------
 // Auth tokens
 // ---------------------------------------------------------------------------
 
@@ -120,6 +195,8 @@ model RefreshToken {
   id                  String   @id @default(uuid())
   userId              String
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeBusinessId    String
+  activeBusiness      Business @relation(fields: [activeBusinessId], references: [id], onDelete: Cascade)
   tokenHash           String   @unique
   family              String
   deviceInfo          String?
@@ -342,34 +419,36 @@ enum TenderAssigneeRole {
 }
 
 model Tender {
-  id                 String         @id @default(uuid())
-  tenderNumber       String         @unique
-  title              String
-  department         String
-  clientId           String
-  client             Organization   @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  type               String
-  category           String
-  location           String
-  state              String
-  estimatedCost      Float
-  emdAmount          Float?
-  tenderFee          Float?
-  documentFee        Float?
-  submissionDate     DateTime
-  openingDate        DateTime?
-  validityPeriodDays Int?
-  status             TenderStatus   @default(DRAFT)
-  statusChangedAt    DateTime       @default(now())
-  priority           TenderPriority @default(MEDIUM)
-  description        String?
-  remarks            String?
+  id                  String         @id @default(uuid())
+  businessId          String
+  business            Business       @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  tenderNumber        String         @unique
+  title               String
+  department          String
+  clientId            String
+  client              Organization   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  type                String
+  category            String
+  location            String
+  state               String
+  estimatedCost       Float
+  emdAmount           Float?
+  tenderFee           Float?
+  documentFee         Float?
+  submissionDate      DateTime
+  openingDate         DateTime?
+  validityPeriodDays  Int?
+  status              TenderStatus   @default(DRAFT)
+  statusChangedAt     DateTime       @default(now())
+  priority            TenderPriority @default(MEDIUM)
+  description         String?
+  remarks             String?
   dealingOfficerName  String?
   dealingOfficerEmail String?
   dealingOfficerPhone String?
-  winnerName         String?
-  winningBidAmount   Float?
-  lossReason         String?
+  winnerName          String?
+  winningBidAmount    Float?
+  lossReason          String?
 
   createdById String
   createdBy   User   @relation("TenderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
@@ -385,6 +464,7 @@ model Tender {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([businessId])
   @@index([clientId])
   @@index([status])
   @@index([submissionDate])
@@ -458,6 +538,8 @@ enum BoqStatus {
 
 model Boq {
   id                 String    @id @default(uuid())
+  businessId         String
+  business           Business  @relation(fields: [businessId], references: [id], onDelete: Restrict)
   tenderId           String
   tender             Tender    @relation(fields: [tenderId], references: [id], onDelete: Cascade)
   sourceAttachmentId String?
@@ -476,6 +558,7 @@ model Boq {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([businessId])
   @@index([tenderId])
   @@index([groupId])
   @@map("boqs")
@@ -537,6 +620,8 @@ enum HistoricalRateCategory {
 
 model HistoricalRate {
   id             String                 @id @default(uuid())
+  businessId     String
+  business       Business               @relation(fields: [businessId], references: [id], onDelete: Restrict)
   category       HistoricalRateCategory
   itemName       String
   unit           String
@@ -551,6 +636,7 @@ model HistoricalRate {
 
   createdAt DateTime @default(now())
 
+  @@index([businessId])
   @@index([category, itemName])
   @@map("historical_rates")
 }
@@ -646,12 +732,14 @@ enum RfqStatus {
 }
 
 model Rfq {
-  id       String    @id @default(uuid())
-  tenderId String?
-  tender   Tender?   @relation(fields: [tenderId], references: [id], onDelete: SetNull)
-  title    String
-  status   RfqStatus @default(DRAFT)
-  dueDate  DateTime?
+  id         String    @id @default(uuid())
+  businessId String
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  tenderId   String?
+  tender     Tender?   @relation(fields: [tenderId], references: [id], onDelete: SetNull)
+  title      String
+  status     RfqStatus @default(DRAFT)
+  dueDate    DateTime?
 
   awardedVendorId String?
   awardedVendor   Vendor? @relation("RfqAwardedVendor", fields: [awardedVendorId], references: [id], onDelete: SetNull)
@@ -666,6 +754,7 @@ model Rfq {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([businessId])
   @@index([tenderId])
   @@map("rfqs")
 }
@@ -733,6 +822,8 @@ enum PurchaseOrderStatus {
 
 model PurchaseOrder {
   id                   String              @id @default(uuid())
+  businessId           String
+  business             Business            @relation(fields: [businessId], references: [id], onDelete: Restrict)
   poNumber             String              @unique
   vendorId             String
   vendor               Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
@@ -754,6 +845,7 @@ model PurchaseOrder {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([businessId])
   @@index([vendorId])
   @@index([tenderId])
   @@map("purchase_orders")
@@ -779,6 +871,8 @@ model PurchaseOrderItem {
 
 model GoodsReceipt {
   id              String        @id @default(uuid())
+  businessId      String
+  business        Business      @relation(fields: [businessId], references: [id], onDelete: Restrict)
   purchaseOrderId String
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   receivedDate    DateTime      @default(now())
@@ -791,6 +885,7 @@ model GoodsReceipt {
 
   createdAt DateTime @default(now())
 
+  @@index([businessId])
   @@index([purchaseOrderId])
   @@map("goods_receipts")
 }
@@ -840,6 +935,8 @@ enum ProjectStatus {
 
 model Project {
   id            String        @id @default(uuid())
+  businessId    String
+  business      Business      @relation(fields: [businessId], references: [id], onDelete: Restrict)
   tenderId      String        @unique
   tender        Tender        @relation(fields: [tenderId], references: [id], onDelete: Restrict)
   name          String
@@ -864,6 +961,7 @@ model Project {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([businessId])
   @@index([status])
   @@map("projects")
 }
@@ -977,13 +1075,15 @@ model ProjectBill {
 // ---------------------------------------------------------------------------
 
 model BankAccount {
-  id             String  @id @default(uuid())
+  id             String   @id @default(uuid())
+  businessId     String
+  business       Business @relation(fields: [businessId], references: [id], onDelete: Restrict)
   name           String
   accountNumber  String?
   bankName       String?
   ifscCode       String?
-  openingBalance Float   @default(0)
-  isActive       Boolean @default(true)
+  openingBalance Float    @default(0)
+  isActive       Boolean  @default(true)
 
   createdById String
   createdBy   User   @relation("BankAccountCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
@@ -993,6 +1093,7 @@ model BankAccount {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([businessId])
   @@map("bank_accounts")
 }
 
@@ -1006,6 +1107,8 @@ enum InvoiceStatus {
 
 model Invoice {
   id            String        @id @default(uuid())
+  businessId    String
+  business      Business      @relation(fields: [businessId], references: [id], onDelete: Restrict)
   invoiceNumber String        @unique
   projectId     String?
   project       Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -1027,6 +1130,7 @@ model Invoice {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([businessId])
   @@map("invoices")
 }
 
@@ -1047,6 +1151,8 @@ enum ExpenseStatus {
 
 model Expense {
   id          String          @id @default(uuid())
+  businessId  String
+  business    Business        @relation(fields: [businessId], references: [id], onDelete: Restrict)
   category    ExpenseCategory
   description String
   amount      Float
@@ -1064,6 +1170,7 @@ model Expense {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([businessId])
   @@map("expenses")
 }
 
@@ -1082,6 +1189,8 @@ enum PaymentMethod {
 
 model Payment {
   id              String           @id @default(uuid())
+  businessId      String
+  business        Business         @relation(fields: [businessId], references: [id], onDelete: Restrict)
   direction       PaymentDirection
   amount          Float
   paymentDate     DateTime         @default(now())
@@ -1098,6 +1207,7 @@ model Payment {
 
   createdAt DateTime @default(now())
 
+  @@index([businessId])
   @@index([entityType, entityId])
   @@index([bankAccountId])
   @@map("payments")
