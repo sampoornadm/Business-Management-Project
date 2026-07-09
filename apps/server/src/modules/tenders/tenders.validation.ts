@@ -22,6 +22,9 @@ export const createTenderSchema = z.object({
   priority: z.enum(TENDER_PRIORITIES).optional(),
   description: z.string().max(5000).optional(),
   remarks: z.string().max(5000).optional(),
+  dealingOfficerName: z.string().max(200).optional(),
+  dealingOfficerEmail: z.string().email().max(200).optional(),
+  dealingOfficerPhone: z.string().max(30).optional(),
 });
 export type CreateTenderBody = z.infer<typeof createTenderSchema>;
 

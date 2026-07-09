@@ -9,7 +9,21 @@ import {
   type ExtractedTenderItem,
   type TenderExtractionResultDto,
 } from "@bmp/types";
-import { Card, CardContent, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn, useToast } from "@bmp/ui";
+import {
+  Card,
+  CardContent,
+  CITIES_BY_STATE,
+  INDIA_STATES,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  cn,
+  useToast,
+  type IndiaState,
+} from "@bmp/ui";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -27,6 +41,33 @@ function matchCuratedOption(value: string | undefined, options: readonly string[
   return options.find((option) => option.toLowerCase() === value.toLowerCase());
 }
 
+// TENDER_CATEGORIES is a construction-industry taxonomy (civil/road/building/
+// water supply) that doesn't have a clean match for industrial spare-parts
+// procurement (flanges, gaskets, elbows...), so extraction never confidently
+// hits one directly. This is a lightweight keyword fallback over the item/
+// description text, not a real classifier — "OTHER" whenever nothing hits.
+const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  MECHANICAL: [
+    "flange", "elbow", "gasket", "coupling", "nipple", "bearing", "valve",
+    "pipe", "tube", "fitting", "nut", "bolt", "bracket", "seal", "hose",
+  ],
+  ELECTRICAL: ["cable", "wire", "motor", "transformer", "switch", "relay", "breaker", "panel", "lamp", "bulb"],
+  CIVIL: ["cement", "concrete", "brick", "aggregate", "rebar", "reinforcement"],
+  ROAD: ["bitumen", "asphalt"],
+  BUILDING: ["paint", "varnish", "coating", "tile", "door", "window"],
+  WATER_SUPPLY: ["pump"],
+};
+
+function inferCategory(text: string): string | undefined {
+  const lower = text.toLowerCase();
+  let best: { category: string; hits: number } | undefined;
+  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    const hits = keywords.filter((keyword) => lower.includes(keyword)).length;
+    if (hits > 0 && (!best || hits > best.hits)) best = { category, hits };
+  }
+  return best?.category ?? "OTHER";
+}
+
 function toFormDefaults(result: TenderExtractionResultDto): Partial<TenderFormValues> {
   const { fields } = result;
   const defaults: Partial<TenderFormValues> = {};
@@ -34,10 +75,11 @@ function toFormDefaults(result: TenderExtractionResultDto): Partial<TenderFormVa
   if (fields.tenderNumber) defaults.tenderNumber = fields.tenderNumber;
   if (fields.title) defaults.title = fields.title;
   if (fields.department) defaults.department = fields.department;
-  if (fields.location) defaults.location = fields.location;
-  if (fields.state) defaults.state = fields.state;
   if (fields.description) defaults.description = fields.description;
   if (fields.remarks) defaults.remarks = fields.remarks;
+  if (fields.dealingOfficerName) defaults.dealingOfficerName = fields.dealingOfficerName;
+  if (fields.dealingOfficerEmail) defaults.dealingOfficerEmail = fields.dealingOfficerEmail;
+  if (fields.dealingOfficerPhone) defaults.dealingOfficerPhone = fields.dealingOfficerPhone;
   if (fields.estimatedCost !== undefined) defaults.estimatedCost = String(fields.estimatedCost);
   if (fields.emdAmount !== undefined) defaults.emdAmount = String(fields.emdAmount);
   if (fields.tenderFee !== undefined) defaults.tenderFee = String(fields.tenderFee);
@@ -54,8 +96,19 @@ function toFormDefaults(result: TenderExtractionResultDto): Partial<TenderFormVa
 
   const type = matchCuratedOption(fields.type, TENDER_TYPES);
   if (type) defaults.type = type;
-  const category = matchCuratedOption(fields.category, TENDER_CATEGORIES);
+
+  const category =
+    matchCuratedOption(fields.category, TENDER_CATEGORIES) ??
+    inferCategory([fields.description, ...result.items.map((item) => item.description)].filter(Boolean).join(" "));
   if (category) defaults.category = category;
+
+  // Location/state are now closed Selects (India state + city picker), so
+  // pre-filling with an uncurated extracted value would hit the same
+  // blank-Select gotcha noted above — only pre-fill on a curated match.
+  const state = matchCuratedOption(fields.state, INDIA_STATES);
+  if (state) defaults.state = state;
+  const location = state ? matchCuratedOption(fields.location, CITIES_BY_STATE[state as IndiaState] ?? []) : undefined;
+  if (location) defaults.location = location;
 
   if (result.suggestedClientId) defaults.clientId = result.suggestedClientId;
 
@@ -71,6 +124,7 @@ export default function NewTenderPage() {
   const [defaultValues, setDefaultValues] = useState<Partial<TenderFormValues>>();
   const [formKey, setFormKey] = useState(0);
   const [hint, setHint] = useState<string>();
+  const [suggestedClientName, setSuggestedClientName] = useState<string>();
   const [extractedItems, setExtractedItems] = useState<ExtractedTenderItem[]>([]);
   const [isCommittingItems, setIsCommittingItems] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
@@ -86,10 +140,14 @@ export default function NewTenderPage() {
       // to remount, since RHF only reads defaultValues on mount.
       setFormKey((key) => key + 1);
 
+      setSuggestedClientName(
+        result.suggestedClientName && !result.suggestedClientId ? result.suggestedClientName : undefined,
+      );
+
       const hints: string[] = [...result.warnings];
       if (result.suggestedClientName && !result.suggestedClientId) {
         hints.push(
-          `Detected client "${result.suggestedClientName}" — select or create the matching organization below.`,
+          `Detected client "${result.suggestedClientName}" — select an existing organization or use "+ New organization" below.`,
         );
       }
       if (hints.length > 0) setHint(hints.join(" "));
@@ -256,6 +314,7 @@ export default function NewTenderPage() {
         onSubmit={handleSubmit}
         isSubmitting={createTender.isPending || isCommittingItems}
         submitLabel="Create tender"
+        suggestedClientName={suggestedClientName}
       />
     </div>
   );

@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import type { IOrganizationsRepository } from "../organizations/organizations.repository.js";
 
+import { parseIiscoHeaderFields } from "./tender-header.parser.js";
 import { parseIiscoRfqItems } from "./tender-item.parser.js";
 
 export type GenerateJsonFn = (prompt: string) => Promise<unknown>;
@@ -72,6 +73,19 @@ export class TenderExtractionService {
     private readonly extractText: ExtractTextFn,
   ) {}
 
+  private async matchClient(
+    clientName: string,
+  ): Promise<{ suggestedClientId?: string; suggestedClientName: string }> {
+    const matches = await this.organizationsRepository.findMany(
+      { page: 1, pageSize: 5 },
+      { search: clientName },
+    );
+    return {
+      suggestedClientId: matches.items.length === 1 ? matches.items[0]!.id : undefined,
+      suggestedClientName: clientName,
+    };
+  }
+
   async extractFromDocument(buffer: Buffer, mimeType: string): Promise<TenderExtractionResultDto> {
     const warnings: string[] = [];
     const text = await this.extractText(buffer, mimeType);
@@ -81,6 +95,25 @@ export class TenderExtractionService {
     // of tracking items across tenders) has zero tolerance for the kind of
     // transcription error a small local model can make over a long list.
     const items = parseIiscoRfqItems(text);
+
+    // Header fields for the recognized IISCO/SAIL template are also parsed
+    // deterministically — tenderNumber is the DB's @unique key, so it gets
+    // the same precision guarantee, and every field this template exposes
+    // is mechanically extractable (see tender-header.parser.ts). The LLM is
+    // only invoked as a fallback for a document that doesn't match this
+    // template at all.
+    const deterministic = parseIiscoHeaderFields(text);
+    if (deterministic) {
+      const { clientName, ...fields } = deterministic;
+      const clientMatch = clientName ? await this.matchClient(clientName) : undefined;
+      return {
+        fields,
+        items,
+        suggestedClientId: clientMatch?.suggestedClientId,
+        suggestedClientName: clientMatch?.suggestedClientName,
+        warnings,
+      };
+    }
 
     const raw = await this.generateJson(`${FIELD_PROMPT}${text.slice(0, MAX_PROMPT_CHARS)}\n"""`);
     const parsed = extractionSchema.safeParse(raw);
@@ -109,19 +142,14 @@ export class TenderExtractionService {
       remarks: data.remarks ?? undefined,
     };
 
-    let suggestedClientId: string | undefined;
-    let suggestedClientName: string | undefined;
-    if (data.clientName) {
-      suggestedClientName = data.clientName;
-      const matches = await this.organizationsRepository.findMany(
-        { page: 1, pageSize: 5 },
-        { search: data.clientName },
-      );
-      if (matches.items.length === 1) {
-        suggestedClientId = matches.items[0]!.id;
-      }
-    }
+    const clientMatch = data.clientName ? await this.matchClient(data.clientName) : undefined;
 
-    return { fields, items, suggestedClientId, suggestedClientName, warnings };
+    return {
+      fields,
+      items,
+      suggestedClientId: clientMatch?.suggestedClientId,
+      suggestedClientName: clientMatch?.suggestedClientName,
+      warnings,
+    };
   }
 }

@@ -364,6 +364,9 @@ model Tender {
   priority           TenderPriority @default(MEDIUM)
   description        String?
   remarks            String?
+  dealingOfficerName  String?
+  dealingOfficerEmail String?
+  dealingOfficerPhone String?
   winnerName         String?
   winningBidAmount   Float?
   lossReason         String?
