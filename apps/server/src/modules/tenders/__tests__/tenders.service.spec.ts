@@ -294,6 +294,30 @@ describe("TendersService", () => {
     ).rejects.toThrow(BadRequestError);
   });
 
+  it("allows reopening a WON tender back to SUBMITTED", async () => {
+    const created = await service.create(baseInput);
+    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId);
+    await service.changeStatus(created.id, { status: "WON" }, actorId);
+    const reopened = await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId);
+    expect(reopened.status).toBe("SUBMITTED");
+  });
+
+  it("allows reopening a CANCELLED tender all the way back to DRAFT", async () => {
+    const created = await service.create(baseInput);
+    await service.changeStatus(created.id, { status: "CANCELLED" }, actorId);
+    const reopened = await service.changeStatus(created.id, { status: "DRAFT" }, actorId);
+    expect(reopened.status).toBe("DRAFT");
+  });
+
+  it("rejects a direct terminal-to-terminal jump even after reopen support is added", async () => {
+    const created = await service.create(baseInput);
+    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId);
+    await service.changeStatus(created.id, { status: "WON" }, actorId);
+    await expect(
+      service.changeStatus(created.id, { status: "LOST" }, actorId),
+    ).rejects.toThrow(BadRequestError);
+  });
+
   it("notifies assignees and the creator on status change, excluding the actor", async () => {
     const created = await service.create(baseInput);
     await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId);
