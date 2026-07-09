@@ -4,6 +4,7 @@ import type { BoqCompareDto, BoqCompareLineDto, BoqDto, BoqListItemDto, BoqParse
 
 import { BOQ_UPLOAD_LIMITS } from "../../config/constants.js";
 import { BadRequestError, NotFoundError } from "../../core/errors/HttpErrors.js";
+import type { RequestContext } from "../../core/interfaces/request-context.js";
 import { round2 } from "../../shared/utils/math.js";
 import type { AttachmentsService } from "../attachments/attachments.service.js";
 import type { AuditService } from "../audit/audit.service.js";
@@ -23,11 +24,6 @@ import type {
   UpdateBoqItemBody,
   UpsertRateAnalysisBody,
 } from "./boq.validation.js";
-
-interface AuditContext {
-  ipAddress?: string;
-  userAgent?: string;
-}
 
 function normalizeDescription(description: string): string {
   return description.trim().toLowerCase().replace(/\s+/g, " ");
@@ -80,7 +76,7 @@ export class BoqService {
     tenderId: string,
     input: CommitBoqBody,
     actorId: string,
-    context: AuditContext,
+    context: RequestContext,
   ): Promise<BoqDto> {
     await this.assertTenderExists(tenderId);
 

@@ -2,6 +2,7 @@ import type { OrganizationDto, OrganizationListItemDto, PaginatedResult } from "
 
 import { ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
+import type { RequestContext } from "../../core/interfaces/request-context.js";
 import type { AuditService } from "../audit/audit.service.js";
 
 import {
@@ -16,11 +17,6 @@ import type {
   UpdateContactData,
   UpdateOrganizationData,
 } from "./organizations.repository.js";
-
-export interface RequestContext {
-  ipAddress?: string;
-  userAgent?: string;
-}
 
 export class OrganizationsService {
   constructor(

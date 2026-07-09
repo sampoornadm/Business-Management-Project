@@ -13,6 +13,7 @@ import type {
 
 import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
+import type { RequestContext } from "../../core/interfaces/request-context.js";
 import type { EmailService } from "../../infra/mailer/email.service.js";
 import { round2 } from "../../shared/utils/math.js";
 import type { AuditService } from "../audit/audit.service.js";
@@ -24,11 +25,6 @@ import type { IVendorsRepository, VendorWithContacts } from "../vendors/vendors.
 import { buildRfqText } from "./rfq-document.js";
 import { toRfqDto, toRfqListItemDto } from "./rfq.mapper.js";
 import type { CreateRfqData, IRfqRepository, RfqDetail, RfqFilters, UpdateRfqData } from "./rfq.repository.js";
-
-export interface RequestContext {
-  ipAddress?: string;
-  userAgent?: string;
-}
 
 const FINALIZED_STATUSES = new Set(["AWARDED", "CLOSED", "CANCELLED"]);
 

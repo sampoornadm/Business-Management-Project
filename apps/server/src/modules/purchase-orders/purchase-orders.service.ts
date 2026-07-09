@@ -2,6 +2,7 @@ import type { PaginatedResult, PurchaseOrderDto, PurchaseOrderListItemDto } from
 
 import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
+import type { RequestContext } from "../../core/interfaces/request-context.js";
 import { round2 } from "../../shared/utils/math.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { IRfqRepository } from "../rfq/rfq.repository.js";
@@ -16,11 +17,6 @@ import type {
   PurchaseOrderDetail,
   PurchaseOrderFilters,
 } from "./purchase-orders.repository.js";
-
-export interface RequestContext {
-  ipAddress?: string;
-  userAgent?: string;
-}
 
 export interface CreateGoodsReceiptInput {
   receivedDate?: Date;
