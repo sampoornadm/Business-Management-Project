@@ -1,4 +1,4 @@
-import type { LoginResponseDto, SessionDto, UserDto } from "@bmp/types";
+import type { AvailableBusiness, LoginResponseDto, SessionDto, UserDto } from "@bmp/types";
 
 import { env } from "../../config/env.js";
 import {
@@ -29,12 +29,15 @@ export interface RefreshResult {
   accessToken: string;
   accessTokenExpiresAt: string;
   refreshToken: string;
+  activeBusinessId: string;
+  availableBusinesses: AvailableBusiness[];
 }
 
 interface ActiveBusiness {
   businessId: string;
   roleId: string;
   roleName: string;
+  availableBusinesses: AvailableBusiness[];
 }
 
 // usersRepository.findByEmail/findById take a businessId only to scope which UserBusiness
@@ -77,7 +80,12 @@ export class AuthService {
       memberships.find((m) => m.businessId === preferredBusinessId) ?? memberships[0]!;
     const membership = await this.businessesRepository.findMembership(userId, chosen.businessId);
     const role = await this.rolesRepository.findById(membership!.roleId);
-    return { businessId: chosen.businessId, roleId: membership!.roleId, roleName: role!.name };
+    return {
+      businessId: chosen.businessId,
+      roleId: membership!.roleId,
+      roleName: role!.name,
+      availableBusinesses: memberships,
+    };
   }
 
   private async issueRefreshToken(
@@ -149,6 +157,8 @@ export class AuthService {
       accessTokenExpiresAt: expiresAt.toISOString(),
       user: await this.toDto(scopedUser),
       refreshToken,
+      activeBusinessId: active.businessId,
+      availableBusinesses: active.availableBusinesses,
     };
   }
 
@@ -206,6 +216,8 @@ export class AuthService {
       accessToken,
       accessTokenExpiresAt: expiresAt.toISOString(),
       refreshToken: newRawToken,
+      activeBusinessId: active.businessId,
+      availableBusinesses: active.availableBusinesses,
     };
   }
 
@@ -241,7 +253,13 @@ export class AuthService {
       userAgent: context.userAgent,
     });
 
-    return { accessToken, accessTokenExpiresAt: expiresAt.toISOString(), refreshToken };
+    return {
+      accessToken,
+      accessTokenExpiresAt: expiresAt.toISOString(),
+      refreshToken,
+      activeBusinessId: active.businessId,
+      availableBusinesses: active.availableBusinesses,
+    };
   }
 
   async logout(rawToken: string): Promise<void> {

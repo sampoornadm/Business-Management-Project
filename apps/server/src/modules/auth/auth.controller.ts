@@ -36,6 +36,8 @@ export class AuthController {
     sendSuccess(res, {
       accessToken: result.accessToken,
       accessTokenExpiresAt: result.accessTokenExpiresAt,
+      activeBusinessId: result.activeBusinessId,
+      availableBusinesses: result.availableBusinesses,
     }, "Token refreshed");
   });
 
@@ -60,6 +62,8 @@ export class AuthController {
     sendSuccess(res, {
       accessToken: result.accessToken,
       accessTokenExpiresAt: result.accessTokenExpiresAt,
+      activeBusinessId: result.activeBusinessId,
+      availableBusinesses: result.availableBusinesses,
     }, "Business switched");
   });
 

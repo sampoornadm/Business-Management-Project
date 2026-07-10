@@ -5,10 +5,18 @@ export interface LoginInput {
   password: string;
 }
 
+export interface AvailableBusiness {
+  businessId: string;
+  businessName: string;
+  businessCode: string;
+}
+
 export interface LoginResponseDto {
   accessToken: string;
   accessTokenExpiresAt: string;
   user: UserDto;
+  activeBusinessId: string;
+  availableBusinesses: AvailableBusiness[];
 }
 
 export interface ForgotPasswordInput {
