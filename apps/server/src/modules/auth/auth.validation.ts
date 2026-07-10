@@ -39,4 +39,9 @@ export const changePasswordSchema = z.object({
 });
 export type ChangePasswordBody = z.infer<typeof changePasswordSchema>;
 
+export const switchBusinessSchema = z.object({
+  businessId: z.string().uuid(),
+});
+export type SwitchBusinessBody = z.infer<typeof switchBusinessSchema>;
+
 export { passwordSchema };
