@@ -19,10 +19,12 @@ export interface CreateHistoricalRateData {
   effectiveDate: Date;
   sourceTenderId?: string | null;
   notes?: string | null;
+  businessId: string;
   createdById: string;
 }
 
 export interface ListHistoricalRatesFilters {
+  businessId: string;
   category?: HistoricalRateCategory;
   itemName?: string;
 }
@@ -33,6 +35,7 @@ export interface IHistoricalRatesRepository {
     category: HistoricalRateCategory,
     itemName: string,
     limit: number,
+    businessId: string,
   ): Promise<HistoricalRateWithCreator[]>;
   create(data: CreateHistoricalRateData): Promise<HistoricalRateWithCreator>;
 }
@@ -43,6 +46,7 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
   findMany(filters: ListHistoricalRatesFilters): Promise<HistoricalRateWithCreator[]> {
     return this.prisma.historicalRate.findMany({
       where: {
+        businessId: filters.businessId,
         category: filters.category,
         itemName: filters.itemName ? { contains: filters.itemName, mode: "insensitive" } : undefined,
       },
@@ -55,9 +59,10 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
     category: HistoricalRateCategory,
     itemName: string,
     limit: number,
+    businessId: string,
   ): Promise<HistoricalRateWithCreator[]> {
     return this.prisma.historicalRate.findMany({
-      where: { category, itemName: { contains: itemName, mode: "insensitive" } },
+      where: { businessId, category, itemName: { contains: itemName, mode: "insensitive" } },
       orderBy: { effectiveDate: "desc" },
       take: limit,
       ...historicalRateArgs,

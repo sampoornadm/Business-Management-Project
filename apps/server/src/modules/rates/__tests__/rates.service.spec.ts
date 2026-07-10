@@ -41,7 +41,15 @@ class FakeHistoricalRatesRepository implements IHistoricalRatesRepository {
     });
   }
 
-  async suggest(category: string, itemName: string, limit: number): Promise<HistoricalRateWithCreator[]> {
+  // businessId is ignored here — the fake stands in for the real (Postgres-
+  // backed) repository in unit tests that don't exercise cross-business
+  // isolation; that's covered by the integration spec instead.
+  async suggest(
+    category: string,
+    itemName: string,
+    limit: number,
+    _businessId?: string,
+  ): Promise<HistoricalRateWithCreator[]> {
     return this.rates
       .filter(
         (rate) =>
@@ -61,6 +69,7 @@ class FakeHistoricalRatesRepository implements IHistoricalRatesRepository {
 describe("RatesService", () => {
   let repository: FakeHistoricalRatesRepository;
   let service: RatesService;
+  const businessId = randomUUID();
 
   beforeEach(() => {
     repository = new FakeHistoricalRatesRepository();
@@ -74,6 +83,7 @@ describe("RatesService", () => {
       unit: "bag",
       rate: 380,
       effectiveDate: new Date("2026-01-01"),
+      businessId,
       createdById: randomUUID(),
     });
     expect(dto.itemName).toBe("Portland Cement");
@@ -87,6 +97,7 @@ describe("RatesService", () => {
       unit: "bag",
       rate: 380,
       effectiveDate: new Date("2026-01-01"),
+      businessId,
       createdById: randomUUID(),
     });
     await repository.create({
@@ -95,10 +106,11 @@ describe("RatesService", () => {
       unit: "day",
       rate: 900,
       effectiveDate: new Date("2026-01-01"),
+      businessId,
       createdById: randomUUID(),
     });
 
-    const results = await service.list({ category: "MATERIAL" });
+    const results = await service.list({ category: "MATERIAL", businessId });
     expect(results).toHaveLength(1);
     expect(results[0]!.itemName).toBe("Portland Cement");
   });
@@ -110,6 +122,7 @@ describe("RatesService", () => {
       unit: "kg",
       rate: 60,
       effectiveDate: new Date("2025-06-01"),
+      businessId,
       createdById: randomUUID(),
     });
     await repository.create({
@@ -118,10 +131,11 @@ describe("RatesService", () => {
       unit: "kg",
       rate: 65,
       effectiveDate: new Date("2026-01-01"),
+      businessId,
       createdById: randomUUID(),
     });
 
-    const results = await service.suggest("MATERIAL", "steel", 1);
+    const results = await service.suggest("MATERIAL", "steel", 1, businessId);
     expect(results).toHaveLength(1);
     expect(results[0]!.rate).toBe(65);
   });
