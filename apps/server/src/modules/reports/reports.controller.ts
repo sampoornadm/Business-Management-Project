@@ -20,41 +20,41 @@ function parseDateRange(query: ReportDateRangeQueryParsed): { from?: Date; to?: 
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
-  getTenderPipeline = asyncHandler(async (_req, res) => {
-    const report = await this.reportsService.getTenderPipeline();
+  getTenderPipeline = asyncHandler(async (req, res) => {
+    const report = await this.reportsService.getTenderPipeline(req.user!.businessId);
     sendSuccess(res, report, "Tender pipeline report retrieved");
   });
 
   getProcurementSpend = asyncHandler(async (req, res) => {
     const { from, to } = parseDateRange(req.query as unknown as ReportDateRangeQueryParsed);
-    const report = await this.reportsService.getProcurementSpend(from, to);
+    const report = await this.reportsService.getProcurementSpend(req.user!.businessId, from, to);
     sendSuccess(res, report, "Procurement spend report retrieved");
   });
 
-  getProjectCosting = asyncHandler(async (_req, res) => {
-    const report = await this.reportsService.getProjectCosting();
+  getProjectCosting = asyncHandler(async (req, res) => {
+    const report = await this.reportsService.getProjectCosting(req.user!.businessId);
     sendSuccess(res, report, "Project costing report retrieved");
   });
 
   getFinancialSummary = asyncHandler(async (req, res) => {
     const { from, to } = parseDateRange(req.query as unknown as ReportDateRangeQueryParsed);
-    const report = await this.reportsService.getFinancialSummary(from, to);
+    const report = await this.reportsService.getFinancialSummary(req.user!.businessId, from, to);
     sendSuccess(res, report, "Financial summary report retrieved");
   });
 
-  getVendorPerformance = asyncHandler(async (_req, res) => {
-    const report = await this.reportsService.getVendorPerformance();
+  getVendorPerformance = asyncHandler(async (req, res) => {
+    const report = await this.reportsService.getVendorPerformance(req.user!.businessId);
     sendSuccess(res, report, "Vendor performance report retrieved");
   });
 
-  getKpis = asyncHandler(async (_req, res) => {
-    const kpis = await this.reportsService.getKpis();
+  getKpis = asyncHandler(async (req, res) => {
+    const kpis = await this.reportsService.getKpis(req.user!.businessId);
     sendSuccess(res, kpis, "KPIs retrieved");
   });
 
   search = asyncHandler(async (req, res) => {
     const { q } = req.query as unknown as SearchQueryParsed;
-    const results = await this.reportsService.search(q);
+    const results = await this.reportsService.search(req.user!.businessId, q);
     sendSuccess(res, results, "Search results retrieved");
   });
 
@@ -62,7 +62,7 @@ export class ReportsController {
     const { reportKey } = req.params as unknown as ExportReportParams;
     const query = req.query as unknown as ExportReportQueryParsed;
     const { from, to } = parseDateRange(query);
-    const table = await this.reportsService.getExportableTable(reportKey, from, to);
+    const table = await this.reportsService.getExportableTable(req.user!.businessId, reportKey, from, to);
 
     if (query.format === "xlsx") {
       const buffer = await exportTableToXlsx(table);

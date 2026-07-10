@@ -30,55 +30,55 @@ class FakeReportsRepository implements IReportsRepository {
   goodsReceiptLeadTimes: { purchaseOrderCreatedAt: Date; receivedDate: Date }[] = [];
   boqLeadTimes: { tenderCreatedAt: Date; boqCreatedAt: Date }[] = [];
 
-  async findTenderStatusCounts() {
+  async findTenderStatusCounts(_businessId: string) {
     return this.tenderStatusCounts;
   }
-  async findTenderDates() {
+  async findTenderDates(_businessId: string) {
     return this.tenderDates;
   }
-  async findPurchaseOrderItemsForSpend() {
+  async findPurchaseOrderItemsForSpend(_businessId: string) {
     return this.poSpendItems;
   }
-  async findActiveProjectsBasic() {
+  async findActiveProjectsBasic(_businessId: string) {
     return this.activeProjects;
   }
-  async findPurchaseOrderTotalsByTenderIds() {
+  async findPurchaseOrderTotalsByTenderIds(_businessId: string) {
     return this.poTotalsByTender;
   }
-  async findLaborTotalsByProjectIds() {
+  async findLaborTotalsByProjectIds(_businessId: string) {
     return this.laborTotalsByProject;
   }
-  async findPaymentsForSummary() {
+  async findPaymentsForSummary(_businessId: string) {
     return this.payments;
   }
   async findVendorsBasic() {
     return this.vendors;
   }
-  async findVendorRatings() {
+  async findVendorRatings(_businessId: string) {
     return this.vendorRatings;
   }
-  async findPurchaseOrdersForOnTimeCalc() {
+  async findPurchaseOrdersForOnTimeCalc(_businessId: string) {
     return this.posForOnTime;
   }
-  async findLatestGoodsReceiptDatesByPoIds() {
+  async findLatestGoodsReceiptDatesByPoIds(_businessId: string) {
     return this.latestReceiptsByPo;
   }
-  async countPurchaseOrdersByVendor() {
+  async countPurchaseOrdersByVendor(_businessId: string) {
     return this.poCountsByVendor;
   }
-  async findAllInvoiceTotals() {
+  async findAllInvoiceTotals(_businessId: string) {
     return this.invoiceTotals;
   }
-  async sumPaymentsByEntityType() {
+  async sumPaymentsByEntityType(_businessId: string) {
     return this.invoicePaymentsSum;
   }
-  async findGoodsReceiptLeadTimes() {
+  async findGoodsReceiptLeadTimes(_businessId: string) {
     return this.goodsReceiptLeadTimes;
   }
-  async findBoqCreationLeadTimes() {
+  async findBoqCreationLeadTimes(_businessId: string) {
     return this.boqLeadTimes;
   }
-  async searchTenders() {
+  async searchTenders(_businessId: string) {
     return [];
   }
   async searchOrganizations() {
@@ -87,7 +87,7 @@ class FakeReportsRepository implements IReportsRepository {
   async searchVendors() {
     return [];
   }
-  async searchProjects() {
+  async searchProjects(_businessId: string) {
     return [];
   }
 }
@@ -95,11 +95,13 @@ class FakeReportsRepository implements IReportsRepository {
 const DAY = 24 * 60 * 60 * 1000;
 
 describe("ReportsService", () => {
+  const businessId = randomUUID();
+
   it("returns a null win rate when no tenders have been decided", async () => {
     const repo = new FakeReportsRepository();
     repo.tenderStatusCounts = [{ status: "DRAFT" as never, count: 3 }];
     const service = new ReportsService(repo);
-    const report = await service.getTenderPipeline();
+    const report = await service.getTenderPipeline(businessId);
     expect(report.winRate).toBeNull();
     expect(report.totalTenders).toBe(3);
   });
@@ -116,7 +118,7 @@ describe("ReportsService", () => {
       { createdAt: base, submissionDate: new Date(base.getTime() + 20 * DAY) },
     ];
     const service = new ReportsService(repo);
-    const report = await service.getTenderPipeline();
+    const report = await service.getTenderPipeline(businessId);
     expect(report.winRate).toBe(75);
     expect(report.avgSubmissionDays).toBe(15);
   });
@@ -131,7 +133,7 @@ describe("ReportsService", () => {
       { amount: 500, vendorId: vendorB, vendorName: "BuildCo", poCreatedAt: new Date("2026-01-10") },
     ];
     const service = new ReportsService(repo);
-    const report = await service.getProcurementSpend();
+    const report = await service.getProcurementSpend(businessId);
     expect(report.grandTotal).toBe(3500);
     expect(report.byVendor[0]).toEqual({ vendorId: vendorA, vendorName: "Ace Steel", total: 3000 });
     expect(report.byMonth).toEqual([
@@ -150,7 +152,7 @@ describe("ReportsService", () => {
     repo.poTotalsByTender = [{ tenderId, amount: 200000 }];
     repo.laborTotalsByProject = [{ projectId, amount: 50000 }];
     const service = new ReportsService(repo);
-    const report = await service.getProjectCosting();
+    const report = await service.getProjectCosting(businessId);
     expect(report.projects[0]!.actualCost).toBe(250000);
     expect(report.projects[0]!.variance).toBe(250000);
   });
@@ -163,7 +165,7 @@ describe("ReportsService", () => {
       { direction: "RECEIVED", amount: 500, paymentDate: new Date("2026-02-01") },
     ];
     const service = new ReportsService(repo);
-    const report = await service.getFinancialSummary();
+    const report = await service.getFinancialSummary(businessId);
     expect(report.months).toEqual([
       { month: "2026-01", received: 1000, paid: 300, net: 700 },
       { month: "2026-02", received: 500, paid: 0, net: 500 },
@@ -194,7 +196,7 @@ describe("ReportsService", () => {
       { purchaseOrderId: poLate, receivedDate: new Date("2026-01-15") },
     ];
     const service = new ReportsService(repo);
-    const report = await service.getVendorPerformance();
+    const report = await service.getVendorPerformance(businessId);
     expect(report.vendors).toHaveLength(1);
     expect(report.vendors[0]!.vendorName).toBe("Ace Steel");
     expect(report.vendors[0]!.averageRating).toBe(4.5);
@@ -208,7 +210,7 @@ describe("ReportsService", () => {
       { status: "LOST" as never, count: 1 },
     ];
     const service = new ReportsService(repo);
-    const kpis = await service.getKpis();
+    const kpis = await service.getKpis(businessId);
     expect(kpis.winRate).toBe(50);
     expect(kpis.receivablesDsoDays).toBeNull();
   });
@@ -221,7 +223,7 @@ describe("ReportsService", () => {
     ];
     repo.invoicePaymentsSum = 50000;
     const service = new ReportsService(repo);
-    const kpis = await service.getKpis();
+    const kpis = await service.getKpis(businessId);
     expect(kpis.receivablesDsoDays).not.toBeNull();
     expect(kpis.receivablesDsoDays).toBeGreaterThan(0);
   });
@@ -229,6 +231,6 @@ describe("ReportsService", () => {
   it("rejects a search query shorter than 2 characters", async () => {
     const repo = new FakeReportsRepository();
     const service = new ReportsService(repo);
-    await expect(service.search("a")).rejects.toThrow(BadRequestError);
+    await expect(service.search(businessId, "a")).rejects.toThrow(BadRequestError);
   });
 });

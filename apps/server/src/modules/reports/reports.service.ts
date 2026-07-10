@@ -50,14 +50,14 @@ export interface ExportableTable {
 export class ReportsService {
   constructor(private readonly reportsRepository: IReportsRepository) {}
 
-  async getTenderPipeline(): Promise<TenderPipelineReportDto> {
-    return cached("reports:tender-pipeline", () => this.computeTenderPipeline());
+  async getTenderPipeline(businessId: string): Promise<TenderPipelineReportDto> {
+    return cached(`reports:tender-pipeline:${businessId}`, () => this.computeTenderPipeline(businessId));
   }
 
-  private async computeTenderPipeline(): Promise<TenderPipelineReportDto> {
+  private async computeTenderPipeline(businessId: string): Promise<TenderPipelineReportDto> {
     const [statusCounts, dates] = await Promise.all([
-      this.reportsRepository.findTenderStatusCounts(),
-      this.reportsRepository.findTenderDates(),
+      this.reportsRepository.findTenderStatusCounts(businessId),
+      this.reportsRepository.findTenderDates(businessId),
     ]);
 
     const totalTenders = statusCounts.reduce((sum, s) => sum + s.count, 0);
@@ -77,8 +77,8 @@ export class ReportsService {
     };
   }
 
-  async getProcurementSpend(from?: Date, to?: Date): Promise<ProcurementSpendReportDto> {
-    const items = await this.reportsRepository.findPurchaseOrderItemsForSpend(from, to);
+  async getProcurementSpend(businessId: string, from?: Date, to?: Date): Promise<ProcurementSpendReportDto> {
+    const items = await this.reportsRepository.findPurchaseOrderItemsForSpend(businessId, from, to);
 
     const byVendorMap = new Map<string, { vendorName: string; total: number }>();
     const byMonthMap = new Map<string, number>();
@@ -102,14 +102,14 @@ export class ReportsService {
     };
   }
 
-  async getProjectCosting(): Promise<ProjectCostingReportDto> {
-    const projects = await this.reportsRepository.findActiveProjectsBasic();
+  async getProjectCosting(businessId: string): Promise<ProjectCostingReportDto> {
+    const projects = await this.reportsRepository.findActiveProjectsBasic(businessId);
     const tenderIds = projects.map((p) => p.tenderId);
     const projectIds = projects.map((p) => p.id);
 
     const [poTotals, laborTotals] = await Promise.all([
-      this.reportsRepository.findPurchaseOrderTotalsByTenderIds(tenderIds),
-      this.reportsRepository.findLaborTotalsByProjectIds(projectIds),
+      this.reportsRepository.findPurchaseOrderTotalsByTenderIds(businessId, tenderIds),
+      this.reportsRepository.findLaborTotalsByProjectIds(businessId, projectIds),
     ]);
 
     const poByTender = new Map<string, number>();
@@ -138,8 +138,8 @@ export class ReportsService {
     };
   }
 
-  async getFinancialSummary(from?: Date, to?: Date): Promise<FinancialSummaryReportDto> {
-    const payments = await this.reportsRepository.findPaymentsForSummary(from, to);
+  async getFinancialSummary(businessId: string, from?: Date, to?: Date): Promise<FinancialSummaryReportDto> {
+    const payments = await this.reportsRepository.findPaymentsForSummary(businessId, from, to);
 
     const byMonth = new Map<string, { received: number; paid: number }>();
     for (const payment of payments) {
@@ -157,19 +157,20 @@ export class ReportsService {
     };
   }
 
-  async getVendorPerformance(): Promise<VendorPerformanceReportDto> {
-    return cached("reports:vendor-performance", () => this.computeVendorPerformance());
+  async getVendorPerformance(businessId: string): Promise<VendorPerformanceReportDto> {
+    return cached(`reports:vendor-performance:${businessId}`, () => this.computeVendorPerformance(businessId));
   }
 
-  private async computeVendorPerformance(): Promise<VendorPerformanceReportDto> {
+  private async computeVendorPerformance(businessId: string): Promise<VendorPerformanceReportDto> {
     const [vendors, ratings, poCounts, pos] = await Promise.all([
       this.reportsRepository.findVendorsBasic(),
-      this.reportsRepository.findVendorRatings(),
-      this.reportsRepository.countPurchaseOrdersByVendor(),
-      this.reportsRepository.findPurchaseOrdersForOnTimeCalc(),
+      this.reportsRepository.findVendorRatings(businessId),
+      this.reportsRepository.countPurchaseOrdersByVendor(businessId),
+      this.reportsRepository.findPurchaseOrdersForOnTimeCalc(businessId),
     ]);
 
     const latestReceipts = await this.reportsRepository.findLatestGoodsReceiptDatesByPoIds(
+      businessId,
       pos.map((p) => p.id),
     );
     const latestReceiptByPo = new Map<string, Date>();
@@ -217,17 +218,17 @@ export class ReportsService {
     return { vendors: vendorRows };
   }
 
-  async getKpis(): Promise<KpiDto> {
-    return cached("reports:kpis", () => this.computeKpis());
+  async getKpis(businessId: string): Promise<KpiDto> {
+    return cached(`reports:kpis:${businessId}`, () => this.computeKpis(businessId));
   }
 
-  private async computeKpis(): Promise<KpiDto> {
+  private async computeKpis(businessId: string): Promise<KpiDto> {
     const [statusCounts, goodsReceiptLeadTimes, boqLeadTimes, invoices, invoicePaid] = await Promise.all([
-      this.reportsRepository.findTenderStatusCounts(),
-      this.reportsRepository.findGoodsReceiptLeadTimes(),
-      this.reportsRepository.findBoqCreationLeadTimes(),
-      this.reportsRepository.findAllInvoiceTotals(),
-      this.reportsRepository.sumPaymentsByEntityType("Invoice"),
+      this.reportsRepository.findTenderStatusCounts(businessId),
+      this.reportsRepository.findGoodsReceiptLeadTimes(businessId),
+      this.reportsRepository.findBoqCreationLeadTimes(businessId),
+      this.reportsRepository.findAllInvoiceTotals(businessId),
+      this.reportsRepository.sumPaymentsByEntityType(businessId, "Invoice"),
     ]);
 
     const wonCount = statusCounts.find((s) => s.status === "WON")?.count ?? 0;
@@ -262,15 +263,15 @@ export class ReportsService {
     };
   }
 
-  async search(query: string): Promise<SearchResultsDto> {
+  async search(businessId: string, query: string): Promise<SearchResultsDto> {
     const trimmed = query.trim();
     if (trimmed.length < 2) throw new BadRequestError("Search query must be at least 2 characters");
 
     const [tenders, organizations, vendors, projects] = await Promise.all([
-      this.reportsRepository.searchTenders(trimmed),
+      this.reportsRepository.searchTenders(businessId, trimmed),
       this.reportsRepository.searchOrganizations(trimmed),
       this.reportsRepository.searchVendors(trimmed),
-      this.reportsRepository.searchProjects(trimmed),
+      this.reportsRepository.searchProjects(businessId, trimmed),
     ]);
 
     const results: SearchResultItemDto[] = [
@@ -307,10 +308,10 @@ export class ReportsService {
     return { query: trimmed, results };
   }
 
-  async getExportableTable(reportKey: ReportKey, from?: Date, to?: Date): Promise<ExportableTable> {
+  async getExportableTable(businessId: string, reportKey: ReportKey, from?: Date, to?: Date): Promise<ExportableTable> {
     switch (reportKey) {
       case "tender-pipeline": {
-        const report = await this.getTenderPipeline();
+        const report = await this.getTenderPipeline(businessId);
         return {
           title: "Tender Pipeline",
           columns: [
@@ -321,7 +322,7 @@ export class ReportsService {
         };
       }
       case "procurement-spend": {
-        const report = await this.getProcurementSpend(from, to);
+        const report = await this.getProcurementSpend(businessId, from, to);
         return {
           title: "Procurement Spend by Vendor",
           columns: [
@@ -332,7 +333,7 @@ export class ReportsService {
         };
       }
       case "project-costing": {
-        const report = await this.getProjectCosting();
+        const report = await this.getProjectCosting(businessId);
         return {
           title: "Project Costing",
           columns: [
@@ -352,7 +353,7 @@ export class ReportsService {
         };
       }
       case "financial-summary": {
-        const report = await this.getFinancialSummary(from, to);
+        const report = await this.getFinancialSummary(businessId, from, to);
         return {
           title: "Financial Summary",
           columns: [
@@ -365,7 +366,7 @@ export class ReportsService {
         };
       }
       case "vendor-performance": {
-        const report = await this.getVendorPerformance();
+        const report = await this.getVendorPerformance(businessId);
         return {
           title: "Vendor Performance",
           columns: [
