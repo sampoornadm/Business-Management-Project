@@ -41,6 +41,7 @@ export interface CreatePurchaseOrderItemData {
 export interface CreatePurchaseOrderData {
   vendorId: string;
   tenderId?: string | null;
+  businessId: string;
   sourceRfqId?: string | null;
   expectedDeliveryDate?: Date | null;
   notes?: string | null;
@@ -49,6 +50,7 @@ export interface CreatePurchaseOrderData {
 }
 
 export interface PurchaseOrderFilters {
+  businessId: string;
   status?: PurchaseOrderStatus;
   vendorId?: string;
   tenderId?: string;
@@ -62,6 +64,7 @@ export interface CreateGoodsReceiptItemData {
 
 export interface CreateGoodsReceiptData {
   purchaseOrderId: string;
+  businessId: string;
   receivedById: string;
   receivedDate: Date;
   remarks?: string | null;
@@ -70,7 +73,7 @@ export interface CreateGoodsReceiptData {
 
 export interface IPurchaseOrdersRepository {
   create(data: CreatePurchaseOrderData): Promise<string>;
-  findById(id: string): Promise<PurchaseOrderDetail | null>;
+  findById(id: string, businessId: string): Promise<PurchaseOrderDetail | null>;
   findMany(
     pagination: PaginationParams,
     filters: PurchaseOrderFilters,
@@ -99,6 +102,7 @@ export class PurchaseOrdersRepository implements IPurchaseOrdersRepository {
           poNumber,
           vendorId: data.vendorId,
           tenderId: data.tenderId ?? null,
+          businessId: data.businessId,
           sourceRfqId: data.sourceRfqId ?? null,
           expectedDeliveryDate: data.expectedDeliveryDate ?? null,
           notes: data.notes ?? null,
@@ -122,8 +126,11 @@ export class PurchaseOrdersRepository implements IPurchaseOrdersRepository {
     return poId;
   }
 
-  findById(id: string): Promise<PurchaseOrderDetail | null> {
-    return this.prisma.purchaseOrder.findUnique({ where: { id }, ...poDetailArgs });
+  findById(id: string, businessId: string): Promise<PurchaseOrderDetail | null> {
+    // findFirst (not findUnique) because `id` alone isn't the unique key
+    // we're filtering by here — businessId must also match, and there's no
+    // compound (id, businessId) unique constraint on PurchaseOrder.
+    return this.prisma.purchaseOrder.findFirst({ where: { id, businessId }, ...poDetailArgs });
   }
 
   async findMany(
@@ -131,6 +138,7 @@ export class PurchaseOrdersRepository implements IPurchaseOrdersRepository {
     filters: PurchaseOrderFilters,
   ): Promise<{ items: PurchaseOrderListItem[]; totalItems: number }> {
     const where: Prisma.PurchaseOrderWhereInput = {
+      businessId: filters.businessId,
       status: filters.status,
       vendorId: filters.vendorId,
       tenderId: filters.tenderId,
@@ -160,6 +168,7 @@ export class PurchaseOrdersRepository implements IPurchaseOrdersRepository {
         data: {
           id: grnId,
           purchaseOrderId: data.purchaseOrderId,
+          businessId: data.businessId,
           receivedById: data.receivedById,
           receivedDate: data.receivedDate,
           remarks: data.remarks ?? null,

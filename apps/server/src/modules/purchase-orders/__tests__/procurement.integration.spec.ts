@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 
 import { prisma } from "@bmp/database";
-import { WILDCARD_PERMISSION } from "@bmp/types";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -11,7 +10,6 @@ import {
   createIntegrationTestUser,
   type IntegrationTestUser,
 } from "../../../shared/test-utils/integration-auth.js";
-import { hashPassword } from "../../../shared/utils/hash.js";
 
 /**
  * Requires a real Postgres + Redis reachable via .env.test, migrated
@@ -20,47 +18,13 @@ import { hashPassword } from "../../../shared/utils/hash.js";
  */
 describe("Procurement workflow (integration)", () => {
   const app = createApp();
-  const email = `procurement-integration-${randomUUID()}@example.com`;
-  const password = "Password123";
-  let accessToken: string;
+  let testUser: IntegrationTestUser;
   let vendorId: string;
   let rfqId: string;
   let poId: string;
 
   beforeAll(async () => {
-    const permission = await prisma.permission.upsert({
-      where: { key: WILDCARD_PERMISSION },
-      update: {},
-      create: { id: randomUUID(), key: WILDCARD_PERMISSION, resource: "*", action: "*" },
-    });
-
-    const role = await prisma.role.upsert({
-      where: { name: "SUPER_ADMIN" },
-      update: {},
-      create: { id: randomUUID(), name: "SUPER_ADMIN", description: "Super Admin", isSystem: true },
-    });
-
-    await prisma.rolePermission.upsert({
-      where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } },
-      update: {},
-      create: { id: randomUUID(), roleId: role.id, permissionId: permission.id },
-    });
-
-    await prisma.user.create({
-      data: {
-        id: randomUUID(),
-        email,
-        passwordHash: await hashPassword(password),
-        firstName: "Procurement",
-        lastName: "Tester",
-        roleId: role.id,
-        isActive: true,
-        isEmailVerified: true,
-      },
-    });
-
-    const loginResponse = await request(app).post("/api/v1/auth/login").send({ email, password });
-    accessToken = loginResponse.body.data.accessToken;
+    testUser = await createIntegrationTestUser(app);
   });
 
   afterAll(async () => {
@@ -71,14 +35,14 @@ describe("Procurement workflow (integration)", () => {
     }
     if (rfqId) await prisma.rfq.deleteMany({ where: { id: rfqId } });
     if (vendorId) await prisma.vendor.deleteMany({ where: { id: vendorId } });
-    await prisma.user.deleteMany({ where: { email } });
+    await cleanupIntegrationTestUser(testUser);
     await prisma.$disconnect();
   });
 
   it("creates a vendor", async () => {
     const response = await request(app)
       .post("/api/v1/vendors")
-      .set("Authorization", `Bearer ${accessToken}`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
       .send({ name: `Integration Vendor ${randomUUID().slice(0, 8)}`, category: "MATERIAL_SUPPLIER" });
     expect(response.status).toBe(201);
     vendorId = response.body.data.id;
@@ -87,7 +51,7 @@ describe("Procurement workflow (integration)", () => {
   it("creates an RFQ with manual items and invites the vendor", async () => {
     const response = await request(app)
       .post("/api/v1/rfqs")
-      .set("Authorization", `Bearer ${accessToken}`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
       .send({
         title: "Cement Supply RFQ",
         items: [{ description: "OPC Cement", unit: "bag", quantity: 100 }],
@@ -101,18 +65,18 @@ describe("Procurement workflow (integration)", () => {
   it("records a vendor quote and shows it in the comparison", async () => {
     const rfqResponse = await request(app)
       .get(`/api/v1/rfqs/${rfqId}`)
-      .set("Authorization", `Bearer ${accessToken}`);
+      .set("Authorization", `Bearer ${testUser.accessToken}`);
     const itemId = rfqResponse.body.data.items[0].id;
 
     const quoteResponse = await request(app)
       .put(`/api/v1/rfq-items/${itemId}/quotes/${vendorId}`)
-      .set("Authorization", `Bearer ${accessToken}`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
       .send({ rate: 375 });
     expect(quoteResponse.status).toBe(200);
 
     const comparisonResponse = await request(app)
       .get(`/api/v1/rfqs/${rfqId}/comparison`)
-      .set("Authorization", `Bearer ${accessToken}`);
+      .set("Authorization", `Bearer ${testUser.accessToken}`);
     expect(comparisonResponse.status).toBe(200);
     expect(comparisonResponse.body.data.items[0].quotes[0].isLowest).toBe(true);
   });
@@ -120,14 +84,14 @@ describe("Procurement workflow (integration)", () => {
   it("awards the RFQ and creates a purchase order from it", async () => {
     const awardResponse = await request(app)
       .post(`/api/v1/rfqs/${rfqId}/award`)
-      .set("Authorization", `Bearer ${accessToken}`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
       .send({ vendorId });
     expect(awardResponse.status).toBe(200);
     expect(awardResponse.body.data.status).toBe("AWARDED");
 
     const poResponse = await request(app)
       .post("/api/v1/purchase-orders/from-rfq")
-      .set("Authorization", `Bearer ${accessToken}`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
       .send({ rfqId });
     expect(poResponse.status).toBe(201);
     expect(poResponse.body.data.items[0].rate).toBe(375);
@@ -137,25 +101,25 @@ describe("Procurement workflow (integration)", () => {
   it("issues the PO and receives goods across two partial deliveries", async () => {
     const issueResponse = await request(app)
       .patch(`/api/v1/purchase-orders/${poId}/status`)
-      .set("Authorization", `Bearer ${accessToken}`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
       .send({ status: "ISSUED" });
     expect(issueResponse.status).toBe(200);
 
     const poDetail = await request(app)
       .get(`/api/v1/purchase-orders/${poId}`)
-      .set("Authorization", `Bearer ${accessToken}`);
+      .set("Authorization", `Bearer ${testUser.accessToken}`);
     const itemId = poDetail.body.data.items[0].id;
 
     const firstReceipt = await request(app)
       .post(`/api/v1/purchase-orders/${poId}/goods-receipts`)
-      .set("Authorization", `Bearer ${accessToken}`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
       .send({ items: [{ purchaseOrderItemId: itemId, quantityReceived: 40 }] });
     expect(firstReceipt.status).toBe(201);
     expect(firstReceipt.body.data.status).toBe("PARTIALLY_RECEIVED");
 
     const secondReceipt = await request(app)
       .post(`/api/v1/purchase-orders/${poId}/goods-receipts`)
-      .set("Authorization", `Bearer ${accessToken}`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
       .send({ items: [{ purchaseOrderItemId: itemId, quantityReceived: 60 }] });
     expect(secondReceipt.status).toBe(201);
     expect(secondReceipt.body.data.status).toBe("RECEIVED");
@@ -164,14 +128,14 @@ describe("Procurement workflow (integration)", () => {
   it("rates the vendor once the PO is fully received", async () => {
     const response = await request(app)
       .put(`/api/v1/purchase-orders/${poId}/vendor-rating`)
-      .set("Authorization", `Bearer ${accessToken}`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
       .send({ rating: 5, remarks: "Delivered on time" });
     expect(response.status).toBe(200);
     expect(response.body.data.vendorRating.rating).toBe(5);
 
     const performanceResponse = await request(app)
       .get(`/api/v1/vendors/${vendorId}/performance`)
-      .set("Authorization", `Bearer ${accessToken}`);
+      .set("Authorization", `Bearer ${testUser.accessToken}`);
     expect(performanceResponse.status).toBe(200);
     expect(performanceResponse.body.data.averageRating).toBe(5);
   });
@@ -278,5 +242,154 @@ describe("RFQ business isolation (integration)", () => {
       .set("Authorization", `Bearer ${testUser.accessToken}`);
     expect(stillThereResponse.status).toBe(200);
     expect(stillThereResponse.body.data.vendorInvites).toHaveLength(1);
+  });
+});
+
+describe("Purchase order business isolation (integration)", () => {
+  const app = createApp();
+  let testUser: IntegrationTestUser;
+
+  beforeAll(async () => {
+    testUser = await createIntegrationTestUser(app);
+  });
+
+  afterAll(async () => {
+    await prisma.vendorRating.deleteMany({
+      where: { purchaseOrder: { businessId: { in: [testUser.businessId, testUser.secondBusinessId] } } },
+    });
+    await prisma.goodsReceipt.deleteMany({
+      where: { businessId: { in: [testUser.businessId, testUser.secondBusinessId] } },
+    });
+    await prisma.purchaseOrder.deleteMany({
+      where: { businessId: { in: [testUser.businessId, testUser.secondBusinessId] } },
+    });
+    // Vendor has no businessId column of its own — it isn't retrofitted by
+    // this task — so it is cleaned up by creator instead.
+    await prisma.vendor.deleteMany({ where: { createdById: testUser.userId } });
+    await cleanupIntegrationTestUser(testUser);
+    await prisma.$disconnect();
+  });
+
+  // Switching requires a fresh login token (the original access token's
+  // embedded businessId claim doesn't change), then trades it for a token
+  // scoped to the second business this same test user also belongs to.
+  async function switchToSecondBusiness(): Promise<string> {
+    const otherLogin = await request(app).post("/api/v1/auth/login").send({
+      email: testUser.email,
+      password: "Password123",
+    });
+    const switchResponse = await request(app)
+      .post("/api/v1/auth/switch-business")
+      .set("Authorization", `Bearer ${otherLogin.body.data.accessToken}`)
+      .send({ businessId: testUser.secondBusinessId });
+    return switchResponse.body.data.accessToken as string;
+  }
+
+  async function createVendor(): Promise<string> {
+    const response = await request(app)
+      .post("/api/v1/vendors")
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
+      .send({ name: `PO Isolation Vendor ${randomUUID().slice(0, 8)}`, category: "MATERIAL_SUPPLIER" });
+    expect(response.status).toBe(201);
+    return response.body.data.id as string;
+  }
+
+  it("does not return a standalone purchase order (no tenderId) from another business, and rejects direct access", async () => {
+    // Purchase orders can be standalone — created with no tenderId at all —
+    // entirely in the first business.
+    const vendorId = await createVendor();
+    const createResponse = await request(app)
+      .post("/api/v1/purchase-orders")
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
+      .send({
+        vendorId,
+        items: [{ description: "TMT Steel Rebar", unit: "kg", quantity: 500, rate: 60 }],
+      });
+    expect(createResponse.status).toBe(201);
+    const isolationPoId = createResponse.body.data.id as string;
+
+    const secondBusinessToken = await switchToSecondBusiness();
+
+    const listResponse = await request(app)
+      .get("/api/v1/purchase-orders")
+      .set("Authorization", `Bearer ${secondBusinessToken}`);
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body.data.items.map((po: { id: string }) => po.id)).not.toContain(isolationPoId);
+
+    const getByIdResponse = await request(app)
+      .get(`/api/v1/purchase-orders/${isolationPoId}`)
+      .set("Authorization", `Bearer ${secondBusinessToken}`);
+    expect(getByIdResponse.status).toBe(404);
+  });
+
+  it("rejects a mutating request (issue status) against another business's purchase order", async () => {
+    // Create a purchase order entirely in the first business. updateStatus()
+    // previously looked the PO up by id with no businessId scope at all —
+    // this exercises that exact route to guard against it regressing, and
+    // confirms the status was not actually changed before being rejected
+    // (not merely hidden from the response), mirroring the RFQ
+    // removeVendorInvite ordering-bug regression test above.
+    const vendorId = await createVendor();
+    const createResponse = await request(app)
+      .post("/api/v1/purchase-orders")
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
+      .send({
+        vendorId,
+        items: [{ description: "OPC Cement", unit: "bag", quantity: 100, rate: 380 }],
+      });
+    expect(createResponse.status).toBe(201);
+    const isolationPoId = createResponse.body.data.id as string;
+
+    const secondBusinessToken = await switchToSecondBusiness();
+
+    const issueResponse = await request(app)
+      .patch(`/api/v1/purchase-orders/${isolationPoId}/status`)
+      .set("Authorization", `Bearer ${secondBusinessToken}`)
+      .send({ status: "ISSUED" });
+    expect(issueResponse.status).toBe(404);
+
+    const stillDraftResponse = await request(app)
+      .get(`/api/v1/purchase-orders/${isolationPoId}`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`);
+    expect(stillDraftResponse.status).toBe(200);
+    expect(stillDraftResponse.body.data.status).toBe("DRAFT");
+  });
+
+  it("rejects a mutating request (goods receipt) against another business's purchase order", async () => {
+    // Issue the PO in the first business, then attempt to record a goods
+    // receipt against it from the second business — createGoodsReceipt()
+    // previously had no businessId parameter at all.
+    const vendorId = await createVendor();
+    const createResponse = await request(app)
+      .post("/api/v1/purchase-orders")
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
+      .send({
+        vendorId,
+        items: [{ description: "OPC Cement", unit: "bag", quantity: 100, rate: 380 }],
+      });
+    expect(createResponse.status).toBe(201);
+    const isolationPoId = createResponse.body.data.id as string;
+    const itemId = createResponse.body.data.items[0].id as string;
+
+    const issueResponse = await request(app)
+      .patch(`/api/v1/purchase-orders/${isolationPoId}/status`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
+      .send({ status: "ISSUED" });
+    expect(issueResponse.status).toBe(200);
+
+    const secondBusinessToken = await switchToSecondBusiness();
+
+    const receiptResponse = await request(app)
+      .post(`/api/v1/purchase-orders/${isolationPoId}/goods-receipts`)
+      .set("Authorization", `Bearer ${secondBusinessToken}`)
+      .send({ items: [{ purchaseOrderItemId: itemId, quantityReceived: 10 }] });
+    expect(receiptResponse.status).toBe(404);
+
+    const stillIssuedResponse = await request(app)
+      .get(`/api/v1/purchase-orders/${isolationPoId}`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`);
+    expect(stillIssuedResponse.status).toBe(200);
+    expect(stillIssuedResponse.body.data.status).toBe("ISSUED");
+    expect(stillIssuedResponse.body.data.goodsReceipts).toHaveLength(0);
   });
 });

@@ -54,7 +54,9 @@ class FakePurchaseOrdersRepository implements IPurchaseOrdersRepository {
     return id;
   }
 
-  async findById(id: string) {
+  // businessId is ignored here — the fake stands in for the real (Postgres-
+  // enforced) scoping; isolation itself is covered by the integration test.
+  async findById(id: string, _businessId: string) {
     return this.purchaseOrders.get(id) ?? null;
   }
 
@@ -118,14 +120,14 @@ class FakePurchaseOrdersRepository implements IPurchaseOrdersRepository {
 
 class FakeRfqRepository implements Partial<IRfqRepository> {
   rfqs = new Map<string, RfqDetail>();
-  async findById(id: string) {
+  async findById(id: string, _businessId: string) {
     return this.rfqs.get(id) ?? null;
   }
 }
 
 class FakeTendersRepository implements Partial<ITendersRepository> {
   tenderIds = new Set<string>();
-  async findById(id: string) {
+  async findById(id: string, _businessId: string) {
     return this.tenderIds.has(id) ? ({ id } as never) : null;
   }
 }
@@ -146,6 +148,7 @@ describe("PurchaseOrdersService", () => {
   let service: PurchaseOrdersService;
   const actorId = randomUUID();
   const vendorId = randomUUID();
+  const businessId = randomUUID();
 
   beforeEach(() => {
     repository = new FakePurchaseOrdersRepository();
@@ -170,6 +173,7 @@ describe("PurchaseOrdersService", () => {
         items: [{ description: "OPC Cement", unit: "bag", quantity: 100, rate: 380 }],
       },
       actorId,
+      { businessId },
     );
   }
 
@@ -177,6 +181,7 @@ describe("PurchaseOrdersService", () => {
     const po = await service.create(
       { vendorId, items: [{ description: "Cement", quantity: 100, rate: 380 }] },
       actorId,
+      { businessId },
     );
     expect(po.items[0]!.amount).toBe(38000);
     expect(po.totalAmount).toBe(38000);
@@ -185,20 +190,26 @@ describe("PurchaseOrdersService", () => {
 
   it("rejects creating a PO for an unknown vendor", async () => {
     await expect(
-      service.create({ vendorId: randomUUID(), items: [{ description: "X", quantity: 1, rate: 1 }] }, actorId),
+      service.create(
+        { vendorId: randomUUID(), items: [{ description: "X", quantity: 1, rate: 1 }] },
+        actorId,
+        { businessId },
+      ),
     ).rejects.toThrow(BadRequestError);
   });
 
   it("issues a draft purchase order", async () => {
     const po = await createBasicPo();
-    const issued = await service.updateStatus(po.id, "ISSUED", actorId);
+    const issued = await service.updateStatus(po.id, "ISSUED", actorId, businessId);
     expect(issued.status).toBe("ISSUED");
   });
 
   it("rejects issuing a non-draft purchase order", async () => {
     const po = await createBasicPo();
-    await service.updateStatus(po.id, "ISSUED", actorId);
-    await expect(service.updateStatus(po.id, "ISSUED", actorId)).rejects.toThrow(ConflictError);
+    await service.updateStatus(po.id, "ISSUED", actorId, businessId);
+    await expect(service.updateStatus(po.id, "ISSUED", actorId, businessId)).rejects.toThrow(
+      ConflictError,
+    );
   });
 
   it("rejects recording a goods receipt before the PO is issued", async () => {
@@ -208,19 +219,21 @@ describe("PurchaseOrdersService", () => {
         po.id,
         { items: [{ purchaseOrderItemId: po.items[0]!.id, quantityReceived: 10 }] },
         actorId,
+        businessId,
       ),
     ).rejects.toThrow(ConflictError);
   });
 
   it("moves through PARTIALLY_RECEIVED to RECEIVED across two goods receipts", async () => {
     const po = await createBasicPo();
-    await service.updateStatus(po.id, "ISSUED", actorId);
+    await service.updateStatus(po.id, "ISSUED", actorId, businessId);
     const itemId = po.items[0]!.id;
 
     const afterFirst = await service.createGoodsReceipt(
       po.id,
       { items: [{ purchaseOrderItemId: itemId, quantityReceived: 40 }] },
       actorId,
+      businessId,
     );
     expect(afterFirst.status).toBe("PARTIALLY_RECEIVED");
     expect(afterFirst.items[0]!.receivedQuantity).toBe(40);
@@ -229,6 +242,7 @@ describe("PurchaseOrdersService", () => {
       po.id,
       { items: [{ purchaseOrderItemId: itemId, quantityReceived: 60 }] },
       actorId,
+      businessId,
     );
     expect(afterSecond.status).toBe("RECEIVED");
     expect(afterSecond.items[0]!.receivedQuantity).toBe(100);
@@ -237,33 +251,40 @@ describe("PurchaseOrdersService", () => {
 
   it("rejects a goods receipt that would exceed the ordered quantity", async () => {
     const po = await createBasicPo();
-    await service.updateStatus(po.id, "ISSUED", actorId);
+    await service.updateStatus(po.id, "ISSUED", actorId, businessId);
     await expect(
       service.createGoodsReceipt(
         po.id,
         { items: [{ purchaseOrderItemId: po.items[0]!.id, quantityReceived: 150 }] },
         actorId,
+        businessId,
       ),
     ).rejects.toThrow(BadRequestError);
   });
 
   it("rejects a vendor rating before the PO is fully received", async () => {
     const po = await createBasicPo();
-    await service.updateStatus(po.id, "ISSUED", actorId);
-    await expect(service.upsertVendorRating(po.id, { rating: 5 }, actorId)).rejects.toThrow(
-      ConflictError,
-    );
+    await service.updateStatus(po.id, "ISSUED", actorId, businessId);
+    await expect(
+      service.upsertVendorRating(po.id, { rating: 5 }, actorId, businessId),
+    ).rejects.toThrow(ConflictError);
   });
 
   it("rates the vendor once the PO is fully received", async () => {
     const po = await createBasicPo();
-    await service.updateStatus(po.id, "ISSUED", actorId);
+    await service.updateStatus(po.id, "ISSUED", actorId, businessId);
     await service.createGoodsReceipt(
       po.id,
       { items: [{ purchaseOrderItemId: po.items[0]!.id, quantityReceived: 100 }] },
       actorId,
+      businessId,
     );
-    const rated = await service.upsertVendorRating(po.id, { rating: 4, remarks: "On time" }, actorId);
+    const rated = await service.upsertVendorRating(
+      po.id,
+      { rating: 4, remarks: "On time" },
+      actorId,
+      businessId,
+    );
     expect(rated.vendorRating?.rating).toBe(4);
   });
 
@@ -286,7 +307,7 @@ describe("PurchaseOrdersService", () => {
       ],
     } as unknown as RfqDetail);
 
-    const po = await service.createFromRfq(rfqId, {}, actorId);
+    const po = await service.createFromRfq(rfqId, {}, actorId, { businessId });
     expect(po.items[0]!.rate).toBe(375);
     expect(po.items[0]!.amount).toBe(75000);
     expect(po.sourceRfqId).toBe(rfqId);
@@ -301,10 +322,12 @@ describe("PurchaseOrdersService", () => {
       items: [],
     } as unknown as RfqDetail);
 
-    await expect(service.createFromRfq(rfqId, {}, actorId)).rejects.toThrow(ConflictError);
+    await expect(service.createFromRfq(rfqId, {}, actorId, { businessId })).rejects.toThrow(
+      ConflictError,
+    );
   });
 
   it("throws for an unknown purchase order id", async () => {
-    await expect(service.getById(randomUUID())).rejects.toThrow(NotFoundError);
+    await expect(service.getById(randomUUID(), businessId)).rejects.toThrow(NotFoundError);
   });
 });
