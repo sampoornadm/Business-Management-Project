@@ -9,7 +9,6 @@ import { prisma } from "../../../infra/prisma/client.js";
 import { logger } from "../../../shared/logger/logger.js";
 import { attachmentsService } from "../../attachments/attachments.module.js";
 import { auditService } from "../../audit/audit.module.js";
-import { tendersRepository } from "../tenders.module.js";
 
 import { documentTypeForFolder, ensureTenderFolders, expandHome, tenderNumberFromFolderName } from "./folder-naming.js";
 
@@ -59,7 +58,14 @@ async function importFile(rootDir: string, absolutePath: string): Promise<void> 
   const tenderNumber = tenderNumberFromFolderName(tenderFolder!);
   if (!tenderNumber) return;
 
-  const tender = await tendersRepository.findByTenderNumber(tenderNumber);
+  // Unscoped by design: this is a trusted system-level background job (not
+  // an HTTP request), and local-docs folders are keyed by tenderNumber alone
+  // with no business segment — same reasoning as reconcileFolders() above,
+  // which already queries prisma.tender directly across all businesses.
+  const tender = await prisma.tender.findUnique({
+    where: { tenderNumber },
+    select: { id: true },
+  });
   if (!tender) {
     logger.warn(`Local docs sync: no tender matches folder "${tenderFolder}" — skipping ${relative}`);
     return;

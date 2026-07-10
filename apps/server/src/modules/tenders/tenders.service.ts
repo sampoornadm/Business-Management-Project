@@ -13,7 +13,7 @@ import { GENERIC_UPLOAD_LIMITS } from "../../config/constants.js";
 import { env } from "../../config/env.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
-import type { RequestContext } from "../../core/interfaces/request-context.js";
+import type { ScopedRequestContext } from "../../core/interfaces/request-context.js";
 import type { EmailService } from "../../infra/mailer/email.service.js";
 import { logger } from "../../shared/logger/logger.js";
 import { toAttachmentDto } from "../attachments/attachments.mapper.js";
@@ -59,29 +59,32 @@ export class TendersService {
     return buildPaginatedResult(items.map(toTenderListItemDto), totalItems, pagination);
   }
 
-  async getById(id: string): Promise<TenderDto> {
-    const tender = await this.tendersRepository.findById(id);
+  async getById(id: string, businessId: string): Promise<TenderDto> {
+    const tender = await this.tendersRepository.findById(id, businessId);
     if (!tender) throw new NotFoundError("Tender not found");
     return toTenderDto(tender);
   }
 
-  private async assertTenderExists(id: string) {
-    const tender = await this.tendersRepository.findById(id);
+  private async assertTenderExists(id: string, businessId: string) {
+    const tender = await this.tendersRepository.findById(id, businessId);
     if (!tender) throw new NotFoundError("Tender not found");
     return tender;
   }
 
   async create(
-    data: CreateTenderData,
-    context: RequestContext = {},
+    data: Omit<CreateTenderData, "businessId">,
+    context: ScopedRequestContext,
   ): Promise<TenderDto> {
-    const duplicate = await this.tendersRepository.findByTenderNumber(data.tenderNumber);
+    const duplicate = await this.tendersRepository.findByTenderNumber(
+      data.tenderNumber,
+      context.businessId,
+    );
     if (duplicate) throw new ConflictError("A tender with this tender number already exists");
 
     const client = await this.organizationsRepository.findById(data.clientId);
     if (!client) throw new BadRequestError("Invalid client");
 
-    const tender = await this.tendersRepository.create(data);
+    const tender = await this.tendersRepository.create({ ...data, businessId: context.businessId });
 
     // Fire-and-forget: a failure to create the local folder tree shouldn't
     // fail tender creation, and the watcher's startup reconciliation
@@ -109,9 +112,9 @@ export class TendersService {
     id: string,
     data: UpdateTenderData,
     actorId: string,
-    context: RequestContext = {},
+    context: ScopedRequestContext,
   ): Promise<TenderDto> {
-    await this.assertTenderExists(id);
+    await this.assertTenderExists(id, context.businessId);
 
     if (data.clientId) {
       const client = await this.organizationsRepository.findById(data.clientId);
@@ -130,8 +133,8 @@ export class TendersService {
     return toTenderDto(tender);
   }
 
-  async delete(id: string, actorId: string, context: RequestContext = {}): Promise<void> {
-    const tender = await this.assertTenderExists(id);
+  async delete(id: string, actorId: string, context: ScopedRequestContext): Promise<void> {
+    const tender = await this.assertTenderExists(id, context.businessId);
     if (tender.status !== "DRAFT") {
       throw new ConflictError("Only tenders in Draft status can be deleted");
     }
@@ -150,9 +153,9 @@ export class TendersService {
     id: string,
     input: ChangeTenderStatusBody,
     actorId: string,
-    context: RequestContext = {},
+    context: ScopedRequestContext,
   ): Promise<TenderDto> {
-    const tender = await this.assertTenderExists(id);
+    const tender = await this.assertTenderExists(id, context.businessId);
     // Captured before the repository call: the repository may return the
     // same mutated object reference rather than a fresh copy (as some
     // fakes/caches do), so this must not be re-read from `tender` afterward.
@@ -203,8 +206,9 @@ export class TendersService {
   async getStatusHistory(
     id: string,
     pagination: PaginationParams,
+    businessId: string,
   ): Promise<PaginatedResult<TenderStatusHistoryEntryDto>> {
-    await this.assertTenderExists(id);
+    await this.assertTenderExists(id, businessId);
     const result = await this.auditService.list(pagination, {
       entityType: "Tender",
       entityId: id,
@@ -228,10 +232,15 @@ export class TendersService {
     return { ...result, items };
   }
 
-  async addAssignee(tenderId: string, input: AddAssigneeBody, actorId: string): Promise<TenderDto> {
-    const tender = await this.assertTenderExists(tenderId);
+  async addAssignee(
+    tenderId: string,
+    input: AddAssigneeBody,
+    actorId: string,
+    businessId: string,
+  ): Promise<TenderDto> {
+    const tender = await this.assertTenderExists(tenderId, businessId);
 
-    const user = await this.usersRepository.findById(input.userId);
+    const user = await this.usersRepository.findById(input.userId, businessId);
     if (!user) throw new BadRequestError("Invalid user");
 
     const existing = await this.tendersRepository.findAssignee(tenderId, input.userId);
@@ -263,11 +272,16 @@ export class TendersService {
       metadata: { userId: input.userId, role: input.role ?? "OTHER" },
     });
 
-    return this.getById(tenderId);
+    return this.getById(tenderId, businessId);
   }
 
-  async removeAssignee(tenderId: string, userId: string, actorId: string): Promise<TenderDto> {
-    await this.assertTenderExists(tenderId);
+  async removeAssignee(
+    tenderId: string,
+    userId: string,
+    actorId: string,
+    businessId: string,
+  ): Promise<TenderDto> {
+    await this.assertTenderExists(tenderId, businessId);
     const existing = await this.tendersRepository.findAssignee(tenderId, userId);
     if (!existing) throw new NotFoundError("Assignee not found for this tender");
 
@@ -280,15 +294,16 @@ export class TendersService {
       metadata: { userId },
     });
 
-    return this.getById(tenderId);
+    return this.getById(tenderId, businessId);
   }
 
   async addCompetitor(
     tenderId: string,
     data: CreateCompetitorData,
     actorId: string,
+    businessId: string,
   ): Promise<TenderDto> {
-    await this.assertTenderExists(tenderId);
+    await this.assertTenderExists(tenderId, businessId);
     await this.tendersRepository.addCompetitor(tenderId, data);
     await this.auditService.log({
       actorId,
@@ -296,7 +311,7 @@ export class TendersService {
       entityType: "Tender",
       entityId: tenderId,
     });
-    return this.getById(tenderId);
+    return this.getById(tenderId, businessId);
   }
 
   private async assertCompetitorBelongsToTender(tenderId: string, competitorId: string) {
@@ -311,7 +326,13 @@ export class TendersService {
     competitorId: string,
     data: UpdateCompetitorData,
     actorId: string,
+    businessId: string,
   ): Promise<TenderDto> {
+    // Tender existence/ownership must be checked first — otherwise a
+    // competitorId that legitimately belongs to a tenderId from another
+    // business would still be mutated before the final getById() below
+    // ever gets a chance to reject it.
+    await this.assertTenderExists(tenderId, businessId);
     await this.assertCompetitorBelongsToTender(tenderId, competitorId);
     await this.tendersRepository.updateCompetitor(competitorId, data);
     await this.auditService.log({
@@ -320,10 +341,16 @@ export class TendersService {
       entityType: "Tender",
       entityId: tenderId,
     });
-    return this.getById(tenderId);
+    return this.getById(tenderId, businessId);
   }
 
-  async deleteCompetitor(tenderId: string, competitorId: string, actorId: string): Promise<TenderDto> {
+  async deleteCompetitor(
+    tenderId: string,
+    competitorId: string,
+    actorId: string,
+    businessId: string,
+  ): Promise<TenderDto> {
+    await this.assertTenderExists(tenderId, businessId);
     await this.assertCompetitorBelongsToTender(tenderId, competitorId);
     await this.tendersRepository.deleteCompetitor(competitorId);
     await this.auditService.log({
@@ -332,11 +359,16 @@ export class TendersService {
       entityType: "Tender",
       entityId: tenderId,
     });
-    return this.getById(tenderId);
+    return this.getById(tenderId, businessId);
   }
 
-  async setTags(tenderId: string, tagIds: string[], actorId: string): Promise<TenderDto> {
-    await this.assertTenderExists(tenderId);
+  async setTags(
+    tenderId: string,
+    tagIds: string[],
+    actorId: string,
+    businessId: string,
+  ): Promise<TenderDto> {
+    await this.assertTenderExists(tenderId, businessId);
 
     for (const tagId of tagIds) {
       const tag = await this.tagsRepository.findById(tagId);
@@ -351,7 +383,7 @@ export class TendersService {
       entityId: tenderId,
       metadata: { tagIds },
     });
-    return this.getById(tenderId);
+    return this.getById(tenderId, businessId);
   }
 
   async uploadDocument(
@@ -360,8 +392,9 @@ export class TendersService {
     documentType: string,
     replacesAttachmentId: string | undefined,
     actorId: string,
+    businessId: string,
   ): Promise<AttachmentDto> {
-    await this.assertTenderExists(tenderId);
+    await this.assertTenderExists(tenderId, businessId);
 
     const { original } = await this.attachmentsService.upload({
       fileBuffer: file.buffer,
@@ -388,14 +421,22 @@ export class TendersService {
     return toAttachmentDto(original);
   }
 
-  async listDocuments(tenderId: string, documentType?: string): Promise<AttachmentDto[]> {
-    await this.assertTenderExists(tenderId);
+  async listDocuments(
+    tenderId: string,
+    documentType: string | undefined,
+    businessId: string,
+  ): Promise<AttachmentDto[]> {
+    await this.assertTenderExists(tenderId, businessId);
     const attachments = await this.attachmentsService.listByEntity("Tender", tenderId, documentType);
     return Promise.all(attachments.map(toAttachmentDto));
   }
 
-  async listDocumentVersions(tenderId: string, documentGroupId: string): Promise<AttachmentDto[]> {
-    await this.assertTenderExists(tenderId);
+  async listDocumentVersions(
+    tenderId: string,
+    documentGroupId: string,
+    businessId: string,
+  ): Promise<AttachmentDto[]> {
+    await this.assertTenderExists(tenderId, businessId);
     const versions = await this.attachmentsService.listVersions(documentGroupId);
     const belongsToTender = versions.every((v) => v.entityType === "Tender" && v.entityId === tenderId);
     if (versions.length > 0 && !belongsToTender) {
@@ -404,8 +445,13 @@ export class TendersService {
     return Promise.all(versions.map(toAttachmentDto));
   }
 
-  async deleteDocument(tenderId: string, documentGroupId: string, actorId: string): Promise<void> {
-    await this.assertTenderExists(tenderId);
+  async deleteDocument(
+    tenderId: string,
+    documentGroupId: string,
+    actorId: string,
+    businessId: string,
+  ): Promise<void> {
+    await this.assertTenderExists(tenderId, businessId);
     const versions = await this.attachmentsService.listVersions(documentGroupId);
     const belongsToTender = versions.every((v) => v.entityType === "Tender" && v.entityId === tenderId);
     if (versions.length === 0 || !belongsToTender) {
