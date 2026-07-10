@@ -52,7 +52,9 @@ class FakeRfqRepository implements IRfqRepository {
     return id;
   }
 
-  async findById(id: string) {
+  // businessId is ignored here — the fake stands in for the real (Postgres-
+  // enforced) scoping; isolation itself is covered by the integration test.
+  async findById(id: string, _businessId: string) {
     return this.rfqs.get(id) ?? null;
   }
 
@@ -154,7 +156,7 @@ class FakeTendersRepository implements Partial<ITendersRepository> {
   tenderIds = new Set<string>();
   tenderNumbers = new Map<string, string>();
 
-  async findById(id: string) {
+  async findById(id: string, _businessId: string) {
     if (!this.tenderIds.has(id)) return null;
     return { id, tenderNumber: this.tenderNumbers.get(id) ?? "TND-0000" } as never;
   }
@@ -188,7 +190,7 @@ class FakeVendorsRepository implements Partial<IVendorsRepository> {
 class FakeUsersRepository implements Partial<IUsersRepository> {
   users = new Map<string, { id: string; firstName: string; lastName: string; email: string }>();
 
-  async findById(id: string) {
+  async findById(id: string, _businessId: string) {
     return (this.users.get(id) ?? null) as never;
   }
 }
@@ -196,7 +198,7 @@ class FakeUsersRepository implements Partial<IUsersRepository> {
 class FakeBoqRepository implements Partial<IBoqRepository> {
   items = new Map<string, BoqItemWithBreakdown>();
 
-  async findItemsByIds(ids: string[]) {
+  async findItemsByIds(ids: string[], _businessId: string) {
     return ids.map((id) => this.items.get(id)).filter((item): item is BoqItemWithBreakdown => Boolean(item));
   }
 }
@@ -213,6 +215,7 @@ describe("RfqService", () => {
   const actorId = randomUUID();
   const vendorA = randomUUID();
   const vendorB = randomUUID();
+  const businessId = randomUUID();
 
   beforeEach(() => {
     repository = new FakeRfqRepository();
@@ -245,6 +248,7 @@ describe("RfqService", () => {
     return service.create(
       { title: "Cement Supply RFQ", items: [{ description: "OPC Cement", unit: "bag", quantity: 500 }] },
       actorId,
+      { businessId },
     );
   }
 
@@ -259,36 +263,39 @@ describe("RfqService", () => {
       service.create(
         { title: "X", tenderId: randomUUID(), items: [{ description: "Item", quantity: 1 }] },
         actorId,
+        { businessId },
       ),
     ).rejects.toThrow(BadRequestError);
   });
 
   it("moves DRAFT to SENT when a vendor is invited", async () => {
     const rfq = await createBasicRfq();
-    const updated = await service.addVendorInvite(rfq.id, vendorA, actorId);
+    const updated = await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
     expect(updated.status).toBe("SENT");
     expect(updated.vendorInvites).toHaveLength(1);
   });
 
   it("rejects inviting the same vendor twice", async () => {
     const rfq = await createBasicRfq();
-    await service.addVendorInvite(rfq.id, vendorA, actorId);
-    await expect(service.addVendorInvite(rfq.id, vendorA, actorId)).rejects.toThrow(ConflictError);
+    await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
+    await expect(service.addVendorInvite(rfq.id, vendorA, actorId, businessId)).rejects.toThrow(
+      ConflictError,
+    );
   });
 
   it("rejects a quote from a vendor that was not invited", async () => {
     const rfq = await createBasicRfq();
     const itemId = rfq.items[0]!.id;
     await expect(
-      service.upsertQuote(itemId, vendorA, { rate: 380 }, actorId),
+      service.upsertQuote(itemId, vendorA, { rate: 380 }, actorId, businessId),
     ).rejects.toThrow(BadRequestError);
   });
 
   it("records quotes and marks the vendor invite RESPONDED", async () => {
     const rfq = await createBasicRfq();
     const itemId = rfq.items[0]!.id;
-    await service.addVendorInvite(rfq.id, vendorA, actorId);
-    const updated = await service.upsertQuote(itemId, vendorA, { rate: 380 }, actorId);
+    await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
+    const updated = await service.upsertQuote(itemId, vendorA, { rate: 380 }, actorId, businessId);
     expect(updated.vendorInvites[0]!.status).toBe("RESPONDED");
     expect(updated.items[0]!.quotes).toHaveLength(1);
   });
@@ -296,12 +303,12 @@ describe("RfqService", () => {
   it("computes the comparative statement with the lowest rate flagged per item", async () => {
     const rfq = await createBasicRfq();
     const itemId = rfq.items[0]!.id;
-    await service.addVendorInvite(rfq.id, vendorA, actorId);
-    await service.addVendorInvite(rfq.id, vendorB, actorId);
-    await service.upsertQuote(itemId, vendorA, { rate: 380 }, actorId);
-    await service.upsertQuote(itemId, vendorB, { rate: 350 }, actorId);
+    await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
+    await service.addVendorInvite(rfq.id, vendorB, actorId, businessId);
+    await service.upsertQuote(itemId, vendorA, { rate: 380 }, actorId, businessId);
+    await service.upsertQuote(itemId, vendorB, { rate: 350 }, actorId, businessId);
 
-    const comparison = await service.getComparison(rfq.id);
+    const comparison = await service.getComparison(rfq.id, businessId);
     expect(comparison.items).toHaveLength(1);
     const quoteA = comparison.items[0]!.quotes.find((q) => q.vendorId === vendorA)!;
     const quoteB = comparison.items[0]!.quotes.find((q) => q.vendorId === vendorB)!;
@@ -315,61 +322,63 @@ describe("RfqService", () => {
 
   it("awards the RFQ to an invited vendor and rejects further quote/invite changes", async () => {
     const rfq = await createBasicRfq();
-    await service.addVendorInvite(rfq.id, vendorA, actorId);
-    const awarded = await service.award(rfq.id, vendorA, actorId);
+    await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
+    const awarded = await service.award(rfq.id, vendorA, actorId, businessId);
     expect(awarded.status).toBe("AWARDED");
     expect(awarded.awardedVendorId).toBe(vendorA);
 
-    await expect(service.addVendorInvite(rfq.id, vendorB, actorId)).rejects.toThrow(ConflictError);
+    await expect(service.addVendorInvite(rfq.id, vendorB, actorId, businessId)).rejects.toThrow(
+      ConflictError,
+    );
   });
 
   it("rejects awarding to a vendor that was never invited", async () => {
     const rfq = await createBasicRfq();
-    await expect(service.award(rfq.id, vendorA, actorId)).rejects.toThrow(BadRequestError);
+    await expect(service.award(rfq.id, vendorA, actorId, businessId)).rejects.toThrow(BadRequestError);
   });
 
   it("closes an RFQ", async () => {
     const rfq = await createBasicRfq();
-    const closed = await service.close(rfq.id, actorId);
+    const closed = await service.close(rfq.id, actorId, businessId);
     expect(closed.status).toBe("CLOSED");
   });
 
   it("throws for an unknown RFQ id", async () => {
-    await expect(service.getById(randomUUID())).rejects.toThrow(NotFoundError);
+    await expect(service.getById(randomUUID(), businessId)).rejects.toThrow(NotFoundError);
   });
 
   describe("reopen", () => {
     it("reopens an AWARDED RFQ back to SENT and clears the awarded vendor", async () => {
       const rfq = await createBasicRfq();
-      await service.addVendorInvite(rfq.id, vendorA, actorId);
-      const awarded = await service.award(rfq.id, vendorA, actorId);
+      await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
+      const awarded = await service.award(rfq.id, vendorA, actorId, businessId);
       expect(awarded.status).toBe("AWARDED");
 
-      const reopened = await service.reopen(rfq.id, actorId);
+      const reopened = await service.reopen(rfq.id, actorId, { businessId });
       expect(reopened.status).toBe("SENT");
       expect(reopened.awardedVendorId).toBeNull();
     });
 
     it("reopens a CLOSED RFQ with no vendor invites back to DRAFT", async () => {
       const rfq = await createBasicRfq();
-      await service.close(rfq.id, actorId);
+      await service.close(rfq.id, actorId, businessId);
 
-      const reopened = await service.reopen(rfq.id, actorId);
+      const reopened = await service.reopen(rfq.id, actorId, { businessId });
       expect(reopened.status).toBe("DRAFT");
     });
 
     it("reopens a CLOSED RFQ that already had vendor invites back to SENT", async () => {
       const rfq = await createBasicRfq();
-      await service.addVendorInvite(rfq.id, vendorA, actorId);
-      await service.close(rfq.id, actorId);
+      await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
+      await service.close(rfq.id, actorId, businessId);
 
-      const reopened = await service.reopen(rfq.id, actorId);
+      const reopened = await service.reopen(rfq.id, actorId, { businessId });
       expect(reopened.status).toBe("SENT");
     });
 
     it("rejects reopening an RFQ that isn't finalized", async () => {
       const rfq = await createBasicRfq();
-      await expect(service.reopen(rfq.id, actorId)).rejects.toThrow(BadRequestError);
+      await expect(service.reopen(rfq.id, actorId, { businessId })).rejects.toThrow(BadRequestError);
     });
   });
 
@@ -386,7 +395,7 @@ describe("RfqService", () => {
         { vendorId: vendorB, vendorName: "Vendor B", itemType: "GASKET", make: null },
       ];
 
-      const result = await service.suggestVendors([flangeItem.id]);
+      const result = await service.suggestVendors([flangeItem.id], businessId);
 
       expect(result.perItem).toHaveLength(1);
       expect(result.perItem[0]!.suggestedVendors).toEqual([
@@ -406,7 +415,7 @@ describe("RfqService", () => {
         { vendorId: vendorB, vendorName: "Vendor B", itemType: "FLANGE", make: null },
       ];
 
-      const result = await service.suggestVendors([flangeItem.id, gasketItem.id]);
+      const result = await service.suggestVendors([flangeItem.id, gasketItem.id], businessId);
 
       expect(result.recommended[0]).toEqual({ vendorId: vendorA, name: "Vendor A", coverageCount: 2 });
       expect(result.recommended[1]).toEqual({ vendorId: vendorB, name: "Vendor B", coverageCount: 1 });
@@ -420,7 +429,7 @@ describe("RfqService", () => {
         { vendorId: vendorB, vendorName: "Vendor B", itemType: "FLANGE", make: "ACME" },
       ];
 
-      const result = await service.suggestVendors([item.id]);
+      const result = await service.suggestVendors([item.id], businessId);
 
       expect(result.perItem[0]!.suggestedVendors[0]!.vendorId).toBe(vendorB);
     });
@@ -430,14 +439,14 @@ describe("RfqService", () => {
       boqRepository.items.set(item.id, item);
       vendorsRepository.itemTags = [{ vendorId: vendorA, vendorName: "Vendor A", itemType: "FLANGE", make: null }];
 
-      const result = await service.suggestVendors([item.id]);
+      const result = await service.suggestVendors([item.id], businessId);
 
       expect(result.perItem[0]!.suggestedVendors).toEqual([]);
       expect(result.recommended).toEqual([]);
     });
 
     it("returns empty results when no item ids are given", async () => {
-      const result = await service.suggestVendors([]);
+      const result = await service.suggestVendors([], businessId);
       expect(result).toEqual({ perItem: [], recommended: [] });
     });
   });
@@ -466,6 +475,7 @@ describe("RfqService", () => {
         const preview = await service.previewQuickSend(
           { boqItemIds: [item.id], vendorId: vendorA },
           actorId,
+          businessId,
         );
 
         expect(preview.vendorContactEmail).toBe("raj@vendora.example");
@@ -485,6 +495,7 @@ describe("RfqService", () => {
         const preview = await service.previewQuickSend(
           { tenderId, boqItemIds: [item.id], vendorId: vendorA },
           actorId,
+          businessId,
         );
 
         expect(preview.text).toContain("against tender TND-0001");
@@ -496,13 +507,13 @@ describe("RfqService", () => {
         vendorsRepository.vendors.set(vendorB, { id: vendorB, name: "Vendor B", contacts: [] });
 
         await expect(
-          service.previewQuickSend({ boqItemIds: [item.id], vendorId: vendorB }, actorId),
+          service.previewQuickSend({ boqItemIds: [item.id], vendorId: vendorB }, actorId, businessId),
         ).rejects.toThrow(BadRequestError);
       });
 
       it("rejects when no items are selected", async () => {
         await expect(
-          service.previewQuickSend({ boqItemIds: [], vendorId: vendorA }, actorId),
+          service.previewQuickSend({ boqItemIds: [], vendorId: vendorA }, actorId, businessId),
         ).rejects.toThrow(BadRequestError);
       });
     });
@@ -515,6 +526,7 @@ describe("RfqService", () => {
         const rfq = await service.quickSend(
           { boqItemIds: [item.id], vendorId: vendorA, text: "Custom edited body" },
           actorId,
+          { businessId },
         );
 
         expect(rfq.status).toBe("SENT");
@@ -538,6 +550,7 @@ describe("RfqService", () => {
         const rfq = await service.quickSend(
           { tenderId, boqItemIds: [item.id], vendorId: vendorA, text: "Body" },
           actorId,
+          { businessId },
         );
 
         expect(rfq.title).toBe("TND-0002 — RFQ for Vendor A");
@@ -549,7 +562,9 @@ describe("RfqService", () => {
         vendorsRepository.vendors.set(vendorB, { id: vendorB, name: "Vendor B", contacts: [] });
 
         await expect(
-          service.quickSend({ boqItemIds: [item.id], vendorId: vendorB, text: "Body" }, actorId),
+          service.quickSend({ boqItemIds: [item.id], vendorId: vendorB, text: "Body" }, actorId, {
+            businessId,
+          }),
         ).rejects.toThrow(BadRequestError);
         expect(emailService.queueRfqEmail).not.toHaveBeenCalled();
       });

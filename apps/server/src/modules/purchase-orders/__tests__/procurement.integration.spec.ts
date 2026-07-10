@@ -6,6 +6,11 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApp } from "../../../app.js";
+import {
+  cleanupIntegrationTestUser,
+  createIntegrationTestUser,
+  type IntegrationTestUser,
+} from "../../../shared/test-utils/integration-auth.js";
 import { hashPassword } from "../../../shared/utils/hash.js";
 
 /**
@@ -169,5 +174,58 @@ describe("Procurement workflow (integration)", () => {
       .set("Authorization", `Bearer ${accessToken}`);
     expect(performanceResponse.status).toBe(200);
     expect(performanceResponse.body.data.averageRating).toBe(5);
+  });
+});
+
+describe("RFQ business isolation (integration)", () => {
+  const app = createApp();
+  let testUser: IntegrationTestUser;
+
+  beforeAll(async () => {
+    testUser = await createIntegrationTestUser(app);
+  });
+
+  afterAll(async () => {
+    await prisma.rfq.deleteMany({
+      where: { businessId: { in: [testUser.businessId, testUser.secondBusinessId] } },
+    });
+    await cleanupIntegrationTestUser(testUser);
+    await prisma.$disconnect();
+  });
+
+  it("does not return a standalone RFQ (no tenderId) from another business, and rejects direct access", async () => {
+    // RFQs can be standalone — created with no tenderId at all — entirely in
+    // the first business.
+    const createResponse = await request(app)
+      .post("/api/v1/rfqs")
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
+      .send({
+        title: "Isolated Standalone RFQ",
+        items: [{ description: "TMT Steel Rebar", unit: "kg", quantity: 500 }],
+      });
+    expect(createResponse.status).toBe(201);
+    const isolationRfqId = createResponse.body.data.id as string;
+
+    // Switch to the second business this same test user also belongs to.
+    const otherLogin = await request(app).post("/api/v1/auth/login").send({
+      email: testUser.email,
+      password: "Password123",
+    });
+    const switchResponse = await request(app)
+      .post("/api/v1/auth/switch-business")
+      .set("Authorization", `Bearer ${otherLogin.body.data.accessToken}`)
+      .send({ businessId: testUser.secondBusinessId });
+    const secondBusinessToken = switchResponse.body.data.accessToken as string;
+
+    const listResponse = await request(app)
+      .get("/api/v1/rfqs")
+      .set("Authorization", `Bearer ${secondBusinessToken}`);
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body.data.items.map((r: { id: string }) => r.id)).not.toContain(isolationRfqId);
+
+    const getByIdResponse = await request(app)
+      .get(`/api/v1/rfqs/${isolationRfqId}`)
+      .set("Authorization", `Bearer ${secondBusinessToken}`);
+    expect(getByIdResponse.status).toBe(404);
   });
 });

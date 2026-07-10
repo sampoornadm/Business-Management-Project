@@ -13,7 +13,7 @@ import type {
 
 import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
-import type { RequestContext } from "../../core/interfaces/request-context.js";
+import type { ScopedRequestContext } from "../../core/interfaces/request-context.js";
 import type { EmailService } from "../../infra/mailer/email.service.js";
 import { round2 } from "../../shared/utils/math.js";
 import type { AuditService } from "../audit/audit.service.js";
@@ -39,8 +39,8 @@ export class RfqService {
     private readonly auditService: AuditService,
   ) {}
 
-  private async getDetailOrThrow(id: string): Promise<RfqDetail> {
-    const rfq = await this.rfqRepository.findById(id);
+  private async getDetailOrThrow(id: string, businessId: string): Promise<RfqDetail> {
+    const rfq = await this.rfqRepository.findById(id, businessId);
     if (!rfq) throw new NotFoundError("RFQ not found");
     return rfq;
   }
@@ -53,23 +53,29 @@ export class RfqService {
     return buildPaginatedResult(items.map(toRfqListItemDto), totalItems, pagination);
   }
 
-  async getById(id: string): Promise<RfqDto> {
-    return toRfqDto(await this.getDetailOrThrow(id));
+  async getById(id: string, businessId: string): Promise<RfqDto> {
+    return toRfqDto(await this.getDetailOrThrow(id, businessId));
   }
 
   async create(
-    input: Omit<CreateRfqData, "createdById"> & { vendorIds?: string[] },
+    input: Omit<CreateRfqData, "createdById" | "businessId"> & { vendorIds?: string[] },
     actorId: string,
-    context: RequestContext = {},
+    context: ScopedRequestContext,
   ): Promise<RfqDto> {
     if (input.items.length === 0) throw new BadRequestError("At least one RFQ item is required");
     if (input.tenderId) {
-      const tender = await this.tendersRepository.findById(input.tenderId);
+      // RFQs can be standalone (no tenderId), so businessId is always sourced
+      // from context — never derived from the tender, even when one is given.
+      const tender = await this.tendersRepository.findById(input.tenderId, context.businessId);
       if (!tender) throw new BadRequestError("Invalid tenderId");
     }
 
     const { vendorIds, ...createData } = input;
-    const rfqId = await this.rfqRepository.create({ ...createData, createdById: actorId });
+    const rfqId = await this.rfqRepository.create({
+      ...createData,
+      businessId: context.businessId,
+      createdById: actorId,
+    });
 
     if (vendorIds && vendorIds.length > 0) {
       for (const vendorId of vendorIds) {
@@ -88,18 +94,23 @@ export class RfqService {
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
     });
-    return this.getById(rfqId);
+    return this.getById(rfqId, context.businessId);
   }
 
-  async update(id: string, data: UpdateRfqData, actorId: string): Promise<RfqDto> {
-    await this.getDetailOrThrow(id);
+  async update(id: string, data: UpdateRfqData, actorId: string, businessId: string): Promise<RfqDto> {
+    await this.getDetailOrThrow(id, businessId);
     await this.rfqRepository.update(id, data);
     await this.auditService.log({ actorId, action: "RFQ_UPDATED", entityType: "Rfq", entityId: id });
-    return this.getById(id);
+    return this.getById(id, businessId);
   }
 
-  async addVendorInvite(rfqId: string, vendorId: string, actorId: string): Promise<RfqDto> {
-    const rfq = await this.getDetailOrThrow(rfqId);
+  async addVendorInvite(
+    rfqId: string,
+    vendorId: string,
+    actorId: string,
+    businessId: string,
+  ): Promise<RfqDto> {
+    const rfq = await this.getDetailOrThrow(rfqId, businessId);
     if (FINALIZED_STATUSES.has(rfq.status)) {
       throw new ConflictError("Cannot invite vendors to a finalized RFQ");
     }
@@ -119,10 +130,19 @@ export class RfqService {
       entityId: rfqId,
       metadata: { vendorId },
     });
-    return this.getById(rfqId);
+    return this.getById(rfqId, businessId);
   }
 
-  async removeVendorInvite(rfqId: string, vendorId: string, actorId: string): Promise<RfqDto> {
+  async removeVendorInvite(
+    rfqId: string,
+    vendorId: string,
+    actorId: string,
+    businessId: string,
+  ): Promise<RfqDto> {
+    // Ownership must be checked first — otherwise a vendorId that legitimately
+    // belongs to an rfqId from another business would still be mutated before
+    // the final getById() below ever gets a chance to reject it.
+    await this.getDetailOrThrow(rfqId, businessId);
     const existing = await this.rfqRepository.findVendorInvite(rfqId, vendorId);
     if (!existing) throw new NotFoundError("Vendor invite not found for this RFQ");
 
@@ -134,7 +154,7 @@ export class RfqService {
       entityId: rfqId,
       metadata: { vendorId },
     });
-    return this.getById(rfqId);
+    return this.getById(rfqId, businessId);
   }
 
   async upsertQuote(
@@ -142,11 +162,14 @@ export class RfqService {
     vendorId: string,
     input: { rate: number; remarks?: string },
     actorId: string,
+    businessId: string,
   ): Promise<RfqDto> {
     const item = await this.rfqRepository.findItemById(rfqItemId);
     if (!item) throw new NotFoundError("RFQ item not found");
 
-    const rfq = await this.getDetailOrThrow(item.rfqId);
+    // RfqItem has no businessId column of its own — getDetailOrThrow scopes
+    // through the parent Rfq immediately below, before anything is mutated.
+    const rfq = await this.getDetailOrThrow(item.rfqId, businessId);
     if (FINALIZED_STATUSES.has(rfq.status)) {
       throw new ConflictError("Cannot record quotes on a finalized RFQ");
     }
@@ -165,11 +188,11 @@ export class RfqService {
       entityId: item.rfqId,
       metadata: { rfqItemId, vendorId, rate: input.rate },
     });
-    return this.getById(item.rfqId);
+    return this.getById(item.rfqId, businessId);
   }
 
-  async getComparison(rfqId: string): Promise<RfqComparisonDto> {
-    const rfq = await this.getDetailOrThrow(rfqId);
+  async getComparison(rfqId: string, businessId: string): Promise<RfqComparisonDto> {
+    const rfq = await this.getDetailOrThrow(rfqId, businessId);
 
     const vendorTotals = new Map<string, { vendorName: string; total: number; itemsQuoted: number }>();
     const items: RfqComparisonItemDto[] = rfq.items.map((item) => {
@@ -212,8 +235,8 @@ export class RfqService {
     return { rfqId, items, vendorTotals: totals };
   }
 
-  async award(rfqId: string, vendorId: string, actorId: string): Promise<RfqDto> {
-    const rfq = await this.getDetailOrThrow(rfqId);
+  async award(rfqId: string, vendorId: string, actorId: string, businessId: string): Promise<RfqDto> {
+    const rfq = await this.getDetailOrThrow(rfqId, businessId);
     if (FINALIZED_STATUSES.has(rfq.status)) throw new ConflictError("RFQ is already finalized");
     if (!rfq.vendorInvites.some((v) => v.vendor.id === vendorId)) {
       throw new BadRequestError("Vendor was not invited to this RFQ");
@@ -227,24 +250,24 @@ export class RfqService {
       entityId: rfqId,
       metadata: { vendorId },
     });
-    return this.getById(rfqId);
+    return this.getById(rfqId, businessId);
   }
 
-  async close(rfqId: string, actorId: string): Promise<RfqDto> {
-    const rfq = await this.getDetailOrThrow(rfqId);
+  async close(rfqId: string, actorId: string, businessId: string): Promise<RfqDto> {
+    const rfq = await this.getDetailOrThrow(rfqId, businessId);
     if (FINALIZED_STATUSES.has(rfq.status)) throw new ConflictError("RFQ is already finalized");
 
     await this.rfqRepository.updateStatus(rfqId, "CLOSED");
     await this.auditService.log({ actorId, action: "RFQ_CLOSED", entityType: "Rfq", entityId: rfqId });
-    return this.getById(rfqId);
+    return this.getById(rfqId, businessId);
   }
 
   // Reopening AWARDED clears the award (a fresh award has to be made again);
   // reopening CLOSED/CANCELLED goes back to SENT if vendors were already
   // invited, else DRAFT — mirroring how the RFQ got to SENT in the first
   // place (see addVendorInvite below).
-  async reopen(rfqId: string, actorId: string, context: RequestContext = {}): Promise<RfqDto> {
-    const rfq = await this.getDetailOrThrow(rfqId);
+  async reopen(rfqId: string, actorId: string, context: ScopedRequestContext): Promise<RfqDto> {
+    const rfq = await this.getDetailOrThrow(rfqId, context.businessId);
     if (!FINALIZED_STATUSES.has(rfq.status)) {
       throw new BadRequestError("RFQ is not finalized — nothing to reopen");
     }
@@ -260,7 +283,7 @@ export class RfqService {
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
     });
-    return this.getById(rfqId);
+    return this.getById(rfqId, context.businessId);
   }
 
   // v1: plain substring keyword matching against the live VendorItemTag
@@ -268,10 +291,10 @@ export class RfqService {
   // items each vendor can cover, with vendors whose tagged `make` also
   // appears in the item text ordered first. See the vendor-matching plan
   // (async-humming-cosmos.md) for why this is deliberately simple for v1.
-  async suggestVendors(boqItemIds: string[]): Promise<RfqVendorSuggestionsDto> {
+  async suggestVendors(boqItemIds: string[], businessId: string): Promise<RfqVendorSuggestionsDto> {
     if (boqItemIds.length === 0) return { perItem: [], recommended: [] };
 
-    const items = await this.boqRepository.findItemsByIds(boqItemIds);
+    const items = await this.boqRepository.findItemsByIds(boqItemIds, businessId);
     const itemTypes = await this.vendorsRepository.findDistinctItemTypes();
     const matches = itemTypes.length > 0 ? await this.vendorsRepository.findActiveVendorsByItemTypes(itemTypes) : [];
 
@@ -317,9 +340,12 @@ export class RfqService {
     return { perItem, recommended };
   }
 
-  private async loadQuickSendContext(input: { tenderId?: string; boqItemIds: string[]; vendorId: string }) {
+  private async loadQuickSendContext(
+    input: { tenderId?: string; boqItemIds: string[]; vendorId: string },
+    businessId: string,
+  ) {
     if (input.boqItemIds.length === 0) throw new BadRequestError("At least one item is required");
-    const items = await this.boqRepository.findItemsByIds(input.boqItemIds);
+    const items = await this.boqRepository.findItemsByIds(input.boqItemIds, businessId);
     if (items.length === 0) throw new BadRequestError("No valid items selected");
 
     const vendor = await this.vendorsRepository.findById(input.vendorId);
@@ -331,7 +357,7 @@ export class RfqService {
 
     let tenderNumber: string | undefined;
     if (input.tenderId) {
-      const tender = await this.tendersRepository.findById(input.tenderId);
+      const tender = await this.tendersRepository.findById(input.tenderId, businessId);
       tenderNumber = tender?.tenderNumber;
     }
 
@@ -347,9 +373,10 @@ export class RfqService {
   async previewQuickSend(
     input: { tenderId?: string; boqItemIds: string[]; vendorId: string },
     actorId: string,
+    businessId: string,
   ): Promise<{ text: string; vendorContactEmail: string }> {
-    const { items, contact, tenderNumber } = await this.loadQuickSendContext(input);
-    const actor = await this.usersRepository.findById(actorId);
+    const { items, contact, tenderNumber } = await this.loadQuickSendContext(input, businessId);
+    const actor = await this.usersRepository.findById(actorId, businessId);
     if (!actor) throw new NotFoundError("Actor not found");
 
     const text = buildRfqText({
@@ -369,9 +396,9 @@ export class RfqService {
   async quickSend(
     input: { tenderId?: string; boqItemIds: string[]; vendorId: string; text: string },
     actorId: string,
-    context: RequestContext = {},
+    context: ScopedRequestContext,
   ): Promise<RfqDto> {
-    const { items, vendor, contact, tenderNumber } = await this.loadQuickSendContext(input);
+    const { items, vendor, contact, tenderNumber } = await this.loadQuickSendContext(input, context.businessId);
 
     const title = tenderNumber ? `${tenderNumber} — RFQ for ${vendor.name}` : `RFQ for ${vendor.name}`;
     const rfq = await this.create(
