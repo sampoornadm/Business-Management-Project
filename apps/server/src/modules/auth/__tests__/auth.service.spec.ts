@@ -6,16 +6,43 @@ import { UnauthorizedError } from "../../../core/errors/HttpErrors.js";
 import { hashPassword, sha256 } from "../../../shared/utils/hash.js";
 import type { AttachmentsService } from "../../attachments/attachments.service.js";
 import type { AuditService } from "../../audit/audit.service.js";
+import type { IBusinessesRepository } from "../../businesses/businesses.repository.js";
+import type { IRolesRepository } from "../../roles/roles.repository.js";
 import type { UserWithRole } from "../../users/users.repository.js";
 import type { IUsersRepository } from "../../users/users.repository.js";
 import type { CreateRefreshTokenData, IAuthRepository } from "../auth.repository.js";
 import { AuthService } from "../auth.service.js";
 import { TokenService } from "../token.service.js";
 
+const BUSINESS_ID = "business-1";
+const ROLE_ID = "role-admin";
+const ROLE_NAME = "ADMIN";
+
+function roleFor(roleId: string, now: Date): UserWithRole["userBusinesses"][number]["role"] {
+  return {
+    id: roleId,
+    name: roleId === ROLE_ID ? ROLE_NAME : "VIEWER",
+    description: null,
+    isSystem: true,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function membershipFor(
+  userId: string,
+  businessId: string,
+  roleId: string,
+  now: Date = new Date(),
+): UserWithRole["userBusinesses"][number] {
+  return { id: randomUUID(), userId, businessId, roleId, role: roleFor(roleId, now), createdAt: now };
+}
+
 function buildUser(overrides: Partial<UserWithRole> = {}): UserWithRole {
   const now = new Date();
+  const id = overrides.id ?? randomUUID();
   return {
-    id: randomUUID(),
+    id,
     email: "jane@example.com",
     passwordHash: "",
     firstName: "Jane",
@@ -25,10 +52,9 @@ function buildUser(overrides: Partial<UserWithRole> = {}): UserWithRole {
     isEmailVerified: true,
     lastLoginAt: null,
     createdById: null,
-    roleId: "role-admin",
     avatarAttachmentId: null,
     avatarAttachment: null,
-    role: { id: "role-admin", name: "ADMIN", description: null, isSystem: true, createdAt: now, updatedAt: now },
+    userBusinesses: [membershipFor(id, BUSINESS_ID, ROLE_ID, now)],
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -36,13 +62,22 @@ function buildUser(overrides: Partial<UserWithRole> = {}): UserWithRole {
 }
 
 class FakeUsersRepository implements Partial<IUsersRepository> {
+  // Stores the FULL set of a user's memberships, mirroring the real schema. Every read method
+  // scopes its returned `UserWithRole` down to just the membership row for the requested
+  // `businessId` — matching what `userWithRoleArgs(businessId)`'s Prisma include does.
   users = new Map<string, UserWithRole>();
 
-  async findByEmail(email: string) {
-    return [...this.users.values()].find((u) => u.email === email) ?? null;
+  private scopedTo(user: UserWithRole, businessId: string): UserWithRole {
+    return { ...user, userBusinesses: user.userBusinesses.filter((ub) => ub.businessId === businessId) };
   }
-  async findById(id: string) {
-    return this.users.get(id) ?? null;
+
+  async findByEmail(email: string, businessId: string) {
+    const user = [...this.users.values()].find((u) => u.email === email);
+    return user ? this.scopedTo(user, businessId) : null;
+  }
+  async findById(id: string, businessId: string) {
+    const user = this.users.get(id);
+    return user ? this.scopedTo(user, businessId) : null;
   }
   async updateLastLoginAt(id: string) {
     const user = this.users.get(id);
@@ -89,9 +124,44 @@ class FakeAuthRepository implements Partial<IAuthRepository> {
   }
 }
 
+class FakeBusinessesRepository implements Partial<IBusinessesRepository> {
+  // userId -> businessId -> roleId
+  memberships = new Map<string, Map<string, string>>();
+
+  addMembership(userId: string, businessId: string, roleId: string) {
+    if (!this.memberships.has(userId)) this.memberships.set(userId, new Map());
+    this.memberships.get(userId)!.set(businessId, roleId);
+  }
+
+  async listUserBusinesses(userId: string) {
+    const map = this.memberships.get(userId);
+    if (!map) return [];
+    return [...map.keys()].map((businessId) => ({
+      businessId,
+      businessName: "Acme Construction",
+      businessCode: "ACME",
+    }));
+  }
+
+  async findMembership(userId: string, businessId: string) {
+    const roleId = this.memberships.get(userId)?.get(businessId);
+    return roleId ? { roleId } : null;
+  }
+}
+
+class FakeRolesRepository implements Partial<IRolesRepository> {
+  roles = new Map<string, { id: string; name: string }>([[ROLE_ID, { id: ROLE_ID, name: ROLE_NAME }]]);
+
+  async findById(id: string) {
+    return (this.roles.get(id) as never) ?? null;
+  }
+}
+
 describe("AuthService", () => {
   let usersRepository: FakeUsersRepository;
   let authRepository: FakeAuthRepository;
+  let businessesRepository: FakeBusinessesRepository;
+  let rolesRepository: FakeRolesRepository;
   let auditService: AuditService;
   let authService: AuthService;
   let user: UserWithRole;
@@ -99,10 +169,13 @@ describe("AuthService", () => {
   beforeEach(async () => {
     usersRepository = new FakeUsersRepository();
     authRepository = new FakeAuthRepository();
+    businessesRepository = new FakeBusinessesRepository();
+    rolesRepository = new FakeRolesRepository();
     auditService = { log: vi.fn().mockResolvedValue(undefined) } as unknown as AuditService;
 
     user = buildUser({ passwordHash: await hashPassword("Password123") });
     usersRepository.users.set(user.id, user);
+    businessesRepository.addMembership(user.id, BUSINESS_ID, ROLE_ID);
 
     const fakeAttachmentsService = {} as AttachmentsService;
     const fakeEmailService = {
@@ -118,6 +191,8 @@ describe("AuthService", () => {
       auditService,
       fakeAttachmentsService,
       fakeEmailService,
+      businessesRepository as unknown as IBusinessesRepository,
+      rolesRepository as unknown as IRolesRepository,
     );
   });
 
@@ -126,6 +201,7 @@ describe("AuthService", () => {
     expect(result.accessToken).toBeTruthy();
     expect(result.refreshToken).toBeTruthy();
     expect(result.user.email).toBe("jane@example.com");
+    expect(result.user.role.name).toBe(ROLE_NAME);
   });
 
   it("rejects an incorrect password", async () => {
@@ -136,6 +212,13 @@ describe("AuthService", () => {
 
   it("rejects login for a deactivated account", async () => {
     user.isActive = false;
+    await expect(authService.login("jane@example.com", "Password123", {})).rejects.toThrow(
+      UnauthorizedError,
+    );
+  });
+
+  it("rejects login for a user with no business memberships", async () => {
+    businessesRepository.memberships.delete(user.id);
     await expect(authService.login("jane@example.com", "Password123", {})).rejects.toThrow(
       UnauthorizedError,
     );
@@ -152,6 +235,14 @@ describe("AuthService", () => {
     expect(oldRow?.isRevoked).toBe(true);
   });
 
+  it("carries the same activeBusinessId forward when rotating the refresh token", async () => {
+    const { refreshToken } = await authService.login("jane@example.com", "Password123", {});
+    await authService.refresh(refreshToken, {});
+
+    const rows = [...authRepository.refreshTokens.values()];
+    expect(rows.every((row) => row.activeBusinessId === BUSINESS_ID)).toBe(true);
+  });
+
   it("detects refresh token reuse and revokes the whole family", async () => {
     const { refreshToken } = await authService.login("jane@example.com", "Password123", {});
     await authService.refresh(refreshToken, {});
@@ -163,5 +254,29 @@ describe("AuthService", () => {
       .filter((t) => t.userId === user.id)
       .every((t) => t.isRevoked);
     expect(allRevoked).toBe(true);
+  });
+});
+
+describe("AuthService.switchBusiness", () => {
+  it("throws ForbiddenError when the user has no membership in the target business", async () => {
+    const businessesRepository = {
+      findMembership: vi.fn().mockResolvedValue(null),
+      listUserBusinesses: vi.fn(),
+    };
+    const service = new AuthService(
+      {} as never, // usersRepository
+      {} as never, // authRepository
+      {} as never, // tokenService
+      { log: vi.fn() } as never, // auditService
+      {} as never, // attachmentsService
+      {} as never, // emailService
+      businessesRepository as never,
+      {} as never, // rolesRepository
+    );
+    await expect(service.switchBusiness("user-1", "business-2")).rejects.toThrow(
+      "You do not have access to this business",
+    );
+    expect(businessesRepository.findMembership).toHaveBeenCalledWith("user-1", "business-2");
+    expect(businessesRepository.listUserBusinesses).not.toHaveBeenCalled();
   });
 });

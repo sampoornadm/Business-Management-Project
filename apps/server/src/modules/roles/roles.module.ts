@@ -10,3 +10,4 @@ export const rolesService = new RolesService(rolesRepository);
 const rolesController = new RolesController(rolesService);
 
 export const rolesRouter = createRolesRouter(rolesController);
+export { rolesRepository };
