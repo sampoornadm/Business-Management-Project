@@ -12,6 +12,7 @@ import type {
   BoqWithCreator,
   BulkRateUpdate,
   CreateBoqData,
+  CreateBoqItemData,
   IBoqRepository,
   UpdateBoqItemData,
   UpsertRateBreakdownData,
@@ -31,6 +32,7 @@ class FakeBoqRepository implements IBoqRepository {
     this.boqs.set(data.id, {
       id: data.id,
       tenderId: data.tenderId,
+      businessId: data.businessId,
       sourceAttachmentId: data.sourceAttachmentId,
       groupId: data.groupId,
       version: data.version,
@@ -53,15 +55,18 @@ class FakeBoqRepository implements IBoqRepository {
     }
   }
 
-  async findBoqById(id: string) {
+  // businessId is ignored here — the fake stands in for the real (Postgres-
+  // backed) BoqRepository, which does the actual scoping. Cross-business
+  // isolation is exercised in boq.integration.spec.ts instead.
+  async findBoqById(id: string, _businessId: string) {
     return this.boqs.get(id) ?? null;
   }
 
-  async findCurrentBoq(tenderId: string) {
+  async findCurrentBoq(tenderId: string, _businessId: string) {
     return [...this.boqs.values()].find((b) => b.tenderId === tenderId && b.isCurrent) ?? null;
   }
 
-  async findVersions(groupId: string) {
+  async findVersions(groupId: string, _businessId: string) {
     return [...this.boqs.values()]
       .filter((b) => (b.groupId ?? b.id) === groupId)
       .sort((a, b) => b.version - a.version);
@@ -73,11 +78,11 @@ class FakeBoqRepository implements IBoqRepository {
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
-  async findItemById(id: string) {
+  async findItemById(id: string, _businessId: string) {
     return this.items.get(id) ?? null;
   }
 
-  async findItemsByIds(ids: string[]) {
+  async findItemsByIds(ids: string[], _businessId: string) {
     return ids.map((id) => this.items.get(id)).filter((item): item is BoqItemWithBreakdown => Boolean(item));
   }
 
@@ -85,6 +90,21 @@ class FakeBoqRepository implements IBoqRepository {
     const item = this.items.get(id);
     if (!item) throw new Error("not found");
     Object.assign(item, data);
+  }
+
+  createItem(data: CreateBoqItemData) {
+    const item = {
+      ...data,
+      rateBreakdown: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as unknown as BoqItemWithBreakdown;
+    this.items.set(data.id, item);
+    return Promise.resolve(item);
+  }
+
+  async deleteItem(id: string) {
+    this.items.delete(id);
   }
 
   async bulkUpdateRates(updates: BulkRateUpdate[]) {
@@ -122,7 +142,7 @@ class FakeBoqRepository implements IBoqRepository {
 class FakeTendersRepository implements Partial<ITendersRepository> {
   tenderIds = new Set<string>();
 
-  async findById(id: string) {
+  async findById(id: string, _businessId: string) {
     return this.tenderIds.has(id) ? ({ id } as never) : null;
   }
 }
@@ -135,6 +155,7 @@ describe("BoqService", () => {
   let service: BoqService;
   const tenderId = randomUUID();
   const actorId = randomUUID();
+  const businessId = randomUUID();
 
   beforeEach(() => {
     boqRepository = new FakeBoqRepository();
@@ -152,13 +173,20 @@ describe("BoqService", () => {
 
   it("rejects operating on an unknown tender", async () => {
     await expect(
-      service.commitBoq(randomUUID(), { items: [{ tempId: "1", description: "Row" }] }, actorId, {}),
+      service.commitBoq(
+        randomUUID(),
+        businessId,
+        { items: [{ tempId: "1", description: "Row" }] },
+        actorId,
+        {},
+      ),
     ).rejects.toThrow(NotFoundError);
   });
 
   it("commits a BOQ and builds a nested item tree with server-computed amounts", async () => {
     const boq = await service.commitBoq(
       tenderId,
+      businessId,
       {
         items: [
           { tempId: "cat-1", description: "Earthwork", category: "Civil" },
@@ -184,6 +212,7 @@ describe("BoqService", () => {
     await expect(
       service.commitBoq(
         tenderId,
+        businessId,
         { items: [{ tempId: "1", parentTempId: "ghost", description: "Orphan" }] },
         actorId,
         {},
@@ -194,6 +223,7 @@ describe("BoqService", () => {
   it("creates a new version on replacesBoqId, incrementing the version and superseding the old one", async () => {
     const first = await service.commitBoq(
       tenderId,
+      businessId,
       { items: [{ tempId: "1", description: "Excavation", unit: "cum", quantity: 100, rate: 50 }] },
       actorId,
       {},
@@ -201,6 +231,7 @@ describe("BoqService", () => {
 
     const second = await service.commitBoq(
       tenderId,
+      businessId,
       {
         replacesBoqId: first.id,
         items: [{ tempId: "1", description: "Excavation", unit: "cum", quantity: 100, rate: 55 }],
@@ -212,18 +243,19 @@ describe("BoqService", () => {
     expect(second.version).toBe(2);
     expect(second.isCurrent).toBe(true);
 
-    const versions = await service.listVersions(tenderId);
+    const versions = await service.listVersions(tenderId, businessId);
     expect(versions).toHaveLength(2);
     expect(versions.find((v) => v.id === first.id)?.isCurrent).toBe(false);
     expect(versions.find((v) => v.id === second.id)?.isCurrent).toBe(true);
 
-    const current = await service.getCurrentBoq(tenderId);
+    const current = await service.getCurrentBoq(tenderId, businessId);
     expect(current.id).toBe(second.id);
   });
 
   it("bulk-updates rates by a percentage adjustment and recomputes amounts", async () => {
     const boq = await service.commitBoq(
       tenderId,
+      businessId,
       {
         items: [
           { tempId: "1", description: "Excavation", unit: "cum", quantity: 100, rate: 50 },
@@ -235,7 +267,11 @@ describe("BoqService", () => {
     );
     const itemIds = boq.items.map((item) => item.id);
 
-    const updated = await service.bulkUpdateItems({ itemIds, ratePercentAdjustment: 10 }, actorId);
+    const updated = await service.bulkUpdateItems(
+      { itemIds, ratePercentAdjustment: 10 },
+      actorId,
+      businessId,
+    );
 
     const excavation = updated.items.find((item) => item.description === "Excavation")!;
     expect(excavation.rate).toBe(55);
@@ -247,13 +283,14 @@ describe("BoqService", () => {
 
   it("rejects a bulk update referencing an unknown item id", async () => {
     await expect(
-      service.bulkUpdateItems({ itemIds: [randomUUID()], ratePercentAdjustment: 5 }, actorId),
+      service.bulkUpdateItems({ itemIds: [randomUUID()], ratePercentAdjustment: 5 }, actorId, businessId),
     ).rejects.toThrow(BadRequestError);
   });
 
   it("computes a rate from the cost breakdown and applies it back to the item", async () => {
     const boq = await service.commitBoq(
       tenderId,
+      businessId,
       { items: [{ tempId: "1", description: "Excavation", unit: "cum", quantity: 10 }] },
       actorId,
       {},
@@ -272,6 +309,7 @@ describe("BoqService", () => {
         taxPercent: 0,
       },
       actorId,
+      businessId,
     );
 
     const item = updated.items[0]!;
@@ -287,18 +325,20 @@ describe("BoqService", () => {
 
     await service.commitBoq(
       tenderId,
+      businessId,
       { items: [{ tempId: "1", description: "Excavation", unit: "cum", quantity: 100, rate: 50 }] },
       actorId,
       {},
     );
     await service.commitBoq(
       otherTenderId,
+      businessId,
       { items: [{ tempId: "1", description: "Excavation", unit: "cum", quantity: 100, rate: 60 }] },
       actorId,
       {},
     );
 
-    const comparison = await service.compare(tenderId, otherTenderId);
+    const comparison = await service.compare(tenderId, otherTenderId, businessId);
     expect(comparison.lines).toHaveLength(1);
     expect(comparison.lines[0]!.rateDelta).toBe(10);
     expect(comparison.lines[0]!.amountDelta).toBe(1000);
@@ -328,6 +368,7 @@ describe("BoqService", () => {
         mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       },
       actorId,
+      businessId,
     );
 
     expect(preview.sourceAttachmentId).toBe("attachment-1");

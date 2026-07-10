@@ -37,8 +37,8 @@ export class BoqService {
     private readonly auditService: AuditService,
   ) {}
 
-  private async assertTenderExists(tenderId: string): Promise<void> {
-    const tender = await this.tendersRepository.findById(tenderId);
+  private async assertTenderExists(tenderId: string, businessId: string): Promise<void> {
+    const tender = await this.tendersRepository.findById(tenderId, businessId);
     if (!tender) throw new NotFoundError("Tender not found");
   }
 
@@ -46,8 +46,9 @@ export class BoqService {
     tenderId: string,
     file: { buffer: Buffer; originalName: string; mimeType: string },
     actorId: string,
+    businessId: string,
   ): Promise<BoqParsePreviewDto> {
-    await this.assertTenderExists(tenderId);
+    await this.assertTenderExists(tenderId, businessId);
 
     const { original } = await this.attachmentsService.upload({
       fileBuffer: file.buffer,
@@ -74,23 +75,24 @@ export class BoqService {
 
   async commitBoq(
     tenderId: string,
+    businessId: string,
     input: CommitBoqBody,
     actorId: string,
     context: RequestContext,
   ): Promise<BoqDto> {
-    await this.assertTenderExists(tenderId);
+    await this.assertTenderExists(tenderId, businessId);
 
     const boqId = randomUUID();
     let groupId: string;
     let version = 1;
 
     if (input.replacesBoqId) {
-      const previous = await this.boqRepository.findBoqById(input.replacesBoqId);
+      const previous = await this.boqRepository.findBoqById(input.replacesBoqId, businessId);
       if (!previous || previous.tenderId !== tenderId) {
         throw new NotFoundError("BOQ version to replace was not found for this tender");
       }
       groupId = previous.groupId ?? previous.id;
-      const versions = await this.boqRepository.findVersions(groupId);
+      const versions = await this.boqRepository.findVersions(groupId, businessId);
       version = Math.max(1, ...versions.map((v) => v.version)) + 1;
     } else {
       // Version 1 of a fresh chain points groupId at its own id, mirroring
@@ -131,6 +133,7 @@ export class BoqService {
     await this.boqRepository.createBoq({
       id: boqId,
       tenderId,
+      businessId,
       createdById: actorId,
       sourceAttachmentId: input.sourceAttachmentId ?? null,
       groupId,
@@ -146,31 +149,31 @@ export class BoqService {
       metadata: { boqId, version, itemCount: rows.length, ...context },
     });
 
-    return this.buildBoqDto(boqId);
+    return this.buildBoqDto(boqId, businessId);
   }
 
-  private async buildBoqDto(boqId: string): Promise<BoqDto> {
-    const boq = await this.boqRepository.findBoqById(boqId);
+  private async buildBoqDto(boqId: string, businessId: string): Promise<BoqDto> {
+    const boq = await this.boqRepository.findBoqById(boqId, businessId);
     if (!boq) throw new NotFoundError("BOQ not found");
     const items = await this.boqRepository.findItemsByBoqId(boqId);
     return toBoqDto(boq, items);
   }
 
-  async getCurrentBoq(tenderId: string): Promise<BoqDto> {
-    await this.assertTenderExists(tenderId);
-    const boq = await this.boqRepository.findCurrentBoq(tenderId);
+  async getCurrentBoq(tenderId: string, businessId: string): Promise<BoqDto> {
+    await this.assertTenderExists(tenderId, businessId);
+    const boq = await this.boqRepository.findCurrentBoq(tenderId, businessId);
     if (!boq) throw new NotFoundError("This tender has no BOQ yet");
     const items = await this.boqRepository.findItemsByBoqId(boq.id);
     return toBoqDto(boq, items);
   }
 
-  async listVersions(tenderId: string): Promise<BoqListItemDto[]> {
-    await this.assertTenderExists(tenderId);
-    const current = await this.boqRepository.findCurrentBoq(tenderId);
+  async listVersions(tenderId: string, businessId: string): Promise<BoqListItemDto[]> {
+    await this.assertTenderExists(tenderId, businessId);
+    const current = await this.boqRepository.findCurrentBoq(tenderId, businessId);
     if (!current) return [];
 
     const groupId = current.groupId ?? current.id;
-    const versions = await this.boqRepository.findVersions(groupId);
+    const versions = await this.boqRepository.findVersions(groupId, businessId);
     const owned = versions.filter((v) => v.tenderId === tenderId);
 
     return Promise.all(
@@ -181,9 +184,9 @@ export class BoqService {
     );
   }
 
-  async finalize(tenderId: string, actorId: string): Promise<BoqDto> {
-    await this.assertTenderExists(tenderId);
-    const boq = await this.boqRepository.findCurrentBoq(tenderId);
+  async finalize(tenderId: string, actorId: string, businessId: string): Promise<BoqDto> {
+    await this.assertTenderExists(tenderId, businessId);
+    const boq = await this.boqRepository.findCurrentBoq(tenderId, businessId);
     if (!boq) throw new NotFoundError("This tender has no BOQ yet");
     await this.boqRepository.finalize(boq.id);
     await this.auditService.log({
@@ -193,11 +196,16 @@ export class BoqService {
       entityId: tenderId,
       metadata: { boqId: boq.id },
     });
-    return this.getCurrentBoq(tenderId);
+    return this.getCurrentBoq(tenderId, businessId);
   }
 
-  async updateItem(itemId: string, data: UpdateBoqItemBody, actorId: string): Promise<BoqDto> {
-    const existing = await this.boqRepository.findItemById(itemId);
+  async updateItem(
+    itemId: string,
+    data: UpdateBoqItemBody,
+    actorId: string,
+    businessId: string,
+  ): Promise<BoqDto> {
+    const existing = await this.boqRepository.findItemById(itemId, businessId);
     if (!existing) throw new NotFoundError("BOQ item not found");
 
     const quantity = data.quantity !== undefined ? data.quantity : existing.quantity;
@@ -212,13 +220,18 @@ export class BoqService {
       entityId: itemId,
       metadata: { boqId: existing.boqId, changes: data },
     });
-    return this.buildBoqDto(existing.boqId);
+    return this.buildBoqDto(existing.boqId, businessId);
   }
 
-  async addItem(tenderId: string, data: CreateBoqItemBody, actorId: string): Promise<BoqDto> {
-    await this.assertTenderExists(tenderId);
+  async addItem(
+    tenderId: string,
+    data: CreateBoqItemBody,
+    actorId: string,
+    businessId: string,
+  ): Promise<BoqDto> {
+    await this.assertTenderExists(tenderId, businessId);
 
-    let boq = await this.boqRepository.findCurrentBoq(tenderId);
+    let boq = await this.boqRepository.findCurrentBoq(tenderId, businessId);
     if (!boq) {
       // A from-scratch tender (no document upload, no prior BOQ) still needs
       // somewhere for its first manually-added item to live — create an
@@ -227,13 +240,14 @@ export class BoqService {
       await this.boqRepository.createBoq({
         id: boqId,
         tenderId,
+        businessId,
         createdById: actorId,
         sourceAttachmentId: null,
         groupId: boqId,
         version: 1,
         items: [],
       });
-      boq = await this.boqRepository.findBoqById(boqId);
+      boq = await this.boqRepository.findBoqById(boqId, businessId);
     }
     if (!boq) throw new NotFoundError("BOQ not found");
 
@@ -265,11 +279,11 @@ export class BoqService {
       entityId: item.id,
       metadata: { boqId: boq.id, description: data.description },
     });
-    return this.buildBoqDto(boq.id);
+    return this.buildBoqDto(boq.id, businessId);
   }
 
-  async deleteItem(itemId: string, actorId: string): Promise<BoqDto> {
-    const existing = await this.boqRepository.findItemById(itemId);
+  async deleteItem(itemId: string, actorId: string, businessId: string): Promise<BoqDto> {
+    const existing = await this.boqRepository.findItemById(itemId, businessId);
     if (!existing) throw new NotFoundError("BOQ item not found");
 
     await this.boqRepository.deleteItem(itemId);
@@ -280,11 +294,15 @@ export class BoqService {
       entityId: itemId,
       metadata: { boqId: existing.boqId, description: existing.description },
     });
-    return this.buildBoqDto(existing.boqId);
+    return this.buildBoqDto(existing.boqId, businessId);
   }
 
-  async bulkUpdateItems(input: BulkUpdateBoqItemsBody, actorId: string): Promise<BoqDto> {
-    const items = await this.boqRepository.findItemsByIds(input.itemIds);
+  async bulkUpdateItems(
+    input: BulkUpdateBoqItemsBody,
+    actorId: string,
+    businessId: string,
+  ): Promise<BoqDto> {
+    const items = await this.boqRepository.findItemsByIds(input.itemIds, businessId);
     if (items.length !== input.itemIds.length) {
       throw new BadRequestError("One or more BOQ items were not found");
     }
@@ -308,15 +326,16 @@ export class BoqService {
       entityId: boqId,
       metadata: { itemIds: input.itemIds, ratePercentAdjustment: input.ratePercentAdjustment },
     });
-    return this.buildBoqDto(boqId);
+    return this.buildBoqDto(boqId, businessId);
   }
 
   async upsertRateAnalysis(
     itemId: string,
     input: UpsertRateAnalysisBody,
     actorId: string,
+    businessId: string,
   ): Promise<BoqDto> {
-    const existing = await this.boqRepository.findItemById(itemId);
+    const existing = await this.boqRepository.findItemById(itemId, businessId);
     if (!existing) throw new NotFoundError("BOQ item not found");
 
     const baseCost =
@@ -341,16 +360,16 @@ export class BoqService {
       entityId: itemId,
       metadata: { boqId: existing.boqId, computedRate },
     });
-    return this.buildBoqDto(existing.boqId);
+    return this.buildBoqDto(existing.boqId, businessId);
   }
 
-  async compare(baseTenderId: string, compareTenderId: string): Promise<BoqCompareDto> {
-    await this.assertTenderExists(baseTenderId);
-    await this.assertTenderExists(compareTenderId);
+  async compare(baseTenderId: string, compareTenderId: string, businessId: string): Promise<BoqCompareDto> {
+    await this.assertTenderExists(baseTenderId, businessId);
+    await this.assertTenderExists(compareTenderId, businessId);
 
     const [baseBoq, compareBoq] = await Promise.all([
-      this.boqRepository.findCurrentBoq(baseTenderId),
-      this.boqRepository.findCurrentBoq(compareTenderId),
+      this.boqRepository.findCurrentBoq(baseTenderId, businessId),
+      this.boqRepository.findCurrentBoq(compareTenderId, businessId),
     ]);
     if (!baseBoq) throw new NotFoundError("The base tender has no BOQ yet");
     if (!compareBoq) throw new NotFoundError("The comparison tender has no BOQ yet");

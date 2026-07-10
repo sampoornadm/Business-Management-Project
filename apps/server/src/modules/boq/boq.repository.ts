@@ -33,6 +33,7 @@ export interface CreateBoqItemRow {
 export interface CreateBoqData {
   id: string;
   tenderId: string;
+  businessId: string;
   createdById: string;
   sourceAttachmentId: string | null;
   groupId: string;
@@ -86,12 +87,12 @@ export interface UpsertRateBreakdownData {
 
 export interface IBoqRepository {
   createBoq(data: CreateBoqData): Promise<void>;
-  findBoqById(id: string): Promise<BoqWithCreator | null>;
-  findCurrentBoq(tenderId: string): Promise<BoqWithCreator | null>;
-  findVersions(groupId: string): Promise<BoqWithCreator[]>;
+  findBoqById(id: string, businessId: string): Promise<BoqWithCreator | null>;
+  findCurrentBoq(tenderId: string, businessId: string): Promise<BoqWithCreator | null>;
+  findVersions(groupId: string, businessId: string): Promise<BoqWithCreator[]>;
   findItemsByBoqId(boqId: string): Promise<BoqItemWithBreakdown[]>;
-  findItemById(id: string): Promise<BoqItemWithBreakdown | null>;
-  findItemsByIds(ids: string[]): Promise<BoqItemWithBreakdown[]>;
+  findItemById(id: string, businessId: string): Promise<BoqItemWithBreakdown | null>;
+  findItemsByIds(ids: string[], businessId: string): Promise<BoqItemWithBreakdown[]>;
   updateItem(id: string, data: UpdateBoqItemData): Promise<void>;
   createItem(data: CreateBoqItemData): Promise<BoqItemWithBreakdown>;
   deleteItem(id: string): Promise<void>;
@@ -108,11 +109,17 @@ export class BoqRepository implements IBoqRepository {
     await this.prisma.$transaction([
       // Only one Boq is ever "current" per tender, even across independent
       // groupId lineages (e.g. a fresh re-upload that isn't a versioned edit).
-      this.prisma.boq.updateMany({ where: { tenderId: data.tenderId }, data: { isCurrent: false } }),
+      // Scoped by businessId too, even though tenderId alone would already
+      // narrow this correctly — keeps the write symmetric with every read below.
+      this.prisma.boq.updateMany({
+        where: { tenderId: data.tenderId, businessId: data.businessId },
+        data: { isCurrent: false },
+      }),
       this.prisma.boq.create({
         data: {
           id: data.id,
           tenderId: data.tenderId,
+          businessId: data.businessId,
           sourceAttachmentId: data.sourceAttachmentId,
           groupId: data.groupId,
           version: data.version,
@@ -127,23 +134,33 @@ export class BoqRepository implements IBoqRepository {
     ]);
   }
 
-  findBoqById(id: string): Promise<BoqWithCreator | null> {
-    return this.prisma.boq.findUnique({ where: { id }, ...boqWithCreatorArgs });
+  findBoqById(id: string, businessId: string): Promise<BoqWithCreator | null> {
+    // findFirst (not findUnique) because `id` alone isn't the unique key we're
+    // filtering by here — businessId must also match, and there's no
+    // compound (id, businessId) unique constraint on Boq.
+    return this.prisma.boq.findFirst({ where: { id, businessId }, ...boqWithCreatorArgs });
   }
 
-  findCurrentBoq(tenderId: string): Promise<BoqWithCreator | null> {
-    return this.prisma.boq.findFirst({ where: { tenderId, isCurrent: true }, ...boqWithCreatorArgs });
+  findCurrentBoq(tenderId: string, businessId: string): Promise<BoqWithCreator | null> {
+    return this.prisma.boq.findFirst({
+      where: { tenderId, businessId, isCurrent: true },
+      ...boqWithCreatorArgs,
+    });
   }
 
-  findVersions(groupId: string): Promise<BoqWithCreator[]> {
+  findVersions(groupId: string, businessId: string): Promise<BoqWithCreator[]> {
     return this.prisma.boq.findMany({
-      where: { groupId },
+      where: { groupId, businessId },
       orderBy: { version: "desc" },
       ...boqWithCreatorArgs,
     });
   }
 
   findItemsByBoqId(boqId: string): Promise<BoqItemWithBreakdown[]> {
+    // boqId is always sourced from an already business-scoped Boq lookup
+    // (findBoqById/findCurrentBoq) immediately before this is called, same
+    // convention as findMaterialUsages/findLaborEntries/findBills in
+    // projects.repository.ts for children of an already-validated parent.
     return this.prisma.boqItem.findMany({
       where: { boqId },
       orderBy: { sortOrder: "asc" },
@@ -151,12 +168,21 @@ export class BoqRepository implements IBoqRepository {
     });
   }
 
-  findItemById(id: string): Promise<BoqItemWithBreakdown | null> {
-    return this.prisma.boqItem.findUnique({ where: { id }, ...boqItemWithBreakdownArgs });
+  findItemById(id: string, businessId: string): Promise<BoqItemWithBreakdown | null> {
+    // BoqItem has no businessId column of its own — scope through the parent
+    // Boq relation instead, same idea as the direct (id, businessId) filters
+    // above but joined one level down.
+    return this.prisma.boqItem.findFirst({
+      where: { id, boq: { businessId } },
+      ...boqItemWithBreakdownArgs,
+    });
   }
 
-  findItemsByIds(ids: string[]): Promise<BoqItemWithBreakdown[]> {
-    return this.prisma.boqItem.findMany({ where: { id: { in: ids } }, ...boqItemWithBreakdownArgs });
+  findItemsByIds(ids: string[], businessId: string): Promise<BoqItemWithBreakdown[]> {
+    return this.prisma.boqItem.findMany({
+      where: { id: { in: ids }, boq: { businessId } },
+      ...boqItemWithBreakdownArgs,
+    });
   }
 
   async updateItem(id: string, data: UpdateBoqItemData): Promise<void> {
