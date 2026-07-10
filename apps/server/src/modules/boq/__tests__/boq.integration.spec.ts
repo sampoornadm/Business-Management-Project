@@ -1,13 +1,16 @@
 import { randomUUID } from "node:crypto";
 
 import { prisma } from "@bmp/database";
-import { WILDCARD_PERMISSION } from "@bmp/types";
 import ExcelJS from "exceljs";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApp } from "../../../app.js";
-import { hashPassword } from "../../../shared/utils/hash.js";
+import {
+  cleanupIntegrationTestUser,
+  createIntegrationTestUser,
+  type IntegrationTestUser,
+} from "../../../shared/test-utils/integration-auth.js";
 
 /**
  * Requires a real Postgres + Redis + MinIO reachable via .env.test
@@ -15,8 +18,7 @@ import { hashPassword } from "../../../shared/utils/hash.js";
  */
 describe("BOQ upload/commit workflow (integration)", () => {
   const app = createApp();
-  const email = `boq-integration-${randomUUID()}@example.com`;
-  const password = "Password123";
+  let testUser: IntegrationTestUser;
   let accessToken: string;
   let userId: string;
   let organizationId: string;
@@ -31,57 +33,12 @@ describe("BOQ upload/commit workflow (integration)", () => {
     return (await workbook.xlsx.writeBuffer()) as unknown as Buffer;
   }
 
-  beforeAll(async () => {
-    const permission = await prisma.permission.upsert({
-      where: { key: WILDCARD_PERMISSION },
-      update: {},
-      create: { id: randomUUID(), key: WILDCARD_PERMISSION, resource: "*", action: "*" },
-    });
-
-    const role = await prisma.role.upsert({
-      where: { name: "SUPER_ADMIN" },
-      update: {},
-      create: { id: randomUUID(), name: "SUPER_ADMIN", description: "Super Admin", isSystem: true },
-    });
-
-    await prisma.rolePermission.upsert({
-      where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } },
-      update: {},
-      create: { id: randomUUID(), roleId: role.id, permissionId: permission.id },
-    });
-
-    const user = await prisma.user.create({
-      data: {
-        id: randomUUID(),
-        email,
-        passwordHash: await hashPassword(password),
-        firstName: "Boq",
-        lastName: "Tester",
-        roleId: role.id,
-        isActive: true,
-        isEmailVerified: true,
-      },
-    });
-    userId = user.id;
-
-    const loginResponse = await request(app).post("/api/v1/auth/login").send({ email, password });
-    accessToken = loginResponse.body.data.accessToken;
-
-    const org = await prisma.organization.create({
-      data: {
-        id: randomUUID(),
-        name: `BOQ Integration Client ${randomUUID()}`,
-        type: "GOVERNMENT",
-        createdById: user.id,
-      },
-    });
-    organizationId = org.id;
-
+  async function createTender(overrides: { tenderNumber: string }): Promise<string> {
     const tenderResponse = await request(app)
       .post("/api/v1/tenders")
       .set("Authorization", `Bearer ${accessToken}`)
       .send({
-        tenderNumber: `TND-BOQ-${randomUUID().slice(0, 8)}`,
+        tenderNumber: overrides.tenderNumber,
         title: "BOQ Integration Tender",
         department: "PWD",
         clientId: organizationId,
@@ -92,7 +49,25 @@ describe("BOQ upload/commit workflow (integration)", () => {
         estimatedCost: 500000,
         submissionDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       });
-    tenderId = tenderResponse.body.data.id as string;
+    return tenderResponse.body.data.id as string;
+  }
+
+  beforeAll(async () => {
+    testUser = await createIntegrationTestUser(app);
+    accessToken = testUser.accessToken;
+    userId = testUser.userId;
+
+    const org = await prisma.organization.create({
+      data: {
+        id: randomUUID(),
+        name: `BOQ Integration Client ${randomUUID()}`,
+        type: "GOVERNMENT",
+        createdById: userId,
+      },
+    });
+    organizationId = org.id;
+
+    tenderId = await createTender({ tenderNumber: `TND-BOQ-${randomUUID().slice(0, 8)}` });
   });
 
   afterAll(async () => {
@@ -100,7 +75,7 @@ describe("BOQ upload/commit workflow (integration)", () => {
     await prisma.attachment.deleteMany({ where: { uploadedById: userId } });
     await prisma.tender.deleteMany({ where: { createdById: userId } });
     await prisma.organization.deleteMany({ where: { id: organizationId } });
-    await prisma.user.deleteMany({ where: { email } });
+    await cleanupIntegrationTestUser(testUser);
     await prisma.$disconnect();
   });
 
@@ -165,5 +140,91 @@ describe("BOQ upload/commit workflow (integration)", () => {
     expect(versions.body.data).toHaveLength(2);
     expect(versions.body.data.find((v: { version: number }) => v.version === 2).isCurrent).toBe(true);
     expect(versions.body.data.find((v: { version: number }) => v.version === 1).isCurrent).toBe(false);
+  });
+
+  it("does not return another business's BOQ, and rejects direct access to its items", async () => {
+    const otherLogin = await request(app).post("/api/v1/auth/login").send({
+      email: testUser.email,
+      password: "Password123",
+    });
+    // switch to the second business this same test user also belongs to
+    const switchResponse = await request(app)
+      .post("/api/v1/auth/switch-business")
+      .set("Authorization", `Bearer ${otherLogin.body.data.accessToken}`)
+      .send({ businessId: testUser.secondBusinessId });
+    const secondBusinessToken = switchResponse.body.data.accessToken as string;
+
+    // Create a tender and commit a BOQ, entirely in the first business.
+    const isolationTenderId = await createTender({
+      tenderNumber: `TND-BOQ-ISO-${randomUUID().slice(0, 8)}`,
+    });
+    const commitResponse = await request(app)
+      .post(`/api/v1/tenders/${isolationTenderId}/boq`)
+      .set("Authorization", `Bearer ${accessToken}`) // first business
+      .send({
+        items: [{ tempId: "1", description: "Excavation", unit: "cum", quantity: 100, rate: 50 }],
+      });
+    expect(commitResponse.status).toBe(201);
+    const isolationBoqId = commitResponse.body.data.id as string;
+    const isolationItemId = commitResponse.body.data.items[0].id as string;
+
+    // Fetch paths nested under the (already business-scoped) tenderId.
+    const getResponse = await request(app)
+      .get(`/api/v1/tenders/${isolationTenderId}/boq`)
+      .set("Authorization", `Bearer ${secondBusinessToken}`);
+    expect(getResponse.status).toBe(404);
+
+    const versionsResponse = await request(app)
+      .get(`/api/v1/tenders/${isolationTenderId}/boq/versions`)
+      .set("Authorization", `Bearer ${secondBusinessToken}`);
+    expect(versionsResponse.status).toBe(404);
+
+    // Item-level mutation routes are mounted at /boq-items/:itemId with no
+    // tenderId (or any other parent id) in the path at all, so they can't
+    // rely on an already-scoped tenderId lookup the way the routes above do.
+    // These must independently scope through the parent Boq's businessId —
+    // assert a second-business token can't read/mutate/delete an item that
+    // belongs to a BOQ committed under the first business.
+    const patchResponse = await request(app)
+      .patch(`/api/v1/boq-items/${isolationItemId}`)
+      .set("Authorization", `Bearer ${secondBusinessToken}`)
+      .send({ description: "Hijacked" });
+    expect(patchResponse.status).toBe(404);
+
+    const rateAnalysisResponse = await request(app)
+      .put(`/api/v1/boq-items/${isolationItemId}/rate-analysis`)
+      .set("Authorization", `Bearer ${secondBusinessToken}`)
+      .send({
+        materialCost: 10,
+        laborCost: 10,
+        machineryCost: 0,
+        transportCost: 0,
+        overheadPercent: 0,
+        profitPercent: 0,
+        taxPercent: 0,
+      });
+    expect(rateAnalysisResponse.status).toBe(404);
+
+    const bulkUpdateResponse = await request(app)
+      .post("/api/v1/boq-items/bulk-update")
+      .set("Authorization", `Bearer ${secondBusinessToken}`)
+      .send({ itemIds: [isolationItemId], ratePercentAdjustment: 10 });
+    expect(bulkUpdateResponse.status).toBe(400); // "not found" -> repository filters it out first
+
+    const deleteResponse = await request(app)
+      .delete(`/api/v1/boq-items/${isolationItemId}`)
+      .set("Authorization", `Bearer ${secondBusinessToken}`);
+    expect(deleteResponse.status).toBe(404);
+
+    // Confirm nothing was mutated from the first business's perspective.
+    const stillThereResponse = await request(app)
+      .get(`/api/v1/tenders/${isolationTenderId}/boq`)
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(stillThereResponse.status).toBe(200);
+    expect(stillThereResponse.body.data.items).toHaveLength(1);
+    expect(stillThereResponse.body.data.items[0].description).toBe("Excavation");
+
+    await prisma.boq.deleteMany({ where: { id: isolationBoqId } });
+    await prisma.tender.deleteMany({ where: { id: isolationTenderId } });
   });
 });
