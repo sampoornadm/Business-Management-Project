@@ -28,6 +28,7 @@ class FakeFinanceRepository implements IFinanceRepository {
   expenses = new Map<string, ExpenseRow>();
   payments: PaymentRow[] = [];
   poTotals = new Map<string, number>();
+  bills = new Map<string, { id: string; projectId: string; currentBillAmount: number }>();
 
   async createBankAccount(data: CreateBankAccountData) {
     const id = randomUUID();
@@ -46,11 +47,13 @@ class FakeFinanceRepository implements IFinanceRepository {
     return id;
   }
 
-  async findBankAccountById(id: string) {
+  // businessId is ignored here — the fake stands in for the real (Postgres-
+  // enforced) scoping; isolation itself is covered by the integration test.
+  async findBankAccountById(id: string, _businessId: string) {
     return this.bankAccounts.get(id) ?? null;
   }
 
-  async findBankAccounts() {
+  async findBankAccounts(_businessId: string) {
     return [...this.bankAccounts.values()];
   }
 
@@ -89,7 +92,7 @@ class FakeFinanceRepository implements IFinanceRepository {
     return id;
   }
 
-  async findInvoiceById(id: string) {
+  async findInvoiceById(id: string, _businessId: string) {
     return this.invoices.get(id) ?? null;
   }
 
@@ -98,7 +101,7 @@ class FakeFinanceRepository implements IFinanceRepository {
     return { items, totalItems: items.length };
   }
 
-  async findAllInvoices() {
+  async findAllInvoices(_businessId: string) {
     return [...this.invoices.values()];
   }
 
@@ -129,7 +132,7 @@ class FakeFinanceRepository implements IFinanceRepository {
     return id;
   }
 
-  async findExpenseById(id: string) {
+  async findExpenseById(id: string, _businessId: string) {
     return this.expenses.get(id) ?? null;
   }
 
@@ -138,7 +141,7 @@ class FakeFinanceRepository implements IFinanceRepository {
     return { items, totalItems: items.length };
   }
 
-  async findAllExpenses() {
+  async findAllExpenses(_businessId: string) {
     return [...this.expenses.values()];
   }
 
@@ -166,41 +169,39 @@ class FakeFinanceRepository implements IFinanceRepository {
     } as unknown as PaymentRow);
   }
 
-  async findPaymentsForEntity(entityType: string, entityId: string) {
+  async findPaymentsForEntity(entityType: string, entityId: string, _businessId: string) {
     return this.payments.filter((p) => p.entityType === entityType && p.entityId === entityId);
   }
 
-  async sumPaymentsForEntity(entityType: string, entityId: string) {
+  async sumPaymentsForEntity(entityType: string, entityId: string, _businessId: string) {
     return this.payments
       .filter((p) => p.entityType === entityType && p.entityId === entityId)
       .reduce((sum, p) => sum + p.amount, 0);
   }
 
-  async sumAllPaymentsByEntityType(entityType: string) {
+  async sumAllPaymentsByEntityType(entityType: string, _businessId: string) {
     return this.payments.filter((p) => p.entityType === entityType).reduce((sum, p) => sum + p.amount, 0);
   }
 
-  async findPaymentsByMethod(method: string) {
+  async findPaymentsByMethod(method: string, _businessId: string) {
     return this.payments.filter((p) => p.method === method);
   }
 
-  async findPaymentsByBankAccount(bankAccountId: string) {
+  async findPaymentsByBankAccount(bankAccountId: string, _businessId: string) {
     return this.payments.filter((p) => p.bankAccountId === bankAccountId);
   }
 
-  async findPurchaseOrderTotal(purchaseOrderId: string) {
+  async findPurchaseOrderTotal(purchaseOrderId: string, _businessId: string) {
     return this.poTotals.get(purchaseOrderId) ?? null;
   }
 
-  async sumOpenPurchaseOrderTotals() {
+  async sumOpenPurchaseOrderTotals(_businessId: string) {
     return [...this.poTotals.values()].reduce((sum, total) => sum + total, 0);
   }
 
-  async findBillForInvoice(billId: string) {
+  async findBillForInvoice(billId: string, _businessId: string) {
     return this.bills.get(billId) ?? null;
   }
-
-  bills = new Map<string, { id: string; projectId: string; currentBillAmount: number }>();
 }
 
 describe("FinanceService", () => {
@@ -208,6 +209,8 @@ describe("FinanceService", () => {
   let auditService: AuditService;
   let service: FinanceService;
   const actorId = randomUUID();
+  const businessId = randomUUID();
+  const context = { businessId };
 
   beforeEach(() => {
     repository = new FakeFinanceRepository();
@@ -219,6 +222,7 @@ describe("FinanceService", () => {
     const invoice = await service.createInvoice(
       { invoiceNumber: "INV-1", clientName: "PWD", subtotal: 100000, gstPercent: 18 },
       actorId,
+      context,
     );
     expect(invoice.gstAmount).toBe(18000);
     expect(invoice.totalAmount).toBe(118000);
@@ -230,6 +234,7 @@ describe("FinanceService", () => {
     const invoice = await service.createInvoiceFromBill(
       { billId: "bill-1", invoiceNumber: "INV-2", clientName: "PWD" },
       actorId,
+      context,
     );
     expect(invoice.subtotal).toBe(50000);
     expect(invoice.sourceBillId).toBe("bill-1");
@@ -240,11 +245,13 @@ describe("FinanceService", () => {
     const invoice = await service.createInvoice(
       { invoiceNumber: "INV-3", clientName: "PWD", subtotal: 100000, gstPercent: 0 },
       actorId,
+      context,
     );
     const afterFirst = await service.recordInvoicePayment(
       invoice.id,
       { amount: 40000, method: "CASH" },
       actorId,
+      businessId,
     );
     expect(afterFirst.status).toBe("PARTIALLY_PAID");
     expect(afterFirst.amountPaid).toBe(40000);
@@ -253,6 +260,7 @@ describe("FinanceService", () => {
       invoice.id,
       { amount: 60000, method: "CASH" },
       actorId,
+      businessId,
     );
     expect(afterSecond.status).toBe("PAID");
     expect(afterSecond.amountPaid).toBe(100000);
@@ -263,9 +271,10 @@ describe("FinanceService", () => {
     const invoice = await service.createInvoice(
       { invoiceNumber: "INV-4", clientName: "PWD", subtotal: 100000, gstPercent: 0 },
       actorId,
+      context,
     );
     await expect(
-      service.recordInvoicePayment(invoice.id, { amount: 150000, method: "CASH" }, actorId),
+      service.recordInvoicePayment(invoice.id, { amount: 150000, method: "CASH" }, actorId, businessId),
     ).rejects.toThrow(BadRequestError);
   });
 
@@ -273,9 +282,10 @@ describe("FinanceService", () => {
     const invoice = await service.createInvoice(
       { invoiceNumber: "INV-5", clientName: "PWD", subtotal: 100000, gstPercent: 0 },
       actorId,
+      context,
     );
     await expect(
-      service.recordInvoicePayment(invoice.id, { amount: 1000, method: "BANK_TRANSFER" }, actorId),
+      service.recordInvoicePayment(invoice.id, { amount: 1000, method: "BANK_TRANSFER" }, actorId, businessId),
     ).rejects.toThrow(BadRequestError);
   });
 
@@ -283,8 +293,14 @@ describe("FinanceService", () => {
     const expense = await service.createExpense(
       { category: "MATERIAL", description: "Cement bags", amount: 20000 },
       actorId,
+      context,
     );
-    const paid = await service.recordExpensePayment(expense.id, { amount: 20000, method: "CASH" }, actorId);
+    const paid = await service.recordExpensePayment(
+      expense.id,
+      { amount: 20000, method: "CASH" },
+      actorId,
+      businessId,
+    );
     expect(paid.status).toBe("PAID");
   });
 
@@ -295,6 +311,7 @@ describe("FinanceService", () => {
       poId,
       { amount: 75000, method: "CASH" },
       actorId,
+      businessId,
     );
     expect(payments).toHaveLength(1);
     expect(payments[0]!.amount).toBe(75000);
@@ -302,62 +319,65 @@ describe("FinanceService", () => {
 
   it("rejects a purchase order payment for an unknown PO", async () => {
     await expect(
-      service.recordPurchaseOrderPayment(randomUUID(), { amount: 1000, method: "CASH" }, actorId),
+      service.recordPurchaseOrderPayment(randomUUID(), { amount: 1000, method: "CASH" }, actorId, businessId),
     ).rejects.toThrow(NotFoundError);
   });
 
   it("computes bank account balance from opening balance plus payments", async () => {
-    const account = await service.createBankAccount(
-      { name: "HDFC Current", openingBalance: 10000 },
-      actorId,
-    );
+    const account = await service.createBankAccount({ name: "HDFC Current", openingBalance: 10000 }, actorId, context);
     const invoice = await service.createInvoice(
       { invoiceNumber: "INV-6", clientName: "PWD", subtotal: 50000, gstPercent: 0 },
       actorId,
+      context,
     );
     await service.recordInvoicePayment(
       invoice.id,
       { amount: 50000, method: "BANK_TRANSFER", bankAccountId: account.id },
       actorId,
+      businessId,
     );
-    const updated = await service.getBankAccount(account.id);
+    const updated = await service.getBankAccount(account.id, businessId);
     expect(updated.currentBalance).toBe(60000);
   });
 
   it("blocks deleting a bank account that has recorded payments", async () => {
-    const account = await service.createBankAccount({ name: "HDFC Current" }, actorId);
+    const account = await service.createBankAccount({ name: "HDFC Current" }, actorId, context);
     const invoice = await service.createInvoice(
       { invoiceNumber: "INV-7", clientName: "PWD", subtotal: 1000, gstPercent: 0 },
       actorId,
+      context,
     );
     await service.recordInvoicePayment(
       invoice.id,
       { amount: 1000, method: "BANK_TRANSFER", bankAccountId: account.id },
       actorId,
+      businessId,
     );
-    await expect(service.deleteBankAccount(account.id, actorId)).rejects.toThrow(ConflictError);
+    await expect(service.deleteBankAccount(account.id, actorId, businessId)).rejects.toThrow(ConflictError);
   });
 
   it("computes the finance summary across invoices, expenses, and purchase orders", async () => {
     const invoice = await service.createInvoice(
       { invoiceNumber: "INV-8", clientName: "PWD", subtotal: 100000, gstPercent: 0 },
       actorId,
+      context,
     );
-    await service.recordInvoicePayment(invoice.id, { amount: 40000, method: "CASH" }, actorId);
+    await service.recordInvoicePayment(invoice.id, { amount: 40000, method: "CASH" }, actorId, businessId);
 
     const expense = await service.createExpense(
       { category: "OFFICE", description: "Stationery", amount: 5000 },
       actorId,
+      context,
     );
-    await service.recordExpensePayment(expense.id, { amount: 2000, method: "CASH" }, actorId);
+    await service.recordExpensePayment(expense.id, { amount: 2000, method: "CASH" }, actorId, businessId);
 
-    const summary = await service.getSummary();
+    const summary = await service.getSummary(businessId);
     expect(summary.totalReceivables).toBe(60000);
     expect(summary.totalPayables).toBe(3000);
     expect(summary.cashBalance).toBe(40000 - 2000);
   });
 
   it("throws for an unknown invoice id", async () => {
-    await expect(service.getInvoice(randomUUID())).rejects.toThrow(NotFoundError);
+    await expect(service.getInvoice(randomUUID(), businessId)).rejects.toThrow(NotFoundError);
   });
 });

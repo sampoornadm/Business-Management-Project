@@ -23,6 +23,7 @@ import type {
 
 import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
+import type { ScopedRequestContext } from "../../core/interfaces/request-context.js";
 import { round2 } from "../../shared/utils/math.js";
 import type { AuditService } from "../audit/audit.service.js";
 
@@ -55,43 +56,56 @@ export class FinanceService {
   // Bank accounts
   // ---------------------------------------------------------------------
 
-  private async computeBankBalance(account: BankAccountRow): Promise<number> {
-    const payments = await this.financeRepository.findPaymentsByBankAccount(account.id);
+  private async computeBankBalance(account: BankAccountRow, businessId: string): Promise<number> {
+    const payments = await this.financeRepository.findPaymentsByBankAccount(account.id, businessId);
     const received = payments.filter((p) => p.direction === "RECEIVED").reduce((s, p) => s + p.amount, 0);
     const paid = payments.filter((p) => p.direction === "PAID").reduce((s, p) => s + p.amount, 0);
     return round2(account.openingBalance + received - paid);
   }
 
-  async listBankAccounts(activeOnly?: boolean): Promise<BankAccountDto[]> {
-    const accounts = await this.financeRepository.findBankAccounts(activeOnly);
+  async listBankAccounts(businessId: string, activeOnly?: boolean): Promise<BankAccountDto[]> {
+    const accounts = await this.financeRepository.findBankAccounts(businessId, activeOnly);
     return Promise.all(
-      accounts.map(async (account) => toBankAccountDto(account, await this.computeBankBalance(account))),
+      accounts.map(async (account) =>
+        toBankAccountDto(account, await this.computeBankBalance(account, businessId)),
+      ),
     );
   }
 
-  async getBankAccount(id: string): Promise<BankAccountDto> {
-    const account = await this.financeRepository.findBankAccountById(id);
+  async getBankAccount(id: string, businessId: string): Promise<BankAccountDto> {
+    const account = await this.financeRepository.findBankAccountById(id, businessId);
     if (!account) throw new NotFoundError("Bank account not found");
-    return toBankAccountDto(account, await this.computeBankBalance(account));
+    return toBankAccountDto(account, await this.computeBankBalance(account, businessId));
   }
 
-  async createBankAccount(input: CreateBankAccountInput, actorId: string): Promise<BankAccountDto> {
-    const id = await this.financeRepository.createBankAccount({ ...input, createdById: actorId });
+  async createBankAccount(
+    input: CreateBankAccountInput,
+    actorId: string,
+    context: ScopedRequestContext,
+  ): Promise<BankAccountDto> {
+    const id = await this.financeRepository.createBankAccount({
+      ...input,
+      businessId: context.businessId,
+      createdById: actorId,
+    });
     await this.auditService.log({
       actorId,
       action: "BANK_ACCOUNT_CREATED",
       entityType: "BankAccount",
       entityId: id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
     });
-    return this.getBankAccount(id);
+    return this.getBankAccount(id, context.businessId);
   }
 
   async updateBankAccount(
     id: string,
     input: UpdateBankAccountInput,
     actorId: string,
+    businessId: string,
   ): Promise<BankAccountDto> {
-    const existing = await this.financeRepository.findBankAccountById(id);
+    const existing = await this.financeRepository.findBankAccountById(id, businessId);
     if (!existing) throw new NotFoundError("Bank account not found");
     await this.financeRepository.updateBankAccount(id, input);
     await this.auditService.log({
@@ -100,13 +114,13 @@ export class FinanceService {
       entityType: "BankAccount",
       entityId: id,
     });
-    return this.getBankAccount(id);
+    return this.getBankAccount(id, businessId);
   }
 
-  async deleteBankAccount(id: string, actorId: string): Promise<void> {
-    const existing = await this.financeRepository.findBankAccountById(id);
+  async deleteBankAccount(id: string, actorId: string, businessId: string): Promise<void> {
+    const existing = await this.financeRepository.findBankAccountById(id, businessId);
     if (!existing) throw new NotFoundError("Bank account not found");
-    const payments = await this.financeRepository.findPaymentsByBankAccount(id);
+    const payments = await this.financeRepository.findPaymentsByBankAccount(id, businessId);
     if (payments.length > 0) {
       throw new ConflictError(`Cannot delete this bank account: it has ${payments.length} recorded payment(s)`);
     }
@@ -123,8 +137,8 @@ export class FinanceService {
   // Invoices
   // ---------------------------------------------------------------------
 
-  private async getInvoiceOrThrow(id: string): Promise<InvoiceRow> {
-    const invoice = await this.financeRepository.findInvoiceById(id);
+  private async getInvoiceOrThrow(id: string, businessId: string): Promise<InvoiceRow> {
+    const invoice = await this.financeRepository.findInvoiceById(id, businessId);
     if (!invoice) throw new NotFoundError("Invoice not found");
     return invoice;
   }
@@ -136,22 +150,29 @@ export class FinanceService {
     const { items, totalItems } = await this.financeRepository.findInvoices(pagination, filters);
     const dtos = await Promise.all(
       items.map(async (invoice) =>
-        toInvoiceListItemDto(invoice, await this.financeRepository.sumPaymentsForEntity("Invoice", invoice.id)),
+        toInvoiceListItemDto(
+          invoice,
+          await this.financeRepository.sumPaymentsForEntity("Invoice", invoice.id, filters.businessId),
+        ),
       ),
     );
     return buildPaginatedResult(dtos, totalItems, pagination);
   }
 
-  async getInvoice(id: string): Promise<InvoiceDto> {
-    const invoice = await this.getInvoiceOrThrow(id);
+  async getInvoice(id: string, businessId: string): Promise<InvoiceDto> {
+    const invoice = await this.getInvoiceOrThrow(id, businessId);
     const [amountPaid, payments] = await Promise.all([
-      this.financeRepository.sumPaymentsForEntity("Invoice", id),
-      this.financeRepository.findPaymentsForEntity("Invoice", id),
+      this.financeRepository.sumPaymentsForEntity("Invoice", id, businessId),
+      this.financeRepository.findPaymentsForEntity("Invoice", id, businessId),
     ]);
     return toInvoiceDto(invoice, amountPaid, payments);
   }
 
-  async createInvoice(input: CreateInvoiceInput, actorId: string): Promise<InvoiceDto> {
+  async createInvoice(
+    input: CreateInvoiceInput,
+    actorId: string,
+    context: ScopedRequestContext,
+  ): Promise<InvoiceDto> {
     const gstPercent = input.gstPercent ?? 18;
     const gstAmount = round2((input.subtotal * gstPercent) / 100);
     const totalAmount = round2(input.subtotal + gstAmount);
@@ -168,14 +189,26 @@ export class FinanceService {
       invoiceDate: input.invoiceDate ? new Date(input.invoiceDate) : undefined,
       dueDate: input.dueDate ? new Date(input.dueDate) : null,
       notes: input.notes,
+      businessId: context.businessId,
       createdById: actorId,
     });
-    await this.auditService.log({ actorId, action: "INVOICE_CREATED", entityType: "Invoice", entityId: id });
-    return this.getInvoice(id);
+    await this.auditService.log({
+      actorId,
+      action: "INVOICE_CREATED",
+      entityType: "Invoice",
+      entityId: id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+    });
+    return this.getInvoice(id, context.businessId);
   }
 
-  async createInvoiceFromBill(input: CreateInvoiceFromBillInput, actorId: string): Promise<InvoiceDto> {
-    const bill = await this.financeRepository.findBillForInvoice(input.billId);
+  async createInvoiceFromBill(
+    input: CreateInvoiceFromBillInput,
+    actorId: string,
+    context: ScopedRequestContext,
+  ): Promise<InvoiceDto> {
+    const bill = await this.financeRepository.findBillForInvoice(input.billId, context.businessId);
     if (!bill) throw new BadRequestError("Invalid billId");
 
     const gstPercent = input.gstPercent ?? 18;
@@ -194,6 +227,7 @@ export class FinanceService {
       totalAmount,
       dueDate: input.dueDate ? new Date(input.dueDate) : null,
       notes: input.notes,
+      businessId: context.businessId,
       createdById: actorId,
     });
     await this.auditService.log({
@@ -202,12 +236,19 @@ export class FinanceService {
       entityType: "Invoice",
       entityId: id,
       metadata: { billId: bill.id },
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
     });
-    return this.getInvoice(id);
+    return this.getInvoice(id, context.businessId);
   }
 
-  async updateInvoice(id: string, input: UpdateInvoiceInput, actorId: string): Promise<InvoiceDto> {
-    await this.getInvoiceOrThrow(id);
+  async updateInvoice(
+    id: string,
+    input: UpdateInvoiceInput,
+    actorId: string,
+    businessId: string,
+  ): Promise<InvoiceDto> {
+    await this.getInvoiceOrThrow(id, businessId);
     await this.financeRepository.updateInvoice(id, {
       clientName: input.clientName,
       dueDate: input.dueDate ? new Date(input.dueDate) : undefined,
@@ -215,15 +256,15 @@ export class FinanceService {
       status: input.status,
     });
     await this.auditService.log({ actorId, action: "INVOICE_UPDATED", entityType: "Invoice", entityId: id });
-    return this.getInvoice(id);
+    return this.getInvoice(id, businessId);
   }
 
   // ---------------------------------------------------------------------
   // Expenses
   // ---------------------------------------------------------------------
 
-  private async getExpenseOrThrow(id: string): Promise<ExpenseRow> {
-    const expense = await this.financeRepository.findExpenseById(id);
+  private async getExpenseOrThrow(id: string, businessId: string): Promise<ExpenseRow> {
+    const expense = await this.financeRepository.findExpenseById(id, businessId);
     if (!expense) throw new NotFoundError("Expense not found");
     return expense;
   }
@@ -235,22 +276,29 @@ export class FinanceService {
     const { items, totalItems } = await this.financeRepository.findExpenses(pagination, filters);
     const dtos = await Promise.all(
       items.map(async (expense) =>
-        toExpenseListItemDto(expense, await this.financeRepository.sumPaymentsForEntity("Expense", expense.id)),
+        toExpenseListItemDto(
+          expense,
+          await this.financeRepository.sumPaymentsForEntity("Expense", expense.id, filters.businessId),
+        ),
       ),
     );
     return buildPaginatedResult(dtos, totalItems, pagination);
   }
 
-  async getExpense(id: string): Promise<ExpenseDto> {
-    const expense = await this.getExpenseOrThrow(id);
+  async getExpense(id: string, businessId: string): Promise<ExpenseDto> {
+    const expense = await this.getExpenseOrThrow(id, businessId);
     const [amountPaid, payments] = await Promise.all([
-      this.financeRepository.sumPaymentsForEntity("Expense", id),
-      this.financeRepository.findPaymentsForEntity("Expense", id),
+      this.financeRepository.sumPaymentsForEntity("Expense", id, businessId),
+      this.financeRepository.findPaymentsForEntity("Expense", id, businessId),
     ]);
     return toExpenseDto(expense, amountPaid, payments);
   }
 
-  async createExpense(input: CreateExpenseInput, actorId: string): Promise<ExpenseDto> {
+  async createExpense(
+    input: CreateExpenseInput,
+    actorId: string,
+    context: ScopedRequestContext,
+  ): Promise<ExpenseDto> {
     const id = await this.financeRepository.createExpense({
       category: input.category,
       description: input.description,
@@ -259,14 +307,27 @@ export class FinanceService {
       projectId: input.projectId ?? null,
       vendorId: input.vendorId ?? null,
       notes: input.notes,
+      businessId: context.businessId,
       createdById: actorId,
     });
-    await this.auditService.log({ actorId, action: "EXPENSE_CREATED", entityType: "Expense", entityId: id });
-    return this.getExpense(id);
+    await this.auditService.log({
+      actorId,
+      action: "EXPENSE_CREATED",
+      entityType: "Expense",
+      entityId: id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+    });
+    return this.getExpense(id, context.businessId);
   }
 
-  async updateExpense(id: string, input: UpdateExpenseInput, actorId: string): Promise<ExpenseDto> {
-    await this.getExpenseOrThrow(id);
+  async updateExpense(
+    id: string,
+    input: UpdateExpenseInput,
+    actorId: string,
+    businessId: string,
+  ): Promise<ExpenseDto> {
+    await this.getExpenseOrThrow(id, businessId);
     await this.financeRepository.updateExpense(id, {
       category: input.category,
       description: input.description,
@@ -277,7 +338,7 @@ export class FinanceService {
       notes: input.notes,
     });
     await this.auditService.log({ actorId, action: "EXPENSE_UPDATED", entityType: "Expense", entityId: id });
-    return this.getExpense(id);
+    return this.getExpense(id, businessId);
   }
 
   // ---------------------------------------------------------------------
@@ -291,13 +352,18 @@ export class FinanceService {
     direction: "RECEIVED" | "PAID";
     input: CreatePaymentInput;
     actorId: string;
+    businessId: string;
   }): Promise<number> {
     if (params.input.amount <= 0) throw new BadRequestError("amount must be positive");
     if (params.input.method !== "CASH" && !params.input.bankAccountId) {
       throw new BadRequestError("bankAccountId is required for non-cash payment methods");
     }
 
-    const alreadyPaid = await this.financeRepository.sumPaymentsForEntity(params.entityType, params.entityId);
+    const alreadyPaid = await this.financeRepository.sumPaymentsForEntity(
+      params.entityType,
+      params.entityId,
+      params.businessId,
+    );
     const newTotalPaid = round2(alreadyPaid + params.input.amount);
     if (newTotalPaid > params.total + EPSILON) {
       throw new BadRequestError(
@@ -315,6 +381,7 @@ export class FinanceService {
       entityType: params.entityType,
       entityId: params.entityId,
       remarks: params.input.remarks,
+      businessId: params.businessId,
       recordedById: params.actorId,
     });
 
@@ -332,8 +399,9 @@ export class FinanceService {
     invoiceId: string,
     input: CreatePaymentInput,
     actorId: string,
+    businessId: string,
   ): Promise<InvoiceDto> {
-    const invoice = await this.getInvoiceOrThrow(invoiceId);
+    const invoice = await this.getInvoiceOrThrow(invoiceId, businessId);
     const newTotalPaid = await this.validateAndCreatePayment({
       entityType: "Invoice",
       entityId: invoiceId,
@@ -341,18 +409,20 @@ export class FinanceService {
       direction: "RECEIVED",
       input,
       actorId,
+      businessId,
     });
     const status: InvoiceStatus = newTotalPaid >= invoice.totalAmount - EPSILON ? "PAID" : "PARTIALLY_PAID";
     await this.financeRepository.updateInvoice(invoiceId, { status });
-    return this.getInvoice(invoiceId);
+    return this.getInvoice(invoiceId, businessId);
   }
 
   async recordExpensePayment(
     expenseId: string,
     input: CreatePaymentInput,
     actorId: string,
+    businessId: string,
   ): Promise<ExpenseDto> {
-    const expense = await this.getExpenseOrThrow(expenseId);
+    const expense = await this.getExpenseOrThrow(expenseId, businessId);
     const newTotalPaid = await this.validateAndCreatePayment({
       entityType: "Expense",
       entityId: expenseId,
@@ -360,18 +430,20 @@ export class FinanceService {
       direction: "PAID",
       input,
       actorId,
+      businessId,
     });
     const status: ExpenseStatus = newTotalPaid >= expense.amount - EPSILON ? "PAID" : "PARTIALLY_PAID";
     await this.financeRepository.updateExpense(expenseId, { status });
-    return this.getExpense(expenseId);
+    return this.getExpense(expenseId, businessId);
   }
 
   async recordPurchaseOrderPayment(
     purchaseOrderId: string,
     input: CreatePaymentInput,
     actorId: string,
+    businessId: string,
   ): Promise<PaymentDto[]> {
-    const total = await this.financeRepository.findPurchaseOrderTotal(purchaseOrderId);
+    const total = await this.financeRepository.findPurchaseOrderTotal(purchaseOrderId, businessId);
     if (total === null) throw new NotFoundError("Purchase order not found");
     await this.validateAndCreatePayment({
       entityType: "PurchaseOrder",
@@ -380,13 +452,22 @@ export class FinanceService {
       direction: "PAID",
       input,
       actorId,
+      businessId,
     });
-    const payments = await this.financeRepository.findPaymentsForEntity("PurchaseOrder", purchaseOrderId);
+    const payments = await this.financeRepository.findPaymentsForEntity(
+      "PurchaseOrder",
+      purchaseOrderId,
+      businessId,
+    );
     return payments.map(toPaymentDto);
   }
 
-  async listPurchaseOrderPayments(purchaseOrderId: string): Promise<PaymentDto[]> {
-    const payments = await this.financeRepository.findPaymentsForEntity("PurchaseOrder", purchaseOrderId);
+  async listPurchaseOrderPayments(purchaseOrderId: string, businessId: string): Promise<PaymentDto[]> {
+    const payments = await this.financeRepository.findPaymentsForEntity(
+      "PurchaseOrder",
+      purchaseOrderId,
+      businessId,
+    );
     return payments.map(toPaymentDto);
   }
 
@@ -394,17 +475,17 @@ export class FinanceService {
   // Reports
   // ---------------------------------------------------------------------
 
-  async getSummary(): Promise<FinanceSummaryDto> {
+  async getSummary(businessId: string): Promise<FinanceSummaryDto> {
     const [invoices, expenses, poPayables, invoicePaid, expensePaid, poPaid, bankAccounts, cashPayments] =
       await Promise.all([
-        this.financeRepository.findAllInvoices(),
-        this.financeRepository.findAllExpenses(),
-        this.financeRepository.sumOpenPurchaseOrderTotals(),
-        this.financeRepository.sumAllPaymentsByEntityType("Invoice"),
-        this.financeRepository.sumAllPaymentsByEntityType("Expense"),
-        this.financeRepository.sumAllPaymentsByEntityType("PurchaseOrder"),
-        this.financeRepository.findBankAccounts(),
-        this.financeRepository.findPaymentsByMethod("CASH"),
+        this.financeRepository.findAllInvoices(businessId),
+        this.financeRepository.findAllExpenses(businessId),
+        this.financeRepository.sumOpenPurchaseOrderTotals(businessId),
+        this.financeRepository.sumAllPaymentsByEntityType("Invoice", businessId),
+        this.financeRepository.sumAllPaymentsByEntityType("Expense", businessId),
+        this.financeRepository.sumAllPaymentsByEntityType("PurchaseOrder", businessId),
+        this.financeRepository.findBankAccounts(businessId),
+        this.financeRepository.findPaymentsByMethod("CASH", businessId),
       ]);
 
     const totalInvoiced = invoices.reduce((sum, invoice) => sum + invoice.totalAmount, 0);
@@ -422,7 +503,7 @@ export class FinanceService {
       bankAccounts.map(async (account) => ({
         bankAccountId: account.id,
         name: account.name,
-        balance: await this.computeBankBalance(account),
+        balance: await this.computeBankBalance(account, businessId),
       })),
     );
 
@@ -434,8 +515,8 @@ export class FinanceService {
     };
   }
 
-  async getCashBook(): Promise<CashBookEntryDto[]> {
-    const payments = await this.financeRepository.findPaymentsByMethod("CASH");
+  async getCashBook(businessId: string): Promise<CashBookEntryDto[]> {
+    const payments = await this.financeRepository.findPaymentsByMethod("CASH", businessId);
     let running = 0;
     return payments.map((p) => {
       running += p.direction === "RECEIVED" ? p.amount : -p.amount;
@@ -454,11 +535,11 @@ export class FinanceService {
     });
   }
 
-  async getBankBook(bankAccountId: string): Promise<CashBookEntryDto[]> {
-    const account = await this.financeRepository.findBankAccountById(bankAccountId);
+  async getBankBook(bankAccountId: string, businessId: string): Promise<CashBookEntryDto[]> {
+    const account = await this.financeRepository.findBankAccountById(bankAccountId, businessId);
     if (!account) throw new NotFoundError("Bank account not found");
 
-    const payments = await this.financeRepository.findPaymentsByBankAccount(bankAccountId);
+    const payments = await this.financeRepository.findPaymentsByBankAccount(bankAccountId, businessId);
     let running = account.openingBalance;
     return payments.map((p) => {
       running += p.direction === "RECEIVED" ? p.amount : -p.amount;
