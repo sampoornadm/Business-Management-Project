@@ -63,7 +63,7 @@ export class UsersController {
 
   updateMe = asyncHandler(async (req, res) => {
     const body = req.body as UpdateOwnProfileBody;
-    const user = await this.usersService.updateOwnProfile(req.user!.id, body);
+    const user = await this.usersService.updateOwnProfile(req.user!.id, body, req.user!.businessId);
     sendSuccess(res, user, "Profile updated");
   });
 

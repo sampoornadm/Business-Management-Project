@@ -48,7 +48,7 @@ export interface IUsersRepository {
     filters: UserFilters,
   ): Promise<{ items: UserWithRole[]; totalItems: number }>;
   create(data: CreateUserData): Promise<UserWithRole>;
-  update(id: string, data: UpdateUserData): Promise<UserWithRole>;
+  update(id: string, data: UpdateUserData, businessId: string): Promise<UserWithRole>;
   updatePasswordHash(id: string, passwordHash: string): Promise<void>;
   updateAvatarAttachmentId(id: string, avatarAttachmentId: string | null): Promise<void>;
   assignRole(id: string, businessId: string, roleId: string): Promise<UserWithRole>;
@@ -122,15 +122,12 @@ export class UsersRepository implements IUsersRepository {
     return this.findById(user.id, data.businessId) as Promise<UserWithRole>;
   }
 
-  update(id: string, data: UpdateUserData): Promise<UserWithRole> {
-    // update() doesn't change role/business, so any existing membership's businessId works
-    // for the returned include — callers only read name/contact fields off the result.
-    return this.prisma.user
-      .update({ where: { id }, data })
-      .then(async (updated) => {
-        const membership = await this.prisma.userBusiness.findFirst({ where: { userId: id } });
-        return this.findById(updated.id, membership!.businessId) as Promise<UserWithRole>;
-      });
+  async update(id: string, data: UpdateUserData, businessId: string): Promise<UserWithRole> {
+    // update() doesn't change role/business, but the returned include still needs to be scoped
+    // to the caller's businessId — a user with memberships in multiple businesses must never
+    // have this resolve to a different business's role than the one the request is scoped to.
+    const updated = await this.prisma.user.update({ where: { id }, data });
+    return this.findById(updated.id, businessId) as Promise<UserWithRole>;
   }
 
   async updatePasswordHash(id: string, passwordHash: string): Promise<void> {

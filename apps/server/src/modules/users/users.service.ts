@@ -127,7 +127,7 @@ export class UsersService {
   ): Promise<UserDto> {
     this.assertMember(await this.usersRepository.findById(id, businessId));
 
-    const user = await this.usersRepository.update(id, data);
+    const user = await this.usersRepository.update(id, data, businessId);
 
     if (data.isActive === false) {
       await this.authRepository.revokeAllForUser(id);
@@ -149,8 +149,9 @@ export class UsersService {
   async updateOwnProfile(
     userId: string,
     data: { firstName?: string; lastName?: string; phone?: string | null },
+    businessId: string,
   ): Promise<UserDto> {
-    const user = await this.usersRepository.update(userId, data);
+    const user = await this.usersRepository.update(userId, data, businessId);
     await this.auditService.log({
       actorId: userId,
       action: "USER_PROFILE_UPDATED",
