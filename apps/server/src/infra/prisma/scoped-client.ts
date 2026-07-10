@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from "@bmp/database";
+import type { PrismaClient } from "@bmp/database";
 
 export const SCOPED_MODELS = new Set([
   "Tender",
