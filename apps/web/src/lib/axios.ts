@@ -1,7 +1,14 @@
+import type { AvailableBusiness } from "@bmp/types";
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 
 import { getAccessToken, useAuthStore } from "./auth-store";
 import { API_URL } from "./env";
+
+interface RefreshResponseData {
+  accessToken: string;
+  activeBusinessId: string;
+  availableBusinesses: AvailableBusiness[];
+}
 
 interface RetryableConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
@@ -23,13 +30,13 @@ apiClient.interceptors.request.use((config) => {
 let refreshPromise: Promise<string> | null = null;
 
 async function refreshAccessToken(): Promise<string> {
-  const response = await axios.post<{ data: { accessToken: string } }>(
+  const response = await axios.post<{ data: RefreshResponseData }>(
     `${API_URL}/auth/refresh`,
     {},
     { withCredentials: true },
   );
-  const { accessToken } = response.data.data;
-  useAuthStore.getState().setAuth({ accessToken });
+  const { accessToken, activeBusinessId, availableBusinesses } = response.data.data;
+  useAuthStore.getState().setAuth({ accessToken, activeBusinessId, availableBusinesses });
   return accessToken;
 }
 
