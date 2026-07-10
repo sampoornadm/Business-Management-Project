@@ -392,4 +392,49 @@ describe("Purchase order business isolation (integration)", () => {
     expect(stillIssuedResponse.body.data.status).toBe("ISSUED");
     expect(stillIssuedResponse.body.data.goodsReceipts).toHaveLength(0);
   });
+
+  it("rejects a mutating request (vendor rating) against another business's purchase order", async () => {
+    // Drive the PO all the way to RECEIVED in the first business (same setup
+    // as the "rates the vendor" happy-path test), then attempt to rate the
+    // vendor from the second business — upsertVendorRating() previously had
+    // no businessId parameter at all.
+    const vendorId = await createVendor();
+    const createResponse = await request(app)
+      .post("/api/v1/purchase-orders")
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
+      .send({
+        vendorId,
+        items: [{ description: "OPC Cement", unit: "bag", quantity: 100, rate: 380 }],
+      });
+    expect(createResponse.status).toBe(201);
+    const isolationPoId = createResponse.body.data.id as string;
+    const itemId = createResponse.body.data.items[0].id as string;
+
+    const issueResponse = await request(app)
+      .patch(`/api/v1/purchase-orders/${isolationPoId}/status`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
+      .send({ status: "ISSUED" });
+    expect(issueResponse.status).toBe(200);
+
+    const receiptResponse = await request(app)
+      .post(`/api/v1/purchase-orders/${isolationPoId}/goods-receipts`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
+      .send({ items: [{ purchaseOrderItemId: itemId, quantityReceived: 100 }] });
+    expect(receiptResponse.status).toBe(201);
+    expect(receiptResponse.body.data.status).toBe("RECEIVED");
+
+    const secondBusinessToken = await switchToSecondBusiness();
+
+    const ratingResponse = await request(app)
+      .put(`/api/v1/purchase-orders/${isolationPoId}/vendor-rating`)
+      .set("Authorization", `Bearer ${secondBusinessToken}`)
+      .send({ rating: 5, remarks: "Should not be recorded" });
+    expect(ratingResponse.status).toBe(404);
+
+    const stillUnratedResponse = await request(app)
+      .get(`/api/v1/purchase-orders/${isolationPoId}`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`);
+    expect(stillUnratedResponse.status).toBe(200);
+    expect(stillUnratedResponse.body.data.vendorRating).toBeNull();
+  });
 });
