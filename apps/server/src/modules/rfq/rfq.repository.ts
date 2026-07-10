@@ -42,6 +42,7 @@ export interface CreateRfqItemData {
 export interface CreateRfqData {
   title: string;
   tenderId?: string | null;
+  businessId: string;
   dueDate?: Date | null;
   createdById: string;
   items: CreateRfqItemData[];
@@ -50,13 +51,14 @@ export interface CreateRfqData {
 export type UpdateRfqData = Partial<Pick<CreateRfqData, "title" | "dueDate">>;
 
 export interface RfqFilters {
+  businessId: string;
   status?: RfqStatus;
   tenderId?: string;
 }
 
 export interface IRfqRepository {
   create(data: CreateRfqData): Promise<string>;
-  findById(id: string): Promise<RfqDetail | null>;
+  findById(id: string, businessId: string): Promise<RfqDetail | null>;
   findMany(
     pagination: PaginationParams,
     filters: RfqFilters,
@@ -84,6 +86,7 @@ export class RfqRepository implements IRfqRepository {
           id: rfqId,
           title: data.title,
           tenderId: data.tenderId ?? null,
+          businessId: data.businessId,
           dueDate: data.dueDate ?? null,
           createdById: data.createdById,
         },
@@ -103,15 +106,22 @@ export class RfqRepository implements IRfqRepository {
     return rfqId;
   }
 
-  findById(id: string): Promise<RfqDetail | null> {
-    return this.prisma.rfq.findUnique({ where: { id }, ...rfqDetailArgs });
+  findById(id: string, businessId: string): Promise<RfqDetail | null> {
+    // findFirst (not findUnique) because `id` alone isn't the unique key
+    // we're filtering by here — businessId must also match, and there's no
+    // compound (id, businessId) unique constraint on Rfq.
+    return this.prisma.rfq.findFirst({ where: { id, businessId }, ...rfqDetailArgs });
   }
 
   async findMany(
     pagination: PaginationParams,
     filters: RfqFilters,
   ): Promise<{ items: RfqListItem[]; totalItems: number }> {
-    const where: Prisma.RfqWhereInput = { status: filters.status, tenderId: filters.tenderId };
+    const where: Prisma.RfqWhereInput = {
+      businessId: filters.businessId,
+      status: filters.status,
+      tenderId: filters.tenderId,
+    };
 
     const [items, totalItems] = await Promise.all([
       this.prisma.rfq.findMany({

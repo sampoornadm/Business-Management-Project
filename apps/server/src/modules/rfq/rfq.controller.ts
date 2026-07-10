@@ -22,6 +22,7 @@ export class RfqController {
     const query = req.query as unknown as ListRfqsQueryParsed;
     const pagination = resolvePagination(query);
     const result = await this.rfqService.listRfqs(pagination, {
+      businessId: req.user!.businessId,
       status: query.status,
       tenderId: query.tenderId,
     });
@@ -29,7 +30,7 @@ export class RfqController {
   });
 
   getById = asyncHandler(async (req, res) => {
-    const rfq = await this.rfqService.getById(req.params.id!);
+    const rfq = await this.rfqService.getById(req.params.id!, req.user!.businessId);
     sendSuccess(res, rfq, "RFQ retrieved");
   });
 
@@ -44,7 +45,7 @@ export class RfqController {
         vendorIds: body.vendorIds,
       },
       req.user!.id,
-      { ipAddress: req.ip, userAgent: req.headers["user-agent"] },
+      { ipAddress: req.ip, userAgent: req.headers["user-agent"], businessId: req.user!.businessId },
     );
     sendSuccess(res, rfq, "RFQ created", 201);
   });
@@ -55,13 +56,19 @@ export class RfqController {
       req.params.id!,
       { title: body.title, dueDate: body.dueDate ? new Date(body.dueDate) : undefined },
       req.user!.id,
+      req.user!.businessId,
     );
     sendSuccess(res, rfq, "RFQ updated");
   });
 
   addVendor = asyncHandler(async (req, res) => {
     const body = req.body as AddRfqVendorBody;
-    const rfq = await this.rfqService.addVendorInvite(req.params.id!, body.vendorId, req.user!.id);
+    const rfq = await this.rfqService.addVendorInvite(
+      req.params.id!,
+      body.vendorId,
+      req.user!.id,
+      req.user!.businessId,
+    );
     sendSuccess(res, rfq, "Vendor invited", 201);
   });
 
@@ -70,6 +77,7 @@ export class RfqController {
       req.params.id!,
       req.params.vendorId!,
       req.user!.id,
+      req.user!.businessId,
     );
     sendSuccess(res, rfq, "Vendor invite removed");
   });
@@ -81,23 +89,24 @@ export class RfqController {
       req.params.vendorId!,
       body,
       req.user!.id,
+      req.user!.businessId,
     );
     sendSuccess(res, rfq, "Quote recorded");
   });
 
   comparison = asyncHandler(async (req, res) => {
-    const comparison = await this.rfqService.getComparison(req.params.id!);
+    const comparison = await this.rfqService.getComparison(req.params.id!, req.user!.businessId);
     sendSuccess(res, comparison, "Comparison retrieved");
   });
 
   award = asyncHandler(async (req, res) => {
     const body = req.body as AwardRfqBody;
-    const rfq = await this.rfqService.award(req.params.id!, body.vendorId, req.user!.id);
+    const rfq = await this.rfqService.award(req.params.id!, body.vendorId, req.user!.id, req.user!.businessId);
     sendSuccess(res, rfq, "RFQ awarded");
   });
 
   close = asyncHandler(async (req, res) => {
-    const rfq = await this.rfqService.close(req.params.id!, req.user!.id);
+    const rfq = await this.rfqService.close(req.params.id!, req.user!.id, req.user!.businessId);
     sendSuccess(res, rfq, "RFQ closed");
   });
 
@@ -105,19 +114,20 @@ export class RfqController {
     const rfq = await this.rfqService.reopen(req.params.id!, req.user!.id, {
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"],
+      businessId: req.user!.businessId,
     });
     sendSuccess(res, rfq, "RFQ reopened");
   });
 
   suggestVendors = asyncHandler(async (req, res) => {
     const body = req.body as SuggestVendorsBody;
-    const suggestions = await this.rfqService.suggestVendors(body.boqItemIds);
+    const suggestions = await this.rfqService.suggestVendors(body.boqItemIds, req.user!.businessId);
     sendSuccess(res, suggestions, "Vendor suggestions retrieved");
   });
 
   quickSendPreview = asyncHandler(async (req, res) => {
     const body = req.body as QuickSendPreviewBody;
-    const preview = await this.rfqService.previewQuickSend(body, req.user!.id);
+    const preview = await this.rfqService.previewQuickSend(body, req.user!.id, req.user!.businessId);
     sendSuccess(res, preview, "RFQ preview generated");
   });
 
@@ -126,6 +136,7 @@ export class RfqController {
     const rfq = await this.rfqService.quickSend(body, req.user!.id, {
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"],
+      businessId: req.user!.businessId,
     });
     sendSuccess(res, rfq, "RFQ sent", 201);
   });
