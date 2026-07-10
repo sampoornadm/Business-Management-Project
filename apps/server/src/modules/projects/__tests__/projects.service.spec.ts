@@ -54,11 +54,11 @@ class FakeProjectsRepository implements IProjectsRepository {
     return id;
   }
 
-  async findById(id: string) {
+  async findById(id: string, _businessId: string) {
     return this.projects.get(id) ?? null;
   }
 
-  async findByTenderId(tenderId: string) {
+  async findByTenderId(tenderId: string, _businessId: string) {
     const found = [...this.projects.values()].find((p) => p.tenderId === tenderId);
     return found ? { id: found.id } : null;
   }
@@ -210,7 +210,7 @@ class FakeProjectsRepository implements IProjectsRepository {
 class FakeTendersRepository implements Partial<ITendersRepository> {
   tenders = new Map<string, { id: string; status: string; winningBidAmount: number | null; estimatedCost: number; title: string; location: string }>();
 
-  async findById(id: string) {
+  async findById(id: string, _businessId: string) {
     return (this.tenders.get(id) as never) ?? null;
   }
 }
@@ -222,6 +222,7 @@ describe("ProjectsService", () => {
   let service: ProjectsService;
   const actorId = randomUUID();
   const tenderId = randomUUID();
+  const businessId = randomUUID();
 
   beforeEach(() => {
     repository = new FakeProjectsRepository();
@@ -246,6 +247,7 @@ describe("ProjectsService", () => {
     const project = await service.createFromTender(
       { tenderId, startDate: new Date().toISOString() },
       actorId,
+      { businessId },
     );
     expect(project.name).toBe("Road Widening Project");
     expect(project.budget).toBe(500000);
@@ -254,14 +256,14 @@ describe("ProjectsService", () => {
   it("rejects converting a tender that isn't WON", async () => {
     tendersRepository.tenders.get(tenderId)!.status = "SUBMITTED";
     await expect(
-      service.createFromTender({ tenderId, startDate: new Date().toISOString() }, actorId),
+      service.createFromTender({ tenderId, startDate: new Date().toISOString() }, actorId, { businessId }),
     ).rejects.toThrow(ConflictError);
   });
 
   it("rejects converting the same tender twice", async () => {
-    await service.createFromTender({ tenderId, startDate: new Date().toISOString() }, actorId);
+    await service.createFromTender({ tenderId, startDate: new Date().toISOString() }, actorId, { businessId });
     await expect(
-      service.createFromTender({ tenderId, startDate: new Date().toISOString() }, actorId),
+      service.createFromTender({ tenderId, startDate: new Date().toISOString() }, actorId, { businessId }),
     ).rejects.toThrow(ConflictError);
   });
 
@@ -269,13 +271,24 @@ describe("ProjectsService", () => {
     const project = await service.createFromTender(
       { tenderId, startDate: new Date().toISOString() },
       actorId,
+      { businessId },
     );
-    const withM1 = await service.addMilestone(project.id, { title: "Foundation", weightPercent: 40 }, actorId);
-    const withM2 = await service.addMilestone(project.id, { title: "Structure", weightPercent: 60 }, actorId);
+    const withM1 = await service.addMilestone(
+      project.id,
+      { title: "Foundation", weightPercent: 40 },
+      actorId,
+      businessId,
+    );
+    const withM2 = await service.addMilestone(
+      project.id,
+      { title: "Structure", weightPercent: 60 },
+      actorId,
+      businessId,
+    );
     const m1 = withM2.milestones.find((m) => m.title === "Foundation")!;
 
-    await service.updateMilestone(project.id, m1.id, { status: "COMPLETED" }, actorId);
-    const progress = await service.getProgress(project.id);
+    await service.updateMilestone(project.id, m1.id, { status: "COMPLETED" }, actorId, businessId);
+    const progress = await service.getProgress(project.id, businessId);
     expect(progress.milestoneProgressPercent).toBe(40);
     expect(progress.completedMilestones).toBe(1);
     expect(progress.totalMilestones).toBe(2);
@@ -286,11 +299,13 @@ describe("ProjectsService", () => {
     const project = await service.createFromTender(
       { tenderId, startDate: new Date().toISOString() },
       actorId,
+      { businessId },
     );
     const entries = await service.addLaborEntry(
       project.id,
       { category: "SKILLED", description: "Masons", workerCount: 5, units: 8, ratePerUnit: 50 },
       actorId,
+      businessId,
     );
     expect(entries[0]!.amount).toBe(2000);
   });
@@ -299,8 +314,14 @@ describe("ProjectsService", () => {
     const project = await service.createFromTender(
       { tenderId, startDate: new Date().toISOString() },
       actorId,
+      { businessId },
     );
-    const bills = await service.addBill(project.id, { billNumber: "RA-1", cumulativeAmount: 100000 }, actorId);
+    const bills = await service.addBill(
+      project.id,
+      { billNumber: "RA-1", cumulativeAmount: 100000 },
+      actorId,
+      businessId,
+    );
     expect(bills[0]!.currentBillAmount).toBe(100000);
   });
 
@@ -308,9 +329,15 @@ describe("ProjectsService", () => {
     const project = await service.createFromTender(
       { tenderId, startDate: new Date().toISOString() },
       actorId,
+      { businessId },
     );
-    await service.addBill(project.id, { billNumber: "RA-1", cumulativeAmount: 100000 }, actorId);
-    const bills = await service.addBill(project.id, { billNumber: "RA-2", cumulativeAmount: 150000 }, actorId);
+    await service.addBill(project.id, { billNumber: "RA-1", cumulativeAmount: 100000 }, actorId, businessId);
+    const bills = await service.addBill(
+      project.id,
+      { billNumber: "RA-2", cumulativeAmount: 150000 },
+      actorId,
+      businessId,
+    );
     expect(bills[1]!.currentBillAmount).toBe(50000);
   });
 
@@ -318,10 +345,11 @@ describe("ProjectsService", () => {
     const project = await service.createFromTender(
       { tenderId, startDate: new Date().toISOString() },
       actorId,
+      { businessId },
     );
-    await service.addBill(project.id, { billNumber: "RA-1", cumulativeAmount: 100000 }, actorId);
+    await service.addBill(project.id, { billNumber: "RA-1", cumulativeAmount: 100000 }, actorId, businessId);
     await expect(
-      service.addBill(project.id, { billNumber: "RA-2", cumulativeAmount: 90000 }, actorId),
+      service.addBill(project.id, { billNumber: "RA-2", cumulativeAmount: 90000 }, actorId, businessId),
     ).rejects.toThrow(BadRequestError);
   });
 
@@ -329,10 +357,16 @@ describe("ProjectsService", () => {
     const project = await service.createFromTender(
       { tenderId, startDate: new Date().toISOString() },
       actorId,
+      { businessId },
     );
-    const bills = await service.addBill(project.id, { billNumber: "RA-1", cumulativeAmount: 100000 }, actorId);
+    const bills = await service.addBill(
+      project.id,
+      { billNumber: "RA-1", cumulativeAmount: 100000 },
+      actorId,
+      businessId,
+    );
     await expect(
-      service.updateBillStatus(project.id, bills[0]!.id, "APPROVED", actorId),
+      service.updateBillStatus(project.id, bills[0]!.id, "APPROVED", actorId, businessId),
     ).rejects.toThrow(BadRequestError);
   });
 
@@ -340,9 +374,15 @@ describe("ProjectsService", () => {
     const project = await service.createFromTender(
       { tenderId, startDate: new Date().toISOString() },
       actorId,
+      { businessId },
     );
-    const bills = await service.addBill(project.id, { billNumber: "RA-1", cumulativeAmount: 100000 }, actorId);
-    const updated = await service.updateBillStatus(project.id, bills[0]!.id, "SUBMITTED", actorId);
+    const bills = await service.addBill(
+      project.id,
+      { billNumber: "RA-1", cumulativeAmount: 100000 },
+      actorId,
+      businessId,
+    );
+    const updated = await service.updateBillStatus(project.id, bills[0]!.id, "SUBMITTED", actorId, businessId);
     expect(updated[0]!.status).toBe("SUBMITTED");
   });
 
@@ -350,6 +390,7 @@ describe("ProjectsService", () => {
     const project = await service.createFromTender(
       { tenderId, startDate: new Date().toISOString() },
       actorId,
+      { businessId },
     );
     repository.boqEstimate = 480000;
     repository.poTotal = 200000;
@@ -357,9 +398,10 @@ describe("ProjectsService", () => {
       project.id,
       { category: "UNSKILLED", description: "Laborers", workerCount: 10, units: 5, ratePerUnit: 40 },
       actorId,
+      businessId,
     );
 
-    const costing = await service.getCosting(project.id);
+    const costing = await service.getCosting(project.id, businessId);
     expect(costing.boqEstimateTotal).toBe(480000);
     expect(costing.purchaseOrdersTotal).toBe(200000);
     expect(costing.laborTotal).toBe(2000);
@@ -368,6 +410,6 @@ describe("ProjectsService", () => {
   });
 
   it("throws for an unknown project id", async () => {
-    await expect(service.getById(randomUUID())).rejects.toThrow(NotFoundError);
+    await expect(service.getById(randomUUID(), businessId)).rejects.toThrow(NotFoundError);
   });
 });

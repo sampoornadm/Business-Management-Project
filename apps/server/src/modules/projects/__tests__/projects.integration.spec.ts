@@ -1,12 +1,15 @@
 import { randomUUID } from "node:crypto";
 
 import { prisma } from "@bmp/database";
-import { WILDCARD_PERMISSION } from "@bmp/types";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApp } from "../../../app.js";
-import { hashPassword } from "../../../shared/utils/hash.js";
+import {
+  cleanupIntegrationTestUser,
+  createIntegrationTestUser,
+  type IntegrationTestUser,
+} from "../../../shared/test-utils/integration-auth.js";
 
 /**
  * Requires a real Postgres + Redis reachable via .env.test, migrated
@@ -15,8 +18,7 @@ import { hashPassword } from "../../../shared/utils/hash.js";
  */
 describe("Project execution workflow (integration)", () => {
   const app = createApp();
-  const email = `project-integration-${randomUUID()}@example.com`;
-  const password = "Password123";
+  let testUser: IntegrationTestUser;
   let accessToken: string;
   let userId: string;
   let organizationId: string;
@@ -25,57 +27,12 @@ describe("Project execution workflow (integration)", () => {
 
   const WON_TRANSITION_CHAIN = ["SUBMITTED"];
 
-  beforeAll(async () => {
-    const permission = await prisma.permission.upsert({
-      where: { key: WILDCARD_PERMISSION },
-      update: {},
-      create: { id: randomUUID(), key: WILDCARD_PERMISSION, resource: "*", action: "*" },
-    });
-
-    const role = await prisma.role.upsert({
-      where: { name: "SUPER_ADMIN" },
-      update: {},
-      create: { id: randomUUID(), name: "SUPER_ADMIN", description: "Super Admin", isSystem: true },
-    });
-
-    await prisma.rolePermission.upsert({
-      where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } },
-      update: {},
-      create: { id: randomUUID(), roleId: role.id, permissionId: permission.id },
-    });
-
-    const user = await prisma.user.create({
-      data: {
-        id: randomUUID(),
-        email,
-        passwordHash: await hashPassword(password),
-        firstName: "Project",
-        lastName: "Tester",
-        roleId: role.id,
-        isActive: true,
-        isEmailVerified: true,
-      },
-    });
-    userId = user.id;
-
-    const loginResponse = await request(app).post("/api/v1/auth/login").send({ email, password });
-    accessToken = loginResponse.body.data.accessToken;
-
-    const org = await prisma.organization.create({
-      data: {
-        id: randomUUID(),
-        name: `Project Integration Client ${randomUUID()}`,
-        type: "GOVERNMENT",
-        createdById: user.id,
-      },
-    });
-    organizationId = org.id;
-
+  async function createWonTender(overrides: { tenderNumber: string }): Promise<string> {
     const tenderResponse = await request(app)
       .post("/api/v1/tenders")
       .set("Authorization", `Bearer ${accessToken}`)
       .send({
-        tenderNumber: `TND-PROJ-${randomUUID().slice(0, 8)}`,
+        tenderNumber: overrides.tenderNumber,
         title: "Project Integration Tender",
         department: "PWD",
         clientId: organizationId,
@@ -86,20 +43,40 @@ describe("Project execution workflow (integration)", () => {
         estimatedCost: 500000,
         submissionDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       });
-    tenderId = tenderResponse.body.data.id as string;
+    const newTenderId = tenderResponse.body.data.id as string;
 
     for (const status of WON_TRANSITION_CHAIN) {
       const response = await request(app)
-        .patch(`/api/v1/tenders/${tenderId}/status`)
+        .patch(`/api/v1/tenders/${newTenderId}/status`)
         .set("Authorization", `Bearer ${accessToken}`)
         .send({ status });
       expect(response.status).toBe(200);
     }
     const wonResponse = await request(app)
-      .patch(`/api/v1/tenders/${tenderId}/status`)
+      .patch(`/api/v1/tenders/${newTenderId}/status`)
       .set("Authorization", `Bearer ${accessToken}`)
       .send({ status: "WON", winnerName: "Us", winningBidAmount: 480000 });
     expect(wonResponse.status).toBe(200);
+
+    return newTenderId;
+  }
+
+  beforeAll(async () => {
+    testUser = await createIntegrationTestUser(app);
+    accessToken = testUser.accessToken;
+    userId = testUser.userId;
+
+    const org = await prisma.organization.create({
+      data: {
+        id: randomUUID(),
+        name: `Project Integration Client ${randomUUID()}`,
+        type: "GOVERNMENT",
+        createdById: userId,
+      },
+    });
+    organizationId = org.id;
+
+    tenderId = await createWonTender({ tenderNumber: `TND-PROJ-${randomUUID().slice(0, 8)}` });
   });
 
   afterAll(async () => {
@@ -112,7 +89,7 @@ describe("Project execution workflow (integration)", () => {
     }
     await prisma.tender.deleteMany({ where: { createdById: userId } });
     await prisma.organization.deleteMany({ where: { id: organizationId } });
-    await prisma.user.deleteMany({ where: { email } });
+    await cleanupIntegrationTestUser(testUser);
     await prisma.$disconnect();
   });
 
@@ -188,5 +165,43 @@ describe("Project execution workflow (integration)", () => {
     expect(response.status).toBe(200);
     expect(response.body.data.laborTotal).toBe(1600);
     expect(response.body.data.budget).toBe(480000);
+  });
+
+  it("does not return another business's projects, and rejects direct access to them", async () => {
+    const otherLogin = await request(app).post("/api/v1/auth/login").send({
+      email: testUser.email,
+      password: "Password123",
+    });
+    // switch to the second business this same test user also belongs to
+    const switchResponse = await request(app)
+      .post("/api/v1/auth/switch-business")
+      .set("Authorization", `Bearer ${otherLogin.body.data.accessToken}`)
+      .send({ businessId: testUser.secondBusinessId });
+    const secondBusinessToken = switchResponse.body.data.accessToken as string;
+
+    // Create + win a tender, then convert it to a project — all in the first business.
+    const isolationTenderId = await createWonTender({
+      tenderNumber: `TND-PROJ-ISO-${randomUUID().slice(0, 8)}`,
+    });
+    const projectResponse = await request(app)
+      .post("/api/v1/projects/from-tender")
+      .set("Authorization", `Bearer ${accessToken}`) // first business
+      .send({ tenderId: isolationTenderId, startDate: new Date().toISOString() });
+    expect(projectResponse.status).toBe(201);
+    const isolationProjectId = projectResponse.body.data.id as string;
+
+    const listResponse = await request(app)
+      .get("/api/v1/projects")
+      .set("Authorization", `Bearer ${secondBusinessToken}`);
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body.data.items.map((p: { id: string }) => p.id)).not.toContain(isolationProjectId);
+
+    const getByIdResponse = await request(app)
+      .get(`/api/v1/projects/${isolationProjectId}`)
+      .set("Authorization", `Bearer ${secondBusinessToken}`);
+    expect(getByIdResponse.status).toBe(404);
+
+    await prisma.project.deleteMany({ where: { id: isolationProjectId } });
+    await prisma.tender.deleteMany({ where: { id: isolationTenderId } });
   });
 });
