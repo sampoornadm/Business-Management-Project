@@ -17,7 +17,7 @@ import {
 
 import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
-import type { RequestContext } from "../../core/interfaces/request-context.js";
+import type { ScopedRequestContext } from "../../core/interfaces/request-context.js";
 import { round2 } from "../../shared/utils/math.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { ITendersRepository } from "../tenders/tenders.repository.js";
@@ -40,8 +40,8 @@ export class ProjectsService {
     private readonly auditService: AuditService,
   ) {}
 
-  private async getDetailOrThrow(id: string): Promise<ProjectDetail> {
-    const project = await this.projectsRepository.findById(id);
+  private async getDetailOrThrow(id: string, businessId: string): Promise<ProjectDetail> {
+    const project = await this.projectsRepository.findById(id, businessId);
     if (!project) throw new NotFoundError("Project not found");
     return project;
   }
@@ -54,27 +54,28 @@ export class ProjectsService {
     return buildPaginatedResult(items.map(toProjectListItemDto), totalItems, pagination);
   }
 
-  async getById(id: string): Promise<ProjectDto> {
-    return toProjectDto(await this.getDetailOrThrow(id));
+  async getById(id: string, businessId: string): Promise<ProjectDto> {
+    return toProjectDto(await this.getDetailOrThrow(id, businessId));
   }
 
   async createFromTender(
     input: CreateProjectFromTenderInput,
     actorId: string,
-    context: RequestContext = {},
+    context: ScopedRequestContext,
   ): Promise<ProjectDto> {
-    const tender = await this.tendersRepository.findById(input.tenderId);
+    const tender = await this.tendersRepository.findById(input.tenderId, context.businessId);
     if (!tender) throw new BadRequestError("Invalid tenderId");
     if (tender.status !== "WON") {
       throw new ConflictError("Only a tender with status WON can be converted to a project");
     }
 
-    const existing = await this.projectsRepository.findByTenderId(input.tenderId);
+    const existing = await this.projectsRepository.findByTenderId(input.tenderId, context.businessId);
     if (existing) throw new ConflictError("This tender already has a project");
 
     const budget = input.budget ?? tender.winningBidAmount ?? tender.estimatedCost;
     const projectId = await this.projectsRepository.createFromTender({
       tenderId: input.tenderId,
+      businessId: context.businessId,
       name: input.name ?? tender.title,
       budget,
       startDate: new Date(input.startDate),
@@ -93,11 +94,16 @@ export class ProjectsService {
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
     });
-    return this.getById(projectId);
+    return this.getById(projectId, context.businessId);
   }
 
-  async update(id: string, data: UpdateProjectInput, actorId: string): Promise<ProjectDto> {
-    await this.getDetailOrThrow(id);
+  async update(
+    id: string,
+    data: UpdateProjectInput,
+    actorId: string,
+    businessId: string,
+  ): Promise<ProjectDto> {
+    await this.getDetailOrThrow(id, businessId);
     await this.projectsRepository.update(id, {
       name: data.name,
       status: data.status,
@@ -109,11 +115,16 @@ export class ProjectsService {
       notes: data.notes,
     });
     await this.auditService.log({ actorId, action: "PROJECT_UPDATED", entityType: "Project", entityId: id });
-    return this.getById(id);
+    return this.getById(id, businessId);
   }
 
-  async addMilestone(projectId: string, input: CreateMilestoneInput, actorId: string): Promise<ProjectDto> {
-    await this.getDetailOrThrow(projectId);
+  async addMilestone(
+    projectId: string,
+    input: CreateMilestoneInput,
+    actorId: string,
+    businessId: string,
+  ): Promise<ProjectDto> {
+    await this.getDetailOrThrow(projectId, businessId);
     await this.projectsRepository.createMilestone({
       projectId,
       title: input.title,
@@ -127,7 +138,7 @@ export class ProjectsService {
       entityType: "Project",
       entityId: projectId,
     });
-    return this.getById(projectId);
+    return this.getById(projectId, businessId);
   }
 
   private async assertMilestoneBelongsToProject(projectId: string, milestoneId: string): Promise<void> {
@@ -142,7 +153,13 @@ export class ProjectsService {
     milestoneId: string,
     input: UpdateMilestoneInput,
     actorId: string,
+    businessId: string,
   ): Promise<ProjectDto> {
+    // Project ownership must be checked first — otherwise a milestoneId that
+    // legitimately belongs to a projectId from another business would still
+    // be mutated before any business-scoped check ever gets a chance to
+    // reject it (mirrors tenders.service.ts#updateCompetitor).
+    await this.getDetailOrThrow(projectId, businessId);
     await this.assertMilestoneBelongsToProject(projectId, milestoneId);
     await this.projectsRepository.updateMilestone(milestoneId, {
       title: input.title,
@@ -163,10 +180,17 @@ export class ProjectsService {
       entityId: projectId,
       metadata: { milestoneId },
     });
-    return this.getById(projectId);
+    return this.getById(projectId, businessId);
   }
 
-  async deleteMilestone(projectId: string, milestoneId: string, actorId: string): Promise<ProjectDto> {
+  async deleteMilestone(
+    projectId: string,
+    milestoneId: string,
+    actorId: string,
+    businessId: string,
+  ): Promise<ProjectDto> {
+    // See updateMilestone: project ownership must be checked before mutating.
+    await this.getDetailOrThrow(projectId, businessId);
     await this.assertMilestoneBelongsToProject(projectId, milestoneId);
     await this.projectsRepository.deleteMilestone(milestoneId);
     await this.auditService.log({
@@ -176,11 +200,16 @@ export class ProjectsService {
       entityId: projectId,
       metadata: { milestoneId },
     });
-    return this.getById(projectId);
+    return this.getById(projectId, businessId);
   }
 
-  async addMaterialUsage(projectId: string, input: CreateMaterialUsageInput, actorId: string) {
-    await this.getDetailOrThrow(projectId);
+  async addMaterialUsage(
+    projectId: string,
+    input: CreateMaterialUsageInput,
+    actorId: string,
+    businessId: string,
+  ) {
+    await this.getDetailOrThrow(projectId, businessId);
     await this.projectsRepository.createMaterialUsage({
       projectId,
       boqItemId: input.boqItemId,
@@ -197,17 +226,22 @@ export class ProjectsService {
       entityType: "Project",
       entityId: projectId,
     });
-    return this.listMaterialUsages(projectId);
+    return this.listMaterialUsages(projectId, businessId);
   }
 
-  async listMaterialUsages(projectId: string) {
-    await this.getDetailOrThrow(projectId);
+  async listMaterialUsages(projectId: string, businessId: string) {
+    await this.getDetailOrThrow(projectId, businessId);
     const usages = await this.projectsRepository.findMaterialUsages(projectId);
     return usages.map(toMaterialUsageDto);
   }
 
-  async addLaborEntry(projectId: string, input: CreateLaborEntryInput, actorId: string) {
-    await this.getDetailOrThrow(projectId);
+  async addLaborEntry(
+    projectId: string,
+    input: CreateLaborEntryInput,
+    actorId: string,
+    businessId: string,
+  ) {
+    await this.getDetailOrThrow(projectId, businessId);
     const amount = round2(input.workerCount * input.units * input.ratePerUnit);
     await this.projectsRepository.createLaborEntry({
       projectId,
@@ -228,17 +262,17 @@ export class ProjectsService {
       entityId: projectId,
       metadata: { amount },
     });
-    return this.listLaborEntries(projectId);
+    return this.listLaborEntries(projectId, businessId);
   }
 
-  async listLaborEntries(projectId: string) {
-    await this.getDetailOrThrow(projectId);
+  async listLaborEntries(projectId: string, businessId: string) {
+    await this.getDetailOrThrow(projectId, businessId);
     const entries = await this.projectsRepository.findLaborEntries(projectId);
     return entries.map(toLaborEntryDto);
   }
 
-  async addBill(projectId: string, input: CreateBillInput, actorId: string) {
-    await this.getDetailOrThrow(projectId);
+  async addBill(projectId: string, input: CreateBillInput, actorId: string, businessId: string) {
+    await this.getDetailOrThrow(projectId, businessId);
     const existingBills = await this.projectsRepository.findBills(projectId);
     const previousCumulative = existingBills.at(-1)?.cumulativeAmount ?? 0;
     const currentBillAmount = round2(input.cumulativeAmount - previousCumulative);
@@ -262,11 +296,11 @@ export class ProjectsService {
       entityId: projectId,
       metadata: { billNumber: input.billNumber, currentBillAmount },
     });
-    return this.listBills(projectId);
+    return this.listBills(projectId, businessId);
   }
 
-  async listBills(projectId: string) {
-    await this.getDetailOrThrow(projectId);
+  async listBills(projectId: string, businessId: string) {
+    await this.getDetailOrThrow(projectId, businessId);
     const bills = await this.projectsRepository.findBills(projectId);
     return bills.map(toBillDto);
   }
@@ -276,7 +310,13 @@ export class ProjectsService {
     billId: string,
     status: BillStatus,
     actorId: string,
+    businessId: string,
   ) {
+    // Project ownership must be checked first — otherwise a billId that
+    // legitimately belongs to a projectId from another business would still
+    // be mutated before any business-scoped check ever gets a chance to
+    // reject it (mirrors updateMilestone/deleteMilestone above).
+    await this.getDetailOrThrow(projectId, businessId);
     const bill = await this.projectsRepository.findBillById(billId);
     if (!bill || bill.projectId !== projectId) throw new NotFoundError("Bill not found for this project");
 
@@ -292,11 +332,11 @@ export class ProjectsService {
       entityId: projectId,
       metadata: { billId, from: bill.status, to: status },
     });
-    return this.listBills(projectId);
+    return this.listBills(projectId, businessId);
   }
 
-  async getCosting(projectId: string): Promise<ProjectCostingDto> {
-    const project = await this.getDetailOrThrow(projectId);
+  async getCosting(projectId: string, businessId: string): Promise<ProjectCostingDto> {
+    const project = await this.getDetailOrThrow(projectId, businessId);
     const [boqEstimateTotal, purchaseOrdersTotal, laborTotal] = await Promise.all([
       this.projectsRepository.sumBoqEstimateForTender(project.tenderId),
       this.projectsRepository.sumPurchaseOrdersForTender(project.tenderId),
@@ -314,8 +354,8 @@ export class ProjectsService {
     };
   }
 
-  async getProgress(projectId: string): Promise<ProjectProgressDto> {
-    const project = await this.getDetailOrThrow(projectId);
+  async getProgress(projectId: string, businessId: string): Promise<ProjectProgressDto> {
+    const project = await this.getDetailOrThrow(projectId, businessId);
     const totalMilestones = project.milestones.length;
     const completedMilestones = project.milestones.filter((m) => m.status === "COMPLETED").length;
     const milestoneProgressPercent = round2(

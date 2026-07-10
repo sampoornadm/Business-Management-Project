@@ -25,6 +25,7 @@ export type ProjectDetail = Prisma.ProjectGetPayload<typeof projectDetailArgs>;
 
 export interface CreateProjectData {
   tenderId: string;
+  businessId: string;
   name: string;
   budget: number;
   startDate: Date;
@@ -35,10 +36,14 @@ export interface CreateProjectData {
 }
 
 export type UpdateProjectData = Partial<
-  Omit<CreateProjectData, "tenderId" | "createdById"> & { status: ProjectStatus; actualEndDate: Date | null }
+  Omit<CreateProjectData, "tenderId" | "businessId" | "createdById"> & {
+    status: ProjectStatus;
+    actualEndDate: Date | null;
+  }
 >;
 
 export interface ProjectFilters {
+  businessId: string;
   status?: ProjectStatus;
 }
 
@@ -110,8 +115,8 @@ export type BillWithCreator = Prisma.ProjectBillGetPayload<typeof billArgs>;
 
 export interface IProjectsRepository {
   createFromTender(data: CreateProjectData): Promise<string>;
-  findById(id: string): Promise<ProjectDetail | null>;
-  findByTenderId(tenderId: string): Promise<{ id: string } | null>;
+  findById(id: string, businessId: string): Promise<ProjectDetail | null>;
+  findByTenderId(tenderId: string, businessId: string): Promise<{ id: string } | null>;
   findMany(
     pagination: PaginationParams,
     filters: ProjectFilters,
@@ -148,19 +153,22 @@ export class ProjectsRepository implements IProjectsRepository {
     return id;
   }
 
-  findById(id: string): Promise<ProjectDetail | null> {
-    return this.prisma.project.findUnique({ where: { id }, ...projectDetailArgs });
+  findById(id: string, businessId: string): Promise<ProjectDetail | null> {
+    // findFirst (not findUnique) because `id` alone isn't the unique key we're
+    // filtering by here — businessId must also match, and there's no
+    // compound (id, businessId) unique constraint on Project.
+    return this.prisma.project.findFirst({ where: { id, businessId }, ...projectDetailArgs });
   }
 
-  findByTenderId(tenderId: string): Promise<{ id: string } | null> {
-    return this.prisma.project.findUnique({ where: { tenderId }, select: { id: true } });
+  findByTenderId(tenderId: string, businessId: string): Promise<{ id: string } | null> {
+    return this.prisma.project.findFirst({ where: { tenderId, businessId }, select: { id: true } });
   }
 
   async findMany(
     pagination: PaginationParams,
     filters: ProjectFilters,
   ): Promise<{ items: ProjectDetail[]; totalItems: number }> {
-    const where: Prisma.ProjectWhereInput = { status: filters.status };
+    const where: Prisma.ProjectWhereInput = { businessId: filters.businessId, status: filters.status };
     const [items, totalItems] = await Promise.all([
       this.prisma.project.findMany({
         where,
