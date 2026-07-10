@@ -161,4 +161,53 @@ describe("Tender workflow (integration)", () => {
 
     expect(listResponse.body.data.items.map((t: { id: string }) => t.id)).not.toContain(tenderId);
   });
+
+  it("does not include another business's tenders in dashboard stats", async () => {
+    const otherLogin = await request(app).post("/api/v1/auth/login").send({
+      email: testUser.email,
+      password: "Password123",
+    });
+    const switchResponse = await request(app)
+      .post("/api/v1/auth/switch-business")
+      .set("Authorization", `Bearer ${otherLogin.body.data.accessToken}`)
+      .send({ businessId: testUser.secondBusinessId });
+    const secondBusinessToken = switchResponse.body.data.accessToken as string;
+
+    const createResponse = await request(app)
+      .post("/api/v1/tenders")
+      .set("Authorization", `Bearer ${accessToken}`) // first business
+      .send({
+        tenderNumber: `TND-${randomUUID().slice(0, 8)}`,
+        title: "Dashboard Isolation Test Tender",
+        department: "PWD",
+        clientId: organizationId,
+        type: "OPEN",
+        category: "ROAD",
+        location: "Test City",
+        state: "Test State",
+        estimatedCost: 500000,
+        submissionDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+    const tenderId = createResponse.body.data.id as string;
+
+    const secondBusinessStats = await request(app)
+      .get("/api/v1/tenders/dashboard-stats")
+      .set("Authorization", `Bearer ${secondBusinessToken}`);
+    expect(secondBusinessStats.status).toBe(200);
+    // The second business has no tenders of its own — first business's
+    // counts/upcoming deadlines (including the tender just created) must
+    // not leak into it.
+    expect(secondBusinessStats.body.data.totalActive).toBe(0);
+    expect(
+      secondBusinessStats.body.data.upcomingDeadlines.map((t: { id: string }) => t.id),
+    ).not.toContain(tenderId);
+
+    const firstBusinessStats = await request(app)
+      .get("/api/v1/tenders/dashboard-stats")
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(firstBusinessStats.status).toBe(200);
+    expect(
+      firstBusinessStats.body.data.upcomingDeadlines.map((t: { id: string }) => t.id),
+    ).toContain(tenderId);
+  });
 });

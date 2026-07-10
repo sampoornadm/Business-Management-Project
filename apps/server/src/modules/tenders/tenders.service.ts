@@ -469,10 +469,10 @@ export class TendersService {
     });
   }
 
-  async getDashboardStats(): Promise<TenderDashboardStatsDto> {
+  async getDashboardStats(businessId: string): Promise<TenderDashboardStatsDto> {
     const [statusCounts, upcoming] = await Promise.all([
-      this.tendersRepository.countByStatus(),
-      this.tendersRepository.findUpcomingDeadlines(7),
+      this.tendersRepository.countByStatus(businessId),
+      this.tendersRepository.findUpcomingDeadlines(7, businessId),
     ]);
 
     const byStatus: Partial<Record<TenderStatus, number>> = {};
