@@ -202,6 +202,20 @@ describe("AuthService", () => {
     expect(result.refreshToken).toBeTruthy();
     expect(result.user.email).toBe("jane@example.com");
     expect(result.user.role.name).toBe(ROLE_NAME);
+    expect(result.activeBusinessId).toBe(BUSINESS_ID);
+    expect(result.availableBusinesses).toEqual([
+      { businessId: BUSINESS_ID, businessName: "Acme Construction", businessCode: "ACME" },
+    ]);
+  });
+
+  it("includes every membership in availableBusinesses when the user belongs to more than one business", async () => {
+    const SECOND_BUSINESS_ID = "business-2";
+    businessesRepository.addMembership(user.id, SECOND_BUSINESS_ID, ROLE_ID);
+
+    const result = await authService.login("jane@example.com", "Password123", {});
+    expect(result.availableBusinesses.map((b) => b.businessId).sort()).toEqual(
+      [BUSINESS_ID, SECOND_BUSINESS_ID].sort(),
+    );
   });
 
   it("rejects an incorrect password", async () => {
@@ -228,6 +242,10 @@ describe("AuthService", () => {
     const { refreshToken } = await authService.login("jane@example.com", "Password123", {});
     const result = await authService.refresh(refreshToken, {});
     expect(result.refreshToken).not.toBe(refreshToken);
+    expect(result.activeBusinessId).toBe(BUSINESS_ID);
+    expect(result.availableBusinesses).toEqual([
+      { businessId: BUSINESS_ID, businessName: "Acme Construction", businessCode: "ACME" },
+    ]);
 
     const oldRow = [...authRepository.refreshTokens.values()].find(
       (t) => t.tokenHash === sha256(refreshToken),
@@ -254,6 +272,17 @@ describe("AuthService", () => {
       .filter((t) => t.userId === user.id)
       .every((t) => t.isRevoked);
     expect(allRevoked).toBe(true);
+  });
+
+  it("returns activeBusinessId and availableBusinesses when switching business", async () => {
+    const SECOND_BUSINESS_ID = "business-2";
+    businessesRepository.addMembership(user.id, SECOND_BUSINESS_ID, ROLE_ID);
+
+    const result = await authService.switchBusiness(user.id, SECOND_BUSINESS_ID, {});
+    expect(result.activeBusinessId).toBe(SECOND_BUSINESS_ID);
+    expect(result.availableBusinesses.map((b) => b.businessId).sort()).toEqual(
+      [BUSINESS_ID, SECOND_BUSINESS_ID].sort(),
+    );
   });
 });
 
