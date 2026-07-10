@@ -12,6 +12,7 @@ import {
   loginSchema,
   resendVerificationSchema,
   resetPasswordSchema,
+  switchBusinessSchema,
   verifyEmailSchema,
 } from "./auth.validation.js";
 
@@ -74,6 +75,24 @@ export function createAuthRouter(controller: AuthController): Router {
    *       200: { description: Logged out everywhere }
    */
   router.post("/logout-all", authenticateMiddleware, controller.logoutAll);
+
+  /**
+   * @openapi
+   * /auth/switch-business:
+   *   post:
+   *     tags: [Auth]
+   *     summary: Switch the current session's active business
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       200: { description: Business switched }
+   *       403: { description: User is not a member of the target business }
+   */
+  router.post(
+    "/switch-business",
+    authenticateMiddleware,
+    validate(switchBusinessSchema),
+    controller.switchBusiness,
+  );
 
   /**
    * @openapi

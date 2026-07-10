@@ -10,6 +10,7 @@ import type {
   LoginBody,
   ResendVerificationBody,
   ResetPasswordBody,
+  SwitchBusinessBody,
   VerifyEmailBody,
 } from "./auth.validation.js";
 import { clearRefreshTokenCookie, setRefreshTokenCookie } from "./cookies.js";
@@ -49,6 +50,17 @@ export class AuthController {
     await this.authService.logoutAll(req.user!.id);
     clearRefreshTokenCookie(res);
     sendSuccess(res, null, "Logged out from all devices");
+  });
+
+  switchBusiness = asyncHandler(async (req, res) => {
+    const body = req.body as SwitchBusinessBody;
+    const context = { ipAddress: req.ip, userAgent: req.headers["user-agent"] };
+    const result = await this.authService.switchBusiness(req.user!.id, body.businessId, context);
+    setRefreshTokenCookie(res, result.refreshToken);
+    sendSuccess(res, {
+      accessToken: result.accessToken,
+      accessTokenExpiresAt: result.accessTokenExpiresAt,
+    }, "Business switched");
   });
 
   listSessions = asyncHandler(async (req, res) => {
