@@ -4,6 +4,7 @@ import { attachmentsRouter } from "../modules/attachments/attachments.module.js"
 import { auditRouter } from "../modules/audit/audit.module.js";
 import { authRouter } from "../modules/auth/auth.module.js";
 import { boqItemsRouter, boqRouter } from "../modules/boq/boq.module.js";
+import { businessesRouter } from "../modules/businesses/businesses.module.js";
 import {
   bankAccountsRouter,
   expensesRouter,
@@ -37,6 +38,7 @@ v1Router.use("/permissions", permissionsRouter);
 v1Router.use("/attachments", attachmentsRouter);
 v1Router.use("/audit-logs", auditRouter);
 v1Router.use("/organizations", organizationsRouter);
+v1Router.use("/businesses", businessesRouter);
 v1Router.use("/tags", tagsRouter);
 v1Router.use("/notifications", notificationsRouter);
 v1Router.use("/tenders", tendersRouter);
