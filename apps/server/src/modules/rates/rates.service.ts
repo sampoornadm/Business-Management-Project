@@ -20,8 +20,9 @@ export class RatesService {
     category: HistoricalRateCategory,
     itemName: string,
     limit: number,
+    businessId: string,
   ): Promise<HistoricalRateDto[]> {
-    const rates = await this.ratesRepository.suggest(category, itemName, limit);
+    const rates = await this.ratesRepository.suggest(category, itemName, limit, businessId);
     return rates.map(toHistoricalRateDto);
   }
 
