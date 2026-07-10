@@ -189,9 +189,28 @@ describe("RFQ business isolation (integration)", () => {
     await prisma.rfq.deleteMany({
       where: { businessId: { in: [testUser.businessId, testUser.secondBusinessId] } },
     });
+    // The mutating-route isolation test below creates a Vendor (Vendor has
+    // no businessId column of its own — it isn't retrofitted by this task),
+    // which has a Restrict FK back to User via createdById.
+    await prisma.vendor.deleteMany({ where: { createdById: testUser.userId } });
     await cleanupIntegrationTestUser(testUser);
     await prisma.$disconnect();
   });
+
+  // Switching requires a fresh login token (the original access token's
+  // embedded businessId claim doesn't change), then trades it for a token
+  // scoped to the second business this same test user also belongs to.
+  async function switchToSecondBusiness(): Promise<string> {
+    const otherLogin = await request(app).post("/api/v1/auth/login").send({
+      email: testUser.email,
+      password: "Password123",
+    });
+    const switchResponse = await request(app)
+      .post("/api/v1/auth/switch-business")
+      .set("Authorization", `Bearer ${otherLogin.body.data.accessToken}`)
+      .send({ businessId: testUser.secondBusinessId });
+    return switchResponse.body.data.accessToken as string;
+  }
 
   it("does not return a standalone RFQ (no tenderId) from another business, and rejects direct access", async () => {
     // RFQs can be standalone — created with no tenderId at all — entirely in
@@ -206,16 +225,7 @@ describe("RFQ business isolation (integration)", () => {
     expect(createResponse.status).toBe(201);
     const isolationRfqId = createResponse.body.data.id as string;
 
-    // Switch to the second business this same test user also belongs to.
-    const otherLogin = await request(app).post("/api/v1/auth/login").send({
-      email: testUser.email,
-      password: "Password123",
-    });
-    const switchResponse = await request(app)
-      .post("/api/v1/auth/switch-business")
-      .set("Authorization", `Bearer ${otherLogin.body.data.accessToken}`)
-      .send({ businessId: testUser.secondBusinessId });
-    const secondBusinessToken = switchResponse.body.data.accessToken as string;
+    const secondBusinessToken = await switchToSecondBusiness();
 
     const listResponse = await request(app)
       .get("/api/v1/rfqs")
@@ -227,5 +237,46 @@ describe("RFQ business isolation (integration)", () => {
       .get(`/api/v1/rfqs/${isolationRfqId}`)
       .set("Authorization", `Bearer ${secondBusinessToken}`);
     expect(getByIdResponse.status).toBe(404);
+  });
+
+  it("rejects a mutating request (remove vendor invite) against another business's RFQ", async () => {
+    // Create a vendor and an RFQ that already has that vendor invited,
+    // entirely in the first business. removeVendorInvite() previously
+    // mutated the vendor invite before any RFQ ownership check existed at
+    // all — this exercises that exact route to guard against it regressing.
+    const vendorResponse = await request(app)
+      .post("/api/v1/vendors")
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
+      .send({ name: `Isolation Vendor ${randomUUID().slice(0, 8)}`, category: "MATERIAL_SUPPLIER" });
+    expect(vendorResponse.status).toBe(201);
+    const vendorId = vendorResponse.body.data.id as string;
+
+    const createResponse = await request(app)
+      .post("/api/v1/rfqs")
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
+      .send({
+        title: "Isolated RFQ With Vendor Invite",
+        items: [{ description: "TMT Steel Rebar", unit: "kg", quantity: 500 }],
+        vendorIds: [vendorId],
+      });
+    expect(createResponse.status).toBe(201);
+    const isolationRfqId = createResponse.body.data.id as string;
+    expect(createResponse.body.data.vendorInvites).toHaveLength(1);
+
+    const secondBusinessToken = await switchToSecondBusiness();
+
+    const removeResponse = await request(app)
+      .delete(`/api/v1/rfqs/${isolationRfqId}/vendors/${vendorId}`)
+      .set("Authorization", `Bearer ${secondBusinessToken}`);
+    expect(removeResponse.status).toBe(404);
+
+    // Confirm the invite was not actually removed from the first business's
+    // perspective — the request above must have been rejected before any
+    // mutation, not merely hidden from the response.
+    const stillThereResponse = await request(app)
+      .get(`/api/v1/rfqs/${isolationRfqId}`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`);
+    expect(stillThereResponse.status).toBe(200);
+    expect(stillThereResponse.body.data.vendorInvites).toHaveLength(1);
   });
 });

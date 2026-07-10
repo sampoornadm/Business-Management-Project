@@ -258,6 +258,16 @@ describe("RfqService", () => {
     expect(rfq.items).toHaveLength(1);
   });
 
+  it("updates an RFQ's title and due date", async () => {
+    const rfq = await createBasicRfq();
+    const dueDate = new Date("2026-08-01T00:00:00.000Z");
+
+    const updated = await service.update(rfq.id, { title: "Revised Cement Supply RFQ", dueDate }, actorId, businessId);
+
+    expect(updated.title).toBe("Revised Cement Supply RFQ");
+    expect(updated.dueDate).toBe(dueDate.toISOString());
+  });
+
   it("rejects an RFQ referencing an unknown tender", async () => {
     await expect(
       service.create(
@@ -280,6 +290,24 @@ describe("RfqService", () => {
     await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
     await expect(service.addVendorInvite(rfq.id, vendorA, actorId, businessId)).rejects.toThrow(
       ConflictError,
+    );
+  });
+
+  it("removes a vendor invite from an RFQ", async () => {
+    const rfq = await createBasicRfq();
+    await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
+    await service.addVendorInvite(rfq.id, vendorB, actorId, businessId);
+
+    const updated = await service.removeVendorInvite(rfq.id, vendorA, actorId, businessId);
+
+    expect(updated.vendorInvites).toHaveLength(1);
+    expect(updated.vendorInvites[0]!.vendor.id).toBe(vendorB);
+  });
+
+  it("rejects removing an invite that doesn't exist for the RFQ", async () => {
+    const rfq = await createBasicRfq();
+    await expect(service.removeVendorInvite(rfq.id, vendorA, actorId, businessId)).rejects.toThrow(
+      NotFoundError,
     );
   });
 
