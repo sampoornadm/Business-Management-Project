@@ -1,12 +1,15 @@
 import { randomUUID } from "node:crypto";
 
 import { prisma } from "@bmp/database";
-import { WILDCARD_PERMISSION } from "@bmp/types";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApp } from "../../../app.js";
-import { hashPassword } from "../../../shared/utils/hash.js";
+import {
+  cleanupIntegrationTestUser,
+  createIntegrationTestUser,
+  type IntegrationTestUser,
+} from "../../../shared/test-utils/integration-auth.js";
 
 /**
  * Requires a real Postgres + Redis reachable via .env.test, migrated
@@ -15,54 +18,22 @@ import { hashPassword } from "../../../shared/utils/hash.js";
  */
 describe("Tender workflow (integration)", () => {
   const app = createApp();
-  const email = `tender-integration-${randomUUID()}@example.com`;
-  const password = "Password123";
+  let testUser: IntegrationTestUser;
   let accessToken: string;
   let userId: string;
   let organizationId: string;
 
   beforeAll(async () => {
-    const permission = await prisma.permission.upsert({
-      where: { key: WILDCARD_PERMISSION },
-      update: {},
-      create: { id: randomUUID(), key: WILDCARD_PERMISSION, resource: "*", action: "*" },
-    });
-
-    const role = await prisma.role.upsert({
-      where: { name: "SUPER_ADMIN" },
-      update: {},
-      create: { id: randomUUID(), name: "SUPER_ADMIN", description: "Super Admin", isSystem: true },
-    });
-
-    await prisma.rolePermission.upsert({
-      where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } },
-      update: {},
-      create: { id: randomUUID(), roleId: role.id, permissionId: permission.id },
-    });
-
-    const user = await prisma.user.create({
-      data: {
-        id: randomUUID(),
-        email,
-        passwordHash: await hashPassword(password),
-        firstName: "Tender",
-        lastName: "Tester",
-        roleId: role.id,
-        isActive: true,
-        isEmailVerified: true,
-      },
-    });
-    userId = user.id;
-
-    const loginResponse = await request(app).post("/api/v1/auth/login").send({ email, password });
-    accessToken = loginResponse.body.data.accessToken;
+    testUser = await createIntegrationTestUser(app);
+    accessToken = testUser.accessToken;
+    userId = testUser.userId;
 
     const org = await prisma.organization.create({
       data: {
         id: randomUUID(),
         name: `Integration Client ${randomUUID()}`,
         type: "GOVERNMENT",
-        createdById: user.id,
+        createdById: userId,
       },
     });
     organizationId = org.id;
@@ -71,7 +42,7 @@ describe("Tender workflow (integration)", () => {
   afterAll(async () => {
     await prisma.tender.deleteMany({ where: { createdById: userId } });
     await prisma.organization.deleteMany({ where: { id: organizationId } });
-    await prisma.user.deleteMany({ where: { email } });
+    await cleanupIntegrationTestUser(testUser);
     await prisma.$disconnect();
   });
 
