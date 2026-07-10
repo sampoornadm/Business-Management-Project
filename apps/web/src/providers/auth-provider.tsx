@@ -1,10 +1,16 @@
 "use client";
 
-import type { ApiResponse, UserDto } from "@bmp/types";
+import type { ApiResponse, AvailableBusiness, UserDto } from "@bmp/types";
 import { useEffect, type PropsWithChildren } from "react";
 
 import { useAuthStore } from "@/lib/auth-store";
 import { apiClient } from "@/lib/axios";
+
+interface RefreshResponse {
+  accessToken: string;
+  activeBusinessId: string;
+  availableBusinesses: AvailableBusiness[];
+}
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const setAuth = useAuthStore((state) => state.setAuth);
@@ -15,11 +21,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     async function silentRefresh() {
       try {
-        const refreshResponse = await apiClient.post<ApiResponse<{ accessToken: string }>>(
+        const refreshResponse = await apiClient.post<ApiResponse<RefreshResponse>>(
           "/auth/refresh",
         );
         if (!refreshResponse.data.success) throw new Error("Refresh failed");
-        const { accessToken } = refreshResponse.data.data;
+        const { accessToken, activeBusinessId, availableBusinesses } = refreshResponse.data.data;
 
         const meResponse = await apiClient.get<ApiResponse<UserDto>>("/users/me", {
           headers: { Authorization: `Bearer ${accessToken}` },
@@ -27,7 +33,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
         if (!meResponse.data.success) throw new Error("Failed to load current user");
 
         if (!cancelled) {
-          setAuth({ accessToken, user: meResponse.data.data });
+          setAuth({
+            accessToken,
+            user: meResponse.data.data,
+            activeBusinessId,
+            availableBusinesses,
+          });
         }
       } catch {
         // No valid session — the user will land on the login page.

@@ -27,7 +27,12 @@ export function useLogin() {
       return response.data.data;
     },
     onSuccess: (data) => {
-      setAuth({ accessToken: data.accessToken, user: data.user });
+      setAuth({
+        accessToken: data.accessToken,
+        user: data.user,
+        activeBusinessId: data.activeBusinessId,
+        availableBusinesses: data.availableBusinesses,
+      });
     },
   });
 }
