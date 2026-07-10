@@ -16,6 +16,7 @@ const ROLE_NAMES_BY_ID: Record<string, string> = {
 };
 
 const BUSINESS_ID = "business-1";
+const OTHER_BUSINESS_ID = "business-2";
 
 function roleFor(roleId: string, now: Date): UserWithRole["userBusinesses"][number]["role"] {
   return {
@@ -26,6 +27,15 @@ function roleFor(roleId: string, now: Date): UserWithRole["userBusinesses"][numb
     createdAt: now,
     updatedAt: now,
   };
+}
+
+function membershipFor(
+  userId: string,
+  businessId: string,
+  roleId: string,
+  now: Date = new Date(),
+): UserWithRole["userBusinesses"][number] {
+  return { id: randomUUID(), userId, businessId, roleId, role: roleFor(roleId, now), createdAt: now };
 }
 
 function buildUser(
@@ -48,16 +58,7 @@ function buildUser(
     createdById: null,
     avatarAttachmentId: null,
     avatarAttachment: null,
-    userBusinesses: [
-      {
-        id: randomUUID(),
-        userId: id,
-        businessId,
-        roleId,
-        role: roleFor(roleId, now),
-        createdAt: now,
-      },
-    ],
+    userBusinesses: [membershipFor(id, businessId, roleId, now)],
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -65,13 +66,25 @@ function buildUser(
 }
 
 class FakeUsersRepository implements Partial<IUsersRepository> {
+  // Stores the FULL set of a user's memberships (possibly across several businesses), mirroring
+  // the real schema. Every read method below scopes its returned `UserWithRole` down to just the
+  // membership row for the requested `businessId` — matching what `userWithRoleArgs(businessId)`'s
+  // `include: { userBusinesses: { where: { businessId } } }` does against the real database. This
+  // is required to catch the class of bug where a lookup/update accidentally resolves an arbitrary
+  // membership instead of the one for the business actually in scope for the request.
   users = new Map<string, UserWithRole>();
 
-  async findByEmail(email: string, _businessId: string) {
-    return [...this.users.values()].find((u) => u.email === email) ?? null;
+  private scopedTo(user: UserWithRole, businessId: string): UserWithRole {
+    return { ...user, userBusinesses: user.userBusinesses.filter((ub) => ub.businessId === businessId) };
   }
-  async findById(id: string, _businessId: string) {
-    return this.users.get(id) ?? null;
+
+  async findByEmail(email: string, businessId: string) {
+    const user = [...this.users.values()].find((u) => u.email === email);
+    return user ? this.scopedTo(user, businessId) : null;
+  }
+  async findById(id: string, businessId: string) {
+    const user = this.users.get(id);
+    return user ? this.scopedTo(user, businessId) : null;
   }
   async create(data: CreateUserData) {
     const now = new Date();
@@ -89,26 +102,23 @@ class FakeUsersRepository implements Partial<IUsersRepository> {
     this.users.set(user.id, user);
     return user;
   }
-  async update(id: string, data: UpdateUserData) {
+  async update(id: string, data: UpdateUserData, businessId: string) {
     const user = this.users.get(id);
     if (!user) throw new Error("not found");
     Object.assign(user, data);
-    return user;
+    return this.scopedTo(user, businessId);
   }
   async assignRole(id: string, businessId: string, roleId: string) {
     const user = this.users.get(id);
     if (!user) throw new Error("not found");
-    user.userBusinesses = [
-      {
-        id: randomUUID(),
-        userId: id,
-        businessId,
-        roleId,
-        role: roleFor(roleId, new Date()),
-        createdAt: new Date(),
-      },
-    ];
-    return user;
+    const membership = user.userBusinesses.find((ub) => ub.businessId === businessId);
+    if (membership) {
+      membership.roleId = roleId;
+      membership.role = roleFor(roleId, new Date());
+    } else {
+      user.userBusinesses.push(membershipFor(id, businessId, roleId));
+    }
+    return this.scopedTo(user, businessId);
   }
 }
 
@@ -192,6 +202,50 @@ describe("UsersService", () => {
 
   it("assigns a valid role to an existing user", async () => {
     const dto = await usersService.assignRole(existing.id, "role-admin", existing.id, BUSINESS_ID);
+    expect(dto.role.name).toBe("ADMIN");
+  });
+
+  it("scopes updateUser()'s returned role to the request's business for a user with multiple business memberships", async () => {
+    const multiBusinessUserId = randomUUID();
+    const now = new Date();
+    // OTHER_BUSINESS_ID's membership is deliberately listed first: if update() ever regresses to
+    // resolving an arbitrary/first membership instead of the one for `BUSINESS_ID`, this would
+    // return "VIEWER" (business-2's role) instead of "ADMIN" (business-1's role), failing loudly.
+    const multiBusinessUser = buildUser({
+      id: multiBusinessUserId,
+      userBusinesses: [
+        membershipFor(multiBusinessUserId, OTHER_BUSINESS_ID, "role-viewer", now),
+        membershipFor(multiBusinessUserId, BUSINESS_ID, "role-admin", now),
+      ],
+    });
+    usersRepository.users.set(multiBusinessUserId, multiBusinessUser);
+
+    const dto = await usersService.updateUser(
+      multiBusinessUserId,
+      { firstName: "Updated" },
+      existing.id,
+      BUSINESS_ID,
+    );
+
+    expect(dto.firstName).toBe("Updated");
+    expect(dto.role.name).toBe("ADMIN");
+  });
+
+  it("scopes updateOwnProfile()'s returned role to the request's business for a user with multiple business memberships", async () => {
+    const multiBusinessUserId = randomUUID();
+    const now = new Date();
+    const multiBusinessUser = buildUser({
+      id: multiBusinessUserId,
+      userBusinesses: [
+        membershipFor(multiBusinessUserId, OTHER_BUSINESS_ID, "role-viewer", now),
+        membershipFor(multiBusinessUserId, BUSINESS_ID, "role-admin", now),
+      ],
+    });
+    usersRepository.users.set(multiBusinessUserId, multiBusinessUser);
+
+    const dto = await usersService.updateOwnProfile(multiBusinessUserId, { firstName: "Self" }, BUSINESS_ID);
+
+    expect(dto.firstName).toBe("Self");
     expect(dto.role.name).toBe("ADMIN");
   });
 });
