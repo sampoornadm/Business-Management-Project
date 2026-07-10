@@ -2,7 +2,7 @@ import type { PaginatedResult, PurchaseOrderDto, PurchaseOrderListItemDto } from
 
 import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
-import type { RequestContext } from "../../core/interfaces/request-context.js";
+import type { ScopedRequestContext } from "../../core/interfaces/request-context.js";
 import { round2 } from "../../shared/utils/math.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { IRfqRepository } from "../rfq/rfq.repository.js";
@@ -33,8 +33,8 @@ export class PurchaseOrdersService {
     private readonly auditService: AuditService,
   ) {}
 
-  private async getDetailOrThrow(id: string): Promise<PurchaseOrderDetail> {
-    const po = await this.purchaseOrdersRepository.findById(id);
+  private async getDetailOrThrow(id: string, businessId: string): Promise<PurchaseOrderDetail> {
+    const po = await this.purchaseOrdersRepository.findById(id, businessId);
     if (!po) throw new NotFoundError("Purchase order not found");
     return po;
   }
@@ -47,8 +47,8 @@ export class PurchaseOrdersService {
     return buildPaginatedResult(items.map(toPurchaseOrderListItemDto), totalItems, pagination);
   }
 
-  async getById(id: string): Promise<PurchaseOrderDto> {
-    return toPurchaseOrderDto(await this.getDetailOrThrow(id));
+  async getById(id: string, businessId: string): Promise<PurchaseOrderDto> {
+    return toPurchaseOrderDto(await this.getDetailOrThrow(id, businessId));
   }
 
   async create(
@@ -60,14 +60,17 @@ export class PurchaseOrdersService {
       items: Array<{ description: string; unit?: string; quantity: number; rate: number; sortOrder?: number }>;
     },
     actorId: string,
-    context: RequestContext = {},
+    context: ScopedRequestContext,
   ): Promise<PurchaseOrderDto> {
     if (input.items.length === 0) throw new BadRequestError("At least one purchase order item is required");
 
     const vendor = await this.vendorsRepository.findById(input.vendorId);
     if (!vendor) throw new BadRequestError("Invalid vendorId");
     if (input.tenderId) {
-      const tender = await this.tendersRepository.findById(input.tenderId);
+      // Purchase orders can be standalone (no tenderId), so businessId is
+      // always sourced from context — never derived from the tender, even
+      // when one is given.
+      const tender = await this.tendersRepository.findById(input.tenderId, context.businessId);
       if (!tender) throw new BadRequestError("Invalid tenderId");
     }
 
@@ -83,6 +86,7 @@ export class PurchaseOrdersService {
     const data: CreatePurchaseOrderData = {
       vendorId: input.vendorId,
       tenderId: input.tenderId ?? null,
+      businessId: context.businessId,
       expectedDeliveryDate: input.expectedDeliveryDate ?? null,
       notes: input.notes ?? null,
       createdById: actorId,
@@ -98,16 +102,16 @@ export class PurchaseOrdersService {
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
     });
-    return this.getById(poId);
+    return this.getById(poId, context.businessId);
   }
 
   async createFromRfq(
     rfqId: string,
     options: { expectedDeliveryDate?: Date; notes?: string },
     actorId: string,
-    context: RequestContext = {},
+    context: ScopedRequestContext,
   ): Promise<PurchaseOrderDto> {
-    const rfq = await this.rfqRepository.findById(rfqId);
+    const rfq = await this.rfqRepository.findById(rfqId, context.businessId);
     if (!rfq) throw new NotFoundError("RFQ not found");
     if (rfq.status !== "AWARDED" || !rfq.awardedVendorId) {
       throw new ConflictError("RFQ must be awarded to a vendor before creating a purchase order");
@@ -134,6 +138,7 @@ export class PurchaseOrdersService {
     const poId = await this.purchaseOrdersRepository.create({
       vendorId: awardedVendorId,
       tenderId: rfq.tenderId,
+      businessId: context.businessId,
       sourceRfqId: rfq.id,
       expectedDeliveryDate: options.expectedDeliveryDate ?? null,
       notes: options.notes ?? null,
@@ -150,15 +155,16 @@ export class PurchaseOrdersService {
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
     });
-    return this.getById(poId);
+    return this.getById(poId, context.businessId);
   }
 
   async updateStatus(
     id: string,
     status: "ISSUED" | "CANCELLED",
     actorId: string,
+    businessId: string,
   ): Promise<PurchaseOrderDto> {
-    const po = await this.getDetailOrThrow(id);
+    const po = await this.getDetailOrThrow(id, businessId);
 
     if (status === "ISSUED" && po.status !== "DRAFT") {
       throw new ConflictError("Only a draft purchase order can be issued");
@@ -174,15 +180,16 @@ export class PurchaseOrdersService {
       entityType: "PurchaseOrder",
       entityId: id,
     });
-    return this.getById(id);
+    return this.getById(id, businessId);
   }
 
   async createGoodsReceipt(
     poId: string,
     input: CreateGoodsReceiptInput,
     actorId: string,
+    businessId: string,
   ): Promise<PurchaseOrderDto> {
-    const po = await this.getDetailOrThrow(poId);
+    const po = await this.getDetailOrThrow(poId, businessId);
     if (po.status !== "ISSUED" && po.status !== "PARTIALLY_RECEIVED") {
       throw new ConflictError("Purchase order must be issued before recording a goods receipt");
     }
@@ -203,13 +210,14 @@ export class PurchaseOrdersService {
 
     await this.purchaseOrdersRepository.createGoodsReceipt({
       purchaseOrderId: poId,
+      businessId,
       receivedById: actorId,
       receivedDate: input.receivedDate ?? new Date(),
       remarks: input.remarks,
       items: input.items,
     });
 
-    const refreshed = await this.getDetailOrThrow(poId);
+    const refreshed = await this.getDetailOrThrow(poId, businessId);
     const receivedById = new Map(input.items.map((i) => [i.purchaseOrderItemId, i.quantityReceived]));
     const allReceived = refreshed.items.every((item) => item.receivedQuantity >= item.quantity - 1e-9);
     const anyReceived =
@@ -226,15 +234,16 @@ export class PurchaseOrdersService {
       entityId: poId,
       metadata: { items: input.items },
     });
-    return this.getById(poId);
+    return this.getById(poId, businessId);
   }
 
   async upsertVendorRating(
     poId: string,
     input: { rating: number; remarks?: string },
     actorId: string,
+    businessId: string,
   ): Promise<PurchaseOrderDto> {
-    const po = await this.getDetailOrThrow(poId);
+    const po = await this.getDetailOrThrow(poId, businessId);
     if (po.status !== "RECEIVED") {
       throw new ConflictError("Can only rate a vendor once the purchase order is fully received");
     }
@@ -253,6 +262,6 @@ export class PurchaseOrdersService {
       entityId: poId,
       metadata: { vendorId: po.vendor.id, rating: input.rating },
     });
-    return this.getById(poId);
+    return this.getById(poId, businessId);
   }
 }

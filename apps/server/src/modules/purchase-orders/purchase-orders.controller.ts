@@ -19,6 +19,7 @@ export class PurchaseOrdersController {
     const query = req.query as unknown as ListPurchaseOrdersQueryParsed;
     const pagination = resolvePagination(query);
     const result = await this.purchaseOrdersService.listPurchaseOrders(pagination, {
+      businessId: req.user!.businessId,
       status: query.status,
       vendorId: query.vendorId,
       tenderId: query.tenderId,
@@ -27,7 +28,7 @@ export class PurchaseOrdersController {
   });
 
   getById = asyncHandler(async (req, res) => {
-    const po = await this.purchaseOrdersService.getById(req.params.id!);
+    const po = await this.purchaseOrdersService.getById(req.params.id!, req.user!.businessId);
     sendSuccess(res, po, "Purchase order retrieved");
   });
 
@@ -42,7 +43,7 @@ export class PurchaseOrdersController {
         items: body.items,
       },
       req.user!.id,
-      { ipAddress: req.ip, userAgent: req.headers["user-agent"] },
+      { ipAddress: req.ip, userAgent: req.headers["user-agent"], businessId: req.user!.businessId },
     );
     sendSuccess(res, po, "Purchase order created", 201);
   });
@@ -56,14 +57,19 @@ export class PurchaseOrdersController {
         notes: body.notes,
       },
       req.user!.id,
-      { ipAddress: req.ip, userAgent: req.headers["user-agent"] },
+      { ipAddress: req.ip, userAgent: req.headers["user-agent"], businessId: req.user!.businessId },
     );
     sendSuccess(res, po, "Purchase order created from RFQ", 201);
   });
 
   updateStatus = asyncHandler(async (req, res) => {
     const body = req.body as UpdatePurchaseOrderStatusBody;
-    const po = await this.purchaseOrdersService.updateStatus(req.params.id!, body.status, req.user!.id);
+    const po = await this.purchaseOrdersService.updateStatus(
+      req.params.id!,
+      body.status,
+      req.user!.id,
+      req.user!.businessId,
+    );
     sendSuccess(res, po, "Purchase order status updated");
   });
 
@@ -77,13 +83,19 @@ export class PurchaseOrdersController {
         items: body.items,
       },
       req.user!.id,
+      req.user!.businessId,
     );
     sendSuccess(res, po, "Goods receipt recorded", 201);
   });
 
   upsertVendorRating = asyncHandler(async (req, res) => {
     const body = req.body as UpsertVendorRatingBody;
-    const po = await this.purchaseOrdersService.upsertVendorRating(req.params.id!, body, req.user!.id);
+    const po = await this.purchaseOrdersService.upsertVendorRating(
+      req.params.id!,
+      body,
+      req.user!.id,
+      req.user!.businessId,
+    );
     sendSuccess(res, po, "Vendor rated");
   });
 }
