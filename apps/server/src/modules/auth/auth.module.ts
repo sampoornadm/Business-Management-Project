@@ -2,6 +2,8 @@ import { EmailService } from "../../infra/mailer/email.service.js";
 import { prisma } from "../../infra/prisma/client.js";
 import { attachmentsService } from "../attachments/attachments.module.js";
 import { auditService } from "../audit/audit.module.js";
+import { businessesRepository } from "../businesses/businesses.module.js";
+import { rolesRepository } from "../roles/roles.module.js";
 import { usersRepository } from "../users/users.module.js";
 
 import { AuthController } from "./auth.controller.js";
@@ -21,6 +23,8 @@ export const authService = new AuthService(
   auditService,
   attachmentsService,
   emailService,
+  businessesRepository,
+  rolesRepository,
 );
 const authController = new AuthController(authService);
 

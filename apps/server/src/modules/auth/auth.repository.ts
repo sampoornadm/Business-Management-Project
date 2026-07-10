@@ -2,6 +2,7 @@ import type { EmailVerificationToken, PasswordResetToken, PrismaClient, RefreshT
 
 export interface CreateRefreshTokenData {
   userId: string;
+  activeBusinessId: string;
   tokenHash: string;
   family: string;
   deviceInfo: string | null;

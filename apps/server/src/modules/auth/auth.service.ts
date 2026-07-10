@@ -1,13 +1,20 @@
 import type { LoginResponseDto, SessionDto, UserDto } from "@bmp/types";
 
 import { env } from "../../config/env.js";
-import { ConflictError, NotFoundError, UnauthorizedError } from "../../core/errors/HttpErrors.js";
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+} from "../../core/errors/HttpErrors.js";
 import type { RequestContext } from "../../core/interfaces/request-context.js";
 import type { EmailService } from "../../infra/mailer/email.service.js";
 import { comparePassword, hashPassword, sha256 } from "../../shared/utils/hash.js";
 import { generateOpaqueToken, generateTokenFamily } from "../../shared/utils/tokens.js";
 import type { AttachmentsService } from "../attachments/attachments.service.js";
 import type { AuditService } from "../audit/audit.service.js";
+import type { IBusinessesRepository } from "../businesses/businesses.repository.js";
+import type { IRolesRepository } from "../roles/roles.repository.js";
 import { toUserDto } from "../users/users.mapper.js";
 import type { IUsersRepository } from "../users/users.repository.js";
 
@@ -24,6 +31,19 @@ export interface RefreshResult {
   refreshToken: string;
 }
 
+interface ActiveBusiness {
+  businessId: string;
+  roleId: string;
+  roleName: string;
+}
+
+// usersRepository.findByEmail/findById take a businessId only to scope which UserBusiness
+// membership row gets attached to the result (`userBusinesses: [...]`) — it has no bearing on
+// which User row is found. The handful of call sites below (forgotPassword/resendVerification/
+// changePassword) never read `user.userBusinesses`/`role`, so there is no real business to scope
+// to yet; this placeholder is passed purely to satisfy the (business-scoped) repository signature.
+const NO_BUSINESS_CONTEXT = "";
+
 export class AuthService {
   constructor(
     private readonly usersRepository: IUsersRepository,
@@ -32,20 +52,44 @@ export class AuthService {
     private readonly auditService: AuditService,
     private readonly attachmentsService: AttachmentsService,
     private readonly emailService: EmailService,
+    private readonly businessesRepository: IBusinessesRepository,
+    private readonly rolesRepository: IRolesRepository,
   ) {}
 
   private toDto(user: Parameters<typeof toUserDto>[0]): Promise<UserDto> {
     return toUserDto(user, this.attachmentsService);
   }
 
+  /**
+   * Resolves which business a user's new session should be active in. Picks `preferredBusinessId`
+   * when the user still has a membership there, otherwise falls back to their first membership.
+   * Throws if the user has no business memberships at all.
+   */
+  private async resolveActiveBusiness(
+    userId: string,
+    preferredBusinessId?: string,
+  ): Promise<ActiveBusiness> {
+    const memberships = await this.businessesRepository.listUserBusinesses(userId);
+    if (memberships.length === 0) {
+      throw new UnauthorizedError("This account is not assigned to any business");
+    }
+    const chosen =
+      memberships.find((m) => m.businessId === preferredBusinessId) ?? memberships[0]!;
+    const membership = await this.businessesRepository.findMembership(userId, chosen.businessId);
+    const role = await this.rolesRepository.findById(membership!.roleId);
+    return { businessId: chosen.businessId, roleId: membership!.roleId, roleName: role!.name };
+  }
+
   private async issueRefreshToken(
     userId: string,
+    businessId: string,
     family: string,
     context: RequestContext,
   ): Promise<string> {
     const rawToken = generateOpaqueToken();
     await this.authRepository.createRefreshToken({
       userId,
+      activeBusinessId: businessId,
       tokenHash: sha256(rawToken),
       family,
       deviceInfo: context.userAgent ?? null,
@@ -56,7 +100,7 @@ export class AuthService {
   }
 
   async login(email: string, password: string, context: RequestContext): Promise<LoginResult> {
-    const user = await this.usersRepository.findByEmail(email);
+    const user = await this.usersRepository.findByEmail(email, NO_BUSINESS_CONTEXT);
 
     if (!user || !(await comparePassword(password, user.passwordHash))) {
       await this.auditService.log({
@@ -75,12 +119,19 @@ export class AuthService {
       throw new UnauthorizedError("This account has been deactivated");
     }
 
+    const active = await this.resolveActiveBusiness(user.id);
+    // Re-fetch scoped to the resolved business so the returned DTO's `role` reflects the
+    // membership that's actually active for this session, not an empty/arbitrary one.
+    const scopedUser = await this.usersRepository.findById(user.id, active.businessId);
+    if (!scopedUser) throw new UnauthorizedError("Account is not active");
+
     const family = generateTokenFamily();
-    const refreshToken = await this.issueRefreshToken(user.id, family, context);
+    const refreshToken = await this.issueRefreshToken(user.id, active.businessId, family, context);
     const { token: accessToken, expiresAt } = this.tokenService.signAccessToken({
       sub: user.id,
-      roleId: user.roleId,
-      roleName: user.role.name,
+      roleId: active.roleId,
+      roleName: active.roleName,
+      businessId: active.businessId,
     });
 
     await this.usersRepository.updateLastLoginAt(user.id);
@@ -96,7 +147,7 @@ export class AuthService {
     return {
       accessToken,
       accessTokenExpiresAt: expiresAt.toISOString(),
-      user: await this.toDto(user),
+      user: await this.toDto(scopedUser),
       refreshToken,
     };
   }
@@ -124,13 +175,19 @@ export class AuthService {
       throw new UnauthorizedError("Refresh token has expired");
     }
 
-    const user = await this.usersRepository.findById(existing.userId);
+    // Preferred, not fixed: resolveActiveBusiness falls back to the user's first remaining
+    // membership if `existing.activeBusinessId` is no longer valid (e.g. membership revoked).
+    const active = await this.resolveActiveBusiness(existing.userId, existing.activeBusinessId);
+    const user = await this.usersRepository.findById(existing.userId, active.businessId);
     if (!user || !user.isActive) throw new UnauthorizedError("Account is not active");
 
     const newRawToken = generateOpaqueToken();
     await this.authRepository.revokeRefreshToken(existing.id, sha256(newRawToken));
     await this.authRepository.createRefreshToken({
       userId: user.id,
+      // Carried forward unchanged from the token being rotated — refresh never switches business
+      // on its own (only switchBusiness() does), even if resolveActiveBusiness had to fall back.
+      activeBusinessId: existing.activeBusinessId,
       tokenHash: sha256(newRawToken),
       family: existing.family,
       deviceInfo: context.userAgent ?? existing.deviceInfo,
@@ -140,8 +197,9 @@ export class AuthService {
 
     const { token: accessToken, expiresAt } = this.tokenService.signAccessToken({
       sub: user.id,
-      roleId: user.roleId,
-      roleName: user.role.name,
+      roleId: active.roleId,
+      roleName: active.roleName,
+      businessId: active.businessId,
     });
 
     return {
@@ -149,6 +207,41 @@ export class AuthService {
       accessTokenExpiresAt: expiresAt.toISOString(),
       refreshToken: newRawToken,
     };
+  }
+
+  async switchBusiness(
+    userId: string,
+    targetBusinessId: string,
+    context: RequestContext = {},
+  ): Promise<RefreshResult> {
+    const membership = await this.businessesRepository.findMembership(userId, targetBusinessId);
+    if (!membership) {
+      throw new ForbiddenError("You do not have access to this business");
+    }
+    const active = await this.resolveActiveBusiness(userId, targetBusinessId);
+    const user = await this.usersRepository.findById(userId, active.businessId);
+    if (!user || !user.isActive) throw new UnauthorizedError("Account is not active");
+
+    const family = generateTokenFamily();
+    const refreshToken = await this.issueRefreshToken(userId, active.businessId, family, context);
+    const { token: accessToken, expiresAt } = this.tokenService.signAccessToken({
+      sub: userId,
+      roleId: active.roleId,
+      roleName: active.roleName,
+      businessId: active.businessId,
+    });
+
+    await this.auditService.log({
+      actorId: userId,
+      action: "AUTH_BUSINESS_SWITCHED",
+      entityType: "User",
+      entityId: userId,
+      metadata: { businessId: active.businessId },
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+    });
+
+    return { accessToken, accessTokenExpiresAt: expiresAt.toISOString(), refreshToken };
   }
 
   async logout(rawToken: string): Promise<void> {
@@ -193,7 +286,7 @@ export class AuthService {
   }
 
   async forgotPassword(email: string, context: RequestContext): Promise<void> {
-    const user = await this.usersRepository.findByEmail(email);
+    const user = await this.usersRepository.findByEmail(email, NO_BUSINESS_CONTEXT);
     if (!user) return;
 
     const rawToken = generateOpaqueToken();
@@ -254,7 +347,7 @@ export class AuthService {
   }
 
   async resendVerification(email: string): Promise<void> {
-    const user = await this.usersRepository.findByEmail(email);
+    const user = await this.usersRepository.findByEmail(email, NO_BUSINESS_CONTEXT);
     if (!user || user.isEmailVerified) return;
 
     const rawToken = generateOpaqueToken();
@@ -272,7 +365,7 @@ export class AuthService {
     currentPassword: string,
     newPassword: string,
   ): Promise<void> {
-    const user = await this.usersRepository.findById(userId);
+    const user = await this.usersRepository.findById(userId, NO_BUSINESS_CONTEXT);
     if (!user) throw new NotFoundError("User not found");
 
     if (!(await comparePassword(currentPassword, user.passwordHash))) {
