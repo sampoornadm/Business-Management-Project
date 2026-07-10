@@ -61,12 +61,14 @@ export interface CreateTenderData {
   dealingOfficerName?: string | null;
   dealingOfficerEmail?: string | null;
   dealingOfficerPhone?: string | null;
+  businessId: string;
   createdById: string;
 }
 
 export type UpdateTenderData = Partial<Omit<CreateTenderData, "createdById">>;
 
 export interface TenderFilters {
+  businessId: string;
   search?: string;
   status?: TenderStatus;
   clientId?: string;
@@ -95,8 +97,8 @@ export interface CreateCompetitorData {
 export type UpdateCompetitorData = Partial<CreateCompetitorData>;
 
 export interface ITendersRepository {
-  findById(id: string): Promise<TenderDetail | null>;
-  findByTenderNumber(tenderNumber: string): Promise<{ id: string } | null>;
+  findById(id: string, businessId: string): Promise<TenderDetail | null>;
+  findByTenderNumber(tenderNumber: string, businessId: string): Promise<{ id: string } | null>;
   findMany(
     pagination: PaginationParams,
     filters: TenderFilters,
@@ -130,12 +132,15 @@ export interface ITendersRepository {
 export class TendersRepository implements ITendersRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  findById(id: string): Promise<TenderDetail | null> {
-    return this.prisma.tender.findUnique({ where: { id }, ...tenderDetailArgs });
+  findById(id: string, businessId: string): Promise<TenderDetail | null> {
+    // findFirst (not findUnique) because `id` alone isn't the unique key we're
+    // filtering by here — businessId must also match, and there's no
+    // compound (id, businessId) unique constraint on Tender.
+    return this.prisma.tender.findFirst({ where: { id, businessId }, ...tenderDetailArgs });
   }
 
-  findByTenderNumber(tenderNumber: string): Promise<{ id: string } | null> {
-    return this.prisma.tender.findUnique({ where: { tenderNumber }, select: { id: true } });
+  findByTenderNumber(tenderNumber: string, businessId: string): Promise<{ id: string } | null> {
+    return this.prisma.tender.findFirst({ where: { tenderNumber, businessId }, select: { id: true } });
   }
 
   async findMany(
@@ -143,6 +148,7 @@ export class TendersRepository implements ITendersRepository {
     filters: TenderFilters,
   ): Promise<{ items: TenderListItem[]; totalItems: number }> {
     const where: Prisma.TenderWhereInput = {
+      businessId: filters.businessId,
       status: filters.status,
       clientId: filters.clientId,
       priority: filters.priority,

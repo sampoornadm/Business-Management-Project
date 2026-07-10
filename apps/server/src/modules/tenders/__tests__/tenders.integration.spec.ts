@@ -125,4 +125,40 @@ describe("Tender workflow (integration)", () => {
       .set("Authorization", `Bearer ${accessToken}`);
     expect(deleteResponse.status).toBe(409);
   });
+
+  it("does not return another business's tenders", async () => {
+    const otherLogin = await request(app).post("/api/v1/auth/login").send({
+      email: testUser.email,
+      password: "Password123",
+    });
+    // switch to the second business this same test user also belongs to
+    const switchResponse = await request(app)
+      .post("/api/v1/auth/switch-business")
+      .set("Authorization", `Bearer ${otherLogin.body.data.accessToken}`)
+      .send({ businessId: testUser.secondBusinessId });
+    const secondBusinessToken = switchResponse.body.data.accessToken as string;
+
+    const createResponse = await request(app)
+      .post("/api/v1/tenders")
+      .set("Authorization", `Bearer ${accessToken}`) // first business
+      .send({
+        tenderNumber: `TND-${randomUUID().slice(0, 8)}`,
+        title: "Isolation Test Tender",
+        department: "PWD",
+        clientId: organizationId,
+        type: "OPEN",
+        category: "ROAD",
+        location: "Test City",
+        state: "Test State",
+        estimatedCost: 500000,
+        submissionDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+    const tenderId = createResponse.body.data.id as string;
+
+    const listResponse = await request(app)
+      .get("/api/v1/tenders")
+      .set("Authorization", `Bearer ${secondBusinessToken}`);
+
+    expect(listResponse.body.data.items.map((t: { id: string }) => t.id)).not.toContain(tenderId);
+  });
 });

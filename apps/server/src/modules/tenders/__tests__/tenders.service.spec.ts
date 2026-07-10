@@ -65,11 +65,11 @@ function buildTender(overrides: Partial<TenderDetail> = {}): TenderDetail {
 class FakeTendersRepository implements Partial<ITendersRepository> {
   tenders = new Map<string, TenderDetail>();
 
-  async findById(id: string) {
+  async findById(id: string, _businessId: string) {
     return this.tenders.get(id) ?? null;
   }
 
-  async findByTenderNumber(tenderNumber: string) {
+  async findByTenderNumber(tenderNumber: string, _businessId: string) {
     const found = [...this.tenders.values()].find((t) => t.tenderNumber === tenderNumber);
     return found ? { id: found.id } : null;
   }
@@ -219,6 +219,8 @@ class FakeTagsRepository implements Partial<ITagsRepository> {
   }
 }
 
+const BUSINESS_ID = randomUUID();
+
 describe("TendersService", () => {
   let tendersRepository: FakeTendersRepository;
   let auditService: AuditService;
@@ -226,8 +228,9 @@ describe("TendersService", () => {
   let emailService: EmailService;
   let service: TendersService;
   const actorId = randomUUID();
+  const ctx = { businessId: BUSINESS_ID };
 
-  const baseInput: CreateTenderData = {
+  const baseInput: Omit<CreateTenderData, "businessId"> = {
     tenderNumber: "TND-0001",
     title: "Road Construction",
     department: "PWD",
@@ -265,67 +268,67 @@ describe("TendersService", () => {
   });
 
   it("creates a tender", async () => {
-    const dto = await service.create(baseInput);
+    const dto = await service.create(baseInput, ctx);
     expect(dto.tenderNumber).toBe("TND-0001");
     expect(dto.status).toBe("DRAFT");
   });
 
   it("rejects a duplicate tender number", async () => {
-    await service.create(baseInput);
-    await expect(service.create(baseInput)).rejects.toThrow(ConflictError);
+    await service.create(baseInput, ctx);
+    await expect(service.create(baseInput, ctx)).rejects.toThrow(ConflictError);
   });
 
   it("rejects an invalid client", async () => {
-    await expect(service.create({ ...baseInput, clientId: randomUUID() })).rejects.toThrow(
-      BadRequestError,
-    );
+    await expect(
+      service.create({ ...baseInput, clientId: randomUUID() }, ctx),
+    ).rejects.toThrow(BadRequestError);
   });
 
   it("allows a valid status transition", async () => {
-    const created = await service.create(baseInput);
-    const updated = await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId);
+    const created = await service.create(baseInput, ctx);
+    const updated = await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
     expect(updated.status).toBe("SUBMITTED");
   });
 
   it("rejects an illegal status transition", async () => {
-    const created = await service.create(baseInput);
+    const created = await service.create(baseInput, ctx);
     await expect(
-      service.changeStatus(created.id, { status: "WON" }, actorId),
+      service.changeStatus(created.id, { status: "WON" }, actorId, ctx),
     ).rejects.toThrow(BadRequestError);
   });
 
   it("allows reopening a WON tender back to SUBMITTED", async () => {
-    const created = await service.create(baseInput);
-    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId);
-    await service.changeStatus(created.id, { status: "WON" }, actorId);
-    const reopened = await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId);
+    const created = await service.create(baseInput, ctx);
+    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    await service.changeStatus(created.id, { status: "WON" }, actorId, ctx);
+    const reopened = await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
     expect(reopened.status).toBe("SUBMITTED");
   });
 
   it("allows reopening a CANCELLED tender all the way back to DRAFT", async () => {
-    const created = await service.create(baseInput);
-    await service.changeStatus(created.id, { status: "CANCELLED" }, actorId);
-    const reopened = await service.changeStatus(created.id, { status: "DRAFT" }, actorId);
+    const created = await service.create(baseInput, ctx);
+    await service.changeStatus(created.id, { status: "CANCELLED" }, actorId, ctx);
+    const reopened = await service.changeStatus(created.id, { status: "DRAFT" }, actorId, ctx);
     expect(reopened.status).toBe("DRAFT");
   });
 
   it("rejects a direct terminal-to-terminal jump even after reopen support is added", async () => {
-    const created = await service.create(baseInput);
-    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId);
-    await service.changeStatus(created.id, { status: "WON" }, actorId);
+    const created = await service.create(baseInput, ctx);
+    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    await service.changeStatus(created.id, { status: "WON" }, actorId, ctx);
     await expect(
-      service.changeStatus(created.id, { status: "LOST" }, actorId),
+      service.changeStatus(created.id, { status: "LOST" }, actorId, ctx),
     ).rejects.toThrow(BadRequestError);
   });
 
   it("notifies assignees and the creator on status change, excluding the actor", async () => {
-    const created = await service.create(baseInput);
-    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId);
+    const created = await service.create(baseInput, ctx);
+    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
     // actorId === createdById here, and there are no other assignees, so no notification is sent
     expect(notificationsService.createMany).not.toHaveBeenCalled();
 
     const otherActor = randomUUID();
-    await service.changeStatus(created.id, { status: "WON" }, otherActor);
+    await service.changeStatus(created.id, { status: "WON" }, otherActor, ctx);
     expect(notificationsService.createMany).toHaveBeenCalledWith(
       [actorId],
       expect.objectContaining({ type: "TENDER_STATUS_CHANGED" }),
@@ -333,21 +336,21 @@ describe("TendersService", () => {
   });
 
   it("only allows deleting a tender while it is in Draft status", async () => {
-    const created = await service.create(baseInput);
-    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId);
-    await expect(service.delete(created.id, actorId)).rejects.toThrow(ConflictError);
+    const created = await service.create(baseInput, ctx);
+    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    await expect(service.delete(created.id, actorId, ctx)).rejects.toThrow(ConflictError);
   });
 
   it("deletes a tender in Draft status", async () => {
-    const created = await service.create(baseInput);
-    await service.delete(created.id, actorId);
-    await expect(service.getById(created.id)).rejects.toThrow(NotFoundError);
+    const created = await service.create(baseInput, ctx);
+    await service.delete(created.id, actorId, ctx);
+    await expect(service.getById(created.id, BUSINESS_ID)).rejects.toThrow(NotFoundError);
   });
 
   it("assigns a user and sends a notification + email", async () => {
-    const created = await service.create(baseInput);
+    const created = await service.create(baseInput, ctx);
     const userId = randomUUID();
-    const dto = await service.addAssignee(created.id, { userId }, actorId);
+    const dto = await service.addAssignee(created.id, { userId }, actorId, BUSINESS_ID);
 
     expect(dto.assignees).toHaveLength(1);
     expect(notificationsService.create).toHaveBeenCalledWith(
@@ -357,9 +360,11 @@ describe("TendersService", () => {
   });
 
   it("rejects assigning the same user twice", async () => {
-    const created = await service.create(baseInput);
+    const created = await service.create(baseInput, ctx);
     const userId = randomUUID();
-    await service.addAssignee(created.id, { userId }, actorId);
-    await expect(service.addAssignee(created.id, { userId }, actorId)).rejects.toThrow(ConflictError);
+    await service.addAssignee(created.id, { userId }, actorId, BUSINESS_ID);
+    await expect(
+      service.addAssignee(created.id, { userId }, actorId, BUSINESS_ID),
+    ).rejects.toThrow(ConflictError);
   });
 });

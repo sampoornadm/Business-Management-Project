@@ -26,7 +26,10 @@ export class TendersController {
   list = asyncHandler(async (req, res) => {
     const query = req.query as unknown as ListTendersQueryParsed;
     const pagination = resolvePagination(query);
-    const result = await this.tendersService.listTenders(pagination, query);
+    const result = await this.tendersService.listTenders(pagination, {
+      ...query,
+      businessId: req.user!.businessId,
+    });
     sendSuccess(res, result, "Tenders retrieved");
   });
 
@@ -36,7 +39,7 @@ export class TendersController {
   });
 
   getById = asyncHandler(async (req, res) => {
-    const tender = await this.tendersService.getById(req.params.id!);
+    const tender = await this.tendersService.getById(req.params.id!, req.user!.businessId);
     sendSuccess(res, tender, "Tender retrieved");
   });
 
@@ -53,7 +56,7 @@ export class TendersController {
     const body = req.body as CreateTenderBody;
     const tender = await this.tendersService.create(
       { ...body, createdById: req.user!.id },
-      { ipAddress: req.ip, userAgent: req.headers["user-agent"] },
+      { ipAddress: req.ip, userAgent: req.headers["user-agent"], businessId: req.user!.businessId },
     );
     sendSuccess(res, tender, "Tender created", 201);
   });
@@ -63,6 +66,7 @@ export class TendersController {
     const tender = await this.tendersService.update(req.params.id!, body, req.user!.id, {
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"],
+      businessId: req.user!.businessId,
     });
     sendSuccess(res, tender, "Tender updated");
   });
@@ -71,6 +75,7 @@ export class TendersController {
     await this.tendersService.delete(req.params.id!, req.user!.id, {
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"],
+      businessId: req.user!.businessId,
     });
     sendSuccess(res, null, "Tender deleted");
   });
@@ -80,24 +85,34 @@ export class TendersController {
     const tender = await this.tendersService.changeStatus(req.params.id!, body, req.user!.id, {
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"],
+      businessId: req.user!.businessId,
     });
     sendSuccess(res, tender, "Tender status updated");
   });
 
   statusHistory = asyncHandler(async (req, res) => {
     const pagination = resolvePagination(req.query as { page?: number; pageSize?: number });
-    const history = await this.tendersService.getStatusHistory(req.params.id!, pagination);
+    const history = await this.tendersService.getStatusHistory(
+      req.params.id!,
+      pagination,
+      req.user!.businessId,
+    );
     sendSuccess(res, history, "Status history retrieved");
   });
 
   listAssignees = asyncHandler(async (req, res) => {
-    const tender = await this.tendersService.getById(req.params.id!);
+    const tender = await this.tendersService.getById(req.params.id!, req.user!.businessId);
     sendSuccess(res, tender.assignees, "Assignees retrieved");
   });
 
   addAssignee = asyncHandler(async (req, res) => {
     const body = req.body as AddAssigneeBody;
-    const tender = await this.tendersService.addAssignee(req.params.id!, body, req.user!.id);
+    const tender = await this.tendersService.addAssignee(
+      req.params.id!,
+      body,
+      req.user!.id,
+      req.user!.businessId,
+    );
     sendSuccess(res, tender, "Assignee added", 201);
   });
 
@@ -106,13 +121,19 @@ export class TendersController {
       req.params.id!,
       req.params.userId!,
       req.user!.id,
+      req.user!.businessId,
     );
     sendSuccess(res, tender, "Assignee removed");
   });
 
   addCompetitor = asyncHandler(async (req, res) => {
     const body = req.body as CreateCompetitorBody;
-    const tender = await this.tendersService.addCompetitor(req.params.id!, body, req.user!.id);
+    const tender = await this.tendersService.addCompetitor(
+      req.params.id!,
+      body,
+      req.user!.id,
+      req.user!.businessId,
+    );
     sendSuccess(res, tender, "Competitor added", 201);
   });
 
@@ -123,6 +144,7 @@ export class TendersController {
       req.params.competitorId!,
       body,
       req.user!.id,
+      req.user!.businessId,
     );
     sendSuccess(res, tender, "Competitor updated");
   });
@@ -132,19 +154,29 @@ export class TendersController {
       req.params.id!,
       req.params.competitorId!,
       req.user!.id,
+      req.user!.businessId,
     );
     sendSuccess(res, tender, "Competitor deleted");
   });
 
   setTags = asyncHandler(async (req, res) => {
     const body = req.body as SetTenderTagsBody;
-    const tender = await this.tendersService.setTags(req.params.id!, body.tagIds, req.user!.id);
+    const tender = await this.tendersService.setTags(
+      req.params.id!,
+      body.tagIds,
+      req.user!.id,
+      req.user!.businessId,
+    );
     sendSuccess(res, tender, "Tags updated");
   });
 
   listDocuments = asyncHandler(async (req, res) => {
     const documentType = req.query.documentType as string | undefined;
-    const documents = await this.tendersService.listDocuments(req.params.id!, documentType);
+    const documents = await this.tendersService.listDocuments(
+      req.params.id!,
+      documentType,
+      req.user!.businessId,
+    );
     sendSuccess(res, documents, "Documents retrieved");
   });
 
@@ -157,6 +189,7 @@ export class TendersController {
       body.documentType,
       body.replacesAttachmentId,
       req.user!.id,
+      req.user!.businessId,
     );
     sendSuccess(res, document, "Document uploaded", 201);
   });
@@ -165,12 +198,18 @@ export class TendersController {
     const versions = await this.tendersService.listDocumentVersions(
       req.params.id!,
       req.params.documentGroupId!,
+      req.user!.businessId,
     );
     sendSuccess(res, versions, "Document versions retrieved");
   });
 
   deleteDocument = asyncHandler(async (req, res) => {
-    await this.tendersService.deleteDocument(req.params.id!, req.params.documentGroupId!, req.user!.id);
+    await this.tendersService.deleteDocument(
+      req.params.id!,
+      req.params.documentGroupId!,
+      req.user!.id,
+      req.user!.businessId,
+    );
     sendSuccess(res, null, "Document deleted");
   });
 }
