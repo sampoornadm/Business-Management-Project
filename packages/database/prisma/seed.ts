@@ -26,6 +26,11 @@ const SAMPLE_USERS: Array<{ role: (typeof ROLE_NAMES)[number]; email: string; fi
   { role: "VIEWER", email: "viewer@bmp.local", firstName: "Vera", lastName: "Viewer" },
 ];
 
+const SAMPLE_BUSINESSES = [
+  { name: "Archie Udyog", code: "ARCHIE" },
+  { name: "Samson Industries", code: "SAMSON" },
+];
+
 async function seedRolesAndPermissions() {
   const permissionByKey = new Map<string, string>();
 
@@ -89,14 +94,29 @@ async function seedRolesAndPermissions() {
   return roleByName;
 }
 
-async function seedUsers(roleByName: Map<string, string>) {
+async function seedBusinesses(): Promise<Map<string, string>> {
+  const businessByCode = new Map<string, string>();
+  for (const sample of SAMPLE_BUSINESSES) {
+    const business = await prisma.business.upsert({
+      where: { code: sample.code },
+      update: {},
+      create: { id: randomUUID(), name: sample.name, code: sample.code },
+    });
+    businessByCode.set(sample.code, business.id);
+  }
+  return businessByCode;
+}
+
+async function seedUsers(roleByName: Map<string, string>, businessByCode: Map<string, string>) {
   const passwordHash = await bcrypt.hash(SEED_PASSWORD, 12);
+  const archieId = businessByCode.get("ARCHIE")!;
+  const samsonId = businessByCode.get("SAMSON")!;
 
   for (const sample of SAMPLE_USERS) {
     const roleId = roleByName.get(sample.role);
     if (!roleId) continue;
 
-    await prisma.user.upsert({
+    const user = await prisma.user.upsert({
       where: { email: sample.email },
       update: {},
       create: {
@@ -105,11 +125,21 @@ async function seedUsers(roleByName: Map<string, string>) {
         passwordHash,
         firstName: sample.firstName,
         lastName: sample.lastName,
-        roleId,
         isActive: true,
         isEmailVerified: true,
       },
     });
+
+    // SUPER_ADMIN is the owner-level account — gets membership (and thus a business
+    // switcher) in both seed businesses. Everyone else gets exactly one.
+    const businessIds = sample.role === "SUPER_ADMIN" ? [archieId, samsonId] : [archieId];
+    for (const businessId of businessIds) {
+      await prisma.userBusiness.upsert({
+        where: { userId_businessId: { userId: user.id, businessId } },
+        update: { roleId },
+        create: { userId: user.id, businessId, roleId },
+      });
+    }
   }
 }
 
@@ -121,12 +151,17 @@ async function seedUsers(roleByName: Map<string, string>) {
 // name instead of being misattributed to whoever created the tender.
 const LOCAL_DOCS_SYNC_USER_EMAIL = "local-sync@bmp.local";
 
-async function seedLocalDocsSyncUser(roleByName: Map<string, string>) {
+async function seedLocalDocsSyncUser(
+  roleByName: Map<string, string>,
+  businessByCode: Map<string, string>,
+) {
   const roleId = roleByName.get("VIEWER");
   if (!roleId) return;
 
+  const archieId = businessByCode.get("ARCHIE")!;
+
   const passwordHash = await bcrypt.hash(randomUUID(), 12);
-  await prisma.user.upsert({
+  const user = await prisma.user.upsert({
     where: { email: LOCAL_DOCS_SYNC_USER_EMAIL },
     update: {},
     create: {
@@ -135,10 +170,15 @@ async function seedLocalDocsSyncUser(roleByName: Map<string, string>) {
       passwordHash,
       firstName: "Local Folder",
       lastName: "Sync",
-      roleId,
       isActive: false,
       isEmailVerified: true,
     },
+  });
+
+  await prisma.userBusiness.upsert({
+    where: { userId_businessId: { userId: user.id, businessId: archieId } },
+    update: { roleId },
+    create: { userId: user.id, businessId: archieId, roleId },
   });
 }
 
@@ -146,11 +186,14 @@ async function main() {
   console.warn("Seeding roles and permissions...");
   const roleByName = await seedRolesAndPermissions();
 
+  console.warn("Seeding businesses...");
+  const businessByCode = await seedBusinesses();
+
   console.warn("Seeding sample users...");
-  await seedUsers(roleByName);
+  await seedUsers(roleByName, businessByCode);
 
   console.warn("Seeding local docs sync system user...");
-  await seedLocalDocsSyncUser(roleByName);
+  await seedLocalDocsSyncUser(roleByName, businessByCode);
 
   console.warn(`Done. Seeded ${SAMPLE_USERS.length} users with password "${SEED_PASSWORD}".`);
 }
