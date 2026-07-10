@@ -28,35 +28,36 @@ export interface PurchaseOrderForOnTimeRow {
 }
 
 export interface IReportsRepository {
-  findTenderStatusCounts(): Promise<{ status: TenderStatus; count: number }[]>;
-  findTenderDates(): Promise<{ createdAt: Date; submissionDate: Date }[]>;
+  findTenderStatusCounts(businessId: string): Promise<{ status: TenderStatus; count: number }[]>;
+  findTenderDates(businessId: string): Promise<{ createdAt: Date; submissionDate: Date }[]>;
 
-  findPurchaseOrderItemsForSpend(from?: Date, to?: Date): Promise<PurchaseOrderSpendRow[]>;
+  findPurchaseOrderItemsForSpend(businessId: string, from?: Date, to?: Date): Promise<PurchaseOrderSpendRow[]>;
 
-  findActiveProjectsBasic(): Promise<ProjectBasicRow[]>;
+  findActiveProjectsBasic(businessId: string): Promise<ProjectBasicRow[]>;
   findPurchaseOrderTotalsByTenderIds(
+    businessId: string,
     tenderIds: string[],
   ): Promise<{ tenderId: string; amount: number }[]>;
-  findLaborTotalsByProjectIds(projectIds: string[]): Promise<{ projectId: string; amount: number }[]>;
+  findLaborTotalsByProjectIds(businessId: string, projectIds: string[]): Promise<{ projectId: string; amount: number }[]>;
 
-  findPaymentsForSummary(from?: Date, to?: Date): Promise<PaymentBasicRow[]>;
+  findPaymentsForSummary(businessId: string, from?: Date, to?: Date): Promise<PaymentBasicRow[]>;
 
   findVendorsBasic(): Promise<{ id: string; name: string }[]>;
-  findVendorRatings(): Promise<{ vendorId: string; rating: number }[]>;
-  findPurchaseOrdersForOnTimeCalc(): Promise<PurchaseOrderForOnTimeRow[]>;
-  findLatestGoodsReceiptDatesByPoIds(poIds: string[]): Promise<{ purchaseOrderId: string; receivedDate: Date }[]>;
-  countPurchaseOrdersByVendor(): Promise<{ vendorId: string; count: number }[]>;
+  findVendorRatings(businessId: string): Promise<{ vendorId: string; rating: number }[]>;
+  findPurchaseOrdersForOnTimeCalc(businessId: string): Promise<PurchaseOrderForOnTimeRow[]>;
+  findLatestGoodsReceiptDatesByPoIds(businessId: string, poIds: string[]): Promise<{ purchaseOrderId: string; receivedDate: Date }[]>;
+  countPurchaseOrdersByVendor(businessId: string): Promise<{ vendorId: string; count: number }[]>;
 
-  findAllInvoiceTotals(): Promise<{ totalAmount: number; invoiceDate: Date }[]>;
-  sumPaymentsByEntityType(entityType: string): Promise<number>;
+  findAllInvoiceTotals(businessId: string): Promise<{ totalAmount: number; invoiceDate: Date }[]>;
+  sumPaymentsByEntityType(businessId: string, entityType: string): Promise<number>;
 
-  findGoodsReceiptLeadTimes(): Promise<{ purchaseOrderCreatedAt: Date; receivedDate: Date }[]>;
-  findBoqCreationLeadTimes(): Promise<{ tenderCreatedAt: Date; boqCreatedAt: Date }[]>;
+  findGoodsReceiptLeadTimes(businessId: string): Promise<{ purchaseOrderCreatedAt: Date; receivedDate: Date }[]>;
+  findBoqCreationLeadTimes(businessId: string): Promise<{ tenderCreatedAt: Date; boqCreatedAt: Date }[]>;
 
-  searchTenders(query: string): Promise<{ id: string; tenderNumber: string; title: string }[]>;
+  searchTenders(businessId: string, query: string): Promise<{ id: string; tenderNumber: string; title: string }[]>;
   searchOrganizations(query: string): Promise<{ id: string; name: string }[]>;
   searchVendors(query: string): Promise<{ id: string; name: string }[]>;
-  searchProjects(query: string): Promise<{ id: string; name: string }[]>;
+  searchProjects(businessId: string, query: string): Promise<{ id: string; name: string }[]>;
 }
 
 const SEARCH_LIMIT = 5;
@@ -64,19 +65,20 @@ const SEARCH_LIMIT = 5;
 export class ReportsRepository implements IReportsRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async findTenderStatusCounts(): Promise<{ status: TenderStatus; count: number }[]> {
-    const groups = await this.prisma.tender.groupBy({ by: ["status"], _count: { _all: true } });
+  async findTenderStatusCounts(businessId: string): Promise<{ status: TenderStatus; count: number }[]> {
+    const groups = await this.prisma.tender.groupBy({ where: { businessId }, by: ["status"], _count: { _all: true } });
     return groups.map((g) => ({ status: g.status, count: g._count._all }));
   }
 
-  findTenderDates(): Promise<{ createdAt: Date; submissionDate: Date }[]> {
-    return this.prisma.tender.findMany({ select: { createdAt: true, submissionDate: true } });
+  findTenderDates(businessId: string): Promise<{ createdAt: Date; submissionDate: Date }[]> {
+    return this.prisma.tender.findMany({ where: { businessId }, select: { createdAt: true, submissionDate: true } });
   }
 
-  async findPurchaseOrderItemsForSpend(from?: Date, to?: Date): Promise<PurchaseOrderSpendRow[]> {
+  async findPurchaseOrderItemsForSpend(businessId: string, from?: Date, to?: Date): Promise<PurchaseOrderSpendRow[]> {
     const items = await this.prisma.purchaseOrderItem.findMany({
       where: {
         purchaseOrder: {
+          businessId,
           createdAt: from || to ? { gte: from, lte: to } : undefined,
         },
       },
@@ -95,20 +97,22 @@ export class ReportsRepository implements IReportsRepository {
     }));
   }
 
-  findActiveProjectsBasic(): Promise<ProjectBasicRow[]> {
+  findActiveProjectsBasic(businessId: string): Promise<ProjectBasicRow[]> {
     return this.prisma.project.findMany({
-      where: { status: { in: ["ACTIVE", "ON_HOLD"] } },
+      where: { businessId, status: { in: ["ACTIVE", "ON_HOLD"] } },
       select: { id: true, name: true, status: true, budget: true, tenderId: true },
     });
   }
 
   async findPurchaseOrderTotalsByTenderIds(
+    businessId: string,
     tenderIds: string[],
   ): Promise<{ tenderId: string; amount: number }[]> {
     if (tenderIds.length === 0) return [];
     const items = await this.prisma.purchaseOrderItem.findMany({
       where: {
         purchaseOrder: {
+          businessId,
           tenderId: { in: tenderIds },
           status: { in: ["ISSUED", "PARTIALLY_RECEIVED", "RECEIVED"] },
         },
@@ -119,18 +123,19 @@ export class ReportsRepository implements IReportsRepository {
   }
 
   async findLaborTotalsByProjectIds(
+    businessId: string,
     projectIds: string[],
   ): Promise<{ projectId: string; amount: number }[]> {
     if (projectIds.length === 0) return [];
     return this.prisma.projectLaborEntry.findMany({
-      where: { projectId: { in: projectIds } },
+      where: { projectId: { in: projectIds }, project: { businessId } },
       select: { projectId: true, amount: true },
     });
   }
 
-  findPaymentsForSummary(from?: Date, to?: Date): Promise<PaymentBasicRow[]> {
+  findPaymentsForSummary(businessId: string, from?: Date, to?: Date): Promise<PaymentBasicRow[]> {
     return this.prisma.payment.findMany({
-      where: from || to ? { paymentDate: { gte: from, lte: to } } : undefined,
+      where: { businessId, paymentDate: from || to ? { gte: from, lte: to } : undefined },
       select: { direction: true, amount: true, paymentDate: true },
     });
   }
@@ -139,65 +144,71 @@ export class ReportsRepository implements IReportsRepository {
     return this.prisma.vendor.findMany({ select: { id: true, name: true } });
   }
 
-  findVendorRatings(): Promise<{ vendorId: string; rating: number }[]> {
-    return this.prisma.vendorRating.findMany({ select: { vendorId: true, rating: true } });
+  findVendorRatings(businessId: string): Promise<{ vendorId: string; rating: number }[]> {
+    return this.prisma.vendorRating.findMany({
+      where: { purchaseOrder: { businessId } },
+      select: { vendorId: true, rating: true },
+    });
   }
 
-  findPurchaseOrdersForOnTimeCalc(): Promise<PurchaseOrderForOnTimeRow[]> {
+  findPurchaseOrdersForOnTimeCalc(businessId: string): Promise<PurchaseOrderForOnTimeRow[]> {
     return this.prisma.purchaseOrder.findMany({
-      where: { expectedDeliveryDate: { not: null } },
+      where: { businessId, expectedDeliveryDate: { not: null } },
       select: { id: true, vendorId: true, expectedDeliveryDate: true },
     });
   }
 
   findLatestGoodsReceiptDatesByPoIds(
+    businessId: string,
     poIds: string[],
   ): Promise<{ purchaseOrderId: string; receivedDate: Date }[]> {
     if (poIds.length === 0) return Promise.resolve([]);
     return this.prisma.goodsReceipt.findMany({
-      where: { purchaseOrderId: { in: poIds } },
+      where: { businessId, purchaseOrderId: { in: poIds } },
       orderBy: { receivedDate: "desc" },
       select: { purchaseOrderId: true, receivedDate: true },
     });
   }
 
-  async countPurchaseOrdersByVendor(): Promise<{ vendorId: string; count: number }[]> {
-    const groups = await this.prisma.purchaseOrder.groupBy({ by: ["vendorId"], _count: { _all: true } });
+  async countPurchaseOrdersByVendor(businessId: string): Promise<{ vendorId: string; count: number }[]> {
+    const groups = await this.prisma.purchaseOrder.groupBy({ where: { businessId }, by: ["vendorId"], _count: { _all: true } });
     return groups.map((g) => ({ vendorId: g.vendorId, count: g._count._all }));
   }
 
-  findAllInvoiceTotals(): Promise<{ totalAmount: number; invoiceDate: Date }[]> {
-    return this.prisma.invoice.findMany({ select: { totalAmount: true, invoiceDate: true } });
+  findAllInvoiceTotals(businessId: string): Promise<{ totalAmount: number; invoiceDate: Date }[]> {
+    return this.prisma.invoice.findMany({ where: { businessId }, select: { totalAmount: true, invoiceDate: true } });
   }
 
-  async sumPaymentsByEntityType(entityType: string): Promise<number> {
+  async sumPaymentsByEntityType(businessId: string, entityType: string): Promise<number> {
     const result = await this.prisma.payment.aggregate({
-      where: { entityType },
+      where: { businessId, entityType },
       _sum: { amount: true },
     });
     return result._sum.amount ?? 0;
   }
 
-  findGoodsReceiptLeadTimes(): Promise<{ purchaseOrderCreatedAt: Date; receivedDate: Date }[]> {
+  findGoodsReceiptLeadTimes(businessId: string): Promise<{ purchaseOrderCreatedAt: Date; receivedDate: Date }[]> {
     return this.prisma.goodsReceipt
       .findMany({
+        where: { businessId },
         select: { receivedDate: true, purchaseOrder: { select: { createdAt: true } } },
       })
       .then((rows) => rows.map((r) => ({ purchaseOrderCreatedAt: r.purchaseOrder.createdAt, receivedDate: r.receivedDate })));
   }
 
-  findBoqCreationLeadTimes(): Promise<{ tenderCreatedAt: Date; boqCreatedAt: Date }[]> {
+  findBoqCreationLeadTimes(businessId: string): Promise<{ tenderCreatedAt: Date; boqCreatedAt: Date }[]> {
     return this.prisma.boq
       .findMany({
-        where: { isCurrent: true },
+        where: { businessId, isCurrent: true },
         select: { createdAt: true, tender: { select: { createdAt: true } } },
       })
       .then((rows) => rows.map((r) => ({ tenderCreatedAt: r.tender.createdAt, boqCreatedAt: r.createdAt })));
   }
 
-  searchTenders(query: string): Promise<{ id: string; tenderNumber: string; title: string }[]> {
+  searchTenders(businessId: string, query: string): Promise<{ id: string; tenderNumber: string; title: string }[]> {
     return this.prisma.tender.findMany({
       where: {
+        businessId,
         OR: [
           { tenderNumber: { contains: query, mode: "insensitive" } },
           { title: { contains: query, mode: "insensitive" } },
@@ -224,9 +235,9 @@ export class ReportsRepository implements IReportsRepository {
     });
   }
 
-  searchProjects(query: string): Promise<{ id: string; name: string }[]> {
+  searchProjects(businessId: string, query: string): Promise<{ id: string; name: string }[]> {
     return this.prisma.project.findMany({
-      where: { name: { contains: query, mode: "insensitive" } },
+      where: { businessId, name: { contains: query, mode: "insensitive" } },
       select: { id: true, name: true },
       take: SEARCH_LIMIT,
     });
