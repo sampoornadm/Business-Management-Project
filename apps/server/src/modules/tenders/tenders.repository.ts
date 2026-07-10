@@ -125,8 +125,8 @@ export interface ITendersRepository {
 
   setTags(tenderId: string, tagIds: string[]): Promise<void>;
 
-  countByStatus(): Promise<Array<{ status: TenderStatus; count: number }>>;
-  findUpcomingDeadlines(withinDays: number): Promise<TenderListItem[]>;
+  countByStatus(businessId: string): Promise<Array<{ status: TenderStatus; count: number }>>;
+  findUpcomingDeadlines(withinDays: number, businessId: string): Promise<TenderListItem[]>;
 }
 
 export class TendersRepository implements ITendersRepository {
@@ -259,16 +259,21 @@ export class TendersRepository implements ITendersRepository {
     ]);
   }
 
-  async countByStatus(): Promise<Array<{ status: TenderStatus; count: number }>> {
-    const rows = await this.prisma.tender.groupBy({ by: ["status"], _count: { _all: true } });
+  async countByStatus(businessId: string): Promise<Array<{ status: TenderStatus; count: number }>> {
+    const rows = await this.prisma.tender.groupBy({
+      by: ["status"],
+      where: { businessId },
+      _count: { _all: true },
+    });
     return rows.map((row) => ({ status: row.status, count: row._count._all }));
   }
 
-  findUpcomingDeadlines(withinDays: number): Promise<TenderListItem[]> {
+  findUpcomingDeadlines(withinDays: number, businessId: string): Promise<TenderListItem[]> {
     const now = new Date();
     const until = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
     return this.prisma.tender.findMany({
       where: {
+        businessId,
         submissionDate: { gte: now, lte: until },
         status: { notIn: ["WON", "LOST", "CANCELLED"] },
       },

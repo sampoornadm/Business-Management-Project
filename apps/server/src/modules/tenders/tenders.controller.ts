@@ -33,8 +33,8 @@ export class TendersController {
     sendSuccess(res, result, "Tenders retrieved");
   });
 
-  dashboardStats = asyncHandler(async (_req, res) => {
-    const stats = await this.tendersService.getDashboardStats();
+  dashboardStats = asyncHandler(async (req, res) => {
+    const stats = await this.tendersService.getDashboardStats(req.user!.businessId);
     sendSuccess(res, stats, "Dashboard stats retrieved");
   });
 

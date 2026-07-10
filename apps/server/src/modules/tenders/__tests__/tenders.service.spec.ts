@@ -176,6 +176,29 @@ class FakeTendersRepository implements Partial<ITendersRepository> {
   async setTags() {
     // not exercised in these unit tests
   }
+
+  async countByStatus(businessId: string) {
+    const counts = new Map<string, number>();
+    for (const tender of this.tenders.values()) {
+      if (tender.businessId !== businessId) continue;
+      counts.set(tender.status, (counts.get(tender.status) ?? 0) + 1);
+    }
+    return [...counts.entries()].map(([status, count]) => ({ status: status as never, count }));
+  }
+
+  async findUpcomingDeadlines(withinDays: number, businessId: string) {
+    const now = new Date();
+    const until = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
+    return [...this.tenders.values()]
+      .filter(
+        (t) =>
+          t.businessId === businessId &&
+          t.submissionDate >= now &&
+          t.submissionDate <= until &&
+          !["WON", "LOST", "CANCELLED"].includes(t.status),
+      )
+      .map((t) => ({ ...t, _count: { assignees: t.assignees.length } })) as never;
+  }
 }
 
 class FakeOrganizationsRepository implements Partial<IOrganizationsRepository> {
@@ -366,5 +389,24 @@ describe("TendersService", () => {
     await expect(
       service.addAssignee(created.id, { userId }, actorId, BUSINESS_ID),
     ).rejects.toThrow(ConflictError);
+  });
+
+  it("scopes dashboard stats to the caller's business", async () => {
+    const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await service.create({ ...baseInput, submissionDate: futureDate }, ctx);
+
+    const otherBusinessId = randomUUID();
+    const otherTender = await service.create(
+      { ...baseInput, tenderNumber: "TND-OTHER-BIZ", submissionDate: futureDate },
+      { businessId: otherBusinessId },
+    );
+
+    const stats = await service.getDashboardStats(BUSINESS_ID);
+    const otherStats = await service.getDashboardStats(otherBusinessId);
+
+    expect(stats.totalActive).toBe(1);
+    expect(stats.upcomingDeadlines.map((t) => t.id)).not.toContain(otherTender.id);
+    expect(otherStats.totalActive).toBe(1);
+    expect(otherStats.upcomingDeadlines.map((t) => t.id)).toContain(otherTender.id);
   });
 });
