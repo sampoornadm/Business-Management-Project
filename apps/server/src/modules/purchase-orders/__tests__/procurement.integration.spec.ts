@@ -8,6 +8,7 @@ import { createApp } from "../../../app.js";
 import {
   cleanupIntegrationTestUser,
   createIntegrationTestUser,
+  switchToSecondBusiness,
   type IntegrationTestUser,
 } from "../../../shared/test-utils/integration-auth.js";
 
@@ -161,21 +162,6 @@ describe("RFQ business isolation (integration)", () => {
     await prisma.$disconnect();
   });
 
-  // Switching requires a fresh login token (the original access token's
-  // embedded businessId claim doesn't change), then trades it for a token
-  // scoped to the second business this same test user also belongs to.
-  async function switchToSecondBusiness(): Promise<string> {
-    const otherLogin = await request(app).post("/api/v1/auth/login").send({
-      email: testUser.email,
-      password: "Password123",
-    });
-    const switchResponse = await request(app)
-      .post("/api/v1/auth/switch-business")
-      .set("Authorization", `Bearer ${otherLogin.body.data.accessToken}`)
-      .send({ businessId: testUser.secondBusinessId });
-    return switchResponse.body.data.accessToken as string;
-  }
-
   it("does not return a standalone RFQ (no tenderId) from another business, and rejects direct access", async () => {
     // RFQs can be standalone — created with no tenderId at all — entirely in
     // the first business.
@@ -189,7 +175,7 @@ describe("RFQ business isolation (integration)", () => {
     expect(createResponse.status).toBe(201);
     const isolationRfqId = createResponse.body.data.id as string;
 
-    const secondBusinessToken = await switchToSecondBusiness();
+    const secondBusinessToken = await switchToSecondBusiness(app, testUser);
 
     const listResponse = await request(app)
       .get("/api/v1/rfqs")
@@ -227,7 +213,7 @@ describe("RFQ business isolation (integration)", () => {
     const isolationRfqId = createResponse.body.data.id as string;
     expect(createResponse.body.data.vendorInvites).toHaveLength(1);
 
-    const secondBusinessToken = await switchToSecondBusiness();
+    const secondBusinessToken = await switchToSecondBusiness(app, testUser);
 
     const removeResponse = await request(app)
       .delete(`/api/v1/rfqs/${isolationRfqId}/vendors/${vendorId}`)
@@ -270,21 +256,6 @@ describe("Purchase order business isolation (integration)", () => {
     await prisma.$disconnect();
   });
 
-  // Switching requires a fresh login token (the original access token's
-  // embedded businessId claim doesn't change), then trades it for a token
-  // scoped to the second business this same test user also belongs to.
-  async function switchToSecondBusiness(): Promise<string> {
-    const otherLogin = await request(app).post("/api/v1/auth/login").send({
-      email: testUser.email,
-      password: "Password123",
-    });
-    const switchResponse = await request(app)
-      .post("/api/v1/auth/switch-business")
-      .set("Authorization", `Bearer ${otherLogin.body.data.accessToken}`)
-      .send({ businessId: testUser.secondBusinessId });
-    return switchResponse.body.data.accessToken as string;
-  }
-
   async function createVendor(): Promise<string> {
     const response = await request(app)
       .post("/api/v1/vendors")
@@ -308,7 +279,7 @@ describe("Purchase order business isolation (integration)", () => {
     expect(createResponse.status).toBe(201);
     const isolationPoId = createResponse.body.data.id as string;
 
-    const secondBusinessToken = await switchToSecondBusiness();
+    const secondBusinessToken = await switchToSecondBusiness(app, testUser);
 
     const listResponse = await request(app)
       .get("/api/v1/purchase-orders")
@@ -340,7 +311,7 @@ describe("Purchase order business isolation (integration)", () => {
     expect(createResponse.status).toBe(201);
     const isolationPoId = createResponse.body.data.id as string;
 
-    const secondBusinessToken = await switchToSecondBusiness();
+    const secondBusinessToken = await switchToSecondBusiness(app, testUser);
 
     const issueResponse = await request(app)
       .patch(`/api/v1/purchase-orders/${isolationPoId}/status`)
@@ -377,7 +348,7 @@ describe("Purchase order business isolation (integration)", () => {
       .send({ status: "ISSUED" });
     expect(issueResponse.status).toBe(200);
 
-    const secondBusinessToken = await switchToSecondBusiness();
+    const secondBusinessToken = await switchToSecondBusiness(app, testUser);
 
     const receiptResponse = await request(app)
       .post(`/api/v1/purchase-orders/${isolationPoId}/goods-receipts`)
@@ -423,7 +394,7 @@ describe("Purchase order business isolation (integration)", () => {
     expect(receiptResponse.status).toBe(201);
     expect(receiptResponse.body.data.status).toBe("RECEIVED");
 
-    const secondBusinessToken = await switchToSecondBusiness();
+    const secondBusinessToken = await switchToSecondBusiness(app, testUser);
 
     const ratingResponse = await request(app)
       .put(`/api/v1/purchase-orders/${isolationPoId}/vendor-rating`)

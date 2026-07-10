@@ -73,3 +73,21 @@ export async function cleanupIntegrationTestUser(testUser: IntegrationTestUser):
   await prisma.business.deleteMany({ where: { id: { in: [testUser.businessId, testUser.secondBusinessId] } } });
   await prisma.user.deleteMany({ where: { id: testUser.userId } });
 }
+
+/**
+ * Switches an integration test user into the second business it also
+ * belongs to. Switching requires a fresh login token (the original access
+ * token's embedded businessId claim doesn't change), then trades it for a
+ * token scoped to the second business via the real switch-business flow.
+ */
+export async function switchToSecondBusiness(app: Express, testUser: IntegrationTestUser): Promise<string> {
+  const otherLogin = await request(app).post("/api/v1/auth/login").send({
+    email: testUser.email,
+    password: "Password123",
+  });
+  const switchResponse = await request(app)
+    .post("/api/v1/auth/switch-business")
+    .set("Authorization", `Bearer ${otherLogin.body.data.accessToken}`)
+    .send({ businessId: testUser.secondBusinessId });
+  return switchResponse.body.data.accessToken as string;
+}
