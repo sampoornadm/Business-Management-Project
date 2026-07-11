@@ -1,6 +1,7 @@
 import type { PermissionKey } from "@bmp/types";
 import {
   BarChart3,
+  Briefcase,
   Building2,
   FileClock,
   FileSpreadsheet,
@@ -40,4 +41,5 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Users", href: "/users", icon: Users2, permission: "users:read" },
   { label: "Roles & Permissions", href: "/settings/roles", icon: ShieldCheck, permission: "roles:read" },
   { label: "Audit Log", href: "/settings/audit-log", icon: FileClock, permission: "audit:read" },
+  { label: "Businesses", href: "/businesses", icon: Briefcase, permission: "businesses:read" },
 ];
