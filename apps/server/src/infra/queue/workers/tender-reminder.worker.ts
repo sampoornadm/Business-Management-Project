@@ -3,6 +3,7 @@ import { Worker } from "bullmq";
 import { notificationsService } from "../../../modules/notifications/notifications.module.js";
 import { logger } from "../../../shared/logger/logger.js";
 import { EmailService } from "../../mailer/email.service.js";
+import { listAllBusinessIds } from "../../prisma/business-ids.js";
 import { prisma } from "../../prisma/client.js";
 import { redis } from "../../redis/client.js";
 import { TENDER_REMINDER_QUEUE_NAME } from "../queues.js";
@@ -20,7 +21,12 @@ function dayBounds(daysFromNow: number): { start: Date; end: Date } {
   return { start, end };
 }
 
-async function checkDeadlines(): Promise<void> {
+/**
+ * Checks upcoming submission deadlines for a single business's tenders and queues reminder
+ * notifications/emails to their assignees. Exported (rather than kept module-private) so tests
+ * can exercise it directly without going through the BullMQ worker/job plumbing.
+ */
+export async function checkDeadlinesForBusiness(businessId: string): Promise<void> {
   const emailService = new EmailService();
 
   for (const daysRemaining of REMINDER_THRESHOLD_DAYS) {
@@ -28,6 +34,7 @@ async function checkDeadlines(): Promise<void> {
 
     const tenders = await prisma.tender.findMany({
       where: {
+        businessId,
         submissionDate: { gte: start, lte: end },
         status: { notIn: [...TERMINAL_STATUSES] },
       },
@@ -73,6 +80,19 @@ async function checkDeadlines(): Promise<void> {
         });
       }
     }
+  }
+}
+
+/**
+ * Runs the deadline check once per business. `Tender` is a business-scoped model (see
+ * scoped-client.ts's `SCOPED_MODELS`), so a single global query across every business's tenders
+ * is refused at query time — `Business` itself isn't scoped (it's the tenant list), so listing
+ * all business ids and looping `checkDeadlinesForBusiness` per tenant is the correct shape.
+ */
+async function checkDeadlines(): Promise<void> {
+  const businessIds = await listAllBusinessIds(prisma);
+  for (const businessId of businessIds) {
+    await checkDeadlinesForBusiness(businessId);
   }
 }
 

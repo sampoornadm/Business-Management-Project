@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@bmp/database";
 
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
+import { listAllBusinessIds } from "../../infra/prisma/business-ids.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
 
 const organizationWithContacts = {
@@ -101,8 +102,21 @@ export class OrganizationsRepository implements IOrganizationsRepository {
     await this.prisma.organization.delete({ where: { id } });
   }
 
-  countTenders(organizationId: string): Promise<number> {
-    return this.prisma.tender.count({ where: { clientId: organizationId } });
+  /**
+   * `Organization` is intentionally global/shared across all businesses, so a single organization
+   * can legitimately be referenced by tenders in multiple businesses — the delete-guard needs a
+   * true cross-business total. `Tender` is a business-scoped model (see scoped-client.ts's
+   * `SCOPED_MODELS`), so a single unscoped count is refused at query time; instead sum a scoped,
+   * per-business count across every business.
+   */
+  async countTenders(organizationId: string): Promise<number> {
+    const businessIds = await listAllBusinessIds(this.prisma);
+    const counts = await Promise.all(
+      businessIds.map((businessId) =>
+        this.prisma.tender.count({ where: { clientId: organizationId, businessId } }),
+      ),
+    );
+    return counts.reduce((sum, count) => sum + count, 0);
   }
 
   async createContact(data: CreateContactData): Promise<void> {
