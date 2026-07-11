@@ -4,6 +4,7 @@ import {
   Avatar,
   AvatarFallback,
   AvatarImage,
+  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -17,6 +18,7 @@ import { usePathname } from "next/navigation";
 import { Fragment } from "react";
 
 import { useLogout } from "@/hooks/use-auth";
+import { useSwitchBusiness } from "@/hooks/use-switch-business";
 import { useAuthStore } from "@/lib/auth-store";
 import { useBreadcrumbStore } from "@/lib/breadcrumb-store";
 
@@ -65,7 +67,10 @@ function Breadcrumbs() {
 
 export function Topbar() {
   const user = useAuthStore((state) => state.user);
+  const activeBusinessId = useAuthStore((state) => state.activeBusinessId);
+  const availableBusinesses = useAuthStore((state) => state.availableBusinesses);
   const logout = useLogout();
+  const switchBusiness = useSwitchBusiness();
 
   const initials = user ? `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase() : "";
 
@@ -74,6 +79,29 @@ export function Topbar() {
       <Breadcrumbs />
       <div className="flex items-center gap-2">
         <TopbarSearch />
+        {availableBusinesses.length > 1 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                {availableBusinesses.find((b) => b.businessId === activeBusinessId)?.businessName ??
+                  "Select business"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Switch business</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {availableBusinesses.map((business) => (
+                <DropdownMenuItem
+                  key={business.businessId}
+                  disabled={business.businessId === activeBusinessId || switchBusiness.isPending}
+                  onClick={() => switchBusiness.mutate(business.businessId)}
+                >
+                  {business.businessName}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
         <NotificationBell />
         <ThemeToggle />
         <DropdownMenu>
