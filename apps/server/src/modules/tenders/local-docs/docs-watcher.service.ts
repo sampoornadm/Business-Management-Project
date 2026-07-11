@@ -5,12 +5,19 @@ import path from "node:path";
 import chokidar, { type FSWatcher } from "chokidar";
 
 import { GENERIC_UPLOAD_LIMITS } from "../../../config/constants.js";
+import { listAllBusinessIds } from "../../../infra/prisma/business-ids.js";
 import { prisma } from "../../../infra/prisma/client.js";
 import { logger } from "../../../shared/logger/logger.js";
 import { attachmentsService } from "../../attachments/attachments.module.js";
 import { auditService } from "../../audit/audit.module.js";
 
-import { documentTypeForFolder, ensureTenderFolders, expandHome, tenderNumberFromFolderName } from "./folder-naming.js";
+import {
+  documentTypeForFolder,
+  ensureTenderFolders,
+  expandHome,
+  tenderNumberFromFolderName,
+  type TenderFolderInfo,
+} from "./folder-naming.js";
 
 // Kept in sync with packages/database/prisma/seed.ts's LOCAL_DOCS_SYNC_USER_EMAIL.
 const LOCAL_DOCS_SYNC_USER_EMAIL = "local-sync@bmp.local";
@@ -41,10 +48,54 @@ function guessDeclaredMimeType(filePath: string): string {
   return ext === ".txt" || ext === ".md" ? "text/plain" : "application/octet-stream";
 }
 
+/**
+ * Lists every tender across every business. `Tender` is a business-scoped model (see
+ * scoped-client.ts's `SCOPED_MODELS`), so a single global query is refused at query time — this
+ * folder sync is meant to guarantee a local folder for every tender in the system regardless of
+ * which business it belongs to (one shared root directory, one flat namespace of tender folders),
+ * so instead of weakening the guard it loops a scoped, per-business query and concatenates the
+ * results, same pattern as `listAllBusinessIds()`'s doc comment in `business-ids.ts` describes for
+ * cross-business background jobs (e.g. the tender-reminder worker).
+ */
+export async function listAllTendersForFolderSync(): Promise<TenderFolderInfo[]> {
+  const businessIds = await listAllBusinessIds(prisma);
+  const tendersByBusiness = await Promise.all(
+    businessIds.map((businessId) =>
+      prisma.tender.findMany({ where: { businessId }, select: { tenderNumber: true, title: true } }),
+    ),
+  );
+  return tendersByBusiness.flat();
+}
+
 async function reconcileFolders(rootDir: string): Promise<void> {
-  const tenders = await prisma.tender.findMany({ select: { tenderNumber: true, title: true } });
+  const tenders = await listAllTendersForFolderSync();
   await Promise.all(tenders.map((tender) => ensureTenderFolders(rootDir, tender)));
   logger.info(`Local docs sync: reconciled folders for ${tenders.length} tender(s) under ${rootDir}`);
+}
+
+/**
+ * Resolves a folder name's tenderNumber to the one tender it refers to, across every business.
+ * `Tender.tenderNumber` is `@unique` at the top level of the schema (not compound with
+ * `businessId`), and local-docs folders carry no business segment in their naming scheme, so there
+ * is no businessId to target up front. `Tender` is still a business-scoped model (see
+ * scoped-client.ts's `SCOPED_MODELS`), so this loops `listAllBusinessIds()` (same cross-business
+ * pattern documented in `business-ids.ts` and used by `listAllTendersForFolderSync()` above) and
+ * runs a scoped, per-business lookup, stopping at the first match — since `tenderNumber` is
+ * globally unique, at most one business can ever match, so there's no need to keep checking the
+ * rest once found. Uses `findFirst` (not `findUnique`) because `{ tenderNumber, businessId }`
+ * together isn't a compound unique constraint — the same reasoning `purchase-orders.repository.ts`
+ * and `finance.repository.ts` document on their own per-business `findFirst` lookups.
+ */
+export async function findTenderByNumberAcrossBusinesses(tenderNumber: string): Promise<{ id: string } | null> {
+  const businessIds = await listAllBusinessIds(prisma);
+  for (const businessId of businessIds) {
+    const tender = await prisma.tender.findFirst({
+      where: { tenderNumber, businessId },
+      select: { id: true },
+    });
+    if (tender) return tender;
+  }
+  return null;
 }
 
 async function importFile(rootDir: string, absolutePath: string): Promise<void> {
@@ -58,14 +109,7 @@ async function importFile(rootDir: string, absolutePath: string): Promise<void> 
   const tenderNumber = tenderNumberFromFolderName(tenderFolder!);
   if (!tenderNumber) return;
 
-  // Unscoped by design: this is a trusted system-level background job (not
-  // an HTTP request), and local-docs folders are keyed by tenderNumber alone
-  // with no business segment — same reasoning as reconcileFolders() above,
-  // which already queries prisma.tender directly across all businesses.
-  const tender = await prisma.tender.findUnique({
-    where: { tenderNumber },
-    select: { id: true },
-  });
+  const tender = await findTenderByNumberAcrossBusinesses(tenderNumber);
   if (!tender) {
     logger.warn(`Local docs sync: no tender matches folder "${tenderFolder}" — skipping ${relative}`);
     return;
