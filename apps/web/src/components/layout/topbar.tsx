@@ -11,6 +11,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  useToast,
 } from "@bmp/ui";
 import { LogOut, Settings, UserRound } from "lucide-react";
 import Link from "next/link";
@@ -71,8 +72,21 @@ export function Topbar() {
   const availableBusinesses = useAuthStore((state) => state.availableBusinesses);
   const logout = useLogout();
   const switchBusiness = useSwitchBusiness();
+  const { toast } = useToast();
 
   const initials = user ? `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase() : "";
+
+  async function handleSwitchBusiness(businessId: string) {
+    try {
+      await switchBusiness.mutateAsync(businessId);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to switch business",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
 
   return (
     <header className="flex h-14 items-center justify-between border-b bg-background px-4">
@@ -94,7 +108,7 @@ export function Topbar() {
                 <DropdownMenuItem
                   key={business.businessId}
                   disabled={business.businessId === activeBusinessId || switchBusiness.isPending}
-                  onClick={() => switchBusiness.mutate(business.businessId)}
+                  onClick={() => handleSwitchBusiness(business.businessId)}
                 >
                   {business.businessName}
                 </DropdownMenuItem>
