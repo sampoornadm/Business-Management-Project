@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient, VendorCategory } from "@bmp/database";
 
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
+import { listAllBusinessIds } from "../../infra/prisma/business-ids.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
 
 const vendorWithContacts = {
@@ -139,8 +140,21 @@ export class VendorsRepository implements IVendorsRepository {
     await this.prisma.vendor.delete({ where: { id } });
   }
 
-  countPurchaseOrders(vendorId: string): Promise<number> {
-    return this.prisma.purchaseOrder.count({ where: { vendorId } });
+  /**
+   * `Vendor` is intentionally global/shared across all businesses, so a single vendor can
+   * legitimately be referenced by purchase orders in multiple businesses — the delete-guard needs
+   * a true cross-business total. `PurchaseOrder` is a business-scoped model (see scoped-client.ts's
+   * `SCOPED_MODELS`), so a single unscoped count is refused at query time; instead sum a scoped,
+   * per-business count across every business.
+   */
+  async countPurchaseOrders(vendorId: string): Promise<number> {
+    const businessIds = await listAllBusinessIds(this.prisma);
+    const counts = await Promise.all(
+      businessIds.map((businessId) =>
+        this.prisma.purchaseOrder.count({ where: { vendorId, businessId } }),
+      ),
+    );
+    return counts.reduce((sum, count) => sum + count, 0);
   }
 
   async createContact(data: CreateContactData): Promise<void> {
