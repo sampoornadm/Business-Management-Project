@@ -79,13 +79,13 @@ export default function DashboardPage() {
           />
         )}
 
-        <StatCard label="Your Role" icon={Activity} value={<Badge variant="secondary">{user?.role.name}</Badge>} />
+        <StatCard label="Your Role" icon={Activity} value={<Badge variant="secondary" className="font-sans">{user?.role.name}</Badge>} />
 
         <StatCard
           label="System Health"
           icon={HardDrive}
           value={
-            <div className="space-y-1 text-sm font-normal">
+            <div className="space-y-1 text-sm font-sans font-normal">
               <div className="flex items-center gap-2">
                 <HealthDot ok={healthQuery.data?.postgres} /> Database
               </div>
