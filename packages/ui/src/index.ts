@@ -23,6 +23,7 @@ export * from "./components/card";
 export * from "./components/document-upload";
 export * from "./components/dropdown-menu";
 export * from "./components/empty-state";
+export * from "./components/filter-bar";
 export * from "./components/multi-select";
 export * from "./components/skeleton";
 export * from "./components/stat-card";
