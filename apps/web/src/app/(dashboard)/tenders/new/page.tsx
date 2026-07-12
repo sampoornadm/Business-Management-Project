@@ -14,6 +14,7 @@ import {
   CardContent,
   CITIES_BY_STATE,
   INDIA_STATES,
+  PageHeader,
   Table,
   TableBody,
   TableCell,
@@ -214,10 +215,7 @@ export default function NewTenderPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">New Tender</h1>
-        <p className="text-sm text-muted-foreground">Create a new tender record.</p>
-      </div>
+      <PageHeader title="New Tender" description="Create a new tender record." />
 
       <Card>
         <CardContent className="space-y-3 pt-6">

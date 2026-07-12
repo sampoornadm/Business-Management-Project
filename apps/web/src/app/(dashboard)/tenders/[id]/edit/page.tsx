@@ -1,6 +1,6 @@
 "use client";
 
-import { Skeleton, useToast } from "@bmp/ui";
+import { PageHeader, Skeleton, useToast } from "@bmp/ui";
 import { useParams, useRouter } from "next/navigation";
 
 import { TenderForm, toCreateTenderInput, type TenderFormValues } from "@/components/tenders/tender-form";
@@ -40,9 +40,7 @@ export default function EditTenderPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Edit Tender</h1>
-      </div>
+      <PageHeader title="Edit Tender" />
       <TenderForm
         defaultValues={{
           tenderNumber: tender.tenderNumber,
