@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { Prisma, PrismaClient } from "@bmp/database";
+import type { ThemeColorKey } from "@bmp/types";
 
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
@@ -75,7 +76,9 @@ export interface IBusinessesRepository {
   findMembership(userId: string, businessId: string): Promise<{ roleId: string } | null>;
   listUserBusinesses(
     userId: string,
-  ): Promise<Array<{ businessId: string; businessName: string; businessCode: string }>>;
+  ): Promise<
+    Array<{ businessId: string; businessName: string; businessCode: string; themeColor: ThemeColorKey }>
+  >;
 }
 
 export class BusinessesRepository implements IBusinessesRepository {
@@ -182,7 +185,9 @@ export class BusinessesRepository implements IBusinessesRepository {
 
   async listUserBusinesses(
     userId: string,
-  ): Promise<Array<{ businessId: string; businessName: string; businessCode: string }>> {
+  ): Promise<
+    Array<{ businessId: string; businessName: string; businessCode: string; themeColor: ThemeColorKey }>
+  > {
     const rows = await this.prisma.userBusiness.findMany({
       where: { userId },
       include: { business: true },
@@ -191,6 +196,7 @@ export class BusinessesRepository implements IBusinessesRepository {
       businessId: row.businessId,
       businessName: row.business.name,
       businessCode: row.business.code,
+      themeColor: row.themeColor as ThemeColorKey,
     }));
   }
 }

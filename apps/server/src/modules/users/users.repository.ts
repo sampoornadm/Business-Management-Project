@@ -52,6 +52,7 @@ export interface IUsersRepository {
   updatePasswordHash(id: string, passwordHash: string): Promise<void>;
   updateAvatarAttachmentId(id: string, avatarAttachmentId: string | null): Promise<void>;
   assignRole(id: string, businessId: string, roleId: string): Promise<UserWithRole>;
+  updateThemeColor(id: string, businessId: string, themeColor: string): Promise<UserWithRole>;
   updateLastLoginAt(id: string): Promise<void>;
   markEmailVerified(id: string): Promise<void>;
   countTotal(businessId: string): Promise<number>;
@@ -143,6 +144,14 @@ export class UsersRepository implements IUsersRepository {
       where: { userId_businessId: { userId: id, businessId } },
       update: { roleId },
       create: { userId: id, businessId, roleId },
+    });
+    return this.findById(id, businessId) as Promise<UserWithRole>;
+  }
+
+  async updateThemeColor(id: string, businessId: string, themeColor: string): Promise<UserWithRole> {
+    await this.prisma.userBusiness.update({
+      where: { userId_businessId: { userId: id, businessId } },
+      data: { themeColor },
     });
     return this.findById(id, businessId) as Promise<UserWithRole>;
   }
