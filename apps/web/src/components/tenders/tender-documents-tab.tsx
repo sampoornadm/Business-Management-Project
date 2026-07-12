@@ -1,7 +1,7 @@
 "use client";
 
 import { TENDER_DOCUMENT_TYPES, type TenderDocumentType } from "@bmp/types";
-import { DocumentUpload, type DocumentVersion, useToast } from "@bmp/ui";
+import { DocumentUpload, Skeleton, type DocumentVersion, useToast } from "@bmp/ui";
 import { Loader2, Plus } from "lucide-react";
 import { useRef, type ChangeEvent } from "react";
 
@@ -207,6 +207,10 @@ export function TenderDocumentsTab({ tenderId }: { tenderId: string }) {
   const documentsQuery = useTenderDocuments(tenderId);
   const roleName = useAuthStore((state) => state.user?.role.name);
   const canDelete = hasPermission(roleName, "attachments:delete");
+
+  if (documentsQuery.isLoading) {
+    return <Skeleton className="h-64 w-full" />;
+  }
 
   const groupIdsByType = new Map<TenderDocumentType, string[]>();
   for (const doc of documentsQuery.data ?? []) {
