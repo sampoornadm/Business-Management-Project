@@ -22,6 +22,7 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { ThemeColorPicker } from "@/components/profile/theme-color-picker";
 import { useChangePassword } from "@/hooks/use-auth";
 import { useUpdateOwnProfile, useUploadAvatar } from "@/hooks/use-users";
 import { useAuthStore } from "@/lib/auth-store";
@@ -52,6 +53,7 @@ type PasswordFormValues = z.infer<typeof passwordSchema>;
 export default function ProfilePage() {
   const { toast } = useToast();
   const user = useAuthStore((state) => state.user);
+  const availableBusinesses = useAuthStore((state) => state.availableBusinesses);
   const updateProfile = useUpdateOwnProfile();
   const uploadAvatar = useUploadAvatar();
   const changePassword = useChangePassword();
@@ -186,6 +188,25 @@ export default function ProfilePage() {
               </Button>
             </form>
           </Form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Theme color</CardTitle>
+          <CardDescription>
+            Pick an accent color for each business you belong to — helps tell them apart at a glance.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {availableBusinesses.map((business) => (
+            <ThemeColorPicker
+              key={business.businessId}
+              businessId={business.businessId}
+              businessName={business.businessName}
+              activeColor={business.themeColor}
+            />
+          ))}
         </CardContent>
       </Card>
 
