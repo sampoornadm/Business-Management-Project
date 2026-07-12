@@ -25,6 +25,7 @@ export * from "./components/dropdown-menu";
 export * from "./components/empty-state";
 export * from "./components/multi-select";
 export * from "./components/skeleton";
+export * from "./components/stat-card";
 export * from "./components/pagination";
 export * from "./components/page-header";
 export * from "./components/separator";
