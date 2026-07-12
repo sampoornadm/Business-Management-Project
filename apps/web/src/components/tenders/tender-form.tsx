@@ -154,7 +154,7 @@ export function TenderForm({
             <CardTitle className="text-base">Basic information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="tenderNumber"
@@ -238,7 +238,7 @@ export function TenderForm({
                 </FormItem>
               )}
             />
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <FormField
                 control={form.control}
                 name="type"
@@ -312,7 +312,7 @@ export function TenderForm({
                 )}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="state"
@@ -390,7 +390,7 @@ export function TenderForm({
           <CardHeader>
             <CardTitle className="text-base">Dealing officer</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-3 gap-4">
+          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <FormField
               control={form.control}
               name="dealingOfficerName"
@@ -437,7 +437,7 @@ export function TenderForm({
           <CardHeader>
             <CardTitle className="text-base">Financials</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4">
+          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField
               control={form.control}
               name="estimatedCost"
@@ -497,7 +497,7 @@ export function TenderForm({
           <CardHeader>
             <CardTitle className="text-base">Dates</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-3 gap-4">
+          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <FormField
               control={form.control}
               name="submissionDate"

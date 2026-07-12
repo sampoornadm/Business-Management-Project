@@ -4,7 +4,10 @@ import { TENDER_PRIORITIES, TENDER_STATUS_LABELS, TENDER_STATUSES, type TenderPr
 import {
   Button,
   DataTable,
+  EmptyState,
+  FilterBar,
   Input,
+  PageHeader,
   Select,
   SelectContent,
   SelectItem,
@@ -12,7 +15,7 @@ import {
   SelectValue,
 } from "@bmp/ui";
 import type { PaginationState } from "@tanstack/react-table";
-import { FilePlus } from "lucide-react";
+import { FilePlus, FileText, SearchX } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -43,24 +46,25 @@ export default function TendersPage() {
   });
 
   const canCreate = hasPermission(roleName, "tenders:create");
+  const hasActiveFilters = Boolean(debouncedSearch || status || priority);
+
+  const newTenderButton = (
+    <Button asChild>
+      <Link href="/tenders/new">
+        <FilePlus className="mr-2 h-4 w-4" /> New Tender
+      </Link>
+    </Button>
+  );
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Tenders</h1>
-          <p className="text-sm text-muted-foreground">Track tenders from draft through award.</p>
-        </div>
-        {canCreate && (
-          <Button asChild>
-            <Link href="/tenders/new">
-              <FilePlus className="mr-2 h-4 w-4" /> New Tender
-            </Link>
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="Tenders"
+        description="Track tenders from draft through award."
+        actions={canCreate ? newTenderButton : undefined}
+      />
 
-      <div className="flex flex-wrap items-center gap-3">
+      <FilterBar>
         <Input
           placeholder="Search by title or tender number..."
           value={search}
@@ -106,7 +110,7 @@ export default function TendersPage() {
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </FilterBar>
 
       <DataTable
         columns={tenderTableColumns}
@@ -115,6 +119,22 @@ export default function TendersPage() {
         pageCount={tendersQuery.data?.totalPages ?? 0}
         pagination={pagination}
         onPaginationChange={setPagination}
+        emptyState={
+          hasActiveFilters ? (
+            <EmptyState
+              icon={SearchX}
+              title="No tenders match your filters"
+              description="Try adjusting your search, status, or priority filters."
+            />
+          ) : (
+            <EmptyState
+              icon={FileText}
+              title="No tenders yet"
+              description="Create your first tender to start tracking it from draft through award."
+              action={canCreate ? newTenderButton : undefined}
+            />
+          )
+        }
       />
     </div>
   );

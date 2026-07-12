@@ -1,7 +1,7 @@
 "use client";
 
 import { TENDER_STATUS_LABELS, type TenderStatus } from "@bmp/types";
-import { Badge, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@bmp/ui";
+import { Badge, Card, CardContent, CardHeader, CardTitle, KpiGrid, Skeleton, StatCard } from "@bmp/ui";
 import { Activity, Database, FileClock, FileText, HardDrive, Users2 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -62,65 +62,43 @@ export default function DashboardPage() {
         <p className="text-sm text-muted-foreground">Here&apos;s what&apos;s happening in your workspace.</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-            <Users2 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {usersQuery.isLoading ? (
-              <Skeleton className="h-8 w-16" />
-            ) : (
-              <div className="font-mono text-2xl font-bold">{usersQuery.data?.totalItems ?? 0}</div>
-            )}
-          </CardContent>
-        </Card>
+      <KpiGrid>
+        <StatCard
+          label="Total Users"
+          icon={Users2}
+          isLoading={usersQuery.isLoading}
+          value={usersQuery.data?.totalItems ?? 0}
+        />
 
         {canReadTenders && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Tenders</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {tenderStatsQuery.isLoading ? (
-                <Skeleton className="h-8 w-16" />
-              ) : (
-                <div className="font-mono text-2xl font-bold">{tenderStatsQuery.data?.totalActive ?? 0}</div>
-              )}
-            </CardContent>
-          </Card>
+          <StatCard
+            label="Active Tenders"
+            icon={FileText}
+            isLoading={tenderStatsQuery.isLoading}
+            value={tenderStatsQuery.data?.totalActive ?? 0}
+          />
         )}
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Your Role</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <Badge variant="secondary">{user?.role.name}</Badge>
-          </CardContent>
-        </Card>
+        <StatCard label="Your Role" icon={Activity} value={<Badge variant="secondary" className="font-sans">{user?.role.name}</Badge>} />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">System Health</CardTitle>
-            <HardDrive className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="space-y-1 text-sm">
-            <div className="flex items-center gap-2">
-              <HealthDot ok={healthQuery.data?.postgres} /> Database
+        <StatCard
+          label="System Health"
+          icon={HardDrive}
+          value={
+            <div className="space-y-1 text-sm font-sans font-normal">
+              <div className="flex items-center gap-2">
+                <HealthDot ok={healthQuery.data?.postgres} /> Database
+              </div>
+              <div className="flex items-center gap-2">
+                <HealthDot ok={healthQuery.data?.redis} /> Cache
+              </div>
+              <div className="flex items-center gap-2">
+                <HealthDot ok={healthQuery.data?.s3} /> File storage
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <HealthDot ok={healthQuery.data?.redis} /> Cache
-            </div>
-            <div className="flex items-center gap-2">
-              <HealthDot ok={healthQuery.data?.s3} /> File storage
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          }
+        />
+      </KpiGrid>
 
       {canReadTenders && (
         <div className="grid gap-4 lg:grid-cols-2">

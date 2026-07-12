@@ -25,6 +25,8 @@ export interface DataTableProps<TData, TValue> {
   onPaginationChange: OnChangeFn<PaginationState>;
   sorting?: SortingState;
   onSortingChange?: OnChangeFn<SortingState>;
+  /** Rendered instead of the default "No results." text when there are zero rows. */
+  emptyState?: React.ReactNode;
 }
 
 export function DataTable<TData, TValue>({
@@ -36,6 +38,7 @@ export function DataTable<TData, TValue>({
   onPaginationChange,
   sorting,
   onSortingChange,
+  emptyState,
 }: DataTableProps<TData, TValue>) {
   const table = useReactTable({
     data,
@@ -88,7 +91,11 @@ export function DataTable<TData, TValue>({
               )
             ) : table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && "selected"}
+                  className="animate-in fade-in duration-200"
+                >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -97,9 +104,13 @@ export function DataTable<TData, TValue>({
                 </TableRow>
               ))
             ) : (
-              <TableRow>
-                <TableCell colSpan={columnCount} className="h-24 text-center text-muted-foreground">
-                  No results.
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={columnCount} className="p-0">
+                  {emptyState ?? (
+                    <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
+                      No results.
+                    </div>
+                  )}
                 </TableCell>
               </TableRow>
             )}

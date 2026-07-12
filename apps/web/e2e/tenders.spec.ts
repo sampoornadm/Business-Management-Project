@@ -59,4 +59,11 @@ test.describe("Tenders", () => {
     await page.goto("/tenders");
     await expect(page.getByText(tenderTitle)).toBeVisible();
   });
+
+  test("shows a filtered-empty state when no tenders match the search", async ({ page }) => {
+    await login(page);
+    await page.goto("/tenders");
+    await page.fill('input[placeholder="Search by title or tender number..."]', `no-such-tender-${Date.now()}`);
+    await expect(page.getByText("No tenders match your filters")).toBeVisible();
+  });
 });
