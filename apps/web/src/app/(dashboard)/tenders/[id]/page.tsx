@@ -171,7 +171,7 @@ export default function TenderDetailPage() {
 
         <TabsContent value="overview" className="space-y-4">
           <Card>
-            <CardContent className="grid grid-cols-2 gap-4 pt-6 text-sm">
+            <CardContent className="grid grid-cols-1 gap-4 pt-6 text-sm sm:grid-cols-2">
               <div>
                 <p className="text-muted-foreground">Department</p>
                 <p>{tender.department}</p>
