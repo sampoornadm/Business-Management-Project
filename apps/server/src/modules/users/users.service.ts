@@ -161,6 +161,20 @@ export class UsersService {
     return this.toDto(user);
   }
 
+  async updateThemeColor(userId: string, businessId: string, themeColor: string): Promise<UserDto> {
+    this.assertMember(await this.usersRepository.findById(userId, businessId));
+
+    const user = await this.usersRepository.updateThemeColor(userId, businessId, themeColor);
+    await this.auditService.log({
+      actorId: userId,
+      action: "USER_THEME_COLOR_UPDATED",
+      entityType: "User",
+      entityId: userId,
+      metadata: { businessId, themeColor },
+    });
+    return this.toDto(user);
+  }
+
   async assignRole(
     id: string,
     roleId: string,

@@ -121,6 +121,13 @@ class FakeUsersRepository implements Partial<IUsersRepository> {
     }
     return this.scopedTo(user, businessId);
   }
+  async updateThemeColor(id: string, businessId: string, themeColor: string) {
+    const user = this.users.get(id);
+    if (!user) throw new Error("not found");
+    const membership = user.userBusinesses.find((ub) => ub.businessId === businessId);
+    if (membership) membership.themeColor = themeColor;
+    return this.scopedTo(user, businessId);
+  }
 }
 
 class FakeRolesRepository implements Partial<IRolesRepository> {
@@ -248,5 +255,35 @@ describe("UsersService", () => {
 
     expect(dto.firstName).toBe("Self");
     expect(dto.role.name).toBe("ADMIN");
+  });
+
+  describe("updateThemeColor", () => {
+    it("updates the themeColor on the caller's membership for that business", async () => {
+      const userId = randomUUID();
+      usersRepository.users.set(
+        userId,
+        buildUser({ id: userId, businessId: BUSINESS_ID, roleId: "role-viewer" }),
+      );
+
+      const result = await usersService.updateThemeColor(userId, BUSINESS_ID, "violet");
+
+      expect(result.id).toBe(userId);
+      const stored = usersRepository.users.get(userId)!;
+      expect(stored.userBusinesses.find((ub) => ub.businessId === BUSINESS_ID)?.themeColor).toBe(
+        "violet",
+      );
+    });
+
+    it("throws NotFoundError when the caller has no membership in that business", async () => {
+      const userId = randomUUID();
+      usersRepository.users.set(
+        userId,
+        buildUser({ id: userId, businessId: BUSINESS_ID, roleId: "role-viewer" }),
+      );
+
+      await expect(
+        usersService.updateThemeColor(userId, OTHER_BUSINESS_ID, "violet"),
+      ).rejects.toThrow(NotFoundError);
+    });
   });
 });
