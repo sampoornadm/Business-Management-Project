@@ -74,10 +74,13 @@ export interface IBusinessesRepository {
   removeMember(businessId: string, userId: string): Promise<void>;
   listMembers(businessId: string): Promise<MemberWithRole[]>;
   findMembership(userId: string, businessId: string): Promise<{ roleId: string } | null>;
-  listUserBusinesses(
-    userId: string,
-  ): Promise<
-    Array<{ businessId: string; businessName: string; businessCode: string; themeColor: ThemeColorKey }>
+  listUserBusinesses(userId: string): Promise<
+    Array<{
+      businessId: string;
+      businessName: string;
+      businessCode: string;
+      themeColor: ThemeColorKey;
+    }>
   >;
 }
 
@@ -183,10 +186,13 @@ export class BusinessesRepository implements IBusinessesRepository {
     });
   }
 
-  async listUserBusinesses(
-    userId: string,
-  ): Promise<
-    Array<{ businessId: string; businessName: string; businessCode: string; themeColor: ThemeColorKey }>
+  async listUserBusinesses(userId: string): Promise<
+    Array<{
+      businessId: string;
+      businessName: string;
+      businessCode: string;
+      themeColor: ThemeColorKey;
+    }>
   > {
     const rows = await this.prisma.userBusiness.findMany({
       where: { userId },
@@ -196,6 +202,7 @@ export class BusinessesRepository implements IBusinessesRepository {
       businessId: row.businessId,
       businessName: row.business.name,
       businessCode: row.business.code,
+      // Unchecked assertion; safe only because writes are validated via Zod
       themeColor: row.themeColor as ThemeColorKey,
     }));
   }

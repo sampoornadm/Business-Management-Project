@@ -148,7 +148,11 @@ export class UsersRepository implements IUsersRepository {
     return this.findById(id, businessId) as Promise<UserWithRole>;
   }
 
-  async updateThemeColor(id: string, businessId: string, themeColor: string): Promise<UserWithRole> {
+  async updateThemeColor(
+    id: string,
+    businessId: string,
+    themeColor: string,
+  ): Promise<UserWithRole> {
     await this.prisma.userBusiness.update({
       where: { userId_businessId: { userId: id, businessId } },
       data: { themeColor },
