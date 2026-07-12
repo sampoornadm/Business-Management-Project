@@ -9,6 +9,7 @@ import type {
   CreateUserBody,
   ListUsersQuery,
   UpdateOwnProfileBody,
+  UpdateThemeColorBody,
   UpdateUserBody,
 } from "./users.validation.js";
 
@@ -65,6 +66,12 @@ export class UsersController {
     const body = req.body as UpdateOwnProfileBody;
     const user = await this.usersService.updateOwnProfile(req.user!.id, body, req.user!.businessId);
     sendSuccess(res, user, "Profile updated");
+  });
+
+  updateThemeColor = asyncHandler(async (req, res) => {
+    const body = req.body as UpdateThemeColorBody;
+    const user = await this.usersService.updateThemeColor(req.user!.id, body.businessId, body.themeColor);
+    sendSuccess(res, user, "Theme color updated");
   });
 
   assignRole = asyncHandler(async (req, res) => {

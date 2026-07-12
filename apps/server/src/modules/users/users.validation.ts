@@ -1,3 +1,4 @@
+import { THEME_COLOR_KEYS } from "@bmp/types";
 import { z } from "zod";
 
 export const createUserSchema = z.object({
@@ -23,6 +24,12 @@ export const updateOwnProfileSchema = z.object({
   phone: z.string().max(30).nullable().optional(),
 });
 export type UpdateOwnProfileBody = z.infer<typeof updateOwnProfileSchema>;
+
+export const updateThemeColorSchema = z.object({
+  businessId: z.string().uuid(),
+  themeColor: z.enum(THEME_COLOR_KEYS),
+});
+export type UpdateThemeColorBody = z.infer<typeof updateThemeColorSchema>;
 
 export const assignRoleSchema = z.object({
   roleId: z.string().uuid(),
