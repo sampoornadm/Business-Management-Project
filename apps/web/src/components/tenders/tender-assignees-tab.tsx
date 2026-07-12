@@ -11,6 +11,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Skeleton,
   useToast,
 } from "@bmp/ui";
 import { UserMinus, UserPlus } from "lucide-react";
@@ -66,7 +67,8 @@ export function TenderAssigneesTab({ tender }: { tender: TenderDto }) {
 
   return (
     <div className="space-y-4">
-      {canAssign && (
+      {canAssign && usersQuery.isLoading && <Skeleton className="h-16 w-full" />}
+      {canAssign && !usersQuery.isLoading && (
         <div className="flex flex-wrap items-end gap-2 rounded-md border p-3">
           <div className="min-w-48">
             <Select value={selectedUserId} onValueChange={setSelectedUserId}>
