@@ -1,3 +1,4 @@
+import type { ThemeColorKey } from "./theme.js";
 import type { RoleName } from "./rbac.js";
 
 export interface RoleSummaryDto {
@@ -48,6 +49,11 @@ export interface UpdateOwnProfileInput {
   firstName?: string;
   lastName?: string;
   phone?: string | null;
+}
+
+export interface UpdateThemeColorInput {
+  businessId: string;
+  themeColor: ThemeColorKey;
 }
 
 export interface AssignRoleInput {

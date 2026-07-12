@@ -1,3 +1,4 @@
+import type { ThemeColorKey } from "./theme.js";
 import type { UserDto } from "./user.js";
 
 export interface LoginInput {
@@ -9,6 +10,7 @@ export interface AvailableBusiness {
   businessId: string;
   businessName: string;
   businessCode: string;
+  themeColor: ThemeColorKey;
 }
 
 export interface LoginResponseDto {
