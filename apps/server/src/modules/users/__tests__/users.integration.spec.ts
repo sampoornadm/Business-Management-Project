@@ -61,13 +61,15 @@ describe("PATCH /users/me/theme-color (integration)", () => {
       data: { id: randomUUID(), name: "Foreign Business", code: `FB-${randomUUID().slice(0, 8)}` },
     });
 
-    const response = await request(app)
-      .patch("/api/v1/users/me/theme-color")
-      .set("Authorization", `Bearer ${testUser.accessToken}`)
-      .send({ businessId: foreignBusiness.id, themeColor: "teal" });
+    try {
+      const response = await request(app)
+        .patch("/api/v1/users/me/theme-color")
+        .set("Authorization", `Bearer ${testUser.accessToken}`)
+        .send({ businessId: foreignBusiness.id, themeColor: "teal" });
 
-    expect(response.status).toBe(404);
-
-    await prisma.business.deleteMany({ where: { id: foreignBusiness.id } });
+      expect(response.status).toBe(404);
+    } finally {
+      await prisma.business.deleteMany({ where: { id: foreignBusiness.id } });
+    }
   });
 });
