@@ -179,6 +179,8 @@ model UserBusiness {
   roleId     String
   role       Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
 
+  themeColor String @default("steel")
+
   createdAt DateTime @default(now())
 
   @@unique([userId, businessId])

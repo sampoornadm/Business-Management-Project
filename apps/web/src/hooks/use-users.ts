@@ -7,6 +7,7 @@ import type {
   ListUsersQuery,
   PaginatedResult,
   UpdateOwnProfileInput,
+  UpdateThemeColorInput,
   UpdateUserInput,
   UserDto,
 } from "@bmp/types";
@@ -114,5 +115,18 @@ export function useUploadAvatar() {
       return unwrap(response.data);
     },
     onSuccess: (user) => setUser(user),
+  });
+}
+
+export function useUpdateThemeColor() {
+  const updateBusinessThemeColor = useAuthStore((state) => state.updateBusinessThemeColor);
+  return useMutation({
+    mutationFn: async (input: UpdateThemeColorInput) => {
+      const response = await apiClient.patch<ApiResponse<UserDto>>("/users/me/theme-color", input);
+      return unwrap(response.data);
+    },
+    onSuccess: (_user, input) => {
+      updateBusinessThemeColor(input.businessId, input.themeColor);
+    },
   });
 }

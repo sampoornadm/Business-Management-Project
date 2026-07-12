@@ -12,6 +12,7 @@ import {
   createUserSchema,
   listUsersQuerySchema,
   updateOwnProfileSchema,
+  updateThemeColorSchema,
   updateUserSchema,
 } from "./users.validation.js";
 
@@ -41,6 +42,23 @@ export function createUsersRouter(controller: UsersController): Router {
    */
   router.get("/me", authenticateMiddleware, controller.getMe);
   router.patch("/me", authenticateMiddleware, validate(updateOwnProfileSchema), controller.updateMe);
+
+  /**
+   * @openapi
+   * /users/me/theme-color:
+   *   patch:
+   *     tags: [Users]
+   *     summary: Set the current user's accent color for one of their businesses
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       200: { description: Updated profile }
+   */
+  router.patch(
+    "/me/theme-color",
+    authenticateMiddleware,
+    validate(updateThemeColorSchema),
+    controller.updateThemeColor,
+  );
 
   /**
    * @openapi

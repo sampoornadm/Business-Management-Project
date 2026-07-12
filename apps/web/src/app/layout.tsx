@@ -33,6 +33,18 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: PropsWithChildren) {
   return (
     <html lang="en" suppressHydrationWarning className={`${plexSans.variable} ${plexMono.variable}`}>
+      <head>
+        <script
+          // Mirrors next-themes' own inline-script approach: read the last-applied
+          // color synchronously and paint it before hydration, avoiding a flash of
+          // the default color. The DashboardLayout effect reconciles it against the
+          // server-derived value once the auth store hydrates (e.g. if this cache
+          // is stale because the color was changed on another device).
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var v=JSON.parse(localStorage.getItem("bmp-theme-color-vars"));if(!v)return;var s=document.documentElement.style;s.setProperty("--primary",v.primary);s.setProperty("--primary-foreground",v.primaryForeground);s.setProperty("--ring",v.ring);}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <QueryProvider>
