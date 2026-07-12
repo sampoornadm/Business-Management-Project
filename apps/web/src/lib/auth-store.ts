@@ -5,7 +5,7 @@ export interface AvailableBusiness {
   businessId: string;
   businessName: string;
   businessCode: string;
-  themeColor?: ThemeColorKey;
+  themeColor: ThemeColorKey;
 }
 
 interface AuthState {
