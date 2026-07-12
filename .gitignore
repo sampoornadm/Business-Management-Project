@@ -66,3 +66,6 @@ skills-lock.json
 
 # superpowers subagent-driven-development scratch state (progress ledger, task briefs/reports)
 .superpowers/
+
+# isolated workspace for superpowers-driven implementation work
+.worktrees/
