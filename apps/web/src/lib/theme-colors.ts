@@ -57,6 +57,8 @@ export function getThemeColorVars(key: ThemeColorKey, mode: "light" | "dark"): T
   return entry[mode];
 }
 
+// Also hardcoded as a raw string in the pre-hydration <script> in app/layout.tsx
+// (that inline script can't import this const) — keep both in sync if renamed.
 const CACHE_KEY = "bmp-theme-color-vars";
 
 export function applyThemeColorVars(key: ThemeColorKey, mode: "light" | "dark"): void {
@@ -66,16 +68,6 @@ export function applyThemeColorVars(key: ThemeColorKey, mode: "light" | "dark"):
   root.setProperty("--primary-foreground", vars.primaryForeground);
   root.setProperty("--ring", vars.ring);
   window.localStorage.setItem(CACHE_KEY, JSON.stringify(vars));
-}
-
-export function readCachedThemeColorVars(): ThemeColorVars | null {
-  const raw = window.localStorage.getItem(CACHE_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as ThemeColorVars;
-  } catch {
-    return null;
-  }
 }
 
 export { THEME_COLOR_KEYS };
