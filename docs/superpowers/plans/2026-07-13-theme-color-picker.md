@@ -15,7 +15,7 @@
 - Vitest, not Jest. Unit tests use hand-written fake repositories (no mocking framework).
 - Don't run `pnpm --filter @bmp/web typecheck` or `build` while `pnpm dev`'s Next dev server is running — both write to `apps/web/.next` and race (see CLAUDE.md gotcha). Stop the dev server first, or run `typecheck` then restart dev after.
 - Numeric/string form fields follow existing React Hook Form conventions where relevant (not applicable here — no numeric input in this feature).
-- Migration: use `pnpm db:migrate` from repo root; when prompted for a migration name, enter exactly `add_theme_color_to_user_business`.
+- Migration: run non-interactively with an explicit `--name` flag (an interactive prompt will hang/fail in a non-TTY shell) — see Task 1 Step 2 for the exact command.
 
 ---
 
@@ -110,13 +110,11 @@ model UserBusiness {
 
 - [ ] **Step 2: Run the migration**
 
-Run from repo root:
+Run from repo root (explicit `--name` avoids the interactive prompt, which hangs/fails in a non-TTY shell):
 
 ```bash
-pnpm db:migrate
+pnpm exec dotenv -e .env -- pnpm --filter @bmp/database exec prisma migrate dev --name add_theme_color_to_user_business
 ```
-
-When prompted `Enter a name for the new migration:`, type `add_theme_color_to_user_business` and press enter.
 
 Expected: a new folder under `packages/database/prisma/migrations/` (timestamp-prefixed, suffix `_add_theme_color_to_user_business`) containing `ALTER TABLE "user_businesses" ADD COLUMN "themeColor" TEXT NOT NULL DEFAULT 'steel';`, and the command exits 0.
 
@@ -396,9 +394,10 @@ git commit -m "feat(server): read/write themeColor at the repository layer"
 
 ---
 
-### Task 4: Service, validation, controller, route
+### Task 4: Service, validation, controller, route (TDD)
 
 **Files:**
+- Modify: `apps/server/src/modules/users/__tests__/users.service.spec.ts`
 - Modify: `apps/server/src/modules/users/users.validation.ts`
 - Modify: `apps/server/src/modules/users/users.service.ts`
 - Modify: `apps/server/src/modules/users/users.controller.ts`
@@ -406,137 +405,10 @@ git commit -m "feat(server): read/write themeColor at the repository layer"
 
 **Interfaces:**
 - Consumes: `IUsersRepository.updateThemeColor` (Task 3), `THEME_COLOR_KEYS` (Task 1).
-- Produces: `UsersService.updateThemeColor(userId: string, businessId: string, themeColor: string): Promise<UserDto>`, consumed by Task 5's tests and the controller in this task.
+- Produces: `UsersService.updateThemeColor(userId: string, businessId: string, themeColor: string): Promise<UserDto>`, consumed by the controller in this task and by Task 5's integration test.
 - Produces: `PATCH /users/me/theme-color` HTTP route, consumed by Task 8 (frontend hook) and Task 5's integration test.
 
-- [ ] **Step 1: Add the validation schema**
-
-In `apps/server/src/modules/users/users.validation.ts`, add the import:
-
-```ts
-import { THEME_COLOR_KEYS } from "@bmp/types";
-```
-
-and, after `updateOwnProfileSchema`:
-
-```ts
-export const updateThemeColorSchema = z.object({
-  businessId: z.string().uuid(),
-  themeColor: z.enum(THEME_COLOR_KEYS),
-});
-export type UpdateThemeColorBody = z.infer<typeof updateThemeColorSchema>;
-```
-
-- [ ] **Step 2: Add the service method**
-
-In `apps/server/src/modules/users/users.service.ts`, add after `updateOwnProfile`:
-
-```ts
-  async updateThemeColor(userId: string, businessId: string, themeColor: string): Promise<UserDto> {
-    this.assertMember(await this.usersRepository.findById(userId, businessId));
-
-    const user = await this.usersRepository.updateThemeColor(userId, businessId, themeColor);
-    await this.auditService.log({
-      actorId: userId,
-      action: "USER_THEME_COLOR_UPDATED",
-      entityType: "User",
-      entityId: userId,
-      metadata: { businessId, themeColor },
-    });
-    return this.toDto(user);
-  }
-```
-
-This reuses the existing `assertMember` helper (already defined in this file) to turn "no membership row for this `businessId`" into a `NotFoundError` — the same check every other business-scoped method in this service already performs, so a user can't set a color for a business they don't belong to.
-
-- [ ] **Step 3: Add the controller handler**
-
-In `apps/server/src/modules/users/users.controller.ts`, add the import:
-
-```ts
-import type {
-  AssignRoleBody,
-  CreateUserBody,
-  ListUsersQuery,
-  UpdateOwnProfileBody,
-  UpdateThemeColorBody,
-  UpdateUserBody,
-} from "./users.validation.js";
-```
-
-(replacing the existing narrower import list), and add this handler after `updateMe`:
-
-```ts
-  updateThemeColor = asyncHandler(async (req, res) => {
-    const body = req.body as UpdateThemeColorBody;
-    const user = await this.usersService.updateThemeColor(req.user!.id, body.businessId, body.themeColor);
-    sendSuccess(res, user, "Theme color updated");
-  });
-```
-
-- [ ] **Step 4: Wire the route**
-
-In `apps/server/src/modules/users/users.routes.ts`, add `updateThemeColorSchema` to the existing validation import:
-
-```ts
-import {
-  assignRoleSchema,
-  createUserSchema,
-  listUsersQuerySchema,
-  updateOwnProfileSchema,
-  updateThemeColorSchema,
-  updateUserSchema,
-} from "./users.validation.js";
-```
-
-and add this route immediately after the `/me` block (before `/me/avatar`):
-
-```ts
-  /**
-   * @openapi
-   * /users/me/theme-color:
-   *   patch:
-   *     tags: [Users]
-   *     summary: Set the current user's accent color for one of their businesses
-   *     security: [{ bearerAuth: [] }]
-   *     responses:
-   *       200: { description: Updated profile }
-   */
-  router.patch(
-    "/me/theme-color",
-    authenticateMiddleware,
-    validate(updateThemeColorSchema),
-    controller.updateThemeColor,
-  );
-```
-
-- [ ] **Step 5: Verify it typechecks**
-
-```bash
-pnpm --filter @bmp/server typecheck
-```
-
-Expected: exits 0.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add apps/server/src/modules/users/users.validation.ts apps/server/src/modules/users/users.service.ts apps/server/src/modules/users/users.controller.ts apps/server/src/modules/users/users.routes.ts
-git commit -m "feat(server): add PATCH /users/me/theme-color endpoint"
-```
-
----
-
-### Task 5: Backend tests
-
-**Files:**
-- Modify: `apps/server/src/modules/users/__tests__/users.service.spec.ts`
-- Create: `apps/server/src/modules/users/__tests__/users.integration.spec.ts`
-
-**Interfaces:**
-- Consumes: `UsersService.updateThemeColor` (Task 4), `FakeUsersRepository` (existing fixture in this file, extended here).
-
-- [ ] **Step 1: Write the failing unit test**
+- [ ] **Step 1: Write the failing unit tests**
 
 In `apps/server/src/modules/users/__tests__/users.service.spec.ts`, add `updateThemeColor` to the `FakeUsersRepository` class (after its `assignRole` method):
 
@@ -584,15 +456,55 @@ Then add this test block at the end of the `describe("UsersService", ...)` block
   });
 ```
 
-- [ ] **Step 2: Run it to verify it fails first (sanity check the test actually exercises new code)**
+- [ ] **Step 2: Run it to verify it fails**
 
 ```bash
 pnpm --filter @bmp/server test -- users/__tests__/users.service.spec.ts
 ```
 
-Expected: FAIL — `usersService.updateThemeColor is not a function` (Task 4 already implemented it in this plan's sequence, so if you're executing tasks in order this should already PASS; if you're verifying Task 4 and 5 independently, temporarily comment out the service method to confirm the test catches its absence, then restore it).
+Expected: FAIL — `usersService.updateThemeColor is not a function` (the method doesn't exist yet; only the fake repository does).
 
-- [ ] **Step 3: Run it to verify it passes**
+- [ ] **Step 3: Add the validation schema**
+
+In `apps/server/src/modules/users/users.validation.ts`, add the import:
+
+```ts
+import { THEME_COLOR_KEYS } from "@bmp/types";
+```
+
+and, after `updateOwnProfileSchema`:
+
+```ts
+export const updateThemeColorSchema = z.object({
+  businessId: z.string().uuid(),
+  themeColor: z.enum(THEME_COLOR_KEYS),
+});
+export type UpdateThemeColorBody = z.infer<typeof updateThemeColorSchema>;
+```
+
+- [ ] **Step 4: Add the service method**
+
+In `apps/server/src/modules/users/users.service.ts`, add after `updateOwnProfile`:
+
+```ts
+  async updateThemeColor(userId: string, businessId: string, themeColor: string): Promise<UserDto> {
+    this.assertMember(await this.usersRepository.findById(userId, businessId));
+
+    const user = await this.usersRepository.updateThemeColor(userId, businessId, themeColor);
+    await this.auditService.log({
+      actorId: userId,
+      action: "USER_THEME_COLOR_UPDATED",
+      entityType: "User",
+      entityId: userId,
+      metadata: { businessId, themeColor },
+    });
+    return this.toDto(user);
+  }
+```
+
+This reuses the existing `assertMember` helper (already defined in this file) to turn "no membership row for this `businessId`" into a `NotFoundError` — the same check every other business-scoped method in this service already performs, so a user can't set a color for a business they don't belong to.
+
+- [ ] **Step 5: Run the unit tests to verify they pass**
 
 ```bash
 pnpm --filter @bmp/server test -- users/__tests__/users.service.spec.ts
@@ -600,7 +512,93 @@ pnpm --filter @bmp/server test -- users/__tests__/users.service.spec.ts
 
 Expected: PASS, both new tests green alongside all existing ones in the file.
 
-- [ ] **Step 4: Write the integration test**
+- [ ] **Step 6: Add the controller handler**
+
+In `apps/server/src/modules/users/users.controller.ts`, add the import:
+
+```ts
+import type {
+  AssignRoleBody,
+  CreateUserBody,
+  ListUsersQuery,
+  UpdateOwnProfileBody,
+  UpdateThemeColorBody,
+  UpdateUserBody,
+} from "./users.validation.js";
+```
+
+(replacing the existing narrower import list), and add this handler after `updateMe`:
+
+```ts
+  updateThemeColor = asyncHandler(async (req, res) => {
+    const body = req.body as UpdateThemeColorBody;
+    const user = await this.usersService.updateThemeColor(req.user!.id, body.businessId, body.themeColor);
+    sendSuccess(res, user, "Theme color updated");
+  });
+```
+
+- [ ] **Step 7: Wire the route**
+
+In `apps/server/src/modules/users/users.routes.ts`, add `updateThemeColorSchema` to the existing validation import:
+
+```ts
+import {
+  assignRoleSchema,
+  createUserSchema,
+  listUsersQuerySchema,
+  updateOwnProfileSchema,
+  updateThemeColorSchema,
+  updateUserSchema,
+} from "./users.validation.js";
+```
+
+and add this route immediately after the `/me` block (before `/me/avatar`):
+
+```ts
+  /**
+   * @openapi
+   * /users/me/theme-color:
+   *   patch:
+   *     tags: [Users]
+   *     summary: Set the current user's accent color for one of their businesses
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       200: { description: Updated profile }
+   */
+  router.patch(
+    "/me/theme-color",
+    authenticateMiddleware,
+    validate(updateThemeColorSchema),
+    controller.updateThemeColor,
+  );
+```
+
+- [ ] **Step 8: Verify it typechecks**
+
+```bash
+pnpm --filter @bmp/server typecheck
+```
+
+Expected: exits 0.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add apps/server/src/modules/users/__tests__/users.service.spec.ts apps/server/src/modules/users/users.validation.ts apps/server/src/modules/users/users.service.ts apps/server/src/modules/users/users.controller.ts apps/server/src/modules/users/users.routes.ts
+git commit -m "feat(server): add PATCH /users/me/theme-color endpoint"
+```
+
+---
+
+### Task 5: Backend integration test
+
+**Files:**
+- Create: `apps/server/src/modules/users/__tests__/users.integration.spec.ts`
+
+**Interfaces:**
+- Consumes: `PATCH /users/me/theme-color` (Task 4), `createIntegrationTestUser`/`cleanupIntegrationTestUser` (existing fixture in `shared/test-utils/integration-auth.ts`).
+
+- [ ] **Step 1: Write the integration test**
 
 Create `apps/server/src/modules/users/__tests__/users.integration.spec.ts`:
 
@@ -677,7 +675,7 @@ describe("PATCH /users/me/theme-color (integration)", () => {
 });
 ```
 
-- [ ] **Step 5: Run the integration test**
+- [ ] **Step 2: Run the integration test**
 
 Requires `docker compose up -d postgres redis minio minio-init mailhog` running and `.env.test` migrated (`dotenv -e .env.test -- pnpm --filter @bmp/database migrate:dev` if not already applied). Then:
 
@@ -687,11 +685,11 @@ pnpm --filter @bmp/server test -- users/__tests__/users.integration.spec.ts
 
 Expected: PASS, all 3 cases green.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add apps/server/src/modules/users/__tests__/users.service.spec.ts apps/server/src/modules/users/__tests__/users.integration.spec.ts
-git commit -m "test(server): cover PATCH /users/me/theme-color"
+git add apps/server/src/modules/users/__tests__/users.integration.spec.ts
+git commit -m "test(server): add integration coverage for PATCH /users/me/theme-color"
 ```
 
 ---
