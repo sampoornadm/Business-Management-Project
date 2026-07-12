@@ -14,5 +14,6 @@ export * from "./report.js";
 export * from "./rfq.js";
 export * from "./tag.js";
 export * from "./tender.js";
+export * from "./theme.js";
 export * from "./user.js";
 export * from "./vendor.js";

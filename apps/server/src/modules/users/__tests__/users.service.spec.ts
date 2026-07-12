@@ -34,8 +34,9 @@ function membershipFor(
   businessId: string,
   roleId: string,
   now: Date = new Date(),
+  themeColor = "steel",
 ): UserWithRole["userBusinesses"][number] {
-  return { id: randomUUID(), userId, businessId, roleId, role: roleFor(roleId, now), createdAt: now };
+  return { id: randomUUID(), userId, businessId, roleId, role: roleFor(roleId, now), themeColor, createdAt: now };
 }
 
 function buildUser(
