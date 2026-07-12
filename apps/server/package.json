@@ -23,7 +23,7 @@
     "@aws-sdk/s3-request-presigner": "^3.716.0",
     "@bmp/database": "workspace:*",
     "@bmp/types": "workspace:*",
-    "bcrypt": "^5.1.1",
+    "bcrypt": "^6.0.0",
     "bullmq": "^5.34.3",
     "chokidar": "^5.0.0",
     "compression": "^1.8.1",
@@ -53,7 +53,7 @@
   },
   "devDependencies": {
     "@bmp/config": "workspace:*",
-    "@types/bcrypt": "^5.0.2",
+    "@types/bcrypt": "^6.0.0",
     "@types/compression": "^1.8.1",
     "@types/cookie-parser": "^1.4.8",
     "@types/cors": "^2.8.17",
