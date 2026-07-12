@@ -752,7 +752,7 @@ git commit -m "feat(web): retrofit Tenders list page with PageHeader, FilterBar,
 
 `tender-form.tsx` currently uses `grid-cols-2` and `grid-cols-3` unconditionally, which cram 2-3
 columns even on a narrow phone screen. Make each responsive: 1 column by default, expanding at the
-`sm` breakpoint. There are four such grids in the file — replace each exactly as shown:
+`sm` breakpoint. There are six such grids in the file — replace each exactly as shown:
 
 Grid 1 (tender number / department, inside "Basic information"):
 ```tsx
