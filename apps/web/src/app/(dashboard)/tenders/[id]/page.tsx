@@ -24,7 +24,7 @@ import {
   TabsTrigger,
   useToast,
 } from "@bmp/ui";
-import { Pencil, Trash2 } from "lucide-react";
+import { Download, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
@@ -35,6 +35,7 @@ import { TenderCompetitorsTab } from "@/components/tenders/tender-competitors-ta
 import { TenderDocumentsTab } from "@/components/tenders/tender-documents-tab";
 import { TenderHistoryTab } from "@/components/tenders/tender-history-tab";
 import { TenderItemsTab } from "@/components/tenders/tender-items-tab";
+import { downloadUndertaking } from "@/hooks/use-document-generation";
 import { useTags } from "@/hooks/use-tags";
 import { useChangeTenderStatus, useDeleteTender, useSetTenderTags, useTender } from "@/hooks/use-tenders";
 import { useAuthStore } from "@/lib/auth-store";
@@ -61,6 +62,7 @@ export default function TenderDetailPage() {
   const canChangeStatus = hasPermission(roleName, "tenders:change_status");
   const canViewBoq = hasPermission(roleName, "boq:read");
   const canCreateProject = hasPermission(roleName, "projects:create");
+  const canGenerateDocument = hasPermission(roleName, "tenders:generate_document");
 
   async function handleStatusChange(values: Parameters<typeof changeStatus.mutateAsync>[0]) {
     try {
@@ -84,6 +86,18 @@ export default function TenderDetailPage() {
       toast({
         variant: "destructive",
         title: "Could not delete tender",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  async function handleGenerateUndertaking() {
+    try {
+      await downloadUndertaking(tender.id);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not generate document",
         description: error instanceof Error ? error.message : "Please try again.",
       });
     }
@@ -121,6 +135,11 @@ export default function TenderDetailPage() {
           )}
           {canChangeStatus && (
             <StatusChangeDialog currentStatus={tender.status} onSubmit={handleStatusChange} />
+          )}
+          {canGenerateDocument && (
+            <Button variant="outline" onClick={handleGenerateUndertaking}>
+              <Download className="mr-2 h-4 w-4" /> Generate Undertaking
+            </Button>
           )}
           {canUpdate && (
             <Button variant="outline" asChild>
