@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -100,5 +100,75 @@ describe("fillDocxTemplate", () => {
     expect(documentXml).toContain("Hello .");
     expect(documentXml).not.toContain("undefined");
     expect(documentXml).not.toContain("{{unknownTag}}");
+  });
+});
+
+describe("generateUndertaking", () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), "bmp-templates-"));
+    const { env } = await import("../../../config/env.js");
+    (env as { TEMPLATES_ROOT_DIR: string }).TEMPLATES_ROOT_DIR = tempDir;
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("fills the template with the tender's data and returns a docx buffer", async () => {
+    await mkdir(tempDir, { recursive: true });
+    await writeFile(
+      path.join(tempDir, "undertaking.docx"),
+      buildTestDocxBuffer(
+        "Dear {{clientOrganizationName}}, re: {{tenderNumber}} - {{tenderTitle}}, from {{businessName}} (GST {{businessGstNumber}}).",
+      ),
+    );
+
+    const fakeTendersRepository = {
+      findForDocumentGeneration: vi.fn().mockResolvedValue({
+        tenderNumber: "TEN-001",
+        title: "Road Widening",
+        department: "PWD",
+        business: { name: "Archie Udyog", address: null, gstNumber: "27AAAAA0000A1Z5", panNumber: null },
+        client: { name: "Acme Corp", address: null },
+      }),
+    };
+
+    const { generateUndertaking } = await import("../document-generation.service.js");
+    const result = await generateUndertaking(fakeTendersRepository, "tender-1", "business-1");
+
+    const resultZip = new PizZip(result);
+    const documentXml = resultZip.file("word/document.xml")!.asText();
+    expect(documentXml).toContain("Dear Acme Corp, re: TEN-001 - Road Widening, from Archie Udyog (GST 27AAAAA0000A1Z5).");
+    expect(fakeTendersRepository.findForDocumentGeneration).toHaveBeenCalledWith("tender-1", "business-1");
+  });
+
+  it("throws NotFoundError when the tender doesn't exist for that business", async () => {
+    const fakeTendersRepository = {
+      findForDocumentGeneration: vi.fn().mockResolvedValue(null),
+    };
+    const { generateUndertaking } = await import("../document-generation.service.js");
+
+    await expect(generateUndertaking(fakeTendersRepository, "missing", "business-1")).rejects.toThrow(
+      "Tender not found",
+    );
+  });
+
+  it("throws a clear error when the template file is missing", async () => {
+    const fakeTendersRepository = {
+      findForDocumentGeneration: vi.fn().mockResolvedValue({
+        tenderNumber: "TEN-001",
+        title: "Road Widening",
+        department: "PWD",
+        business: { name: "Archie Udyog", address: null, gstNumber: null, panNumber: null },
+        client: { name: "Acme Corp", address: null },
+      }),
+    };
+    const { generateUndertaking } = await import("../document-generation.service.js");
+
+    await expect(generateUndertaking(fakeTendersRepository, "tender-1", "business-1")).rejects.toThrow(
+      /template not found/i,
+    );
   });
 });
