@@ -264,5 +264,28 @@ describe("local docs sync tender lookups (integration)", () => {
       const badAttachment = await prisma.attachment.findFirst({ where: { originalName: "bad-tender.txt" } });
       expect(badAttachment).toBeNull();
     });
+
+    // Regression guard for the actual bug shape a business-scope bypass would take: unlike the two
+    // negative cases above (a business code that matches nothing, a tender folder that matches
+    // nothing), here BOTH segments individually resolve — just to different businesses. Business A's
+    // real code + business B's real tender folder name. `Tender.tenderNumber` is globally `@unique`,
+    // so a broken `importFile` that dropped the `businessId: business.id` filter (falling back to an
+    // unscoped `findFirst({ where: { tenderNumber } })`) would still "successfully" resolve tender B
+    // here — the three pre-existing tests can't tell scoped-lookup apart from that regression because
+    // in each of them the scoped and unscoped queries return the same tender. This is the one case
+    // where they diverge: correctly-scoped code finds no tender under business A and skips; the
+    // regression finds tender B and wrongly attaches to it.
+    it("skips a file whose business code is A but whose tender folder belongs to business B's tender (no cross-business Attachment on either tender)", async () => {
+      watcher = await startLocalDocsWatcher(rootDir);
+      await dropFile(
+        path.join(businessACode, "tenders", tenderBFolderName, "cross-business.txt"),
+        "should never be imported",
+      );
+      await dropFile(path.join(businessACode, "tenders", tenderAFolderName, "control.txt"), "control content");
+      await waitForAttachment("control.txt");
+
+      const badAttachment = await prisma.attachment.findFirst({ where: { originalName: "cross-business.txt" } });
+      expect(badAttachment).toBeNull();
+    });
   });
 });
