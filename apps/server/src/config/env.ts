@@ -51,8 +51,7 @@ const envSchema = z.object({
   // doesn't run the worker on the same filesystem as the watched folder (see
   // apps/server/src/modules/tenders/local-docs/).
   LOCAL_DOCS_SYNC_ENABLED: booleanEnv("false"),
-  LOCAL_DOCS_ROOT_DIR: z.string().default("~/BMP-Tenders"),
-  TEMPLATES_ROOT_DIR: z.string().default("~/BMP-Templates"),
+  BUSINESSES_ROOT_DIR: z.string().default("~/BMP-Businesses"),
 });
 
 export type Env = z.infer<typeof envSchema>;
