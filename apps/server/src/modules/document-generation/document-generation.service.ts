@@ -23,12 +23,20 @@ const TEMPLATE_FILENAMES: Record<DocumentType, string> = {
   undertaking: "undertaking.docx",
 };
 
-export function getTemplatePath(documentType: DocumentType): string {
-  return path.join(expandHome(env.TEMPLATES_ROOT_DIR), TEMPLATE_FILENAMES[documentType]);
+export function getTemplatePath(businessCode: string, documentType: DocumentType): string {
+  return path.join(
+    expandHome(env.BUSINESSES_ROOT_DIR),
+    businessCode,
+    "templates",
+    TEMPLATE_FILENAMES[documentType],
+  );
 }
 
-export async function getTemplateStatus(documentType: DocumentType): Promise<TemplateStatus> {
-  const templatePath = getTemplatePath(documentType);
+export async function getTemplateStatus(
+  businessCode: string,
+  documentType: DocumentType,
+): Promise<TemplateStatus> {
+  const templatePath = getTemplatePath(businessCode, documentType);
   try {
     const stats = await stat(templatePath);
     return {
@@ -75,9 +83,11 @@ export async function generateUndertaking(
   const tender = await tendersRepository.findForDocumentGeneration(tenderId, businessId);
   if (!tender) throw new NotFoundError("Tender not found");
 
-  const status = await getTemplateStatus("undertaking");
+  const status = await getTemplateStatus(tender.business.code, "undertaking");
   if (!status.exists) {
-    throw new NotFoundError(`Undertaking template not found. Place it at ${status.path}`);
+    throw new NotFoundError(
+      `Undertaking template not found for ${tender.business.code}. Place it at ${status.path}`,
+    );
   }
 
   const templateBuffer = await readFile(status.path);

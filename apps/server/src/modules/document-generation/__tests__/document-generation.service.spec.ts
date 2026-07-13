@@ -5,7 +5,7 @@ import path from "node:path";
 import PizZip from "pizzip";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../../config/env.js", () => ({ env: { TEMPLATES_ROOT_DIR: "" } }));
+vi.mock("../../../config/env.js", () => ({ env: { BUSINESSES_ROOT_DIR: "" } }));
 
 describe("getTemplateStatus", () => {
   let tempDir: string;
@@ -20,23 +20,25 @@ describe("getTemplateStatus", () => {
 
   it("reports exists: false when the template file is absent", async () => {
     const { env } = await import("../../../config/env.js");
-    (env as { TEMPLATES_ROOT_DIR: string }).TEMPLATES_ROOT_DIR = tempDir;
+    (env as { BUSINESSES_ROOT_DIR: string }).BUSINESSES_ROOT_DIR = tempDir;
     const { getTemplateStatus } = await import("../document-generation.service.js");
 
-    const status = await getTemplateStatus("undertaking");
+    const status = await getTemplateStatus("ARCHIE", "undertaking");
 
     expect(status.exists).toBe(false);
     expect(status.lastModifiedAt).toBeNull();
     expect(status.filename).toBe("undertaking.docx");
+    expect(status.path).toBe(path.join(tempDir, "ARCHIE", "templates", "undertaking.docx"));
   });
 
   it("reports exists: true with the file's mtime when present", async () => {
     const { env } = await import("../../../config/env.js");
-    (env as { TEMPLATES_ROOT_DIR: string }).TEMPLATES_ROOT_DIR = tempDir;
-    await writeFile(path.join(tempDir, "undertaking.docx"), "fake docx bytes");
+    (env as { BUSINESSES_ROOT_DIR: string }).BUSINESSES_ROOT_DIR = tempDir;
+    await mkdir(path.join(tempDir, "ARCHIE", "templates"), { recursive: true });
+    await writeFile(path.join(tempDir, "ARCHIE", "templates", "undertaking.docx"), "fake docx bytes");
     const { getTemplateStatus } = await import("../document-generation.service.js");
 
-    const status = await getTemplateStatus("undertaking");
+    const status = await getTemplateStatus("ARCHIE", "undertaking");
 
     expect(status.exists).toBe(true);
     expect(status.lastModifiedAt).not.toBeNull();
@@ -109,7 +111,7 @@ describe("generateUndertaking", () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), "bmp-templates-"));
     const { env } = await import("../../../config/env.js");
-    (env as { TEMPLATES_ROOT_DIR: string }).TEMPLATES_ROOT_DIR = tempDir;
+    (env as { BUSINESSES_ROOT_DIR: string }).BUSINESSES_ROOT_DIR = tempDir;
   });
 
   afterEach(async () => {
@@ -117,9 +119,10 @@ describe("generateUndertaking", () => {
   });
 
   it("fills the template with the tender's data and returns a docx buffer", async () => {
-    await mkdir(tempDir, { recursive: true });
+    const templatesDir = path.join(tempDir, "ARCHIE", "templates");
+    await mkdir(templatesDir, { recursive: true });
     await writeFile(
-      path.join(tempDir, "undertaking.docx"),
+      path.join(templatesDir, "undertaking.docx"),
       buildTestDocxBuffer(
         "Dear {{clientOrganizationName}}, re: {{tenderNumber}} - {{tenderTitle}}, from {{businessName}} (GST {{businessGstNumber}}).",
       ),
@@ -130,7 +133,13 @@ describe("generateUndertaking", () => {
         tenderNumber: "TEN-001",
         title: "Road Widening",
         department: "PWD",
-        business: { name: "Archie Udyog", address: null, gstNumber: "27AAAAA0000A1Z5", panNumber: null },
+        business: {
+          code: "ARCHIE",
+          name: "Archie Udyog",
+          address: null,
+          gstNumber: "27AAAAA0000A1Z5",
+          panNumber: null,
+        },
         client: { name: "Acme Corp", address: null },
       }),
     };
@@ -161,7 +170,7 @@ describe("generateUndertaking", () => {
         tenderNumber: "TEN-001",
         title: "Road Widening",
         department: "PWD",
-        business: { name: "Archie Udyog", address: null, gstNumber: null, panNumber: null },
+        business: { code: "ARCHIE", name: "Archie Udyog", address: null, gstNumber: null, panNumber: null },
         client: { name: "Acme Corp", address: null },
       }),
     };
