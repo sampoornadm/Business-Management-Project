@@ -1,9 +1,18 @@
 import { randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 import { prisma } from "@bmp/database";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { FSWatcher } from "chokidar";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { findTenderByNumberAcrossBusinesses, listAllTendersForFolderSync } from "../docs-watcher.service.js";
+import {
+  findTenderByNumberAcrossBusinesses,
+  listAllTendersForFolderSync,
+  startLocalDocsWatcher,
+} from "../docs-watcher.service.js";
+import { tenderFolderName } from "../folder-naming.js";
 
 /**
  * Requires a real Postgres reachable via .env.test, migrated (`pnpm db:migrate` against the test
@@ -34,6 +43,8 @@ describe("local docs sync tender lookups (integration)", () => {
   let tenderBId: string;
   let tenderANumber: string;
   let tenderBNumber: string;
+  let tenderAFolderName: string;
+  let tenderBFolderName: string;
 
   beforeAll(async () => {
     const user = await prisma.user.create({
@@ -99,6 +110,7 @@ describe("local docs sync tender lookups (integration)", () => {
       },
     });
     tenderAId = tenderA.id;
+    tenderAFolderName = tenderFolderName(tenderA);
 
     const tenderB = await prisma.tender.create({
       data: {
@@ -118,6 +130,7 @@ describe("local docs sync tender lookups (integration)", () => {
       },
     });
     tenderBId = tenderB.id;
+    tenderBFolderName = tenderFolderName(tenderB);
   });
 
   afterAll(async () => {
@@ -158,6 +171,98 @@ describe("local docs sync tender lookups (integration)", () => {
     it("returns null when no business has a tender with that number", async () => {
       const tender = await findTenderByNumberAcrossBusinesses(`TND-DOES-NOT-EXIST-${randomUUID()}`);
       expect(tender).toBeNull();
+    });
+  });
+
+  /**
+   * `importFile` (private to docs-watcher.service.ts) is exercised here through the public
+   * `startLocalDocsWatcher` API — a real chokidar watcher on a real temp directory, real files
+   * written to disk, real `add` events firing `importFile` end-to-end. This is the only coverage
+   * of importFile's `<businessCode>/tenders/<tenderFolder>/<filename>` path parsing and its two
+   * "no match, skip and log (don't throw)" branches (unresolvable business code, unresolvable
+   * tender folder within a resolved business) — the tests above only cover
+   * `listAllTendersForFolderSync`/`findTenderByNumberAcrossBusinesses`, neither of which importFile
+   * calls anymore after the business-scoped rewrite.
+   *
+   * `awaitWriteFinish` (stabilityThreshold: 1500ms, pollInterval: 200ms) means an `add` event never
+   * fires the instant a file is written — assertions poll via `vi.waitFor` instead of a fixed
+   * `setTimeout`. For the two negative cases, a "control" file dropped into a known-good path in the
+   * same test is used as the timing signal: once the control file's Attachment shows up, the
+   * watcher has necessarily also had its chance to process the bad file, so asserting "no Attachment"
+   * at that point isn't a guess about how long is "long enough".
+   */
+  describe("importFile via startLocalDocsWatcher (integration)", () => {
+    let rootDir: string;
+    let watcher: FSWatcher | undefined;
+
+    beforeEach(async () => {
+      rootDir = await mkdtemp(path.join(os.tmpdir(), "docs-watcher-"));
+    });
+
+    afterEach(async () => {
+      await watcher?.close();
+      watcher = undefined;
+      await rm(rootDir, { recursive: true, force: true });
+      await prisma.attachment.deleteMany({ where: { entityId: { in: [tenderAId, tenderBId] } } });
+    });
+
+    async function dropFile(relativePath: string, content: string): Promise<void> {
+      const filePath = path.join(rootDir, relativePath);
+      await mkdir(path.dirname(filePath), { recursive: true });
+      await writeFile(filePath, content);
+    }
+
+    async function waitForAttachment(originalName: string) {
+      return vi.waitFor(
+        async () => {
+          const found = await prisma.attachment.findFirst({ where: { originalName, entityType: "Tender" } });
+          expect(found).not.toBeNull();
+          return found!;
+        },
+        { timeout: 8000, interval: 250 },
+      );
+    }
+
+    it("imports dropped files as Attachments on the tender resolved from each file's own business+folder path", async () => {
+      watcher = await startLocalDocsWatcher(rootDir);
+      await dropFile(path.join(businessACode, "tenders", tenderAFolderName, "happy-a.txt"), "business A file");
+      await dropFile(path.join(businessBCode, "tenders", tenderBFolderName, "happy-b.txt"), "business B file");
+
+      const attachmentA = await waitForAttachment("happy-a.txt");
+      const attachmentB = await waitForAttachment("happy-b.txt");
+
+      expect(attachmentA.entityId).toBe(tenderAId);
+      expect(attachmentA.entityId).not.toBe(tenderBId);
+      expect(attachmentB.entityId).toBe(tenderBId);
+      expect(attachmentB.entityId).not.toBe(tenderAId);
+    });
+
+    it("skips a file whose business code segment matches no Business (no Attachment created)", async () => {
+      watcher = await startLocalDocsWatcher(rootDir);
+      await dropFile(
+        path.join("NONEXISTENT-CODE", "tenders", tenderAFolderName, "bad-business.txt"),
+        "should never be imported",
+      );
+      // Control file in a known-good path — see describe-level comment on why this is the
+      // wait signal instead of a fixed sleep.
+      await dropFile(path.join(businessACode, "tenders", tenderAFolderName, "control.txt"), "control content");
+      await waitForAttachment("control.txt");
+
+      const badAttachment = await prisma.attachment.findFirst({ where: { originalName: "bad-business.txt" } });
+      expect(badAttachment).toBeNull();
+    });
+
+    it("skips a file whose tender folder doesn't match any tender within that business (no Attachment created)", async () => {
+      watcher = await startLocalDocsWatcher(rootDir);
+      await dropFile(
+        path.join(businessACode, "tenders", "UNKNOWN-999 - Ghost Tender", "bad-tender.txt"),
+        "should never be imported",
+      );
+      await dropFile(path.join(businessACode, "tenders", tenderAFolderName, "control.txt"), "control content");
+      await waitForAttachment("control.txt");
+
+      const badAttachment = await prisma.attachment.findFirst({ where: { originalName: "bad-tender.txt" } });
+      expect(badAttachment).toBeNull();
     });
   });
 });
