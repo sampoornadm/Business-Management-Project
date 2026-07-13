@@ -52,6 +52,7 @@ const envSchema = z.object({
   // apps/server/src/modules/tenders/local-docs/).
   LOCAL_DOCS_SYNC_ENABLED: booleanEnv("false"),
   LOCAL_DOCS_ROOT_DIR: z.string().default("~/BMP-Tenders"),
+  TEMPLATES_ROOT_DIR: z.string().default("~/BMP-Templates"),
 });
 
 export type Env = z.infer<typeof envSchema>;
