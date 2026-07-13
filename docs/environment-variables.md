@@ -65,6 +65,7 @@ dev placeholder committed in `.env.example`.
 | `WEB_APP_URL` | Yes | No | Used to build links in emails (invite/reset/verify). Must be the public web URL in production. |
 | `SEED_USER_PASSWORD` | Dev/CI only | **Yes** | Password assigned to all seeded demo users (`pnpm db:seed`). **Never run the seed script against a production database** — it's for local dev and CI fixtures only. |
 | `BACKUP_RETENTION_DAYS` | No (default `14`) | No | Read by `infra/scripts/backup-db.sh`. |
+| `TEMPLATES_ROOT_DIR` | No (default `~/BMP-Templates`) | No | Folder where document-generation templates live, one fixed-name file per document type (e.g. `undertaking.docx`). No upload UI — place the file directly. It must be a plain `.docx` (not `.dotx`): if you built it from a `.dotx` letterhead starter in Word, use File > Save As > Word Document before placing it here. |
 
 ## Ollama (local LLM — tender document auto-extraction)
 

@@ -126,6 +126,18 @@ Run `prisma migrate deploy` (step 3) before restarting `server`/`worker` if the 
 migration — migrations are additive-by-convention in this codebase (see `CLAUDE.md`'s RBAC/seed
 notes), so this is safe to run before the new code is live.
 
+**New permission keys need a seed re-run to take effect.** A new entry added to
+`PERMISSION_KEYS`/`ROLE_PERMISSION_MATRIX` in `packages/types/src/rbac.ts` only exists in *code*
+until something writes the corresponding `Permission`/`RolePermission` rows into the database —
+that's `pnpm db:seed`, which is idempotent but is also explicitly a dev/CI-only script (see
+`environment-variables.md`'s `SEED_USER_PASSWORD` note) and must not be run against a production
+database wholesale. On a production deploy that adds a permission, apply the equivalent
+`Permission`/`RolePermission` inserts directly (mirroring what the seed script would do for that
+one key) rather than running the full seed. Either way, also flush the Redis-cached role-permission
+set (`ROLE_PERMISSIONS_CACHE_TTL_SECONDS`) afterward — otherwise already-cached roles won't see the
+new grant until the cache TTL expires. `SUPER_ADMIN` needs none of this, since its wildcard
+permission matches every key without a corresponding database row.
+
 ## 6. Scaling
 
 - `server` and `web` are stateless — run multiple replicas behind nginx (or a real load balancer)
