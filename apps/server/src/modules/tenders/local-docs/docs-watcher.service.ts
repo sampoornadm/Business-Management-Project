@@ -57,19 +57,25 @@ function guessDeclaredMimeType(filePath: string): string {
  * results, same pattern as `listAllBusinessIds()`'s doc comment in `business-ids.ts` describes for
  * cross-business background jobs (e.g. the tender-reminder worker).
  */
-export async function listAllTendersForFolderSync(): Promise<TenderFolderInfo[]> {
-  const businessIds = await listAllBusinessIds(prisma);
+export async function listAllTendersForFolderSync(): Promise<
+  Array<TenderFolderInfo & { businessCode: string }>
+> {
+  const businesses = await prisma.business.findMany({ select: { id: true, code: true } });
   const tendersByBusiness = await Promise.all(
-    businessIds.map((businessId) =>
-      prisma.tender.findMany({ where: { businessId }, select: { tenderNumber: true, title: true } }),
-    ),
+    businesses.map(async (business) => {
+      const tenders = await prisma.tender.findMany({
+        where: { businessId: business.id },
+        select: { tenderNumber: true, title: true },
+      });
+      return tenders.map((tender) => ({ ...tender, businessCode: business.code }));
+    }),
   );
   return tendersByBusiness.flat();
 }
 
 async function reconcileFolders(rootDir: string): Promise<void> {
   const tenders = await listAllTendersForFolderSync();
-  await Promise.all(tenders.map((tender) => ensureTenderFolders(rootDir, tender)));
+  await Promise.all(tenders.map((tender) => ensureTenderFolders(rootDir, tender.businessCode, tender)));
   logger.info(`Local docs sync: reconciled folders for ${tenders.length} tender(s) under ${rootDir}`);
 }
 
@@ -101,21 +107,38 @@ export async function findTenderByNumberAcrossBusinesses(tenderNumber: string): 
 async function importFile(rootDir: string, absolutePath: string): Promise<void> {
   const relative = path.relative(rootDir, absolutePath);
   const segments = relative.split(path.sep);
-  // A file dropped directly at the watch root, outside any tender folder,
-  // has nothing to resolve against — nothing to do.
-  if (segments.length < 2) return;
+  // A file dropped outside <businessCode>/tenders/<tenderFolder>/ has nothing
+  // to resolve against — nothing to do. Minimum shape: [businessCode, "tenders",
+  // tenderFolder, filename] = 4 segments.
+  if (segments.length < 4) return;
 
-  const [tenderFolder, subfolder] = segments;
-  const tenderNumber = tenderNumberFromFolderName(tenderFolder!);
-  if (!tenderNumber) return;
+  const [businessCode, tendersSegment, tenderFolder, subfolder] = segments;
+  if (tendersSegment !== "tenders") return;
 
-  const tender = await findTenderByNumberAcrossBusinesses(tenderNumber);
-  if (!tender) {
-    logger.warn(`Local docs sync: no tender matches folder "${tenderFolder}" — skipping ${relative}`);
+  const business = await prisma.business.findUnique({
+    where: { code: businessCode! },
+    select: { id: true },
+  });
+  if (!business) {
+    logger.warn(`Local docs sync: no business matches folder "${businessCode}" — skipping ${relative}`);
     return;
   }
 
-  const documentType = documentTypeForFolder(segments.length > 2 ? subfolder : undefined);
+  const tenderNumber = tenderNumberFromFolderName(tenderFolder!);
+  if (!tenderNumber) return;
+
+  const tender = await prisma.tender.findFirst({
+    where: { tenderNumber, businessId: business.id },
+    select: { id: true },
+  });
+  if (!tender) {
+    logger.warn(
+      `Local docs sync: no tender matches folder "${tenderFolder}" under business "${businessCode}" — skipping ${relative}`,
+    );
+    return;
+  }
+
+  const documentType = documentTypeForFolder(segments.length > 4 ? subfolder : undefined);
 
   const buffer = await readFile(absolutePath);
   const hash = createHash("sha256").update(buffer).digest("hex");
@@ -159,7 +182,7 @@ export async function startLocalDocsWatcher(rootDirRaw: string): Promise<FSWatch
   const watcher = chokidar.watch(rootDir, {
     ignoreInitial: false,
     awaitWriteFinish: { stabilityThreshold: 1500, pollInterval: 200 },
-    depth: 3,
+    depth: 5,
   });
 
   watcher.on("add", (filePath) => {

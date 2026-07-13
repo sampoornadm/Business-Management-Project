@@ -28,6 +28,8 @@ describe("local docs sync tender lookups (integration)", () => {
   let organizationId: string;
   let businessAId: string;
   let businessBId: string;
+  let businessACode: string;
+  let businessBCode: string;
   let tenderAId: string;
   let tenderBId: string;
   let tenderANumber: string;
@@ -63,6 +65,8 @@ describe("local docs sync tender lookups (integration)", () => {
     });
     businessAId = businessA.id;
     businessBId = businessB.id;
+    businessACode = businessA.code;
+    businessBCode = businessB.code;
 
     const organization = await prisma.organization.create({
       data: {
@@ -125,12 +129,13 @@ describe("local docs sync tender lookups (integration)", () => {
   });
 
   describe("listAllTendersForFolderSync", () => {
-    it("collects tenders from both businesses, not just one", async () => {
+    it("collects tenders from both businesses, not just one, each tagged with its business code", async () => {
       const tenders = await listAllTendersForFolderSync();
-      const tenderNumbers = tenders.map((tender) => tender.tenderNumber);
+      const tenderA = tenders.find((tender) => tender.tenderNumber === tenderANumber);
+      const tenderB = tenders.find((tender) => tender.tenderNumber === tenderBNumber);
 
-      expect(tenderNumbers).toContain(tenderANumber);
-      expect(tenderNumbers).toContain(tenderBNumber);
+      expect(tenderA?.businessCode).toBe(businessACode);
+      expect(tenderB?.businessCode).toBe(businessBCode);
     });
   });
 
