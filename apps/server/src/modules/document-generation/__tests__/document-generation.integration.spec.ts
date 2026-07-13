@@ -144,11 +144,33 @@ describe("POST /tenders/:id/documents/undertaking (integration)", () => {
     expect(response.body.error.message).toMatch(/template not found/i);
   });
 
-  it("returns 404 for a tender that doesn't belong to the caller's business", async () => {
-    const response = await request(app)
-      .post(`/api/v1/tenders/${randomUUID()}/documents/undertaking`)
-      .set("Authorization", `Bearer ${testUser.accessToken}`);
+  it("returns 404 for a tender that belongs to a different business than the caller's active one", async () => {
+    const otherBusinessTender = await prisma.tender.create({
+      data: {
+        id: randomUUID(),
+        businessId: testUser.secondBusinessId,
+        tenderNumber: `TEN-OTHER-${randomUUID().slice(0, 8)}`,
+        title: "Other Business Tender",
+        department: "Test Dept",
+        clientId: clientOrgId,
+        type: "OPEN",
+        category: "CIVIL",
+        location: "Test City",
+        state: "Test State",
+        estimatedCost: 100000,
+        submissionDate: new Date(),
+        createdById: testUser.userId,
+      },
+    });
 
-    expect(response.status).toBe(404);
+    try {
+      const response = await request(app)
+        .post(`/api/v1/tenders/${otherBusinessTender.id}/documents/undertaking`)
+        .set("Authorization", `Bearer ${testUser.accessToken}`);
+
+      expect(response.status).toBe(404);
+    } finally {
+      await prisma.tender.deleteMany({ where: { id: otherBusinessTender.id } });
+    }
   });
 });
