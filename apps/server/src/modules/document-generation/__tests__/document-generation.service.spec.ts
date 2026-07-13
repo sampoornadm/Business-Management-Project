@@ -89,10 +89,16 @@ describe("fillDocxTemplate", () => {
     expect(documentXml).not.toContain("{{tenderNumber}}");
   });
 
-  it("renders unresolved tags outside the provided data as blank instead of failing", async () => {
+  it("renders unresolved tags as an empty string rather than the literal word 'undefined'", async () => {
     const { fillDocxTemplate } = await import("../document-generation.service.js");
     const template = buildTestDocxBuffer("Hello {{unknownTag}}.");
 
-    expect(fillDocxTemplate(template, {})).toBeInstanceOf(Buffer);
+    const result = fillDocxTemplate(template, {});
+
+    const resultZip = new PizZip(result);
+    const documentXml = resultZip.file("word/document.xml")!.asText();
+    expect(documentXml).toContain("Hello .");
+    expect(documentXml).not.toContain("undefined");
+    expect(documentXml).not.toContain("{{unknownTag}}");
   });
 });
