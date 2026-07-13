@@ -47,29 +47,35 @@ function buildTestDocxBuffer(bodyText: string): Buffer {
 describe("POST /tenders/:id/documents/undertaking (integration)", () => {
   const app = createApp();
   let testUser: IntegrationTestUser;
+  let businessCode: string;
   let tenderId: string;
   let clientOrgId: string;
   let templatesDir: string;
   // `env` (from config/env.ts) is parsed from process.env once at module-import
   // time and cached as a plain object — by the time this file's `beforeAll`
-  // runs, app.js's import graph has already resolved `env.TEMPLATES_ROOT_DIR`,
+  // runs, app.js's import graph has already resolved `env.BUSINESSES_ROOT_DIR`,
   // so setting process.env here would have no effect. Mutate the already-
   // parsed `env` object directly instead (same technique the sibling unit
   // test in document-generation.service.spec.ts uses).
-  const originalTemplatesRootDir = env.TEMPLATES_ROOT_DIR;
+  const originalBusinessesRootDir = env.BUSINESSES_ROOT_DIR;
 
   beforeAll(async () => {
     templatesDir = await mkdtemp(path.join(tmpdir(), "bmp-templates-integration-"));
-    env.TEMPLATES_ROOT_DIR = templatesDir;
+    env.BUSINESSES_ROOT_DIR = templatesDir;
   });
 
   afterAll(async () => {
     await rm(templatesDir, { recursive: true, force: true });
-    env.TEMPLATES_ROOT_DIR = originalTemplatesRootDir;
+    env.BUSINESSES_ROOT_DIR = originalBusinessesRootDir;
   });
 
   beforeEach(async () => {
     testUser = await createIntegrationTestUser(app);
+    const business = await prisma.business.findUnique({
+      where: { id: testUser.businessId },
+      select: { code: true },
+    });
+    businessCode = business!.code;
     const clientOrg = await prisma.organization.create({
       data: {
         id: randomUUID(),
@@ -103,16 +109,17 @@ describe("POST /tenders/:id/documents/undertaking (integration)", () => {
     // templatesDir is shared across every test in this suite (created once in
     // beforeAll); reset it here so a test that wrote a template doesn't leak
     // it into a later test that assumes the template is absent.
-    await rm(path.join(templatesDir, "undertaking.docx"), { force: true });
+    await rm(path.join(templatesDir, businessCode, "templates", "undertaking.docx"), { force: true });
     await prisma.tender.deleteMany({ where: { id: tenderId } });
     await prisma.organization.deleteMany({ where: { id: clientOrgId } });
     await cleanupIntegrationTestUser(testUser);
   });
 
   it("generates a filled docx when the template exists", async () => {
-    await mkdir(templatesDir, { recursive: true });
+    const businessTemplatesDir = path.join(templatesDir, businessCode, "templates");
+    await mkdir(businessTemplatesDir, { recursive: true });
     await writeFile(
-      path.join(templatesDir, "undertaking.docx"),
+      path.join(businessTemplatesDir, "undertaking.docx"),
       buildTestDocxBuffer("Tender {{tenderNumber}} for {{clientOrganizationName}}."),
     );
 
@@ -145,9 +152,10 @@ describe("POST /tenders/:id/documents/undertaking (integration)", () => {
   });
 
   it("returns 404 for a tender that belongs to a different business than the caller's active one", async () => {
-    await mkdir(templatesDir, { recursive: true });
+    const businessTemplatesDir = path.join(templatesDir, businessCode, "templates");
+    await mkdir(businessTemplatesDir, { recursive: true });
     await writeFile(
-      path.join(templatesDir, "undertaking.docx"),
+      path.join(businessTemplatesDir, "undertaking.docx"),
       buildTestDocxBuffer("Tender {{tenderNumber}}."),
     );
 

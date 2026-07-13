@@ -41,7 +41,7 @@ export type TenderAssigneeWithRelations = TenderDetail["assignees"][number];
 
 const tenderDocGenArgs = {
   include: {
-    business: { select: { name: true, address: true, gstNumber: true, panNumber: true } },
+    business: { select: { code: true, name: true, address: true, gstNumber: true, panNumber: true } },
     client: { select: { name: true, address: true } },
   },
 } satisfies Prisma.TenderDefaultArgs;
