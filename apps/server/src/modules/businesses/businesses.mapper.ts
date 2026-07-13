@@ -1,34 +1,6 @@
+import type { BusinessContactDto, BusinessDto, MsmeCategory } from "@bmp/types";
+
 import type { BusinessWithContacts } from "./businesses.repository.js";
-
-export interface BusinessContactDto {
-  id: string;
-  name: string;
-  designation: string | null;
-  email: string | null;
-  phone: string | null;
-  isPrimary: boolean;
-}
-
-export interface BusinessDto {
-  id: string;
-  name: string;
-  code: string;
-  address: string | null;
-  city: string | null;
-  state: string | null;
-  pincode: string | null;
-  gstNumber: string | null;
-  udyamRegistrationNumber: string | null;
-  msmeCategory: string | null;
-  panNumber: string | null;
-  website: string | null;
-  notes: string | null;
-  isActive: boolean;
-  tenderCount: number;
-  contacts: BusinessContactDto[];
-  createdAt: string;
-  updatedAt: string;
-}
 
 function toContactDto(contact: BusinessWithContacts["contacts"][number]): BusinessContactDto {
   return {
@@ -52,7 +24,7 @@ export function toBusinessDto(business: BusinessWithContacts): BusinessDto {
     pincode: business.pincode,
     gstNumber: business.gstNumber,
     udyamRegistrationNumber: business.udyamRegistrationNumber,
-    msmeCategory: business.msmeCategory,
+    msmeCategory: business.msmeCategory as MsmeCategory | null,
     panNumber: business.panNumber,
     website: business.website,
     notes: business.notes,
