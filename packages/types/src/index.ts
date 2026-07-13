@@ -3,6 +3,7 @@ export * from "./attachment.js";
 export * from "./audit.js";
 export * from "./auth.js";
 export * from "./boq.js";
+export * from "./business.js";
 export * from "./finance.js";
 export * from "./notification.js";
 export * from "./organization.js";

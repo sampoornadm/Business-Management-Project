@@ -1,6 +1,5 @@
 "use client";
 
-import type { OrganizationContactDto } from "@bmp/types";
 import {
   Button,
   Checkbox,
@@ -34,7 +33,13 @@ type ContactFormValues = z.infer<typeof contactSchema>;
 
 export interface ContactDialogProps {
   trigger: ReactNode;
-  contact?: OrganizationContactDto;
+  contact?: {
+    name: string;
+    designation: string | null;
+    email: string | null;
+    phone: string | null;
+    isPrimary: boolean;
+  };
   onSubmit: (values: ContactFormValues) => Promise<void>;
 }
 
