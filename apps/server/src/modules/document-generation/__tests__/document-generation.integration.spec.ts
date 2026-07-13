@@ -145,6 +145,12 @@ describe("POST /tenders/:id/documents/undertaking (integration)", () => {
   });
 
   it("returns 404 for a tender that belongs to a different business than the caller's active one", async () => {
+    await mkdir(templatesDir, { recursive: true });
+    await writeFile(
+      path.join(templatesDir, "undertaking.docx"),
+      buildTestDocxBuffer("Tender {{tenderNumber}}."),
+    );
+
     const otherBusinessTender = await prisma.tender.create({
       data: {
         id: randomUUID(),
@@ -169,6 +175,7 @@ describe("POST /tenders/:id/documents/undertaking (integration)", () => {
         .set("Authorization", `Bearer ${testUser.accessToken}`);
 
       expect(response.status).toBe(404);
+      expect(response.body.error.message).toMatch(/tender not found/i);
     } finally {
       await prisma.tender.deleteMany({ where: { id: otherBusinessTender.id } });
     }
