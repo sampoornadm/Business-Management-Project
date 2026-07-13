@@ -1,10 +1,11 @@
 "use client";
 
-import { Badge, DataTable, Input } from "@bmp/ui";
+import { Badge, Button, DataTable, Input } from "@bmp/ui";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
+import { Briefcase } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { CreateBusinessDialog } from "@/components/businesses/create-business-dialog";
 import type { Business } from "@/hooks/use-businesses";
 import { useBusinesses } from "@/hooks/use-businesses";
 import { useAuthStore } from "@/lib/auth-store";
@@ -14,7 +15,11 @@ const columns: ColumnDef<Business>[] = [
   {
     accessorKey: "name",
     header: "Name",
-    cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+    cell: ({ row }) => (
+      <Link href={`/businesses/${row.original.id}`} className="font-medium hover:underline">
+        {row.original.name}
+      </Link>
+    ),
   },
   {
     accessorKey: "code",
@@ -63,7 +68,13 @@ export default function BusinessesPage() {
             Legal entities that tenders, projects, and finance records are scoped under.
           </p>
         </div>
-        {canCreate && <CreateBusinessDialog />}
+        {canCreate && (
+          <Button asChild>
+            <Link href="/businesses/new">
+              <Briefcase className="mr-2 h-4 w-4" /> Add Business
+            </Link>
+          </Button>
+        )}
       </div>
 
       <Input
