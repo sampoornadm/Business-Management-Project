@@ -30,7 +30,7 @@ export type ListOrganizationsQuery = z.infer<typeof listOrganizationsQuerySchema
 export const createContactSchema = z.object({
   name: z.string().min(1).max(150),
   designation: z.string().max(150).optional(),
-  email: z.string().email().optional(),
+  email: z.string().email().optional().or(z.literal("")),
   phone: z.string().max(30).optional(),
   isPrimary: z.boolean().optional(),
 });
