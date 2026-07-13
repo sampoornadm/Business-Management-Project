@@ -53,6 +53,7 @@ export function fillDocxTemplate(templateBuffer: Buffer, data: Record<string, st
     paragraphLoop: true,
     linebreaks: true,
     delimiters: { start: "{{", end: "}}" },
+    nullGetter: () => "",
   });
   doc.render(data);
   return doc.getZip().generate({ type: "nodebuffer" });
