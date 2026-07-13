@@ -39,6 +39,15 @@ const tenderDetailArgs = {
 export type TenderDetail = Prisma.TenderGetPayload<typeof tenderDetailArgs>;
 export type TenderAssigneeWithRelations = TenderDetail["assignees"][number];
 
+const tenderDocGenArgs = {
+  include: {
+    business: { select: { name: true, address: true, gstNumber: true, panNumber: true } },
+    client: { select: { name: true, address: true } },
+  },
+} satisfies Prisma.TenderDefaultArgs;
+
+export type TenderForDocumentGeneration = Prisma.TenderGetPayload<typeof tenderDocGenArgs>;
+
 export interface CreateTenderData {
   tenderNumber: string;
   title: string;
@@ -99,6 +108,7 @@ export type UpdateCompetitorData = Partial<CreateCompetitorData>;
 export interface ITendersRepository {
   findById(id: string, businessId: string): Promise<TenderDetail | null>;
   findByTenderNumber(tenderNumber: string, businessId: string): Promise<{ id: string } | null>;
+  findForDocumentGeneration(id: string, businessId: string): Promise<TenderForDocumentGeneration | null>;
   findMany(
     pagination: PaginationParams,
     filters: TenderFilters,
@@ -141,6 +151,10 @@ export class TendersRepository implements ITendersRepository {
 
   findByTenderNumber(tenderNumber: string, businessId: string): Promise<{ id: string } | null> {
     return this.prisma.tender.findFirst({ where: { tenderNumber, businessId }, select: { id: true } });
+  }
+
+  findForDocumentGeneration(id: string, businessId: string): Promise<TenderForDocumentGeneration | null> {
+    return this.prisma.tender.findFirst({ where: { id, businessId }, ...tenderDocGenArgs });
   }
 
   async findMany(
