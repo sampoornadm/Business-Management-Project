@@ -93,7 +93,7 @@ export default function TenderDetailPage() {
 
   async function handleGenerateUndertaking() {
     try {
-      await downloadUndertaking(tender.id);
+      await downloadUndertaking(tender.id, tender.tenderNumber);
     } catch (error) {
       toast({
         variant: "destructive",
