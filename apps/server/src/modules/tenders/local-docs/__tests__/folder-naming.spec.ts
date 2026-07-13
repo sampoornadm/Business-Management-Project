@@ -87,19 +87,29 @@ describe("ensureTenderFolders", () => {
     await rm(rootDir, { recursive: true, force: true });
   });
 
-  it("creates the tender folder with a subfolder for every document type", async () => {
-    await ensureTenderFolders(rootDir, { tenderNumber: "TND-1", title: "Road Works" });
+  it("creates the tender folder under <businessCode>/tenders/, with a subfolder for every document type", async () => {
+    await ensureTenderFolders(rootDir, "ARCHIE", { tenderNumber: "TND-1", title: "Road Works" });
 
-    const tenderDir = path.join(rootDir, "TND-1 - Road Works");
+    const tenderDir = path.join(rootDir, "ARCHIE", "tenders", "TND-1 - Road Works");
     const subfolders = await readdir(tenderDir);
     expect(subfolders.sort()).toEqual(
       ["Addendum", "BOQ", "Corrigendum", "Drawings", "General", "NIT", "Technical Specs", "Tender Notice"].sort(),
     );
   });
 
+  it("keeps different businesses' tender folders separate", async () => {
+    await ensureTenderFolders(rootDir, "ARCHIE", { tenderNumber: "TND-3", title: "Shared Number" });
+    await ensureTenderFolders(rootDir, "SAMSON", { tenderNumber: "TND-3", title: "Shared Number" });
+
+    const archieDir = path.join(rootDir, "ARCHIE", "tenders", "TND-3 - Shared Number");
+    const samsonDir = path.join(rootDir, "SAMSON", "tenders", "TND-3 - Shared Number");
+    await expect(readdir(archieDir)).resolves.toHaveLength(8);
+    await expect(readdir(samsonDir)).resolves.toHaveLength(8);
+  });
+
   it("is idempotent when called again for the same tender", async () => {
     const tender = { tenderNumber: "TND-2", title: "Bridge Works" };
-    await ensureTenderFolders(rootDir, tender);
-    await expect(ensureTenderFolders(rootDir, tender)).resolves.not.toThrow();
+    await ensureTenderFolders(rootDir, "ARCHIE", tender);
+    await expect(ensureTenderFolders(rootDir, "ARCHIE", tender)).resolves.not.toThrow();
   });
 });

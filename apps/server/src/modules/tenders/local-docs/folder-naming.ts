@@ -51,8 +51,12 @@ export function expandHome(dir: string): string {
   return dir.startsWith("~") ? path.join(os.homedir(), dir.slice(1)) : dir;
 }
 
-export async function ensureTenderFolders(rootDir: string, tender: TenderFolderInfo): Promise<void> {
-  const tenderDir = path.join(expandHome(rootDir), tenderFolderName(tender));
+export async function ensureTenderFolders(
+  rootDir: string,
+  businessCode: string,
+  tender: TenderFolderInfo,
+): Promise<void> {
+  const tenderDir = path.join(expandHome(rootDir), businessCode, "tenders", tenderFolderName(tender));
   await Promise.all(
     Object.values(TENDER_DOCUMENT_TYPE_FOLDER_NAMES).map((folder) =>
       mkdir(path.join(tenderDir, folder), { recursive: true }),
