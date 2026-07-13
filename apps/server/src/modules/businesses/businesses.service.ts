@@ -3,7 +3,8 @@ import { buildPaginatedResult, type PaginatedResult, type PaginationParams } fro
 import type { RequestContext } from "../../core/interfaces/request-context.js";
 import type { AuditService } from "../audit/audit.service.js";
 
-import type { BusinessDto } from "./businesses.mapper.js";
+import type { BusinessDto } from "@bmp/types";
+
 import { toBusinessDto } from "./businesses.mapper.js";
 import type {
   BusinessFilters,
