@@ -19,6 +19,7 @@ import { logger } from "../../shared/logger/logger.js";
 import { toAttachmentDto } from "../attachments/attachments.mapper.js";
 import type { AttachmentsService } from "../attachments/attachments.service.js";
 import type { AuditService } from "../audit/audit.service.js";
+import type { IBusinessesRepository } from "../businesses/businesses.repository.js";
 import type { NotificationsService } from "../notifications/notifications.service.js";
 import type { IOrganizationsRepository } from "../organizations/organizations.repository.js";
 import type { ITagsRepository } from "../tags/tags.repository.js";
@@ -45,6 +46,7 @@ export class TendersService {
     private readonly organizationsRepository: IOrganizationsRepository,
     private readonly usersRepository: IUsersRepository,
     private readonly tagsRepository: ITagsRepository,
+    private readonly businessesRepository: IBusinessesRepository,
     private readonly auditService: AuditService,
     private readonly attachmentsService: AttachmentsService,
     private readonly notificationsService: NotificationsService,
@@ -90,7 +92,10 @@ export class TendersService {
     // fail tender creation, and the watcher's startup reconciliation
     // self-heals this anyway if it's ever missing.
     if (env.LOCAL_DOCS_SYNC_ENABLED) {
-      void ensureTenderFolders(env.LOCAL_DOCS_ROOT_DIR, tender).catch((error: unknown) => {
+      void this.businessesRepository.findById(context.businessId).then((business) => {
+        if (!business) return;
+        return ensureTenderFolders(env.BUSINESSES_ROOT_DIR, business.code, tender);
+      }).catch((error: unknown) => {
         logger.warn(
           `Could not create local docs folder for tender ${tender.tenderNumber}: ${error instanceof Error ? error.message : error}`,
         );
