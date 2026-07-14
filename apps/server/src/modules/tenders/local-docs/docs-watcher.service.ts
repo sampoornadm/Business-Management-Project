@@ -5,7 +5,6 @@ import path from "node:path";
 import chokidar, { type FSWatcher } from "chokidar";
 
 import { GENERIC_UPLOAD_LIMITS } from "../../../config/constants.js";
-import { listAllBusinessIds } from "../../../infra/prisma/business-ids.js";
 import { prisma } from "../../../infra/prisma/client.js";
 import { logger } from "../../../shared/logger/logger.js";
 import { attachmentsService } from "../../attachments/attachments.module.js";
@@ -77,31 +76,6 @@ async function reconcileFolders(rootDir: string): Promise<void> {
   const tenders = await listAllTendersForFolderSync();
   await Promise.all(tenders.map((tender) => ensureTenderFolders(rootDir, tender.businessCode, tender)));
   logger.info(`Local docs sync: reconciled folders for ${tenders.length} tender(s) under ${rootDir}`);
-}
-
-/**
- * Resolves a folder name's tenderNumber to the one tender it refers to, across every business.
- * `Tender.tenderNumber` is `@unique` at the top level of the schema (not compound with
- * `businessId`), and local-docs folders carry no business segment in their naming scheme, so there
- * is no businessId to target up front. `Tender` is still a business-scoped model (see
- * scoped-client.ts's `SCOPED_MODELS`), so this loops `listAllBusinessIds()` (same cross-business
- * pattern documented in `business-ids.ts` and used by `listAllTendersForFolderSync()` above) and
- * runs a scoped, per-business lookup, stopping at the first match — since `tenderNumber` is
- * globally unique, at most one business can ever match, so there's no need to keep checking the
- * rest once found. Uses `findFirst` (not `findUnique`) because `{ tenderNumber, businessId }`
- * together isn't a compound unique constraint — the same reasoning `purchase-orders.repository.ts`
- * and `finance.repository.ts` document on their own per-business `findFirst` lookups.
- */
-export async function findTenderByNumberAcrossBusinesses(tenderNumber: string): Promise<{ id: string } | null> {
-  const businessIds = await listAllBusinessIds(prisma);
-  for (const businessId of businessIds) {
-    const tender = await prisma.tender.findFirst({
-      where: { tenderNumber, businessId },
-      select: { id: true },
-    });
-    if (tender) return tender;
-  }
-  return null;
 }
 
 async function importFile(rootDir: string, absolutePath: string): Promise<void> {
