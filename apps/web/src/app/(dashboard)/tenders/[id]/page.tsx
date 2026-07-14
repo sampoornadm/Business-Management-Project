@@ -15,6 +15,7 @@ import {
   Button,
   Card,
   CardContent,
+  formatDate,
   MultiSelect,
   Skeleton,
   Stepper,
@@ -220,11 +221,11 @@ export default function TenderDetailPage() {
               </div>
               <div>
                 <p className="text-muted-foreground">Submission date</p>
-                <p>{new Date(tender.submissionDate).toLocaleDateString()}</p>
+                <p>{formatDate(tender.submissionDate)}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Opening date</p>
-                <p>{tender.openingDate ? new Date(tender.openingDate).toLocaleDateString() : "-"}</p>
+                <p>{tender.openingDate ? formatDate(tender.openingDate) : "-"}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Created by</p>

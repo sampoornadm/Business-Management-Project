@@ -7,6 +7,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  formatDateTime,
   Skeleton,
   useToast,
 } from "@bmp/ui";
@@ -70,7 +71,7 @@ export default function SessionsPage() {
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
                 {session.ipAddress ?? "Unknown IP"} · Signed in{" "}
-                {new Date(session.createdAt).toLocaleString()}
+                {formatDateTime(session.createdAt)}
               </CardContent>
             </Card>
           ))}

@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  formatDate,
   Form,
   FormControl,
   FormField,
@@ -198,7 +199,7 @@ export function RateAnalysisDialog({ tenderId, item }: { tenderId: string; item:
                 <div key={suggestion.id} className="flex items-center justify-between text-sm">
                   <span>
                     {suggestion.itemName} — {suggestion.rate.toLocaleString()}/{suggestion.unit} (
-                    {new Date(suggestion.effectiveDate).toLocaleDateString()})
+                    {formatDate(suggestion.effectiveDate)})
                   </span>
                   <Button
                     type="button"

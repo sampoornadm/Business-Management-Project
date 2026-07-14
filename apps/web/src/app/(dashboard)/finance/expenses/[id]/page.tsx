@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge, Card, CardContent, CardHeader, CardTitle, Skeleton, useToast } from "@bmp/ui";
+import { Badge, Card, CardContent, CardHeader, CardTitle, formatDate, Skeleton, useToast } from "@bmp/ui";
 import { useParams } from "next/navigation";
 
 import { RecordPaymentDialog } from "@/components/finance/record-payment-dialog";
@@ -34,7 +34,7 @@ export default function ExpenseDetailPage() {
             <Badge variant={STATUS_VARIANT[expense.status]}>{expense.status}</Badge>
           </div>
           <p className="text-sm text-muted-foreground">
-            {expense.category} · {new Date(expense.expenseDate).toLocaleDateString()}
+            {expense.category} · {formatDate(expense.expenseDate)}
           </p>
         </div>
         {remaining > 0 && (
@@ -78,7 +78,7 @@ export default function ExpenseDetailPage() {
                 <div>
                   <p className="font-medium">{payment.amount.toLocaleString()}</p>
                   <p className="text-muted-foreground">
-                    {payment.method} · {new Date(payment.paymentDate).toLocaleDateString()}
+                    {payment.method} · {formatDate(payment.paymentDate)}
                     {payment.referenceNumber ? ` · ${payment.referenceNumber}` : ""}
                   </p>
                 </div>

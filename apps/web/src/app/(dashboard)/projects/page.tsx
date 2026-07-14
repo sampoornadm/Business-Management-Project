@@ -1,7 +1,7 @@
 "use client";
 
 import type { ProjectListItemDto } from "@bmp/types";
-import { Badge, DataTable } from "@bmp/ui";
+import { Badge, DataTable, formatDate } from "@bmp/ui";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
 import Link from "next/link";
 import { useState } from "react";
@@ -37,12 +37,12 @@ const columns: ColumnDef<ProjectListItemDto>[] = [
   {
     accessorKey: "startDate",
     header: "Start Date",
-    cell: ({ row }) => new Date(row.original.startDate).toLocaleDateString(),
+    cell: ({ row }) => formatDate(row.original.startDate),
   },
   {
     accessorKey: "endDate",
     header: "Planned End",
-    cell: ({ row }) => (row.original.endDate ? new Date(row.original.endDate).toLocaleDateString() : "-"),
+    cell: ({ row }) => (row.original.endDate ? formatDate(row.original.endDate) : "-"),
   },
 ];
 

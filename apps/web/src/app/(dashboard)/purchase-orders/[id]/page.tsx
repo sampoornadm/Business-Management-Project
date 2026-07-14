@@ -7,6 +7,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  formatDate,
   Skeleton,
   Table,
   TableBody,
@@ -181,7 +182,7 @@ export default function PurchaseOrderDetailPage() {
             po.goodsReceipts.map((receipt) => (
               <div key={receipt.id} className="rounded-md border p-3 text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="font-medium">{new Date(receipt.receivedDate).toLocaleDateString()}</span>
+                  <span className="font-medium">{formatDate(receipt.receivedDate)}</span>
                   <span className="text-muted-foreground">
                     by {receipt.receivedBy.firstName} {receipt.receivedBy.lastName}
                   </span>
@@ -232,7 +233,7 @@ export default function PurchaseOrderDetailPage() {
                 <div key={payment.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
                   <p className="font-medium">{payment.amount.toLocaleString()}</p>
                   <p className="text-muted-foreground">
-                    {payment.method} · {new Date(payment.paymentDate).toLocaleDateString()}
+                    {payment.method} · {formatDate(payment.paymentDate)}
                   </p>
                 </div>
               ))

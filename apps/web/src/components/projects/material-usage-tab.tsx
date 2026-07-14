@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  formatDate,
   Input,
   Table,
   TableBody,
@@ -124,7 +125,7 @@ export function MaterialUsageTab({ projectId }: { projectId: string }) {
                   <TableCell>{usage.materialName}</TableCell>
                   <TableCell>{usage.unit ?? "-"}</TableCell>
                   <TableCell className="text-right">{usage.quantityUsed}</TableCell>
-                  <TableCell>{new Date(usage.usageDate).toLocaleDateString()}</TableCell>
+                  <TableCell>{formatDate(usage.usageDate)}</TableCell>
                   <TableCell>
                     {usage.recordedBy.firstName} {usage.recordedBy.lastName}
                   </TableCell>

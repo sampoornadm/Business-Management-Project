@@ -3,7 +3,7 @@
 import { Loader2, Trash2, Upload } from "lucide-react";
 import * as React from "react";
 
-import { cn } from "../lib/utils";
+import { cn, formatDateTime } from "../lib/utils";
 
 import { Badge } from "./badge";
 
@@ -158,7 +158,7 @@ export function DocumentUpload({
                         {version.originalName}
                       </a>
                       <p className="truncate text-muted-foreground">
-                        {version.uploadedByName} &middot; {new Date(version.uploadedAt).toLocaleString()} &middot;{" "}
+                        {version.uploadedByName} &middot; {formatDateTime(version.uploadedAt)} &middot;{" "}
                         {formatBytes(version.sizeBytes)}
                       </p>
                     </div>

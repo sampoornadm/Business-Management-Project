@@ -1,7 +1,7 @@
 "use client";
 
 import type { PurchaseOrderListItemDto } from "@bmp/types";
-import { Badge, Button, DataTable } from "@bmp/ui";
+import { Badge, Button, DataTable, formatDate } from "@bmp/ui";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
 import { FilePlus2 } from "lucide-react";
 import Link from "next/link";
@@ -48,7 +48,7 @@ const columns: ColumnDef<PurchaseOrderListItemDto>[] = [
     header: "Expected Delivery",
     cell: ({ row }) =>
       row.original.expectedDeliveryDate
-        ? new Date(row.original.expectedDeliveryDate).toLocaleDateString()
+        ? formatDate(row.original.expectedDeliveryDate)
         : "-",
   },
 ];

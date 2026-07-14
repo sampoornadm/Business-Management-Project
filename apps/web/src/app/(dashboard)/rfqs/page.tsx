@@ -1,7 +1,7 @@
 "use client";
 
 import type { RfqListItemDto } from "@bmp/types";
-import { Badge, Button, DataTable } from "@bmp/ui";
+import { Badge, Button, DataTable, formatDate } from "@bmp/ui";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
 import { FilePlus2 } from "lucide-react";
 import Link from "next/link";
@@ -39,7 +39,7 @@ const columns: ColumnDef<RfqListItemDto>[] = [
   {
     accessorKey: "dueDate",
     header: "Due Date",
-    cell: ({ row }) => (row.original.dueDate ? new Date(row.original.dueDate).toLocaleDateString() : "-"),
+    cell: ({ row }) => (row.original.dueDate ? formatDate(row.original.dueDate) : "-"),
   },
 ];
 

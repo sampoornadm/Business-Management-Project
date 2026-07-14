@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  formatDate,
   Input,
   Select,
   SelectContent,
@@ -171,7 +172,7 @@ export function LaborEntriesTab({ projectId }: { projectId: string }) {
                   <TableCell className="text-right">{entry.units}</TableCell>
                   <TableCell className="text-right">{entry.ratePerUnit.toLocaleString()}</TableCell>
                   <TableCell className="text-right">{entry.amount.toLocaleString()}</TableCell>
-                  <TableCell>{new Date(entry.entryDate).toLocaleDateString()}</TableCell>
+                  <TableCell>{formatDate(entry.entryDate)}</TableCell>
                 </TableRow>
               ))
             )}

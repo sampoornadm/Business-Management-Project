@@ -1,7 +1,7 @@
 "use client";
 
 import { TENDER_STATUS_LABELS, type TenderStatus } from "@bmp/types";
-import { Badge, Card, CardContent, CardHeader, CardTitle, KpiGrid, Skeleton, StatCard } from "@bmp/ui";
+import { Badge, Card, CardContent, CardHeader, CardTitle, formatDate, KpiGrid, Skeleton, StatCard } from "@bmp/ui";
 import { Activity, Database, FileClock, FileText, HardDrive, Users2 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -176,7 +176,7 @@ export default function DashboardPage() {
                         <div className="flex shrink-0 items-center gap-2">
                           {dueSoon && <Badge variant="signal">Due soon</Badge>}
                           <span className="text-xs text-muted-foreground">
-                            {new Date(tender.submissionDate).toLocaleDateString()}
+                            {formatDate(tender.submissionDate)}
                           </span>
                         </div>
                       </li>
