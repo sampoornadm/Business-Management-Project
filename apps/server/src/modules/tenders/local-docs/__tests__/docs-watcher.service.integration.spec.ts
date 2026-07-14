@@ -7,11 +7,7 @@ import { prisma } from "@bmp/database";
 import type { FSWatcher } from "chokidar";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  findTenderByNumberAcrossBusinesses,
-  listAllTendersForFolderSync,
-  startLocalDocsWatcher,
-} from "../docs-watcher.service.js";
+import { listAllTendersForFolderSync, startLocalDocsWatcher } from "../docs-watcher.service.js";
 import { tenderFolderName } from "../folder-naming.js";
 
 /**
@@ -19,18 +15,18 @@ import { tenderFolderName } from "../folder-naming.js";
  * database). Run via `pnpm --filter @bmp/server test` after `docker compose up`.
  *
  * `docs-watcher.service.ts`'s local-folder sync (opt-in via `LOCAL_DOCS_SYNC_ENABLED`) used to run
- * two unscoped `Tender` queries — `reconcileFolders()`'s `findMany({ select: ... })` with no
- * `where` at all, and `importFile()`'s `findUnique({ where: { tenderNumber } })` — both refused at
- * query time by the businessId-scope guard (see scoped-client.ts's `SCOPED_MODELS`), crashing the
- * watcher outright the moment `LOCAL_DOCS_SYNC_ENABLED=true` was set. `Tender.tenderNumber` is
- * `@unique` at the top level of the schema (not compound with `businessId`), and local-docs folders
- * carry no business segment in their naming scheme, so both queries were rewritten to loop
- * `listAllBusinessIds()` and run scoped, per-business queries instead (see the doc comments on
- * `listAllTendersForFolderSync()`/`findTenderByNumberAcrossBusinesses()` in docs-watcher.service.ts).
+ * an unscoped `Tender` query — `reconcileFolders()`'s `findMany({ select: ... })` with no `where`
+ * at all — refused at query time by the businessId-scope guard (see scoped-client.ts's
+ * `SCOPED_MODELS`), crashing the watcher outright the moment `LOCAL_DOCS_SYNC_ENABLED=true` was
+ * set. It was rewritten to loop `listAllBusinessIds()` and run a scoped, per-business query per
+ * business instead (see `listAllTendersForFolderSync()`'s doc comment in docs-watcher.service.ts).
+ * `importFile()` now resolves a dropped file's business directly from its path's business-code
+ * segment (see the `importFile` describe block below), so it no longer needs a cross-business
+ * search at all.
  *
- * This exercises both functions against two real businesses through the same guarded Prisma client
- * the service uses in production — a regression back to a single unscoped query would throw via the
- * guard, not just return a wrong/incomplete result.
+ * This exercises `listAllTendersForFolderSync` against two real businesses through the same
+ * guarded Prisma client the service uses in production — a regression back to a single unscoped
+ * query would throw via the guard, not just return a wrong/incomplete result.
  */
 describe("local docs sync tender lookups (integration)", () => {
   let userId: string;
@@ -152,37 +148,15 @@ describe("local docs sync tender lookups (integration)", () => {
     });
   });
 
-  describe("findTenderByNumberAcrossBusinesses", () => {
-    it("finds a tender that lives in business A", async () => {
-      const tender = await findTenderByNumberAcrossBusinesses(tenderANumber);
-      expect(tender?.id).toBe(tenderAId);
-    });
-
-    // Together with the assertion above, this proves the loop doesn't stop after only
-    // checking whichever business happens to be first — regardless of the order
-    // `listAllBusinessIds()` returns ids in, one of these two tenders is necessarily *not*
-    // in the first-checked business, so a broken implementation that queried only the first
-    // business (or otherwise failed to loop across all of them) would fail one of these two.
-    it("finds a tender that lives in business B", async () => {
-      const tender = await findTenderByNumberAcrossBusinesses(tenderBNumber);
-      expect(tender?.id).toBe(tenderBId);
-    });
-
-    it("returns null when no business has a tender with that number", async () => {
-      const tender = await findTenderByNumberAcrossBusinesses(`TND-DOES-NOT-EXIST-${randomUUID()}`);
-      expect(tender).toBeNull();
-    });
-  });
-
   /**
    * `importFile` (private to docs-watcher.service.ts) is exercised here through the public
    * `startLocalDocsWatcher` API — a real chokidar watcher on a real temp directory, real files
    * written to disk, real `add` events firing `importFile` end-to-end. This is the only coverage
    * of importFile's `<businessCode>/tenders/<tenderFolder>/<filename>` path parsing and its two
    * "no match, skip and log (don't throw)" branches (unresolvable business code, unresolvable
-   * tender folder within a resolved business) — the tests above only cover
-   * `listAllTendersForFolderSync`/`findTenderByNumberAcrossBusinesses`, neither of which importFile
-   * calls anymore after the business-scoped rewrite.
+   * tender folder within a resolved business) — the test above only covers
+   * `listAllTendersForFolderSync`, which importFile doesn't call directly (it queries
+   * `business`/`tender` via Prisma itself once it has the path's business-code segment).
    *
    * `awaitWriteFinish` (stabilityThreshold: 1500ms, pollInterval: 200ms) means an `add` event never
    * fires the instant a file is written — assertions poll via `vi.waitFor` instead of a fixed
