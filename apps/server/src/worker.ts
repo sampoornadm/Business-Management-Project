@@ -8,7 +8,7 @@ import { logger } from "./shared/logger/logger.js";
 const emailWorker = startEmailWorker();
 const tenderReminderWorker = startTenderReminderWorker();
 const localDocsWatcher = env.LOCAL_DOCS_SYNC_ENABLED
-  ? await startLocalDocsWatcher(env.LOCAL_DOCS_ROOT_DIR)
+  ? await startLocalDocsWatcher(env.BUSINESSES_ROOT_DIR)
   : undefined;
 
 // Idempotent: BullMQ dedupes repeatable jobs by pattern + jobId, so

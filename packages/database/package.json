@@ -15,9 +15,10 @@
     "migrate:reset": "prisma migrate reset",
     "seed": "tsx prisma/seed.ts",
     "studio": "prisma studio",
+    "migrate-tender-folders": "tsx scripts/migrate-tender-folders.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"no tests\" && exit 0",
+    "test": "vitest run",
     "clean": "rm -rf generated dist .turbo"
   },
   "dependencies": {
@@ -31,7 +32,8 @@
     "@types/node": "^22.10.5",
     "prisma": "^6.1.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

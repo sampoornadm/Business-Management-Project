@@ -6,6 +6,7 @@ import { BadRequestError, ConflictError, NotFoundError } from "../../../core/err
 import type { EmailService } from "../../../infra/mailer/email.service.js";
 import type { AttachmentsService } from "../../attachments/attachments.service.js";
 import type { AuditService } from "../../audit/audit.service.js";
+import type { IBusinessesRepository } from "../../businesses/businesses.repository.js";
 import type { NotificationsService } from "../../notifications/notifications.service.js";
 import type { IOrganizationsRepository, OrganizationWithContacts } from "../../organizations/organizations.repository.js";
 import type { ITagsRepository } from "../../tags/tags.repository.js";
@@ -242,6 +243,12 @@ class FakeTagsRepository implements Partial<ITagsRepository> {
   }
 }
 
+class FakeBusinessesRepository implements Partial<IBusinessesRepository> {
+  async findById(id: string) {
+    return { id, code: "TEST" } as never;
+  }
+}
+
 const BUSINESS_ID = randomUUID();
 
 describe("TendersService", () => {
@@ -283,6 +290,7 @@ describe("TendersService", () => {
       new FakeOrganizationsRepository() as unknown as IOrganizationsRepository,
       new FakeUsersRepository() as unknown as IUsersRepository,
       new FakeTagsRepository() as unknown as ITagsRepository,
+      new FakeBusinessesRepository() as unknown as IBusinessesRepository,
       auditService,
       {} as AttachmentsService,
       notificationsService,
