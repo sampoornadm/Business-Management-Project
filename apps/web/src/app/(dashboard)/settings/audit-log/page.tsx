@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge, Card, CardContent, DataTable } from "@bmp/ui";
+import { Badge, Card, CardContent, DataTable, formatDateTime } from "@bmp/ui";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
 import { useState } from "react";
 
@@ -25,7 +25,7 @@ const columns: ColumnDef<AuditRow>[] = [
   {
     accessorKey: "createdAt",
     header: "When",
-    cell: ({ row }) => new Date(row.original.createdAt).toLocaleString(),
+    cell: ({ row }) => formatDateTime(row.original.createdAt),
   },
 ];
 

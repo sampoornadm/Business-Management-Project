@@ -9,6 +9,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  formatDateTime,
 } from "@bmp/ui";
 import { Bell } from "lucide-react";
 import Link from "next/link";
@@ -60,7 +61,7 @@ export function NotificationBell() {
                 {notification.title}
               </span>
               <span className="text-xs text-muted-foreground">
-                {new Date(notification.createdAt).toLocaleString()}
+                {formatDateTime(notification.createdAt)}
               </span>
             </DropdownMenuItem>
           ))

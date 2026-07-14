@@ -1,7 +1,7 @@
 "use client";
 
 import type { UserDto } from "@bmp/types";
-import { Avatar, AvatarFallback, AvatarImage, Badge } from "@bmp/ui";
+import { Avatar, AvatarFallback, AvatarImage, Badge, formatDateTime } from "@bmp/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 
@@ -51,6 +51,6 @@ export const userTableColumns: ColumnDef<UserDto>[] = [
     accessorKey: "lastLoginAt",
     header: "Last Login",
     cell: ({ row }) =>
-      row.original.lastLoginAt ? new Date(row.original.lastLoginAt).toLocaleString() : "Never",
+      row.original.lastLoginAt ? formatDateTime(row.original.lastLoginAt) : "Never",
   },
 ];

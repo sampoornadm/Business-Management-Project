@@ -6,6 +6,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  formatDate,
   Skeleton,
   Tabs,
   TabsContent,
@@ -54,7 +55,7 @@ export default function ProjectDetailPage() {
         </div>
         <p className="text-sm text-muted-foreground">
           Budget: {project.budget.toLocaleString()} · Started{" "}
-          {new Date(project.startDate).toLocaleDateString()}
+          {formatDate(project.startDate)}
           {" · "}
           <Link href={`/tenders/${project.tenderId}`} className="hover:underline">
             View source tender

@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, CardContent, Skeleton, useToast } from "@bmp/ui";
+import { Button, Card, CardContent, formatDateTime, Skeleton, useToast } from "@bmp/ui";
 import { useState } from "react";
 
 import {
@@ -46,7 +46,7 @@ export default function NotificationsPage() {
                     <p className="text-sm text-muted-foreground">{notification.body}</p>
                   )}
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {new Date(notification.createdAt).toLocaleString()}
+                    {formatDateTime(notification.createdAt)}
                   </p>
                 </div>
                 {!notification.isRead && (

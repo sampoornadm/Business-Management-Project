@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  formatDate,
   Input,
   Select,
   SelectContent,
@@ -148,7 +149,7 @@ export function MilestonesTab({ project }: { project: ProjectDto }) {
                 <TableRow key={milestone.id}>
                   <TableCell>{milestone.title}</TableCell>
                   <TableCell>
-                    {milestone.plannedDate ? new Date(milestone.plannedDate).toLocaleDateString() : "-"}
+                    {milestone.plannedDate ? formatDate(milestone.plannedDate) : "-"}
                   </TableCell>
                   <TableCell>{milestone.weightPercent}%</TableCell>
                   <TableCell>

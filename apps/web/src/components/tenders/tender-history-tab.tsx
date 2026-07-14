@@ -1,7 +1,7 @@
 "use client";
 
 import { TENDER_STATUS_LABELS } from "@bmp/types";
-import { Skeleton } from "@bmp/ui";
+import { formatDateTime, Skeleton } from "@bmp/ui";
 
 import { useTenderStatusHistory } from "@/hooks/use-tenders";
 
@@ -34,7 +34,7 @@ export function TenderHistoryTab({ tenderId }: { tenderId: string }) {
           </p>
           <p className="text-xs text-muted-foreground">
             {entry.changedBy ? `${entry.changedBy.firstName} ${entry.changedBy.lastName}` : "System"} ·{" "}
-            {new Date(entry.changedAt).toLocaleString()}
+            {formatDateTime(entry.changedAt)}
           </p>
           {entry.remarks && <p className="mt-1 text-sm">{entry.remarks}</p>}
         </li>

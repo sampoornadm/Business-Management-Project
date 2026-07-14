@@ -2,7 +2,7 @@
 
 import type { TenderListItemDto } from "@bmp/types";
 import { TENDER_STATUS_LABELS } from "@bmp/types";
-import { Badge } from "@bmp/ui";
+import { Badge, formatDate } from "@bmp/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 
@@ -47,7 +47,7 @@ export const tenderTableColumns: ColumnDef<TenderListItemDto>[] = [
   {
     accessorKey: "submissionDate",
     header: "Submission Date",
-    cell: ({ row }) => new Date(row.original.submissionDate).toLocaleDateString(),
+    cell: ({ row }) => formatDate(row.original.submissionDate),
   },
   {
     accessorKey: "assigneeCount",

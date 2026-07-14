@@ -7,6 +7,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  formatDate,
   Select,
   SelectContent,
   SelectItem,
@@ -170,7 +171,7 @@ export default function RfqDetailPage() {
           </div>
           <p className="text-sm text-muted-foreground">
             {rfq.itemCount} item(s) · {rfq.vendorCount} vendor(s) invited
-            {rfq.dueDate ? ` · due ${new Date(rfq.dueDate).toLocaleDateString()}` : ""}
+            {rfq.dueDate ? ` · due ${formatDate(rfq.dueDate)}` : ""}
           </p>
         </div>
         {canUpdate && !isFinalized && (

@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  formatDate,
   Input,
   Table,
   TableBody,
@@ -150,7 +151,7 @@ export function BillsTab({ projectId }: { projectId: string }) {
                 return (
                   <TableRow key={bill.id}>
                     <TableCell>{bill.billNumber}</TableCell>
-                    <TableCell>{new Date(bill.billDate).toLocaleDateString()}</TableCell>
+                    <TableCell>{formatDate(bill.billDate)}</TableCell>
                     <TableCell className="text-right">{bill.cumulativeAmount.toLocaleString()}</TableCell>
                     <TableCell className="text-right">{bill.currentBillAmount.toLocaleString()}</TableCell>
                     <TableCell>
