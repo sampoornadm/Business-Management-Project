@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -71,7 +71,6 @@ describe("planMigration", () => {
   });
 
   it("ignores non-directory entries at the root (e.g. stray files like .DS_Store)", async () => {
-    const { writeFile } = await import("node:fs/promises");
     await writeFile(path.join(oldRootDir, ".DS_Store"), "");
 
     const { planMigration } = await import("../migrate-tender-folders.js");
@@ -79,5 +78,51 @@ describe("planMigration", () => {
 
     expect(plan.moves).toEqual([]);
     expect(plan.unresolved).toEqual([]);
+  });
+});
+
+describe("executeMigration", () => {
+  let oldRootDir: string;
+  let newRootDir: string;
+
+  beforeEach(async () => {
+    oldRootDir = await mkdtemp(path.join(tmpdir(), "bmp-migrate-test-old-"));
+    newRootDir = await mkdtemp(path.join(tmpdir(), "bmp-migrate-test-new-"));
+  });
+
+  afterEach(async () => {
+    await rm(oldRootDir, { recursive: true, force: true });
+    await rm(newRootDir, { recursive: true, force: true });
+  });
+
+  // Regression test for a Critical finding: startLocalDocsWatcher()'s reconcileFolders() runs on
+  // every boot and unconditionally pre-creates the full empty subfolder skeleton
+  // (<businessCode>/tenders/<tenderFolder>/{BOQ,Drawings,...}) for every tender, whether or not
+  // that tender's old-style folder has been migrated yet. So by the time this script actually
+  // runs, `move.to` almost always already exists as a non-empty directory — a blind top-level
+  // `rename(move.from, move.to)` throws ENOTEMPTY against that. This test pre-creates exactly
+  // that collision (including an asymmetric sibling skeleton folder, "Drawings", that has no
+  // counterpart in the source) and asserts the migration still succeeds.
+  it("merges an old tender folder's contents into a destination that already has an empty skeleton (reconcileFolders collision)", async () => {
+    const from = path.join(oldRootDir, "TND-1 - Road Works");
+    const to = path.join(newRootDir, "ARCHIE", "tenders", "TND-1 - Road Works");
+
+    await mkdir(path.join(from, "BOQ"), { recursive: true });
+    await writeFile(path.join(from, "BOQ", "quote.pdf"), "quote contents");
+
+    // Simulates reconcileFolders() having already run: destination skeleton exists, empty,
+    // including a sibling subfolder ("Drawings") absent from the source.
+    await mkdir(path.join(to, "BOQ"), { recursive: true });
+    await mkdir(path.join(to, "Drawings"), { recursive: true });
+
+    const { executeMigration } = await import("../migrate-tender-folders.js");
+    const plan = { moves: [{ from, to }], unresolved: [] };
+
+    await expect(executeMigration(plan, oldRootDir)).resolves.not.toThrow();
+
+    const moved = await readFile(path.join(to, "BOQ", "quote.pdf"), "utf8");
+    expect(moved).toBe("quote contents");
+
+    await expect(stat(from)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

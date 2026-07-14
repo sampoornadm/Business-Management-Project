@@ -1,4 +1,4 @@
-import { readdir, rename, rmdir } from "node:fs/promises";
+import { mkdir, readdir, rename, rmdir } from "node:fs/promises";
 import path from "node:path";
 
 import { listAllTendersForFolderSync } from "../../../apps/server/src/modules/tenders/local-docs/docs-watcher.service.js";
@@ -36,9 +36,24 @@ export async function planMigration(oldRootDir: string, newRootDir: string = old
   return { moves, unresolved };
 }
 
+// `move.to` may already exist as a non-empty directory: startLocalDocsWatcher()'s
+// reconcileFolders() creates the full <BOQ,Drawings,General,...> skeleton for every tender on
+// every boot, regardless of whether that tender's old-style folder has been migrated yet. A
+// blind top-level `rename(move.from, move.to)` throws ENOTEMPTY against a pre-existing
+// destination, so instead we merge one level deep: ensure `move.to` exists, then rename each
+// entry directly inside `move.from` (files and subfolders alike — old tender folders are only
+// ever one level deep, see ensureTenderFolders in folder-naming.ts) into the same-named path
+// under `move.to`. A subfolder rename still succeeds via POSIX rename semantics as long as the
+// destination subfolder is empty, which it will be since reconcileFolders only ever creates
+// empty skeleton folders.
 export async function executeMigration(plan: MigrationPlan, oldRootDir: string): Promise<void> {
   for (const move of plan.moves) {
-    await rename(move.from, move.to);
+    await mkdir(move.to, { recursive: true });
+    const entries = await readdir(move.from, { withFileTypes: true });
+    for (const entry of entries) {
+      await rename(path.join(move.from, entry.name), path.join(move.to, entry.name));
+    }
+    await rmdir(move.from);
   }
   const remaining = await readdir(oldRootDir);
   if (remaining.length === 0) {
