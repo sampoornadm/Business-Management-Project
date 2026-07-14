@@ -3,6 +3,7 @@ import { EmailService } from "../../infra/mailer/email.service.js";
 import { prisma } from "../../infra/prisma/client.js";
 import { attachmentsService } from "../attachments/attachments.module.js";
 import { auditService } from "../audit/audit.module.js";
+import { businessesRepository } from "../businesses/businesses.module.js";
 import { notificationsService } from "../notifications/notifications.module.js";
 import { organizationsRepository } from "../organizations/organizations.module.js";
 import { TagsRepository } from "../tags/tags.repository.js";
@@ -24,6 +25,7 @@ export const tendersService = new TendersService(
   organizationsRepository,
   usersRepository,
   tagsRepository,
+  businessesRepository,
   auditService,
   attachmentsService,
   notificationsService,
