@@ -278,9 +278,11 @@ describe("AuthService", () => {
   it("returns activeBusinessId and availableBusinesses when switching business", async () => {
     const SECOND_BUSINESS_ID = "business-2";
     businessesRepository.addMembership(user.id, SECOND_BUSINESS_ID, ROLE_ID);
+    user.userBusinesses.push(membershipFor(user.id, SECOND_BUSINESS_ID, ROLE_ID));
 
     const result = await authService.switchBusiness(user.id, SECOND_BUSINESS_ID, {});
     expect(result.activeBusinessId).toBe(SECOND_BUSINESS_ID);
+    expect(result.user.id).toBe(user.id);
     expect(result.availableBusinesses.map((b) => b.businessId).sort()).toEqual(
       [BUSINESS_ID, SECOND_BUSINESS_ID].sort(),
     );
