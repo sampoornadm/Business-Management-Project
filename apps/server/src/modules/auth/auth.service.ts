@@ -29,6 +29,7 @@ export interface RefreshResult {
   accessToken: string;
   accessTokenExpiresAt: string;
   refreshToken: string;
+  user: UserDto;
   activeBusinessId: string;
   availableBusinesses: AvailableBusiness[];
 }
@@ -216,6 +217,7 @@ export class AuthService {
       accessToken,
       accessTokenExpiresAt: expiresAt.toISOString(),
       refreshToken: newRawToken,
+      user: await this.toDto(user),
       activeBusinessId: active.businessId,
       availableBusinesses: active.availableBusinesses,
     };
@@ -257,6 +259,7 @@ export class AuthService {
       accessToken,
       accessTokenExpiresAt: expiresAt.toISOString(),
       refreshToken,
+      user: await this.toDto(user),
       activeBusinessId: active.businessId,
       availableBusinesses: active.availableBusinesses,
     };

@@ -8,6 +8,7 @@ import { apiClient } from "@/lib/axios";
 
 interface RefreshResponse {
   accessToken: string;
+  user: UserDto;
   activeBusinessId: string;
   availableBusinesses: AvailableBusiness[];
 }
@@ -25,20 +26,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
           "/auth/refresh",
         );
         if (!refreshResponse.data.success) throw new Error("Refresh failed");
-        const { accessToken, activeBusinessId, availableBusinesses } = refreshResponse.data.data;
-
-        const meResponse = await apiClient.get<ApiResponse<UserDto>>("/users/me", {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        if (!meResponse.data.success) throw new Error("Failed to load current user");
+        const { accessToken, user, activeBusinessId, availableBusinesses } = refreshResponse.data.data;
 
         if (!cancelled) {
-          setAuth({
-            accessToken,
-            user: meResponse.data.data,
-            activeBusinessId,
-            availableBusinesses,
-          });
+          setAuth({ accessToken, user, activeBusinessId, availableBusinesses });
         }
       } catch {
         // No valid session — the user will land on the login page.

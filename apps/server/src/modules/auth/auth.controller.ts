@@ -36,6 +36,7 @@ export class AuthController {
     sendSuccess(res, {
       accessToken: result.accessToken,
       accessTokenExpiresAt: result.accessTokenExpiresAt,
+      user: result.user,
       activeBusinessId: result.activeBusinessId,
       availableBusinesses: result.availableBusinesses,
     }, "Token refreshed");
