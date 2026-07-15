@@ -11,7 +11,7 @@ const tenderReminderWorker = startTenderReminderWorker();
 const localDocsWatcher = env.LOCAL_DOCS_SYNC_ENABLED
   ? await startLocalDocsWatcher(env.BUSINESSES_ROOT_DIR)
   : undefined;
-const incomingTendersWatcher = env.LOCAL_DOCS_SYNC_ENABLED
+const incomingTendersWatcher = env.INCOMING_TENDERS_INGESTION_ENABLED
   ? await startIncomingTendersWatcher(env.BUSINESSES_ROOT_DIR)
   : undefined;
 

@@ -52,6 +52,12 @@ const envSchema = z.object({
   // apps/server/src/modules/tenders/local-docs/).
   LOCAL_DOCS_SYNC_ENABLED: booleanEnv("false"),
   BUSINESSES_ROOT_DIR: z.string().default("~/BMP-Businesses"),
+
+  // Separate opt-in from LOCAL_DOCS_SYNC_ENABLED above: that flag only attaches files
+  // onto an EXISTING tender, while this one lets dropped files auto-create real
+  // Tender/Organization/Boq rows with zero human review. An environment that already
+  // has LOCAL_DOCS_SYNC_ENABLED=true for the former must not silently gain the latter.
+  INCOMING_TENDERS_INGESTION_ENABLED: booleanEnv("false"),
 });
 
 export type Env = z.infer<typeof envSchema>;
