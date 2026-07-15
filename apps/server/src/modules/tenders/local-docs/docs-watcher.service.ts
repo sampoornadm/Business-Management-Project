@@ -23,7 +23,7 @@ const LOCAL_DOCS_SYNC_USER_EMAIL = "local-sync@bmp.local";
 
 let cachedSystemUserId: string | undefined;
 
-async function getSystemUserId(): Promise<string> {
+export async function getSystemUserId(): Promise<string> {
   if (cachedSystemUserId) return cachedSystemUserId;
   const user = await prisma.user.findUnique({
     where: { email: LOCAL_DOCS_SYNC_USER_EMAIL },

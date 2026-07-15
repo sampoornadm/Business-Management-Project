@@ -3,12 +3,16 @@ import { tenderReminderQueue } from "./infra/queue/queues.js";
 import { startEmailWorker } from "./infra/queue/workers/email.worker.js";
 import { startTenderReminderWorker } from "./infra/queue/workers/tender-reminder.worker.js";
 import { startLocalDocsWatcher } from "./modules/tenders/local-docs/docs-watcher.service.js";
+import { startIncomingTendersWatcher } from "./modules/tenders/local-docs/incoming-tenders.service.js";
 import { logger } from "./shared/logger/logger.js";
 
 const emailWorker = startEmailWorker();
 const tenderReminderWorker = startTenderReminderWorker();
 const localDocsWatcher = env.LOCAL_DOCS_SYNC_ENABLED
   ? await startLocalDocsWatcher(env.BUSINESSES_ROOT_DIR)
+  : undefined;
+const incomingTendersWatcher = env.INCOMING_TENDERS_INGESTION_ENABLED
+  ? await startIncomingTendersWatcher(env.BUSINESSES_ROOT_DIR)
   : undefined;
 
 // Idempotent: BullMQ dedupes repeatable jobs by pattern + jobId, so
@@ -21,12 +25,17 @@ await tenderReminderQueue.add(
 );
 
 logger.info(
-  `Background worker process started (email queue, tender reminders${localDocsWatcher ? ", local docs sync" : ""})`,
+  `Background worker process started (email queue, tender reminders${localDocsWatcher ? ", local docs sync" : ""}${incomingTendersWatcher ? ", incoming tenders ingestion" : ""})`,
 );
 
 async function shutdown(signal: string): Promise<void> {
   logger.info(`Received ${signal}, shutting down worker...`);
-  await Promise.all([emailWorker.close(), tenderReminderWorker.close(), localDocsWatcher?.close()]);
+  await Promise.all([
+    emailWorker.close(),
+    tenderReminderWorker.close(),
+    localDocsWatcher?.close(),
+    incomingTendersWatcher?.close(),
+  ]);
   process.exit(0);
 }
 

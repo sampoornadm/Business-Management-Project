@@ -66,6 +66,7 @@ dev placeholder committed in `.env.example`.
 | `SEED_USER_PASSWORD` | Dev/CI only | **Yes** | Password assigned to all seeded demo users (`pnpm db:seed`). **Never run the seed script against a production database** — it's for local dev and CI fixtures only. |
 | `BACKUP_RETENTION_DAYS` | No (default `14`) | No | Read by `infra/scripts/backup-db.sh`. |
 | `BUSINESSES_ROOT_DIR` | No (default `~/BMP-Businesses`) | No | One root, one subfolder per business (keyed by `Business.code`): `<code>/templates/` (document-generation `.docx` templates — must be a plain `.docx`, not `.dotx`: if built from a `.dotx` letterhead starter in Word, use File > Save As > Word Document first) and `<code>/tenders/` (the tender-document auto-import folders, opt-in via `LOCAL_DOCS_SYNC_ENABLED`). No upload UI — place files directly. |
+| `INCOMING_TENDERS_INGESTION_ENABLED` | No (default `false`) | No | Separate opt-in from `LOCAL_DOCS_SYNC_ENABLED`: watches `<code>/incoming-tenders/` (under `BUSINESSES_ROOT_DIR`) and auto-creates a DRAFT `Tender`/`Organization`/`Boq` from a dropped `.pdf`/`.docx` with zero human review. `LOCAL_DOCS_SYNC_ENABLED` only attaches files onto an *existing* tender — enabling that flag does not imply this one, and vice versa. |
 
 ## Ollama (local LLM — tender document auto-extraction)
 
