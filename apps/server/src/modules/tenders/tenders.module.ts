@@ -31,7 +31,7 @@ export const tendersService = new TendersService(
   notificationsService,
   emailService,
 );
-const tenderExtractionService = new TenderExtractionService(
+export const tenderExtractionService = new TenderExtractionService(
   organizationsRepository,
   generateJson,
   extractDocumentText,
