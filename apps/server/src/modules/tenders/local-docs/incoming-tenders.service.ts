@@ -12,7 +12,7 @@ import { boqService } from "../../boq/boq.module.js";
 import { organizationsRepository, organizationsService } from "../../organizations/organizations.module.js";
 import { extractDocumentText } from "../tender-extraction.parser.js";
 import { TenderExtractionService } from "../tender-extraction.service.js";
-import { tendersService } from "../tenders.module.js";
+import { tendersRepository, tendersService } from "../tenders.module.js";
 
 import { getSystemUserId } from "./docs-watcher.service.js";
 import { ensureTenderFolders, expandHome, tenderFolderName } from "./folder-naming.js";
@@ -23,11 +23,15 @@ const EXTENSION_TO_MIME_TYPE: Record<string, string> = {
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
-async function moveToSubfolder(rootDir: string, businessCode: string, filename: string, subfolder: string): Promise<void> {
+async function moveToSubfolder(
+  rootDir: string,
+  businessCode: string,
+  absolutePath: string,
+  subfolder: string,
+): Promise<void> {
   const targetDir = path.join(rootDir, businessCode, "incoming-tenders", subfolder);
   await mkdir(targetDir, { recursive: true });
-  const sourcePath = path.join(rootDir, businessCode, "incoming-tenders", filename);
-  await rename(sourcePath, path.join(targetDir, filename));
+  await rename(absolutePath, path.join(targetDir, path.basename(absolutePath)));
 }
 
 export async function processIncomingTenderFile(
@@ -38,8 +42,8 @@ export async function processIncomingTenderFile(
   const relative = path.relative(rootDir, absolutePath);
   const segments = relative.split(path.sep);
   // Only [businessCode, "incoming-tenders", filename] — 3 segments exactly. A path
-  // inside incoming-tenders/duplicates/ or incoming-tenders/errors/ (created by this
-  // same function below) has 4 segments and must NOT be re-processed.
+  // inside incoming-tenders/duplicates/ (created by this same function below) has 4
+  // segments and must NOT be re-processed.
   if (segments.length !== 3) return;
 
   const [businessCode, folderSegment, filename] = segments;
@@ -66,6 +70,19 @@ export async function processIncomingTenderFile(
     return;
   }
 
+  // Check tenderNumber uniqueness BEFORE creating the client org: a resubmission of an
+  // already-processed file (or any tenderNumber collision) is a normal, foreseeable
+  // event, not an exotic edge case. Doing this check first means we never create an
+  // orphan Organization row for a file that's about to be rejected as a duplicate.
+  const existingTender = await tendersRepository.findByTenderNumber(draft.tenderNumber, business.id);
+  if (existingTender) {
+    await moveToSubfolder(rootDir, businessCode!, absolutePath, "duplicates");
+    logger.warn(
+      `Incoming tenders: tender ${draft.tenderNumber} already exists — moved "${filename}" to duplicates/`,
+    );
+    return;
+  }
+
   let clientId = result.suggestedClientId;
   if (!clientId) {
     const clientName = result.suggestedClientName ?? draft.title;
@@ -82,8 +99,10 @@ export async function processIncomingTenderFile(
   try {
     tender = await tendersService.create({ ...draft, clientId }, { businessId: business.id });
   } catch (error) {
+    // Defense-in-depth backstop for the narrow race between the uniqueness check above
+    // and this create() call — the check above is the primary guard now.
     if (error instanceof ConflictError) {
-      await moveToSubfolder(rootDir, businessCode!, filename!, "duplicates");
+      await moveToSubfolder(rootDir, businessCode!, absolutePath, "duplicates");
       logger.warn(
         `Incoming tenders: tender ${draft.tenderNumber} already exists — moved "${filename}" to duplicates/`,
       );

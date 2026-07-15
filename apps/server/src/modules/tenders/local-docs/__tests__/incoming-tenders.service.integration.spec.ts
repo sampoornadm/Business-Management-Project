@@ -198,4 +198,56 @@ describe("incoming-tenders ingestion (integration)", () => {
     const remainingIncoming = (await readdir(incomingDir)).filter((name) => name !== "duplicates");
     expect(remainingIncoming).toEqual([]);
   });
+
+  it("does not create an orphan Organization when the tenderNumber already exists", async () => {
+    const tenderNumber = `TND-${randomUUID().slice(0, 8)}`;
+    const preExistingClientName = `${CLIENT_NAME_PREFIX} ${randomUUID().slice(0, 8)}`;
+    const incomingDir = path.join(rootDir, businessCode, "incoming-tenders");
+    await mkdir(incomingDir, { recursive: true });
+
+    const organization = await prisma.organization.create({
+      data: { id: randomUUID(), name: preExistingClientName, type: "GOVERNMENT", createdById: userId },
+    });
+    await prisma.tender.create({
+      data: {
+        id: randomUUID(),
+        tenderNumber,
+        title: "Already exists",
+        department: "Dept",
+        clientId: organization.id,
+        type: "Open",
+        category: "General",
+        location: "Somewhere",
+        state: "Somewhere",
+        estimatedCost: 0,
+        submissionDate: new Date(),
+        businessId,
+        createdById: userId,
+      },
+    });
+
+    // A brand-new client name that doesn't match any existing organization — before
+    // Finding 1's fix, resolving/creating this org happened BEFORE the duplicate-
+    // tenderNumber check, so this exact scenario left an orphan Organization row
+    // behind even though the tender creation was always going to be rejected.
+    const newClientName = `${CLIENT_NAME_PREFIX} orphan-check ${randomUUID().slice(0, 8)}`;
+    const filePath = path.join(incomingDir, "BID-fixture.PDF");
+    await writeFile(filePath, "fake pdf bytes");
+
+    const orgCountBefore = await prisma.organization.count({ where: { name: newClientName } });
+
+    await processIncomingTenderFile(
+      rootDir,
+      filePath,
+      fakeExtractionService(buildSailFixtureText(tenderNumber, newClientName)),
+    );
+
+    const orgCountAfter = await prisma.organization.count({ where: { name: newClientName } });
+    expect(orgCountAfter).toBe(orgCountBefore);
+    expect(orgCountAfter).toBe(0);
+
+    const duplicatesDir = path.join(incomingDir, "duplicates");
+    const duplicateFiles = await readdir(duplicatesDir);
+    expect(duplicateFiles).toEqual(["BID-fixture.PDF"]);
+  });
 });
