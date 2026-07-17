@@ -1,6 +1,6 @@
 "use client";
 
-import type { BoqDto, BoqItemDto, RfqVendorSuggestionsDto } from "@bmp/types";
+import { DEFAULT_GST_RATE, type BoqDto, type BoqItemDto, type RfqVendorSuggestionsDto } from "@bmp/types";
 import { Badge, Button, EditableTreeTable, Input, useToast, type EditableTreeColumn } from "@bmp/ui";
 import { Send, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -58,9 +58,19 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
 
   async function commitField(
     item: BoqItemDto,
-    field: "description" | "unit" | "quantity" | "rate",
+    field: "description" | "unit" | "quantity" | "rate" | "gstRate",
     value: string,
   ) {
+    if (field === "gstRate") {
+      // Unlike quantity/rate, GST is non-nullable — a cleared box means "back to default".
+      const parsed = value === "" ? DEFAULT_GST_RATE : Number(value);
+      if (Number.isNaN(parsed) || parsed < 0 || parsed > 100) {
+        toast({ variant: "destructive", title: "Enter a GST rate between 0 and 100" });
+        return;
+      }
+      await commitUpdate(item, { gstRate: parsed });
+      return;
+    }
     if (field === "quantity" || field === "rate") {
       const parsed = value === "" ? undefined : Number(value);
       if (value !== "" && Number.isNaN(parsed)) {
@@ -127,8 +137,14 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
       key: "description",
       header: "Description",
       editable: canEdit,
+      // Real tender descriptions run to ~180 chars ("TUBE MATERIAL : POLYURETHANE WORKING
+      // PRESSURE : ... HARDNESS: SHORE A98, MINIMUM BEND RADIUS: 30 MM") — no single-line
+      // input shows that at any width, so this wraps and takes the lion's share of the row.
+      inputType: "textarea",
+      widthClassName: "w-[38%] min-w-[22rem]",
       getValue: (item) => item.description,
       onCommit: (item, value) => void commitField(item, "description", value),
+      render: (item) => <span className="whitespace-pre-wrap break-words">{item.description}</span>,
     },
     {
       key: "unit",
@@ -156,10 +172,57 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
       onCommit: (item, value) => void commitField(item, "rate", value),
     },
     {
+      key: "gstRate",
+      header: "GST %",
+      align: "right",
+      editable: canEdit,
+      inputType: "number",
+      widthClassName: "w-24",
+      getValue: (item) => item.gstRate,
+      onCommit: (item, value) => void commitField(item, "gstRate", value),
+    },
+    {
       key: "amount",
       header: "Amount",
       align: "right",
       getValue: (item) => item.amount?.toLocaleString() ?? "-",
+    },
+    {
+      key: "ai",
+      header: "AI suggestion",
+      render: (item) => {
+        if (!item.aiEnrichedAt) return <span className="text-muted-foreground">-</span>;
+        const confidence = item.aiConfidence ?? 0;
+        const classification = [item.aiCategory, item.aiSubcategory].filter(Boolean).join(" · ");
+        return (
+          <div className="flex items-center gap-2" title={item.normalizedName ?? undefined}>
+            {classification && (
+              <Badge variant="secondary" className="text-xs font-normal">
+                {classification}
+              </Badge>
+            )}
+            {item.suggestedRate !== null && (
+              <>
+                <span className="tabular-nums">{item.suggestedRate.toLocaleString()}</span>
+                <Badge variant={confidence >= 0.95 ? "default" : "outline"} className="text-xs">
+                  {Math.round(confidence * 100)}%
+                </Badge>
+                {canEdit && item.rate !== item.suggestedRate && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => void commitUpdate(item, { rate: item.suggestedRate ?? undefined })}
+                    disabled={updateItem.isPending}
+                  >
+                    Apply
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+        );
+      },
     },
   ];
 

@@ -49,6 +49,7 @@ export interface UpdateBoqItemData {
   quantity?: number | null;
   rate?: number | null;
   amount?: number | null;
+  gstRate?: number;
   remarks?: string | null;
   sortOrder?: number;
 }
@@ -64,6 +65,7 @@ export interface CreateBoqItemData {
   quantity: number | null;
   rate: number | null;
   amount: number | null;
+  gstRate?: number;
   remarks: string | null;
   sortOrder: number;
 }
@@ -72,6 +74,17 @@ export interface BulkRateUpdate {
   id: string;
   rate: number | null;
   amount: number | null;
+}
+
+export interface UpdateBoqItemEnrichmentData {
+  normalizedName: string | null;
+  aiCategory: string | null;
+  aiSubcategory: string | null;
+  aiConfidence: number | null;
+  suggestedRate: number | null;
+  aiSource: string | null;
+  aiRateSourceId: string | null;
+  aiEnrichedAt: Date;
 }
 
 export interface UpsertRateBreakdownData {
@@ -97,6 +110,7 @@ export interface IBoqRepository {
   createItem(data: CreateBoqItemData): Promise<BoqItemWithBreakdown>;
   deleteItem(id: string): Promise<void>;
   bulkUpdateRates(updates: BulkRateUpdate[]): Promise<void>;
+  updateItemEnrichment(id: string, data: UpdateBoqItemEnrichmentData): Promise<void>;
   upsertRateBreakdown(itemId: string, data: UpsertRateBreakdownData): Promise<void>;
   sumAmountByBoqId(boqId: string): Promise<number>;
   finalize(boqId: string): Promise<void>;
@@ -206,6 +220,10 @@ export class BoqRepository implements IBoqRepository {
         }),
       ),
     );
+  }
+
+  async updateItemEnrichment(id: string, data: UpdateBoqItemEnrichmentData): Promise<void> {
+    await this.prisma.boqItem.update({ where: { id }, data });
   }
 
   async upsertRateBreakdown(itemId: string, data: UpsertRateBreakdownData): Promise<void> {

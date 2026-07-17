@@ -94,7 +94,7 @@ export async function generateUndertaking(
   const data: Record<string, string> = {
     tenderNumber: tender.tenderNumber,
     tenderTitle: tender.title,
-    tenderDepartment: tender.department,
+    tenderDepartment: tender.department ?? "",
     businessName: tender.business.name,
     businessAddress: tender.business.address ?? "",
     businessGstNumber: tender.business.gstNumber ?? "",

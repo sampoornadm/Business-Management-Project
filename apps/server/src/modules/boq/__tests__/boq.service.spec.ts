@@ -15,6 +15,7 @@ import type {
   CreateBoqItemData,
   IBoqRepository,
   UpdateBoqItemData,
+  UpdateBoqItemEnrichmentData,
   UpsertRateBreakdownData,
 } from "../boq.repository.js";
 import { BoqService } from "../boq.service.js";
@@ -114,6 +115,12 @@ class FakeBoqRepository implements IBoqRepository {
       item.rate = update.rate;
       item.amount = update.amount;
     }
+  }
+
+  async updateItemEnrichment(id: string, data: UpdateBoqItemEnrichmentData) {
+    const item = this.items.get(id);
+    if (!item) throw new Error("not found");
+    Object.assign(item, data);
   }
 
   async upsertRateBreakdown(itemId: string, data: UpsertRateBreakdownData) {

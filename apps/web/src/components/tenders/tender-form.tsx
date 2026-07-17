@@ -31,12 +31,6 @@ import { z } from "zod";
 import { CreateOrganizationDialog } from "@/components/organizations/create-organization-dialog";
 import { useOrganizations } from "@/hooks/use-organizations";
 
-const numericString = (label: string) =>
-  z
-    .string()
-    .min(1, `${label} is required`)
-    .refine((value) => !Number.isNaN(Number(value)) && Number(value) >= 0, "Must be a non-negative number");
-
 const optionalNumericString = z
   .string()
   .optional()
@@ -50,20 +44,24 @@ const optionalNumericString = z
 // `.transform()`, because RHF's 3-generic resolver typing for input/output
 // splits doesn't reliably line up with the zodResolver version this project
 // uses. Simpler to keep one flat string-typed shape end to end.
+// Only tenderNumber/title/clientId are required. The rest are blank-able on purpose: a tender
+// auto-created from a document keeps whatever the document didn't state as an empty field, and
+// this same form is how the user fills those in later — so it must be able to save with them
+// still blank. See the Tender model and incoming-tender-mapper.
 const tenderFormSchema = z.object({
   tenderNumber: z.string().min(1, "Required").max(100),
   title: z.string().min(1, "Required").max(300),
-  department: z.string().min(1, "Required").max(150),
   clientId: z.string().min(1, "Select a client"),
-  type: z.string().min(1, "Select a type"),
-  category: z.string().min(1, "Select a category"),
-  location: z.string().min(1, "Required").max(200),
-  state: z.string().min(1, "Required").max(100),
-  estimatedCost: numericString("Estimated cost"),
+  department: z.string().max(150).optional(),
+  type: z.string().optional(),
+  category: z.string().optional(),
+  location: z.string().max(200).optional(),
+  state: z.string().max(100).optional(),
+  estimatedCost: optionalNumericString,
   emdAmount: optionalNumericString,
   tenderFee: optionalNumericString,
   documentFee: optionalNumericString,
-  submissionDate: z.string().min(1, "Required"),
+  submissionDate: z.string().optional(),
   openingDate: z.string().optional(),
   validityPeriodDays: optionalNumericString,
   priority: z.enum(TENDER_PRIORITIES),
@@ -83,11 +81,19 @@ function toOptionalNumber(value: string | undefined): number | undefined {
 export function toCreateTenderInput(values: TenderFormValues): CreateTenderInput {
   return {
     ...values,
-    estimatedCost: Number(values.estimatedCost),
+    // `|| undefined` throughout: an untouched input is "" and must be sent as absent, so it
+    // stores as NULL. Sending "" would persist an empty string that reads as a real value.
+    department: values.department || undefined,
+    type: values.type || undefined,
+    category: values.category || undefined,
+    location: values.location || undefined,
+    state: values.state || undefined,
+    estimatedCost: toOptionalNumber(values.estimatedCost),
     emdAmount: toOptionalNumber(values.emdAmount),
     tenderFee: toOptionalNumber(values.tenderFee),
     documentFee: toOptionalNumber(values.documentFee),
     validityPeriodDays: toOptionalNumber(values.validityPeriodDays),
+    submissionDate: values.submissionDate || undefined,
     openingDate: values.openingDate || undefined,
     dealingOfficerName: values.dealingOfficerName || undefined,
     dealingOfficerEmail: values.dealingOfficerEmail || undefined,

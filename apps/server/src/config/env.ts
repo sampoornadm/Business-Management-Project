@@ -46,6 +46,24 @@ const envSchema = z.object({
   OLLAMA_BASE_URL: z.string().default("http://localhost:11434"),
   OLLAMA_MODEL: z.string().default("llama3.1:8b"),
 
+  // Opt-in: enriches committed BOQ items (classification, normalized name, historical
+  // rate suggestion) via a background job. Off by default — every BOQ path works
+  // identically with this false or with Ollama simply not running.
+  AI_ENRICHMENT_ENABLED: booleanEnv("false"),
+  OLLAMA_EMBED_MODEL: z.string().default("bge-m3"),
+  OLLAMA_ENRICHMENT_MODEL: z.string().default("qwen3:4b"),
+  // Cosine similarity a HistoricalRate match must clear before its rate can be suggested
+  // (it must also pass an identical-numeric-spec and matching-unit check — see
+  // boq-enrichment.service.ts). Calibrated against bge-m3, whose cosine range is compressed:
+  // the same item with only whitespace differing measures 0.989, but "XLPE Cable 4C x16" vs
+  // "…x1.6" — a 10x spec difference and a completely different rate — still measures 0.948.
+  // 0.95 would hand an estimator that wrong rate; 0.98 keeps this to near-exact restatements.
+  // Re-measure if you change OLLAMA_EMBED_MODEL — this number is model-specific.
+  AI_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.98),
+  // Retrieval floor: candidates below this aren't even shown to the LLM. Measured with
+  // bge-m3: unrelated trades score 0.31-0.38, same-trade items 0.84+.
+  AI_CONTEXT_FLOOR: z.coerce.number().min(0).max(1).default(0.75),
+
   // Opt-in: watches a local folder tree and auto-imports dropped files as
   // tender documents. Off by default so this is a no-op on any machine that
   // doesn't run the worker on the same filesystem as the watched folder (see

@@ -68,12 +68,65 @@ dev placeholder committed in `.env.example`.
 | `BUSINESSES_ROOT_DIR` | No (default `~/BMP-Businesses`) | No | One root, one subfolder per business (keyed by `Business.code`): `<code>/templates/` (document-generation `.docx` templates — must be a plain `.docx`, not `.dotx`: if built from a `.dotx` letterhead starter in Word, use File > Save As > Word Document first) and `<code>/tenders/` (the tender-document auto-import folders, opt-in via `LOCAL_DOCS_SYNC_ENABLED`). No upload UI — place files directly. |
 | `INCOMING_TENDERS_INGESTION_ENABLED` | No (default `false`) | No | Separate opt-in from `LOCAL_DOCS_SYNC_ENABLED`: watches `<code>/incoming-tenders/` (under `BUSINESSES_ROOT_DIR`) and auto-creates a DRAFT `Tender`/`Organization`/`Boq` from a dropped `.pdf`/`.docx` with zero human review. `LOCAL_DOCS_SYNC_ENABLED` only attaches files onto an *existing* tender — enabling that flag does not imply this one, and vice versa. |
 
-## Ollama (local LLM — tender document auto-extraction)
+## Ollama (local LLM — tender document auto-extraction, AI tender intelligence)
 
 | Variable | Required | Sensitive | Notes |
 |---|---|---|---|
-| `OLLAMA_BASE_URL` | No (default `http://localhost:11434`) | No | Only used by the "extract from document" upload on the New Tender page. Requires `ollama serve` running locally with the configured model pulled. If the server itself runs inside Docker, use `http://host.docker.internal:11434` to reach an Ollama instance on the host. |
-| `OLLAMA_MODEL` | No (default `llama3.1:8b`) | No | Pull with `ollama pull llama3.1:8b`. If unreachable/misconfigured, the upload returns a clear error — no other functionality is affected. |
+| `OLLAMA_BASE_URL` | No (default `http://localhost:11434`) | No | Used by the "extract from document" upload on the New Tender page and by AI enrichment. Requires `ollama serve` running locally with the configured models pulled. If the server/worker runs inside Docker, use `http://host.docker.internal:11434` to reach an Ollama instance on the host — `docker-compose.yml` already sets this for both. |
+| `OLLAMA_MODEL` | No (default `llama3.1:8b`) | No | Tender document extraction only. Pull with `ollama pull llama3.1:8b`. If unreachable/misconfigured, the upload returns a clear error — no other functionality is affected. |
+
+## AI tender intelligence (optional)
+
+Enriches committed BOQ items in the background: normalized name, category/subcategory, and — only
+where the item is provably the same as one already priced — a suggested rate from `HistoricalRate`.
+Entirely local, CPU-only, no GPU required. Roughly 3s per line item, so a typical 10-15 item tender
+finishes in well under a minute.
+
+Every BOQ path works identically with this disabled or with Ollama simply not running: when the
+worker can't reach Ollama it logs a warning and completes the job, leaving the item's `ai*` columns
+null. AI never writes to estimator-entered fields — suggestions land in separate `ai*` columns and
+the grid offers an explicit "Apply".
+
+Setup: `ollama pull bge-m3 && ollama pull qwen3:4b`, then set `AI_ENRICHMENT_ENABLED=true`.
+
+### Low-memory machines (8GB)
+
+The default stack needs ~3.7GB resident for models alone (`qwen3:4b` 2.5GB + `bge-m3` 1.2GB). On an
+8GB box — after Windows (~3-4GB), Docker Desktop/WSL2 (~2GB) and Node — that does not fit. Do
+**not** reach for parallelism to compensate: measured on CPU, running 4 items concurrently gained
+**1.16x**, because inference already saturates every core on a single request. It costs RAM (a KV
+cache per slot) and buys nothing. Serial already meets the 60s/tender budget (~3s per item).
+
+Two config-only downgrades, no code change. Both were measured against `examples/RFx 1400012609.PDF`:
+
+| Swap | Models RAM | Cost |
+|---|---|---|
+| `OLLAMA_EMBED_MODEL=nomic-embed-text` (274MB, replaces bge-m3) | 2.8GB | None found. Its near-miss margin below `AI_MATCH_THRESHOLD` measured *wider* than bge-m3's (0.077 vs 0.041), i.e. slightly safer. Tested on one family of items only — re-measure on your own before trusting it broadly. |
+| also `OLLAMA_ENRICHMENT_MODEL=qwen3:1.7b` (1.4GB, replaces qwen3:4b) | 1.7GB | Drops `aiSubcategory` entirely (always null) and mangles `normalizedName` (`"TUBE POLYURETHANE 5/5.5 ID 8 MM..."` — loses the OD marker). Category accuracy held up. 1.65x faster. |
+
+Neither swap affects **rate safety**: a suggested rate requires `AI_MATCH_THRESHOLD` + identical
+numeric specs + matching unit, and the numeric-spec guard reads the raw description, not the model's
+output. Changing `OLLAMA_EMBED_MODEL` **does** invalidate stored embeddings — clear
+`HistoricalRate.embeddedAt` to force a re-embed — and requires re-deriving `AI_MATCH_THRESHOLD`.
+
+Also set `OLLAMA_KEEP_ALIVE=60s` (default 5m) so Ollama releases model RAM between tenders, and keep
+the enrichment worker at `concurrency: 1`.
+
+**What it will and won't do.** Classification and normalization run on every item and are the
+reliable part. A *rate* is only suggested when all three of these agree: cosine ≥
+`AI_MATCH_THRESHOLD`, identical numeric specs, and a matching unit. This is deliberately strict —
+measured, neither the embedding nor the model can tell "XLPE Cable 4C x16" from "…x25" or from
+"PVC Cable 4C x16", and a wrong unit rate in a live bid is far more expensive than a blank cell. A
+loosely-worded restatement of a known item will get a category but no rate; use the existing manual
+historical-rate lookup for those.
+
+| Variable | Required | Sensitive | Notes |
+|---|---|---|---|
+| `AI_ENRICHMENT_ENABLED` | No (default `false`) | No | Master switch. When false, nothing is queued and the enrichment worker never starts. |
+| `OLLAMA_EMBED_MODEL` | No (default `bge-m3`) | No | Embedding model for similarity search. `bge-m3` is what Ollama ships (BGE-Small has no official Ollama image and would need a custom Modelfile). Changing this invalidates existing embeddings **and the calibrated thresholds below** — clear `HistoricalRate.embeddedAt` to force a re-embed, and re-measure. |
+| `OLLAMA_ENRICHMENT_MODEL` | No (default `qwen3:4b`) | No | Classification model. Called for every item; it names and categorises, it never prices. |
+| `AI_MATCH_THRESHOLD` | No (default `0.98`) | No | Cosine similarity required before a historical rate can be suggested. Calibrated for `bge-m3`: a same-item restatement measures 0.989, but a 10x spec difference ("x16" vs "x1.6") still measures 0.948 — hence 0.98, not 0.95. |
+| `AI_CONTEXT_FLOOR` | No (default `0.75`) | No | Retrieval floor: candidates below this aren't shown to the LLM as category context. Unrelated trades measure 0.31-0.38, same-trade items 0.84+. |
 
 ## Web (Next.js)
 

@@ -15,6 +15,7 @@ import {
   Button,
   Card,
   CardContent,
+  EMPTY_VALUE,
   formatDate,
   MultiSelect,
   Skeleton,
@@ -210,7 +211,7 @@ export default function TenderDetailPage() {
               </div>
               <div>
                 <p className="text-muted-foreground">Estimated cost</p>
-                <p>{tender.estimatedCost.toLocaleString()}</p>
+                <p>{tender.estimatedCost?.toLocaleString() ?? EMPTY_VALUE}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">EMD / Tender fee / Doc fee</p>

@@ -29,7 +29,7 @@ export interface PurchaseOrderForOnTimeRow {
 
 export interface IReportsRepository {
   findTenderStatusCounts(businessId: string): Promise<{ status: TenderStatus; count: number }[]>;
-  findTenderDates(businessId: string): Promise<{ createdAt: Date; submissionDate: Date }[]>;
+  findTenderDates(businessId: string): Promise<{ createdAt: Date; submissionDate: Date | null }[]>;
 
   findPurchaseOrderItemsForSpend(businessId: string, from?: Date, to?: Date): Promise<PurchaseOrderSpendRow[]>;
 
@@ -70,7 +70,7 @@ export class ReportsRepository implements IReportsRepository {
     return groups.map((g) => ({ status: g.status, count: g._count._all }));
   }
 
-  findTenderDates(businessId: string): Promise<{ createdAt: Date; submissionDate: Date }[]> {
+  findTenderDates(businessId: string): Promise<{ createdAt: Date; submissionDate: Date | null }[]> {
     return this.prisma.tender.findMany({ where: { businessId }, select: { createdAt: true, submissionDate: true } });
   }
 

@@ -13,9 +13,17 @@ describe("buildDraftTenderData", () => {
     expect(buildDraftTenderData(fields, BUSINESS_ID, CREATED_BY_ID)).toBeNull();
   });
 
-  it("returns null when submissionDate is missing", () => {
-    const fields: TenderExtractionFields = { tenderNumber: "1400013728" };
-    expect(buildDraftTenderData(fields, BUSINESS_ID, CREATED_BY_ID)).toBeNull();
+  it("still ingests when submissionDate is missing, leaving it blank", () => {
+    // The real case this exists for: every RFx PDF carries a literal "00.00.0000" bid
+    // deadline, so extraction yields no submissionDate. Those documents must still ingest.
+    const fields: TenderExtractionFields = { tenderNumber: "1400012609" };
+
+    const result = buildDraftTenderData(fields, BUSINESS_ID, CREATED_BY_ID);
+
+    expect(result).not.toBeNull();
+    expect(result?.tenderNumber).toBe("1400012609");
+    expect(result?.submissionDate).toBeNull();
+    expect(result?.remarks).toContain("submissionDate");
   });
 
   it("maps every extracted field through unchanged when all are present", () => {
@@ -57,28 +65,28 @@ describe("buildDraftTenderData", () => {
     expect(result?.businessId).toBe(BUSINESS_ID);
     expect(result?.createdById).toBe(CREATED_BY_ID);
     expect(result?.remarks).toContain("Some remark from the document");
-    expect(result?.remarks).not.toContain("Placeholder values");
+    expect(result?.remarks).not.toContain("Left blank");
   });
 
-  it("placeholders every missing-but-required field and lists them in remarks", () => {
-    const fields: TenderExtractionFields = {
-      tenderNumber: "1400013728",
-      submissionDate: "2026-07-20T15:00:00",
-    };
+  it("leaves every unstated field blank rather than inventing a value, and lists them in remarks", () => {
+    const fields: TenderExtractionFields = { tenderNumber: "1400013728" };
 
     const result = buildDraftTenderData(fields, BUSINESS_ID, CREATED_BY_ID);
 
     expect(result).not.toBeNull();
+    // Title is the one fallback: a tender needs a display name, and its own number is a
+    // truthful one — unlike "Not specified" or a 0 cost, which read as real data.
     expect(result?.title).toBe("1400013728");
-    expect(result?.department).toBe("Not specified");
-    expect(result?.type).toBe("Not specified");
-    expect(result?.category).toBe("General");
-    expect(result?.location).toBe("Not specified");
-    expect(result?.state).toBe("Not specified");
-    expect(result?.estimatedCost).toBe(0);
-    expect(result?.remarks).toContain("Placeholder values");
+    expect(result?.department).toBeNull();
+    expect(result?.type).toBeNull();
+    expect(result?.category).toBeNull();
+    expect(result?.location).toBeNull();
+    expect(result?.state).toBeNull();
+    expect(result?.estimatedCost).toBeNull();
+    expect(result?.submissionDate).toBeNull();
+    expect(result?.remarks).toContain("Left blank");
     expect(result?.remarks).toContain("department");
-    expect(result?.remarks).toContain("category");
     expect(result?.remarks).toContain("estimatedCost");
+    expect(result?.remarks).toContain("submissionDate");
   });
 });

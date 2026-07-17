@@ -71,8 +71,12 @@ export class ReportsService {
       wonCount,
       lostCount,
       winRate: decided > 0 ? round2((wonCount / decided) * 100) : null,
+      // Tenders with no stated deadline are excluded rather than counted as 0 days —
+      // averaging in a date that doesn't exist would drag this toward zero.
       avgSubmissionDays: average(
-        dates.map((d) => (d.submissionDate.getTime() - d.createdAt.getTime()) / MS_PER_DAY),
+        dates
+          .filter((d): d is { createdAt: Date; submissionDate: Date } => d.submissionDate !== null)
+          .map((d) => (d.submissionDate.getTime() - d.createdAt.getTime()) / MS_PER_DAY),
       ),
     };
   }
