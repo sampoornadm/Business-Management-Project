@@ -27,12 +27,21 @@ export function useSwitchBusiness() {
       return response.data.data;
     },
     onSuccess: async (data) => {
+      // setAuth first: resetQueries refetches immediately below, and those requests must
+      // carry the NEW business's access token or they'd just re-fetch the old business.
       setAuth({
         accessToken: data.accessToken,
         activeBusinessId: data.activeBusinessId,
         availableBusinesses: data.availableBusinesses,
       });
-      await queryClient.clear();
+
+      // resetQueries, not clear(): clear() empties the cache but never tells mounted
+      // observers to refetch, so every already-rendered list/detail kept showing the
+      // PREVIOUS business's rows while the switcher claimed you'd moved. Server-side
+      // scoping was never the problem — the client just never asked again.
+      // reset (not invalidate) so stale cross-business rows are dropped rather than shown
+      // while the refetch is in flight.
+      await queryClient.resetQueries();
     },
   });
 }
