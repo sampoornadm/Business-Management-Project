@@ -120,17 +120,20 @@ export class PurchaseOrdersService {
     const awardedVendorId = rfq.awardedVendorId;
     const items: CreatePurchaseOrderItemData[] = rfq.items.map((item, index) => {
       const quote = item.quotes.find((q) => q.vendorId === awardedVendorId);
-      if (!quote) {
+      // A regretted quote is a row that exists with rate = null. `!quote` alone no longer means
+      // "no price": without the regretted/null check this builds a PO line at amount 0.
+      if (!quote || quote.regretted || quote.rate === null) {
         throw new BadRequestError(
           `The awarded vendor has not quoted a rate for item: ${item.description}`,
         );
       }
+      const rate = quote.rate;
       return {
         description: item.description,
         unit: item.unit,
         quantity: item.quantity,
-        rate: quote.rate,
-        amount: round2(item.quantity * quote.rate),
+        rate,
+        amount: round2(item.quantity * rate),
         sortOrder: index,
       };
     });
