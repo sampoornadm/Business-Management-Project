@@ -58,6 +58,11 @@ export const awardRfqSchema = z.object({
 });
 export type AwardRfqBody = z.infer<typeof awardRfqSchema>;
 
+export const importQuotesSchema = z.object({
+  vendorId: z.string().uuid(),
+});
+export type ImportQuotesBody = z.infer<typeof importQuotesSchema>;
+
 export const suggestVendorsSchema = z.object({
   boqItemIds: z.array(z.string().uuid()).min(1, "At least one item is required"),
 });
