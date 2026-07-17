@@ -28,6 +28,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { QuoteCell } from "@/components/rfq/quote-cell";
+import { QuoteSheetActions } from "@/components/rfq/quote-sheet-actions";
 import { useCreatePurchaseOrderFromRfq } from "@/hooks/use-purchase-orders";
 import {
   useAddRfqVendor,
@@ -241,8 +242,14 @@ export default function RfqDetailPage() {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
           <CardTitle className="text-base">Items & quotes</CardTitle>
+          {canUpdate && !isFinalized && rfq.vendorInvites.length > 0 && (
+            <QuoteSheetActions
+              rfqId={rfq.id}
+              vendors={rfq.vendorInvites.map((v) => ({ id: v.vendor.id, name: v.vendor.name }))}
+            />
+          )}
         </CardHeader>
         <CardContent>
           <div className="overflow-auto">
@@ -265,15 +272,27 @@ export default function RfqDetailPage() {
                     <TableCell className="text-right">{item.quantity}</TableCell>
                     {rfq.vendorInvites.map((invite) => {
                       const quote = item.quotes.find((q) => q.vendorId === invite.vendor.id);
+                      const hasMakeModel =
+                        quote && (quote.make !== "Unbranded" || quote.model !== "Generic");
                       return (
                         <TableCell key={invite.id}>
-                          <QuoteCell
-                            initialRate={quote?.rate ?? null}
-                            disabled={!canUpdate || isFinalized}
-                            onCommit={(rate) =>
-                              upsertQuote.mutate({ itemId: item.id, vendorId: invite.vendor.id, input: { rate } })
-                            }
-                          />
+                          {quote?.regretted ? (
+                            // A regret is not a missing quote and not a rate of 0 — show it as such.
+                            <Badge variant="outline">Regretted</Badge>
+                          ) : (
+                            <QuoteCell
+                              initialRate={quote?.rate ?? null}
+                              disabled={!canUpdate || isFinalized}
+                              onCommit={(rate) =>
+                                upsertQuote.mutate({ itemId: item.id, vendorId: invite.vendor.id, input: { rate } })
+                              }
+                            />
+                          )}
+                          {!quote?.regretted && hasMakeModel && (
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                              {quote!.make} / {quote!.model}
+                            </span>
+                          )}
                         </TableCell>
                       );
                     })}
@@ -295,7 +314,16 @@ export default function RfqDetailPage() {
               {comparisonQuery.data.vendorTotals.map((total, index) => (
                 <div key={total.vendorId} className="rounded-md border p-3 text-sm">
                   <div className="flex items-center gap-1 font-medium">
-                    {total.vendorName} {index === 0 && <Badge className="ml-1">Lowest</Badge>}
+                    {total.vendorName}{" "}
+                    {total.itemsQuoted === 0 ? (
+                      // A wholly-regretting vendor sorts first with total 0 — "priced nothing",
+                      // never "Lowest". itemsQuoted===0 is the honest test, not total===0.
+                      <Badge variant="outline" className="ml-1">
+                        Priced nothing
+                      </Badge>
+                    ) : (
+                      index === 0 && <Badge className="ml-1">Lowest</Badge>
+                    )}
                   </div>
                   <p className="text-muted-foreground">
                     Total: {total.total.toLocaleString()} ({total.itemsQuoted} item(s) quoted)

@@ -157,6 +157,26 @@ export function useUpsertRfqQuote(rfqId: string) {
   });
 }
 
+export function useImportQuotes(rfqId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ vendorId, file }: { vendorId: string; file: File }) => {
+      const form = new FormData();
+      form.append("vendorId", vendorId);
+      form.append("file", file);
+      const response = await apiClient.post<ApiResponse<{ imported: number; errors: string[] }>>(
+        `/rfqs/${rfqId}/quotes/import`,
+        form,
+      );
+      return unwrap(response.data);
+    },
+    onSuccess: () => {
+      invalidateRfq(queryClient, rfqId);
+      void queryClient.invalidateQueries({ queryKey: ["rfqs", rfqId, "comparison"] });
+    },
+  });
+}
+
 export function useRfqComparison(id: string | undefined) {
   return useQuery({
     queryKey: ["rfqs", id, "comparison"],
