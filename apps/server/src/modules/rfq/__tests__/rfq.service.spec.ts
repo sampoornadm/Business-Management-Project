@@ -328,6 +328,55 @@ describe("RfqService", () => {
     expect(updated.items[0]!.quotes).toHaveLength(1);
   });
 
+  // Builds an RFQ with a single item and seeds its quotes directly on the fake
+  // repository — there's no public API yet to record a regret (that's a
+  // separate task), so the row is constructed the same way the repository
+  // itself would shape it from Prisma.
+  async function seedRfqWithQuotes(
+    quotes: Array<{ vendorId: string; vendorName: string; rate: number | null; regretted: boolean }>,
+  ) {
+    const rfq = await createBasicRfq();
+    const rawRfq = repository.rfqs.get(rfq.id)!;
+    const item = rawRfq.items[0]!;
+    item.quotes = quotes.map((q) => ({
+      id: randomUUID(),
+      rfqItemId: item.id,
+      vendorId: q.vendorId,
+      vendor: { id: q.vendorId, name: q.vendorName },
+      rate: q.rate,
+      regretted: q.regretted,
+      make: "Unbranded",
+      model: "Generic",
+      quotedAt: new Date(),
+      remarks: null,
+      updatedAt: new Date(),
+    })) as unknown as typeof item.quotes;
+    return rfq.id;
+  }
+
+  it("excludes a regretted quote from the lowest rate, totals and itemsQuoted", async () => {
+    // Vendor A quotes 100. Vendor B regretted this line. B must not win it at 0.
+    const rfqId = await seedRfqWithQuotes([
+      { vendorId: vendorA, vendorName: "A", rate: 100, regretted: false },
+      { vendorId: vendorB, vendorName: "B", rate: null, regretted: true },
+    ]);
+
+    const comparison = await service.getComparison(rfqId, businessId);
+
+    const line = comparison.items[0]!;
+    const a = line.quotes.find((q) => q.vendorId === vendorA)!;
+    const b = line.quotes.find((q) => q.vendorId === vendorB)!;
+
+    expect(a.isLowest).toBe(true);
+    expect(b.isLowest).toBe(false);
+    expect(b.rate).toBeNull();
+    expect(b.amount).toBeNull();
+
+    const totalB = comparison.vendorTotals.find((v) => v.vendorId === vendorB)!;
+    expect(totalB.total).toBe(0);
+    expect(totalB.itemsQuoted).toBe(0);
+  });
+
   it("computes the comparative statement with the lowest rate flagged per item", async () => {
     const rfq = await createBasicRfq();
     const itemId = rfq.items[0]!.id;

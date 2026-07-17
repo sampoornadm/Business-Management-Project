@@ -6,7 +6,9 @@ export type RfqVendorStatus = (typeof RFQ_VENDOR_STATUSES)[number];
 
 export interface RfqQuoteDto {
   vendorId: string;
-  rate: number;
+  // Null means the vendor gave no price for this line (including a regret) —
+  // never coerce to 0, see RfqComparisonQuoteDto below for why.
+  rate: number | null;
   remarks: string | null;
   updatedAt: string;
 }
@@ -82,9 +84,14 @@ export interface UpsertRfqQuoteInput {
 export interface RfqComparisonQuoteDto {
   vendorId: string;
   vendorName: string;
-  rate: number;
-  amount: number;
+  // Null on a regretted (or not-yet-quoted) line — excluded from lowest-rate,
+  // totals, and itemsQuoted rather than coerced to 0.
+  rate: number | null;
+  amount: number | null;
   isLowest: boolean;
+  regretted: boolean;
+  make: string;
+  model: string;
 }
 
 export interface RfqComparisonItemDto {

@@ -313,6 +313,31 @@ describe("PurchaseOrdersService", () => {
     expect(po.sourceRfqId).toBe(rfqId);
   });
 
+  it("refuses to build a purchase order line from a regretted quote", async () => {
+    // The awarded vendor regretted this line. Before the regret column existed this could not
+    // happen; now the quote row exists with rate null and must not become an amount of 0.
+    const rfqId = randomUUID();
+    rfqRepository.rfqs.set(rfqId, {
+      id: rfqId,
+      tenderId: null,
+      status: "AWARDED",
+      awardedVendorId: vendorId,
+      items: [
+        {
+          id: randomUUID(),
+          description: "OPC Cement",
+          unit: "bag",
+          quantity: 200,
+          quotes: [{ vendorId, rate: null, regretted: true }],
+        },
+      ],
+    } as unknown as RfqDetail);
+
+    await expect(service.createFromRfq(rfqId, {}, actorId, { businessId })).rejects.toThrow(
+      BadRequestError,
+    );
+  });
+
   it("rejects creating a PO from an RFQ that hasn't been awarded", async () => {
     const rfqId = randomUUID();
     rfqRepository.rfqs.set(rfqId, {

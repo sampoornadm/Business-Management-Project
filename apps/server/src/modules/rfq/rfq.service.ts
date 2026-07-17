@@ -196,26 +196,46 @@ export class RfqService {
 
     const vendorTotals = new Map<string, { vendorName: string; total: number; itemsQuoted: number }>();
     const items: RfqComparisonItemDto[] = rfq.items.map((item) => {
-      const rates = item.quotes.map((q) => q.rate);
+      // Regretted rows carry no rate. They must not reach Math.min: a null coerces to 0 and
+      // the vendor who declined the line would be reported as the cheapest bid on it.
+      const priced = item.quotes.filter((q) => !q.regretted && q.rate !== null);
+      const rates = priced.map((q) => q.rate as number);
       const lowestRate = rates.length > 0 ? Math.min(...rates) : null;
 
       const quotes = item.quotes.map((quote) => {
-        const amount = round2(quote.rate * item.quantity);
-        const existing = vendorTotals.get(quote.vendor.id) ?? {
-          vendorName: quote.vendor.name,
-          total: 0,
-          itemsQuoted: 0,
-        };
-        existing.total = round2(existing.total + amount);
-        existing.itemsQuoted += 1;
-        vendorTotals.set(quote.vendor.id, existing);
+        const isPriced = !quote.regretted && quote.rate !== null;
+        const amount = isPriced ? round2((quote.rate as number) * item.quantity) : null;
+
+        if (isPriced) {
+          const existing = vendorTotals.get(quote.vendor.id) ?? {
+            vendorName: quote.vendor.name,
+            total: 0,
+            itemsQuoted: 0,
+          };
+          existing.total = round2(existing.total + (amount as number));
+          existing.itemsQuoted += 1;
+          vendorTotals.set(quote.vendor.id, existing);
+        } else {
+          // Still register the vendor so a wholly-regretting vendor appears with a zero total
+          // rather than vanishing from the comparison.
+          if (!vendorTotals.has(quote.vendor.id)) {
+            vendorTotals.set(quote.vendor.id, {
+              vendorName: quote.vendor.name,
+              total: 0,
+              itemsQuoted: 0,
+            });
+          }
+        }
 
         return {
           vendorId: quote.vendor.id,
           vendorName: quote.vendor.name,
           rate: quote.rate,
           amount,
-          isLowest: quote.rate === lowestRate,
+          isLowest: isPriced && quote.rate === lowestRate,
+          regretted: quote.regretted,
+          make: quote.make,
+          model: quote.model,
         };
       });
 
