@@ -1,3 +1,4 @@
+import { BadRequestError } from "../../core/errors/HttpErrors.js";
 import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 import { resolvePagination } from "../../shared/utils/pagination.js";
@@ -7,6 +8,7 @@ import type {
   AddRfqVendorBody,
   AwardRfqBody,
   CreateRfqBody,
+  ImportQuotesBody,
   ListRfqsQueryParsed,
   QuickSendBody,
   QuickSendPreviewBody,
@@ -92,6 +94,33 @@ export class RfqController {
       req.user!.businessId,
     );
     sendSuccess(res, rfq, "Quote recorded");
+  });
+
+  downloadQuoteSheet = asyncHandler(async (req, res) => {
+    const { filename, buffer } = await this.rfqService.buildQuoteSheetFor(
+      req.params.id!,
+      req.user!.businessId,
+    );
+    // A file download, not a JSON envelope — send the raw buffer.
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(buffer);
+  });
+
+  importQuotes = asyncHandler(async (req, res) => {
+    if (!req.file) throw new BadRequestError("No file provided");
+    const body = req.body as ImportQuotesBody;
+    const result = await this.rfqService.importQuotes(
+      req.params.id!,
+      body.vendorId,
+      req.file.buffer,
+      req.user!.id,
+      req.user!.businessId,
+    );
+    sendSuccess(res, result, `Imported ${result.imported} quote(s)`);
   });
 
   comparison = asyncHandler(async (req, res) => {

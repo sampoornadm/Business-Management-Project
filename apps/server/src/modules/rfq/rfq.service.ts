@@ -22,6 +22,7 @@ import type { ITendersRepository } from "../tenders/tenders.repository.js";
 import type { IUsersRepository } from "../users/users.repository.js";
 import type { IVendorsRepository, VendorWithContacts } from "../vendors/vendors.repository.js";
 
+import { buildQuoteSheet, parseQuoteSheet } from "./quote-sheet.js";
 import { buildRfqText } from "./rfq-document.js";
 import { toRfqDto, toRfqListItemDto } from "./rfq.mapper.js";
 import type { CreateRfqData, IRfqRepository, RfqDetail, RfqFilters, UpdateRfqData } from "./rfq.repository.js";
@@ -210,6 +211,73 @@ export class RfqService {
       metadata: { rfqItemId, vendorId, rate: input.rate ?? null, regretted },
     });
     return this.getById(item.rfqId, businessId);
+  }
+
+  async buildQuoteSheetFor(
+    rfqId: string,
+    businessId: string,
+  ): Promise<{ filename: string; buffer: Buffer }> {
+    const rfq = await this.getDetailOrThrow(rfqId, businessId);
+    const buffer = await buildQuoteSheet(
+      rfq.title,
+      rfq.items.map((item) => ({
+        rfqItemId: item.id,
+        description: item.description,
+        unit: item.unit,
+        quantity: item.quantity,
+      })),
+    );
+    const safeTitle = rfq.title.replace(/[^a-zA-Z0-9-_]+/g, "-").slice(0, 60);
+    return { filename: `quotes-${safeTitle || rfqId}.xlsx`, buffer };
+  }
+
+  async importQuotes(
+    rfqId: string,
+    vendorId: string,
+    buffer: Buffer,
+    actorId: string,
+    businessId: string,
+  ): Promise<{ imported: number; errors: string[] }> {
+    const rfq = await this.getDetailOrThrow(rfqId, businessId);
+    if (FINALIZED_STATUSES.has(rfq.status)) {
+      throw new ConflictError("Cannot record quotes on a finalized RFQ");
+    }
+    const invite = rfq.vendorInvites.find((v) => v.vendor.id === vendorId);
+    if (!invite) throw new BadRequestError("Vendor was not invited to this RFQ");
+
+    const { rows, errors } = await parseQuoteSheet(buffer);
+    // Only ids that belong to THIS rfq. A sheet from another RFQ must not write here.
+    const ownItemIds = new Set(rfq.items.map((i) => i.id));
+
+    let imported = 0;
+    for (const row of rows) {
+      if (!ownItemIds.has(row.rfqItemId)) {
+        errors.push(`${row.rfqItemId} is not an item on this RFQ`);
+        continue;
+      }
+      await this.rfqRepository.upsertQuote(row.rfqItemId, vendorId, {
+        rate: row.rate,
+        regretted: row.regretted,
+        make: row.make,
+        model: row.model,
+        remarks: row.remarks,
+      });
+      imported += 1;
+    }
+
+    if (imported > 0 && invite.status === "INVITED") {
+      await this.rfqRepository.updateVendorInviteStatus(rfqId, vendorId, "RESPONDED");
+    }
+
+    await this.auditService.log({
+      actorId,
+      action: "RFQ_QUOTES_IMPORTED",
+      entityType: "Rfq",
+      entityId: rfqId,
+      metadata: { vendorId, imported, errorCount: errors.length },
+    });
+
+    return { imported, errors };
   }
 
   async getComparison(rfqId: string, businessId: string): Promise<RfqComparisonDto> {

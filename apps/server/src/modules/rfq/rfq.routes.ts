@@ -3,12 +3,14 @@ import { Router } from "express";
 import { authenticateMiddleware } from "../../shared/middleware/authenticate.middleware.js";
 import { requirePermission } from "../../shared/middleware/requirePermission.middleware.js";
 import { validate } from "../../shared/middleware/validate.middleware.js";
+import { createUploadMiddleware } from "../attachments/upload.middleware.js";
 
 import type { RfqController } from "./rfq.controller.js";
 import {
   addRfqVendorSchema,
   awardRfqSchema,
   createRfqSchema,
+  importQuotesSchema,
   listRfqsQuerySchema,
   quickSendPreviewSchema,
   quickSendSchema,
@@ -17,9 +19,12 @@ import {
   upsertRfqQuoteSchema,
 } from "./rfq.validation.js";
 
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
 /** Mounted at /rfqs */
 export function createRfqRouter(controller: RfqController): Router {
   const router = Router();
+  const uploadQuoteSheet = createUploadMiddleware("file", 5 * 1024 * 1024, [XLSX_MIME]);
 
   /**
    * @openapi
@@ -210,6 +215,52 @@ export function createRfqRouter(controller: RfqController): Router {
     authenticateMiddleware,
     requirePermission("rfq:read"),
     controller.comparison,
+  );
+
+  /**
+   * @openapi
+   * /rfqs/{id}/quote-sheet:
+   *   get:
+   *     tags: [RFQ]
+   *     summary: Download a pre-filled quote sheet for this RFQ's items
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: xlsx file }
+   */
+  router.get(
+    "/:id/quote-sheet",
+    authenticateMiddleware,
+    requirePermission("rfq:read"),
+    controller.downloadQuoteSheet,
+  );
+
+  /**
+   * @openapi
+   * /rfqs/{id}/quotes/import:
+   *   post:
+   *     tags: [RFQ]
+   *     summary: Import a filled quote sheet for one vendor
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Import summary with per-row errors }
+   */
+  router.post(
+    "/:id/quotes/import",
+    authenticateMiddleware,
+    requirePermission("rfq:update"),
+    uploadQuoteSheet,
+    validate(importQuotesSchema),
+    controller.importQuotes,
   );
 
   /**
