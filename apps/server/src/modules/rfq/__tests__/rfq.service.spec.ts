@@ -15,6 +15,7 @@ import type {
   RfqDetail,
   RfqFilters,
   UpdateRfqData,
+  UpsertQuoteData,
 } from "../rfq.repository.js";
 import { RfqService } from "../rfq.service.js";
 
@@ -127,7 +128,7 @@ class FakeRfqRepository implements IRfqRepository {
     return null;
   }
 
-  async upsertQuote(rfqItemId: string, vendorId: string, rate: number, remarks?: string | null) {
+  async upsertQuote(rfqItemId: string, vendorId: string, data: UpsertQuoteData) {
     for (const rfq of this.rfqs.values()) {
       const item = rfq.items.find((i) => i.id === rfqItemId);
       if (!item) continue;
@@ -135,16 +136,26 @@ class FakeRfqRepository implements IRfqRepository {
         rfq.vendorInvites.find((v) => v.vendor.id === vendorId)?.vendor.name ?? "Vendor";
       const existing = item.quotes.find((q) => q.vendorId === vendorId);
       if (existing) {
-        existing.rate = rate;
-        existing.remarks = remarks ?? null;
+        Object.assign(existing, {
+          rate: data.rate,
+          regretted: data.regretted,
+          remarks: data.remarks ?? null,
+          ...(data.make !== undefined ? { make: data.make } : {}),
+          ...(data.model !== undefined ? { model: data.model } : {}),
+          ...(data.quotedAt !== undefined ? { quotedAt: data.quotedAt } : {}),
+        });
       } else {
         (item.quotes as unknown[]).push({
           id: randomUUID(),
           rfqItemId,
           vendorId,
           vendor: { id: vendorId, name: vendorName },
-          rate,
-          remarks: remarks ?? null,
+          rate: data.rate,
+          regretted: data.regretted,
+          make: data.make ?? "Unbranded",
+          model: data.model ?? "Generic",
+          quotedAt: data.quotedAt ?? new Date(),
+          remarks: data.remarks ?? null,
           updatedAt: new Date(),
         });
       }
@@ -326,6 +337,30 @@ describe("RfqService", () => {
     const updated = await service.upsertQuote(itemId, vendorA, { rate: 380 }, actorId, businessId);
     expect(updated.vendorInvites[0]!.status).toBe("RESPONDED");
     expect(updated.items[0]!.quotes).toHaveLength(1);
+  });
+
+  it("records a regret with no rate, and defaults make/model when the vendor gave none", async () => {
+    const rfq = await createBasicRfq();
+    const itemId = rfq.items[0]!.id;
+    await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
+
+    await service.upsertQuote(itemId, vendorA, { regretted: true }, actorId, businessId);
+
+    const saved = repository.rfqs.get(rfq.id)!.items[0]!.quotes.find((q) => q.vendorId === vendorA)!;
+    expect(saved.rate).toBeNull();
+    expect(saved.regretted).toBe(true);
+    expect(saved.make).toBe("Unbranded");
+    expect(saved.model).toBe("Generic");
+  });
+
+  it("rejects a quote that is neither priced nor a regret", async () => {
+    const rfq = await createBasicRfq();
+    const itemId = rfq.items[0]!.id;
+    await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
+
+    await expect(
+      service.upsertQuote(itemId, vendorA, {}, actorId, businessId),
+    ).rejects.toThrow(BadRequestError);
   });
 
   // Builds an RFQ with a single item and seeds its quotes directly on the fake

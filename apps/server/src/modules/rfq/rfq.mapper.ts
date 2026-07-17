@@ -12,6 +12,10 @@ function toQuoteDto(quote: RfqItemDetail["quotes"][number]): RfqQuoteDto {
   return {
     vendorId: quote.vendorId,
     rate: quote.rate,
+    regretted: quote.regretted,
+    make: quote.make,
+    model: quote.model,
+    quotedAt: quote.quotedAt.toISOString(),
     remarks: quote.remarks,
     updatedAt: quote.updatedAt.toISOString(),
   };

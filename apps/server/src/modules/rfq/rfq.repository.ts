@@ -50,6 +50,16 @@ export interface CreateRfqData {
 
 export type UpdateRfqData = Partial<Pick<CreateRfqData, "title" | "dueDate">>;
 
+export interface UpsertQuoteData {
+  // Null is a regret — the absence of a price, never 0. See RfqQuote.rate in schema.prisma.
+  rate: number | null;
+  regretted: boolean;
+  make?: string;
+  model?: string;
+  quotedAt?: Date;
+  remarks?: string | null;
+}
+
 export interface RfqFilters {
   businessId: string;
   status?: RfqStatus;
@@ -72,7 +82,7 @@ export interface IRfqRepository {
   updateVendorInviteStatus(rfqId: string, vendorId: string, status: RfqVendorStatus): Promise<void>;
   removeVendorInvite(rfqId: string, vendorId: string): Promise<void>;
   findItemById(itemId: string): Promise<{ id: string; rfqId: string; quantity: number } | null>;
-  upsertQuote(rfqItemId: string, vendorId: string, rate: number, remarks?: string | null): Promise<void>;
+  upsertQuote(rfqItemId: string, vendorId: string, data: UpsertQuoteData): Promise<void>;
 }
 
 export class RfqRepository implements IRfqRepository {
@@ -188,16 +198,20 @@ export class RfqRepository implements IRfqRepository {
     });
   }
 
-  async upsertQuote(
-    rfqItemId: string,
-    vendorId: string,
-    rate: number,
-    remarks?: string | null,
-  ): Promise<void> {
+  async upsertQuote(rfqItemId: string, vendorId: string, data: UpsertQuoteData): Promise<void> {
+    const payload = {
+      rate: data.rate,
+      regretted: data.regretted,
+      remarks: data.remarks ?? null,
+      // Omit rather than pass undefined so the column defaults apply on create.
+      ...(data.make !== undefined ? { make: data.make } : {}),
+      ...(data.model !== undefined ? { model: data.model } : {}),
+      ...(data.quotedAt !== undefined ? { quotedAt: data.quotedAt } : {}),
+    };
     await this.prisma.rfqQuote.upsert({
       where: { rfqItemId_vendorId: { rfqItemId, vendorId } },
-      create: { id: randomUUID(), rfqItemId, vendorId, rate, remarks: remarks ?? null },
-      update: { rate, remarks: remarks ?? null },
+      create: { id: randomUUID(), rfqItemId, vendorId, ...payload },
+      update: payload,
     });
   }
 }

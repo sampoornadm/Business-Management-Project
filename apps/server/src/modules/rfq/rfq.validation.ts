@@ -37,10 +37,20 @@ export const addRfqVendorSchema = z.object({
 });
 export type AddRfqVendorBody = z.infer<typeof addRfqVendorSchema>;
 
-export const upsertRfqQuoteSchema = z.object({
-  rate: z.number().nonnegative(),
-  remarks: z.string().max(500).optional(),
-});
+export const upsertRfqQuoteSchema = z
+  .object({
+    // Either a rate or a regret. Enforced by the refine below rather than by making rate
+    // required, because a regret legitimately has no rate.
+    rate: z.number().nonnegative().optional(),
+    regretted: z.boolean().optional(),
+    make: z.string().max(120).optional(),
+    model: z.string().max(120).optional(),
+    quotedAt: z.coerce.date().optional(),
+    remarks: z.string().max(500).optional(),
+  })
+  .refine((d) => d.regretted === true || d.rate !== undefined, {
+    message: "Provide a rate, or mark the item as regretted",
+  });
 export type UpsertRfqQuoteBody = z.infer<typeof upsertRfqQuoteSchema>;
 
 export const awardRfqSchema = z.object({

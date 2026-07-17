@@ -9,6 +9,10 @@ export interface RfqQuoteDto {
   // Null means the vendor gave no price for this line (including a regret) —
   // never coerce to 0, see RfqComparisonQuoteDto below for why.
   rate: number | null;
+  regretted: boolean;
+  make: string;
+  model: string;
+  quotedAt: string;
   remarks: string | null;
   updatedAt: string;
 }
@@ -77,7 +81,12 @@ export interface AddRfqVendorInput {
 }
 
 export interface UpsertRfqQuoteInput {
-  rate: number;
+  // Either a rate or a regret — a regretted line legitimately has no rate.
+  rate?: number;
+  regretted?: boolean;
+  make?: string;
+  model?: string;
+  quotedAt?: string;
   remarks?: string;
 }
 
