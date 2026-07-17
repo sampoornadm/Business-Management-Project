@@ -35,6 +35,11 @@ export class BoqController {
     sendSuccess(res, boq, "BOQ committed", 201);
   });
 
+  enrich = asyncHandler(async (req, res) => {
+    await this.boqService.requestEnrichment(req.params.id!, req.params.boqId!, req.user!.businessId);
+    sendSuccess(res, null, "BOQ enrichment queued", 202);
+  });
+
   getCurrent = asyncHandler(async (req, res) => {
     const boq = await this.boqService.getCurrentBoq(req.params.id!, req.user!.businessId);
     sendSuccess(res, boq, "BOQ retrieved");

@@ -3,20 +3,42 @@ import { z } from "zod";
 
 const priceField = z.coerce.number().nonnegative().optional();
 
+/**
+ * Optional free text that treats "" as "not stated". Forms post empty strings for untouched
+ * inputs, and these fields are genuinely blank-able — a source document may not state them,
+ * and a blank must round-trip as NULL rather than as an empty string masquerading as a value.
+ */
+const optionalText = (max: number) =>
+  z
+    .union([z.string().max(max), z.literal(""), z.null()])
+    .optional()
+    .transform((value) => (value === "" || value === undefined ? null : value));
+
+/** Same idea for optional numbers/dates: "" means "not stated", not 0 / epoch. */
+const optionalNumber = z
+  .union([z.coerce.number().nonnegative(), z.literal(""), z.null()])
+  .optional()
+  .transform((value) => (value === "" || value === undefined ? null : value));
+
+const optionalDate = z
+  .union([z.coerce.date(), z.literal(""), z.null()])
+  .optional()
+  .transform((value) => (value === "" || value === undefined ? null : value));
+
 export const createTenderSchema = z.object({
   tenderNumber: z.string().min(1).max(100),
   title: z.string().min(1).max(300),
-  department: z.string().min(1).max(150),
   clientId: z.string().uuid(),
-  type: z.string().min(1).max(50),
-  category: z.string().min(1).max(50),
-  location: z.string().min(1).max(200),
-  state: z.string().min(1).max(100),
-  estimatedCost: z.coerce.number().nonnegative(),
+  department: optionalText(150),
+  type: optionalText(50),
+  category: optionalText(50),
+  location: optionalText(200),
+  state: optionalText(100),
+  estimatedCost: optionalNumber,
   emdAmount: priceField,
   tenderFee: priceField,
   documentFee: priceField,
-  submissionDate: z.coerce.date(),
+  submissionDate: optionalDate,
   openingDate: z.coerce.date().optional(),
   validityPeriodDays: z.coerce.number().int().positive().optional(),
   priority: z.enum(TENDER_PRIORITIES).optional(),

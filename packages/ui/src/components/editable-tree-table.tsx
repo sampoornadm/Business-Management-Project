@@ -8,6 +8,7 @@ import { cn } from "../lib/utils";
 import { Checkbox } from "./checkbox";
 import { Input } from "./input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./table";
+import { Textarea } from "./textarea";
 
 export interface EditableTreeRow {
   id: string;
@@ -22,7 +23,8 @@ export interface EditableTreeColumn<TRow extends EditableTreeRow> {
   /** Read-only render for this cell. Ignored if `editable` is true. */
   render?: (row: TRow) => React.ReactNode;
   editable?: boolean;
-  inputType?: "text" | "number";
+  /** "textarea" wraps and auto-grows — use it for long free text that a single line can't show. */
+  inputType?: "text" | "number" | "textarea";
   getValue?: (row: TRow) => string | number | null;
   onCommit?: (row: TRow, value: string) => void;
 }
@@ -77,15 +79,38 @@ function EditableCell<TRow extends EditableTreeRow>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [column.getValue?.(row)]);
 
+  const commit = (): void => {
+    const original = String(column.getValue?.(row) ?? "");
+    if (value !== original) column.onCommit?.(row, value);
+  };
+
+  // Long free text (item descriptions run to ~180 chars) can't be read in a single-line
+  // input at any column width — it wraps and auto-grows instead. Enter still commits;
+  // Shift+Enter inserts a newline.
+  if (column.inputType === "textarea") {
+    return (
+      <Textarea
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+        }}
+        rows={Math.min(6, Math.ceil(value.length / 60) || 1)}
+        className="min-h-8 w-full resize-y py-1 text-sm"
+      />
+    );
+  }
+
   return (
     <Input
       type={column.inputType === "number" ? "number" : "text"}
       value={value}
       onChange={(e) => setValue(e.target.value)}
-      onBlur={() => {
-        const original = String(column.getValue?.(row) ?? "");
-        if (value !== original) column.onCommit?.(row, value);
-      }}
+      onBlur={commit}
       onKeyDown={(e) => {
         if (e.key === "Enter") e.currentTarget.blur();
       }}
@@ -185,7 +210,14 @@ export function EditableTreeTable<TRow extends EditableTreeRow>({
                   {columns.map((column, columnIndex) => (
                     <TableCell
                       key={column.key}
-                      className={cn(column.align === "right" && "text-right")}
+                      // widthClassName was only ever applied to the header, so it never
+                      // actually constrained the column — a <td> ignores a width set on a
+                      // sibling <th> alone once content forces it wider.
+                      className={cn(
+                        "align-top",
+                        column.align === "right" && "text-right",
+                        column.widthClassName,
+                      )}
                     >
                       {columnIndex === 0 ? (
                         <div className="flex items-center gap-1" style={{ paddingLeft: depth * 20 }}>

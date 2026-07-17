@@ -83,6 +83,13 @@ services:
       REDIS_URL: redis://redis:6379
       S3_ENDPOINT: http://minio:9000
       SMTP_HOST: mailhog
+      # Ollama runs on the HOST, not in a container — `localhost` inside this container is
+      # the container itself, so the env default would fail with a confusing
+      # SERVICE_UNAVAILABLE even with Ollama running fine (tender extraction + AI enrichment).
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    extra_hosts:
+      # Docker Desktop (mac/win) resolves host.docker.internal already; Linux needs this.
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -106,6 +113,10 @@ services:
       REDIS_URL: redis://redis:6379
       S3_ENDPOINT: http://minio:9000
       SMTP_HOST: mailhog
+      # See the server service above — Ollama is a host process, not a container.
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+/** GST percent. Bounded at 100 — a rate above that is a typo, not a tax slab. */
+const gstRateField = z.number().min(0).max(100);
+
 const commitBoqItemSchema = z.object({
   tempId: z.string().min(1),
   parentTempId: z.string().min(1).optional(),
@@ -28,6 +31,7 @@ export const createBoqItemSchema = z.object({
   unit: z.string().max(50).optional(),
   quantity: z.number().nonnegative().optional(),
   rate: z.number().nonnegative().optional(),
+  gstRate: gstRateField.optional(),
   remarks: z.string().max(1000).optional(),
 });
 export type CreateBoqItemBody = z.infer<typeof createBoqItemSchema>;
@@ -40,6 +44,7 @@ export const updateBoqItemSchema = z
     unit: z.string().max(50).optional(),
     quantity: z.number().nonnegative().optional(),
     rate: z.number().nonnegative().optional(),
+    gstRate: gstRateField.optional(),
     remarks: z.string().max(1000).optional(),
     sortOrder: z.number().int().optional(),
   })

@@ -72,7 +72,16 @@ export class ProjectsService {
     const existing = await this.projectsRepository.findByTenderId(input.tenderId, context.businessId);
     if (existing) throw new ConflictError("This tender already has a project");
 
+    // estimatedCost is nullable (a source document may not state one), so all three sources
+    // can be absent. Project.budget is not nullable and a project budget of 0 would be a
+    // silent lie, so ask for it explicitly rather than inventing a number.
     const budget = input.budget ?? tender.winningBidAmount ?? tender.estimatedCost;
+    if (budget === null) {
+      throw new BadRequestError(
+        "budget is required: this tender has no winning bid amount and no estimated cost to derive it from",
+      );
+    }
+
     const projectId = await this.projectsRepository.createFromTender({
       tenderId: input.tenderId,
       businessId: context.businessId,

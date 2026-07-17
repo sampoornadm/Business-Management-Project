@@ -159,6 +159,14 @@ export async function startLocalDocsWatcher(rootDirRaw: string): Promise<FSWatch
     depth: 5,
   });
 
+  // See the same handler in incoming-tenders.service.ts: an unhandled 'error' event is a
+  // fatal uncaught exception, and this watcher must not be able to kill the worker.
+  watcher.on("error", (error: unknown) => {
+    logger.error(
+      `Local docs sync: watcher error (sync is now inactive): ${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
+
   watcher.on("add", (filePath) => {
     void importFile(rootDir, filePath).catch((error: unknown) => {
       logger.error(

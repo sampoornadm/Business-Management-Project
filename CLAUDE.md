@@ -143,6 +143,19 @@ receiving status.
   (`OLLAMA_BASE_URL`/`OLLAMA_MODEL`, see `environment-variables.md`), not a hosted API. No key, no
   cost. If Ollama isn't running, the upload returns a clear `ServiceUnavailableError`; every other
   tender-creation path (manual entry, `POST /tenders`) is completely unaffected.
+- Ollama **thinking models** (`qwen3:*`, `deepseek-r1:*`, used by AI enrichment) put their entire
+  output in a separate `thinking` field and leave `response` **empty** — `generateJson` would then
+  always throw "not valid JSON" with no clue why. `ollama.client.ts` always sends `think: false`
+  (verified harmless on non-thinking models like `llama3.1`, which ignore it rather than erroring).
+- AI enrichment's thresholds are **measured against `bge-m3`, not guessed** — re-measure if you
+  change `OLLAMA_EMBED_MODEL`. Its cosine range is compressed and its ranking is not spec-aware:
+  "XLPE Cable 4C x16" scores 0.860 against "…x25" (wrong size) but only 0.846 against its own
+  paraphrase, 0.843 against "PVC Cable 4C x16" (wrong material), and 0.948 against "…x1.6" (a 10x
+  spec difference). qwen3:4b is no better at this — it calls "…x25" the same item even when handed
+  that exact pair as a negative example. So a suggested rate requires **all three** of: cosine
+  ≥ `AI_MATCH_THRESHOLD` (0.98), identical numeric specs (`sameSpec()`), and a matching unit. Don't
+  "helpfully" lower the threshold to catch more matches — the true paraphrase (0.846) and the
+  wrong-material trap (0.843) are 0.003 apart and cannot be separated by similarity.
 - `docker compose up -d` with no service names starts **everything** in `docker-compose.yml`,
   including the containerized `server`/`web`/`worker`/`nginx` app images — not just the infra
   services (postgres/redis/minio/mailhog). Local day-to-day dev uses `pnpm dev` (tsx/next running

@@ -51,17 +51,17 @@ export type TenderForDocumentGeneration = Prisma.TenderGetPayload<typeof tenderD
 export interface CreateTenderData {
   tenderNumber: string;
   title: string;
-  department: string;
+  department?: string | null;
   clientId: string;
-  type: string;
-  category: string;
-  location: string;
-  state: string;
-  estimatedCost: number;
+  type?: string | null;
+  category?: string | null;
+  location?: string | null;
+  state?: string | null;
+  estimatedCost?: number | null;
   emdAmount?: number | null;
   tenderFee?: number | null;
   documentFee?: number | null;
-  submissionDate: Date;
+  submissionDate?: Date | null;
   openingDate?: Date | null;
   validityPeriodDays?: number | null;
   priority?: TenderPriority;

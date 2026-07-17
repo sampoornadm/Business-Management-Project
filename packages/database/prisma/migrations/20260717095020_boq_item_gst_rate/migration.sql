@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "boq_items" ADD COLUMN     "gstRate" DOUBLE PRECISION NOT NULL DEFAULT 18;

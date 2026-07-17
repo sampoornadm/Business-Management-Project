@@ -426,18 +426,22 @@ model Tender {
   business            Business       @relation(fields: [businessId], references: [id], onDelete: Restrict)
   tenderNumber        String         @unique
   title               String
-  department          String
   clientId            String
   client              Organization   @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  type                String
-  category            String
-  location            String
-  state               String
-  estimatedCost       Float
+  // Nullable because a tender is often created from a source document that simply does not
+  // state these (an RFx commonly carries no submission deadline at all). Blank is the honest
+  // answer — the alternative was auto-ingestion writing "Not specified" and estimatedCost 0,
+  // which reads as real data and is worse than an empty cell. All are editable after creation.
+  department          String?
+  type                String?
+  category            String?
+  location            String?
+  state               String?
+  estimatedCost       Float?
   emdAmount           Float?
   tenderFee           Float?
   documentFee         Float?
-  submissionDate      DateTime
+  submissionDate      DateTime?
   openingDate         DateTime?
   validityPeriodDays  Int?
   status              TenderStatus   @default(DRAFT)
@@ -581,8 +585,25 @@ model BoqItem {
   quantity    Float?
   rate        Float?
   amount      Float?
+  // Indian GST rate for this line, percent. 18 is the common slab and the default; override
+  // per item where it differs. Deliberately NOT folded into `amount` (still quantity × rate) —
+  // that figure already flows into BOQ totals, RFQs, POs and finance, so making it
+  // GST-inclusive is a separate, explicit decision rather than a side effect of this column.
+  gstRate     Float   @default(18)
   remarks     String?
   sortOrder   Int     @default(0)
+
+  // AI enrichment (optional, written only by the ai-enrichment worker). Deliberately
+  // separate from `category` above: that one is estimator-typed and must never be
+  // clobbered by a suggestion — the UI offers "apply" instead.
+  normalizedName String?
+  aiCategory     String?
+  aiSubcategory  String?
+  aiConfidence   Float?
+  suggestedRate  Float?
+  aiSource       String? // "historical" | "llm"
+  aiRateSourceId String? // HistoricalRate.id — unenforced ref, same convention as Attachment.entityId
+  aiEnrichedAt   DateTime?
 
   rateBreakdown BoqItemRateBreakdown?
 
@@ -632,6 +653,13 @@ model HistoricalRate {
   effectiveDate  DateTime
   sourceTenderId String?
   notes          String?
+
+  // Embedding of `itemName`, populated lazily by the ai-enrichment worker.
+  // ponytail: plain Float[] + brute-force cosine in the service — fine to ~100k rows
+  // per business. Swap to pgvector (Unsupported("vector(N)") + $queryRaw + HNSW) if a
+  // cosine sweep ever shows up in the job's timing logs.
+  embedding  Float[]
+  embeddedAt DateTime?
 
   createdById String
   createdBy   User   @relation("HistoricalRateCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)

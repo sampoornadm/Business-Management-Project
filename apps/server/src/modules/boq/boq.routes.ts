@@ -184,6 +184,33 @@ export function createBoqRouter(controller: BoqController): Router {
     controller.compare,
   );
 
+  /**
+   * @openapi
+   * /tenders/{id}/boq/{boqId}/enrich:
+   *   post:
+   *     tags: [BOQ]
+   *     summary: Queue AI enrichment (classification, normalized name, rate suggestion) for a BOQ
+   *     description: Accepted even when AI is disabled or Ollama is unavailable — enrichment is optional and degrades to a no-op.
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: path
+   *         name: boqId
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       202: { description: Enrichment queued }
+   */
+  router.post(
+    "/:id/boq/:boqId/enrich",
+    authenticateMiddleware,
+    requirePermission("boq:update"),
+    controller.enrich,
+  );
+
   return router;
 }
 

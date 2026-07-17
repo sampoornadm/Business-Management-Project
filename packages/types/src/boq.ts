@@ -4,6 +4,13 @@ export type BoqStatus = (typeof BOQ_STATUSES)[number];
 export const HISTORICAL_RATE_CATEGORIES = ["MATERIAL", "LABOR", "MACHINERY", "TRANSPORT"] as const;
 export type HistoricalRateCategory = (typeof HISTORICAL_RATE_CATEGORIES)[number];
 
+/**
+ * Default Indian GST slab for a BOQ line. Must stay in step with `BoqItem.gstRate`'s
+ * `@default(18)` in the Prisma schema, which is the source of truth for stored rows — this
+ * copy exists so the UI can reset a cleared field without a round-trip.
+ */
+export const DEFAULT_GST_RATE = 18;
+
 /** Curated suggestions only — the field is free text, not a DB enum. */
 export const BOQ_COLUMN_FIELDS = [
   "itemCode",
@@ -37,9 +44,19 @@ export interface BoqItemDto {
   quantity: number | null;
   rate: number | null;
   amount: number | null;
+  /** GST percent for this line (default 18). Not included in `amount` — see the BoqItem model. */
+  gstRate: number;
   remarks: string | null;
   sortOrder: number;
   rateBreakdown: BoqItemRateBreakdownDto | null;
+  /** AI suggestions — all null when enrichment is disabled, pending, or unavailable. */
+  normalizedName: string | null;
+  aiCategory: string | null;
+  aiSubcategory: string | null;
+  aiConfidence: number | null;
+  suggestedRate: number | null;
+  aiSource: string | null;
+  aiEnrichedAt: string | null;
   children: BoqItemDto[];
 }
 
@@ -110,6 +127,7 @@ export interface CreateBoqItemInput {
   unit?: string;
   quantity?: number;
   rate?: number;
+  gstRate?: number;
   remarks?: string;
 }
 
@@ -120,6 +138,7 @@ export interface UpdateBoqItemInput {
   unit?: string;
   quantity?: number;
   rate?: number;
+  gstRate?: number;
   remarks?: string;
   sortOrder?: number;
 }

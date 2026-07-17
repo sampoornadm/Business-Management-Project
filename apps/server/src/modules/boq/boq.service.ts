@@ -3,8 +3,11 @@ import { randomUUID } from "node:crypto";
 import type { BoqCompareDto, BoqCompareLineDto, BoqDto, BoqListItemDto, BoqParsePreviewDto } from "@bmp/types";
 
 import { BOQ_UPLOAD_LIMITS } from "../../config/constants.js";
+import { env } from "../../config/env.js";
 import { BadRequestError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import type { RequestContext } from "../../core/interfaces/request-context.js";
+import { aiEnrichmentQueue } from "../../infra/queue/queues.js";
+import { logger } from "../../shared/logger/logger.js";
 import { round2 } from "../../shared/utils/math.js";
 import type { AttachmentsService } from "../attachments/attachments.service.js";
 import type { AuditService } from "../audit/audit.service.js";
@@ -40,6 +43,27 @@ export class BoqService {
   private async assertTenderExists(tenderId: string, businessId: string): Promise<void> {
     const tender = await this.tendersRepository.findById(tenderId, businessId);
     if (!tender) throw new NotFoundError("Tender not found");
+  }
+
+  /**
+   * Fire-and-forget: AI enrichment is optional, so a Redis hiccup here must never fail a
+   * BOQ commit that already succeeded.
+   */
+  private async queueEnrichment(boqId: string, businessId: string): Promise<void> {
+    if (!env.AI_ENRICHMENT_ENABLED) return;
+    try {
+      await aiEnrichmentQueue.add("enrich-boq", { boqId, businessId });
+    } catch (err) {
+      logger.warn({ boqId, err }, "Could not queue BOQ enrichment");
+    }
+  }
+
+  /** Re-runs enrichment for a BOQ on demand. No-op when AI is disabled. */
+  async requestEnrichment(tenderId: string, boqId: string, businessId: string): Promise<void> {
+    await this.assertTenderExists(tenderId, businessId);
+    const boq = await this.boqRepository.findBoqById(boqId, businessId);
+    if (!boq || boq.tenderId !== tenderId) throw new NotFoundError("BOQ not found for this tender");
+    await this.queueEnrichment(boqId, businessId);
   }
 
   async parseUpload(
@@ -148,6 +172,8 @@ export class BoqService {
       entityId: tenderId,
       metadata: { boqId, version, itemCount: rows.length, ...context },
     });
+
+    await this.queueEnrichment(boqId, businessId);
 
     return this.buildBoqDto(boqId, businessId);
   }
@@ -268,6 +294,8 @@ export class BoqService {
       quantity,
       rate,
       amount,
+      // Omitted (not just null) when absent, so the column default of 18 applies.
+      ...(data.gstRate !== undefined ? { gstRate: data.gstRate } : {}),
       remarks: data.remarks ?? null,
       sortOrder: nextSortOrder,
     });

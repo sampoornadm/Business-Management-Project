@@ -29,6 +29,16 @@ export interface ListHistoricalRatesFilters {
   itemName?: string;
 }
 
+/** Just what the similarity search needs — deliberately not the full entity + creator join. */
+export interface HistoricalRateVector {
+  id: string;
+  itemName: string;
+  unit: string;
+  rate: number;
+  category: HistoricalRateCategory;
+  embedding: number[];
+}
+
 export interface IHistoricalRatesRepository {
   findMany(filters: ListHistoricalRatesFilters): Promise<HistoricalRateWithCreator[]>;
   suggest(
@@ -38,6 +48,9 @@ export interface IHistoricalRatesRepository {
     businessId: string,
   ): Promise<HistoricalRateWithCreator[]>;
   create(data: CreateHistoricalRateData): Promise<HistoricalRateWithCreator>;
+  findUnembedded(businessId: string): Promise<{ id: string; itemName: string }[]>;
+  setEmbedding(id: string, embedding: number[]): Promise<void>;
+  findEmbedded(businessId: string): Promise<HistoricalRateVector[]>;
 }
 
 export class HistoricalRatesRepository implements IHistoricalRatesRepository {
@@ -73,6 +86,27 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
     return this.prisma.historicalRate.create({
       data: { id: randomUUID(), ...data },
       ...historicalRateArgs,
+    });
+  }
+
+  findUnembedded(businessId: string): Promise<{ id: string; itemName: string }[]> {
+    return this.prisma.historicalRate.findMany({
+      where: { businessId, embeddedAt: null },
+      select: { id: true, itemName: true },
+    });
+  }
+
+  async setEmbedding(id: string, embedding: number[]): Promise<void> {
+    await this.prisma.historicalRate.update({
+      where: { id },
+      data: { embedding, embeddedAt: new Date() },
+    });
+  }
+
+  findEmbedded(businessId: string): Promise<HistoricalRateVector[]> {
+    return this.prisma.historicalRate.findMany({
+      where: { businessId, embeddedAt: { not: null } },
+      select: { id: true, itemName: true, unit: true, rate: true, category: true, embedding: true },
     });
   }
 }

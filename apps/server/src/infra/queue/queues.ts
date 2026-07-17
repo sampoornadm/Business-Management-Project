@@ -43,3 +43,25 @@ export const tenderReminderQueue = new Queue<Record<string, never>, void, "check
   TENDER_REMINDER_QUEUE_NAME,
   { connection: redis },
 );
+
+export interface AiEnrichmentJobPayload {
+  boqId: string;
+  businessId: string;
+}
+
+export const AI_ENRICHMENT_QUEUE_NAME = "ai-enrichment";
+
+export const aiEnrichmentQueue = new Queue<AiEnrichmentJobPayload, void, "enrich-boq">(
+  AI_ENRICHMENT_QUEUE_NAME,
+  {
+    connection: redis,
+    // Only 2 attempts: Ollama being down is handled inside the worker as a clean no-op,
+    // so a retry here only ever covers a transient mid-run failure.
+    defaultJobOptions: {
+      attempts: 2,
+      backoff: { type: "exponential", delay: 10_000 },
+      removeOnComplete: 50,
+      removeOnFail: 100,
+    },
+  },
+);

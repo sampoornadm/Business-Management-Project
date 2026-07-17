@@ -103,25 +103,28 @@ export interface TenderTagDto {
   color: string | null;
 }
 
+// Everything except tenderNumber/title is nullable: a tender is often created from a source
+// document that doesn't state a field (an RFx routinely has no submission deadline), and a
+// blank the user can fill in beats a fabricated "Not specified". See the Tender model.
 export interface TenderListItemDto {
   id: string;
   tenderNumber: string;
   title: string;
-  department: string;
+  department: string | null;
   client: TenderOrganizationSummaryDto;
-  type: string;
-  category: string;
+  type: string | null;
+  category: string | null;
   status: TenderStatus;
   priority: TenderPriority;
-  estimatedCost: number;
-  submissionDate: string;
+  estimatedCost: number | null;
+  submissionDate: string | null;
   assigneeCount: number;
   createdAt: string;
 }
 
 export interface TenderDto extends TenderListItemDto {
-  location: string;
-  state: string;
+  location: string | null;
+  state: string | null;
   emdAmount: number | null;
   tenderFee: number | null;
   documentFee: number | null;
@@ -146,17 +149,17 @@ export interface TenderDto extends TenderListItemDto {
 export interface CreateTenderInput {
   tenderNumber: string;
   title: string;
-  department: string;
   clientId: string;
-  type: string;
-  category: string;
-  location: string;
-  state: string;
-  estimatedCost: number;
+  department?: string;
+  type?: string;
+  category?: string;
+  location?: string;
+  state?: string;
+  estimatedCost?: number;
   emdAmount?: number;
   tenderFee?: number;
   documentFee?: number;
-  submissionDate: string;
+  submissionDate?: string;
   openingDate?: string;
   validityPeriodDays?: number;
   priority?: TenderPriority;

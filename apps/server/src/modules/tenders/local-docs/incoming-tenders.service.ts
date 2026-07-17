@@ -65,7 +65,7 @@ export async function processIncomingTenderFile(
   const draft = buildDraftTenderData(result.fields, business.id, systemUserId);
   if (!draft) {
     logger.warn(
-      `Incoming tenders: could not extract tenderNumber/submissionDate from "${filename}" — leaving in place for manual review`,
+      `Incoming tenders: could not extract a tenderNumber from "${filename}" — leaving in place for manual review`,
     );
     return;
   }
@@ -163,6 +163,15 @@ export async function startIncomingTendersWatcher(rootDirRaw: string): Promise<F
     ignoreInitial: false,
     awaitWriteFinish: { stabilityThreshold: 1500, pollInterval: 200 },
     depth: 3,
+  });
+
+  // Without this, an unhandled 'error' event is a fatal uncaught exception that kills the
+  // whole worker process — taking email, tender reminders and AI enrichment down with a
+  // problem that only concerns this watcher. Ingestion is opt-in; the rest isn't.
+  watcher.on("error", (error: unknown) => {
+    logger.error(
+      `Incoming tenders: watcher error (ingestion is now inactive): ${error instanceof Error ? error.message : String(error)}`,
+    );
   });
 
   watcher.on("add", (filePath) => {

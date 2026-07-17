@@ -161,10 +161,12 @@ export default function DashboardPage() {
               ) : (
                 <ul className="divide-y">
                   {tenderStatsQuery.data?.upcomingDeadlines.map((tender) => {
-                    const daysLeft = Math.ceil(
-                      (new Date(tender.submissionDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
-                    );
-                    const dueSoon = daysLeft <= 2;
+                    // The query filters on a submissionDate range, so these always have one;
+                    // the guard is only here because the field is nullable app-wide.
+                    const daysLeft = tender.submissionDate
+                      ? Math.ceil((new Date(tender.submissionDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                      : null;
+                    const dueSoon = daysLeft !== null && daysLeft <= 2;
                     return (
                       <li key={tender.id} className="flex items-center justify-between gap-2 py-2 text-sm">
                         <Link href={`/tenders/${tender.id}`} className="min-w-0 flex-1 hover:underline">
