@@ -126,11 +126,13 @@ This is the highest-risk change in the plan. Do it before anything reads the new
 
 **Files:**
 - Modify: `apps/server/src/modules/rfq/rfq.service.ts:194-222` (`getComparison`)
+- Modify: `apps/server/src/modules/purchase-orders/purchase-orders.service.ts:120-135` (`createFromRfq`)
 - Test: `apps/server/src/modules/rfq/__tests__/rfq.service.spec.ts`
+- Test: `apps/server/src/modules/purchase-orders/__tests__/purchase-orders.service.spec.ts`
 
 **Interfaces:**
 - Consumes: `RfqQuote.rate: Float | null`, `RfqQuote.regretted: boolean` (Task 1).
-- Produces: `getComparison` returns `RfqComparisonDto` where regretted quotes contribute nothing to `lowestRate`, vendor totals, or `itemsQuoted`.
+- Produces: `getComparison` returns `RfqComparisonDto` where regretted quotes contribute nothing to `lowestRate`, vendor totals, or `itemsQuoted`; `createFromRfq` refuses to build a PO line from a regretted quote.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -244,16 +246,85 @@ wholly-regretting vendor still appears there with `total: 0, itemsQuoted: 0`.
 Run: `cd apps/server && pnpm vitest run rfq`
 Expected: PASS, including the 30 pre-existing `rfq.service.spec.ts` tests.
 
-- [ ] **Step 6: Typecheck**
+- [ ] **Step 6: Close the RFQ → purchase order hole**
+
+`createFromRfq` in `purchase-orders.service.ts` currently reads:
+
+```ts
+const quote = item.quotes.find((q) => q.vendorId === awardedVendorId);
+if (!quote) {
+  throw new BadRequestError(
+    `The awarded vendor has not quoted a rate for item: ${item.description}`,
+  );
+}
+return {
+  description: item.description,
+  unit: item.unit,
+  quantity: item.quantity,
+  rate: quote.rate,
+  amount: round2(item.quantity * quote.rate),
+  sortOrder: index,
+};
+```
+
+Before Task 1, "no quote row" and "no rate" were the same thing, so `!quote` was a sufficient
+guard. Now a regret **is** a row — with `rate: null` — so the guard passes and
+`round2(quantity * null)` yields **0**: a vendor who declined the line and then won the RFQ
+produces a zero-rupee PO line. Replace the guard and the return:
+
+```ts
+const quote = item.quotes.find((q) => q.vendorId === awardedVendorId);
+// A regretted quote is a row that exists with rate = null. `!quote` alone no longer means
+// "no price": without the regretted/null check this builds a PO line at amount 0.
+if (!quote || quote.regretted || quote.rate === null) {
+  throw new BadRequestError(
+    `The awarded vendor has not quoted a rate for item: ${item.description}`,
+  );
+}
+const rate = quote.rate;
+return {
+  description: item.description,
+  unit: item.unit,
+  quantity: item.quantity,
+  rate,
+  amount: round2(item.quantity * rate),
+  sortOrder: index,
+};
+```
+
+Write the test first, in `purchase-orders.service.spec.ts`, following the fake-repository setup
+already in that file:
+
+```ts
+it("refuses to build a purchase order line from a regretted quote", async () => {
+  // The awarded vendor regretted this line. Before the regret column existed this could not
+  // happen; now the quote row exists with rate null and must not become an amount of 0.
+  seedAwardedRfqWithQuote({ vendorId: awardedVendorId, rate: null, regretted: true });
+
+  await expect(service.createFromRfq(rfqId, input, actorId, context)).rejects.toThrow(
+    BadRequestError,
+  );
+});
+```
+
+Run: `cd apps/server && pnpm vitest run purchase-orders.service.spec.ts -t "regretted quote"`
+Expected: FAIL first (a PO is created with amount 0), then PASS after the guard change.
+
+- [ ] **Step 7: Typecheck the whole server**
 
 Run: `pnpm --filter @bmp/server typecheck`
-Expected: no output. Fix any site that reads `quote.rate` as non-null — **check each by hand rather than reaching for `?? 0`**, which would silently reintroduce the regret-as-zero bug.
+Expected: no output.
 
-- [ ] **Step 7: Commit**
+Task 1 deliberately left the server not typechecking — widening `rate` to nullable breaks every
+site that assumed a number. This step closes that. **Fix each site by hand; never reach for
+`?? 0`**, which satisfies the compiler and silently restores the regret-as-zero bug this whole
+task exists to prevent.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add apps/server/src/modules/rfq packages/types/src/rfq.ts
-git commit -m "fix(rfq): exclude regretted quotes from lowest-rate and vendor totals"
+git add apps/server/src/modules/rfq apps/server/src/modules/purchase-orders packages/types/src/rfq.ts
+git commit -m "fix(rfq): exclude regretted quotes from lowest-rate, totals and PO conversion"
 ```
 
 ---
