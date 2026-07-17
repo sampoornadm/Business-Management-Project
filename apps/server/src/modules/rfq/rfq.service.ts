@@ -160,7 +160,14 @@ export class RfqService {
   async upsertQuote(
     rfqItemId: string,
     vendorId: string,
-    input: { rate: number; remarks?: string },
+    input: {
+      rate?: number;
+      regretted?: boolean;
+      make?: string;
+      model?: string;
+      quotedAt?: Date;
+      remarks?: string;
+    },
     actorId: string,
     businessId: string,
   ): Promise<RfqDto> {
@@ -176,7 +183,21 @@ export class RfqService {
     const invite = rfq.vendorInvites.find((v) => v.vendor.id === vendorId);
     if (!invite) throw new BadRequestError("Vendor was not invited to this RFQ");
 
-    await this.rfqRepository.upsertQuote(rfqItemId, vendorId, input.rate, input.remarks);
+    const regretted = input.regretted === true;
+    // Zod's refine guards the HTTP boundary; this guards every direct caller too, so a
+    // meaningless quote (no rate, no regret) is never persisted as a rate-null non-regret.
+    if (!regretted && input.rate === undefined) {
+      throw new BadRequestError("Provide a rate, or mark the item as regretted");
+    }
+
+    await this.rfqRepository.upsertQuote(rfqItemId, vendorId, {
+      rate: regretted ? null : (input.rate ?? null),
+      regretted,
+      make: input.make,
+      model: input.model,
+      quotedAt: input.quotedAt,
+      remarks: input.remarks,
+    });
     if (invite.status === "INVITED") {
       await this.rfqRepository.updateVendorInviteStatus(item.rfqId, vendorId, "RESPONDED");
     }
@@ -186,7 +207,7 @@ export class RfqService {
       action: "RFQ_QUOTE_RECORDED",
       entityType: "Rfq",
       entityId: item.rfqId,
-      metadata: { rfqItemId, vendorId, rate: input.rate },
+      metadata: { rfqItemId, vendorId, rate: input.rate ?? null, regretted },
     });
     return this.getById(item.rfqId, businessId);
   }
