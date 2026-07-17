@@ -1175,18 +1175,46 @@ Wherever the page renders a quote's rate, a regret must read differently from a 
 <span className="text-xs text-muted-foreground">{quote.make} / {quote.model}</span>
 ```
 
-- [ ] **Step 5: Typecheck and lint**
+- [ ] **Step 5: Stop a regretting vendor being badged "Lowest"**
+
+Found by the Task 2 review. `apps/web/src/app/(dashboard)/rfqs/[id]/page.tsx:295-298` badges the
+first `vendorTotals` entry:
+
+```tsx
+{comparisonQuery.data.vendorTotals.map((total, index) => (
+  <div key={total.vendorId} className="rounded-md border p-3 text-sm">
+    <div className="flex items-center gap-1 font-medium">
+      {total.vendorName} {index === 0 && <Badge className="ml-1">Lowest</Badge>}
+```
+
+A vendor who regretted every line now reports `total: 0, itemsQuoted: 0` — so it sorts first and
+gets badged "Lowest", reading as "cheapest" when it priced nothing. That is the same bug this whole
+task removes from the maths, surfacing in the UI. Replace the badge condition:
+
+```tsx
+{total.vendorName}{" "}
+{total.itemsQuoted === 0 ? (
+  <Badge variant="outline" className="ml-1">Priced nothing</Badge>
+) : (
+  index === 0 && <Badge className="ml-1">Lowest</Badge>
+)}
+```
+
+`itemsQuoted === 0` is the honest test: it means the vendor priced no line at all, whatever their
+total says. Do not test `total === 0` — a real quote of zero and "no quote" must not read alike.
+
+- [ ] **Step 6: Typecheck and lint**
 
 Stop the dev server first — `typecheck` and `dev` race on `apps/web/.next`.
 
 Run: `pnpm --filter @bmp/web typecheck && pnpm --filter @bmp/web lint`
 Expected: both silent.
 
-- [ ] **Step 6: Verify in the real app**
+- [ ] **Step 7: Verify in the real app**
 
 Start `pnpm dev`, open an RFQ with items and at least one invited vendor. Download the sheet, put a rate in one row and `Y` in another row's Regret column, import it against that vendor. Confirm: the rate appears, the regret renders as "Regretted" and not as 0, and the regretting vendor is not shown as the lowest bid.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add apps/web/src
