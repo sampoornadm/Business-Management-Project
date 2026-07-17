@@ -836,17 +836,22 @@ model RfqQuote {
   // Nullable because a regret is the ABSENCE of a price, not a price of zero. Anything
   // that averages, totals or ranks quotes must skip rows where regretted = true — a regret
   // sorting as the lowest bid would award an RFQ to the vendor who declined it.
+  //
+  // `regretted` is distinct from RfqVendorStatus.DECLINED, which is per (rfq, vendor) and
+  // means "not bidding at all". This is per (item, vendor): "bidding, but not for this line".
   rate      Float?
   regretted Boolean @default(false)
 
-  // Distinct from RfqVendorStatus.DECLINED, which is per (rfq, vendor) and means "not
-  // bidding at all". This is per (item, vendor): "bidding, but not for this line".
-  make      String   @default("Unbranded")
-  model     String   @default("Generic")
+  // Defaulted rather than nullable, deliberately: "Unbranded" and "Generic" are real
+  // commodity categories a vendor genuinely quotes against, not stand-ins for a fact nobody
+  // stated (contrast Tender.department etc., which are nullable for exactly that reason).
+  // On a regretted row these are meaningless and simply ignored.
+  make  String @default("Unbranded")
+  model String @default("Generic")
 
   // The business date the vendor gave this rate. Not updatedAt, which moves when someone
   // fixes a typo.
-  quotedAt  DateTime @default(now())
+  quotedAt DateTime @default(now())
 
   remarks   String?
   updatedAt DateTime @updatedAt
