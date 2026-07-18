@@ -265,15 +265,6 @@ export default function TenderDetailPage() {
             </CardContent>
           </Card>
 
-          {tender.description && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Description</CardTitle>
-              </CardHeader>
-              <CardContent className="whitespace-pre-wrap pt-0 text-sm">{tender.description}</CardContent>
-            </Card>
-          )}
-
           {tender.notes && (
             <Card>
               <CardHeader>

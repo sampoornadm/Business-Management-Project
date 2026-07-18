@@ -65,9 +65,7 @@ const tenderFormSchema = z.object({
   openingDate: z.string().optional(),
   validityPeriodDays: optionalNumericString,
   priority: z.enum(TENDER_PRIORITIES),
-  description: z.string().optional(),
   notes: z.string().optional(),
-  remarks: z.string().optional(),
   dealingOfficerName: z.string().optional(),
   dealingOfficerEmail: z.string().optional(),
   dealingOfficerPhone: z.string().optional(),
@@ -123,9 +121,7 @@ const DEFAULT_VALUES: TenderFormValues = {
   openingDate: "",
   validityPeriodDays: "",
   priority: "MEDIUM",
-  description: "",
   notes: "",
-  remarks: "",
   dealingOfficerName: "",
   dealingOfficerEmail: "",
   dealingOfficerPhone: "",
@@ -551,48 +547,21 @@ export function TenderForm({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Description, notes &amp; remarks</CardTitle>
+            <CardTitle className="text-base">Terms &amp; Notes</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl>
-                    <Textarea rows={4} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <CardContent>
             <FormField
               control={form.control}
               name="notes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Terms &amp; Notes</FormLabel>
                   <FormControl>
                     <Textarea
-                      rows={10}
-                      placeholder="Note / NIT / ITT terms captured from the document. Edit freely to remove anything unnecessary."
+                      rows={14}
+                      placeholder="Note / NIT / ITT text captured from the document. Edit freely to remove anything unnecessary."
                       className="font-mono text-xs"
                       {...field}
                     />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="remarks"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Remarks</FormLabel>
-                  <FormControl>
-                    <Textarea rows={3} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
