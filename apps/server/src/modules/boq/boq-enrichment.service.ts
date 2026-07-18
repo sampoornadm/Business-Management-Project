@@ -3,6 +3,7 @@ import { ServiceUnavailableError } from "../../core/errors/HttpErrors.js";
 import { embed, generateJson } from "../../infra/llm/ollama.client.js";
 import { logger } from "../../shared/logger/logger.js";
 import { cosineSimilarity, round2 } from "../../shared/utils/math.js";
+import { sameSpec } from "../../shared/utils/spec-match.js";
 import type {
   HistoricalRateVector,
   IHistoricalRatesRepository,
@@ -27,31 +28,6 @@ interface LlmClassification {
   category: string;
   subcategory: string | null;
   confidence: number;
-}
-
-/**
- * Every number in a description, as a multiset. This is the discriminator that decides
- * whether two descriptions are the same item — and it is deliberately NOT delegated to the
- * embedding or the LLM, because both were measured failing at exactly this:
- *   - bge-m3 scores "XLPE Cable 4C x16" closer to "…x25" (0.860) than to its own paraphrase (0.846).
- *   - qwen3:4b calls "…x25" and "PVC Cable 4C x16" the same item as "XLPE Cable 4C x16",
- *     even when given those exact pairs as negative examples in the prompt.
- * Getting this wrong puts a wrong unit rate into a live tender bid, so it gets a boring,
- * deterministic check instead.
- *
- * It does not catch a same-size/different-material swap ("XLPE Cable 4C x16" vs "PVC Cable
- * 4C x16" share {4, 16}) — that one is caught by AI_MATCH_THRESHOLD instead, since a material
- * word swap measured 0.843 cosine, nowhere near the 0.98 bar. The two checks cover each
- * other's blind spot, which is why a rate needs BOTH.
- */
-function specNumbers(description: string): string[] {
-  return (description.match(/\d+(?:\.\d+)?/g) ?? []).map((n) => String(Number(n))).sort();
-}
-
-function sameSpec(a: string, b: string): boolean {
-  const left = specNumbers(a);
-  const right = specNumbers(b);
-  return left.length === right.length && left.every((value, i) => value === right[i]);
 }
 
 interface Match {

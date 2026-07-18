@@ -36,9 +36,21 @@ export interface ItemQuoteRow {
   quotedAt: Date;
 }
 
-export interface ConfirmedExample {
+export interface ItemForClassify {
+  id: string;
   canonicalName: string;
+  unit: string | null;
+  embedding: number[];
+  embeddedAt: Date | null;
+}
+
+export interface ConfirmedMatchRow {
+  id: string;
   categoryId: string;
+  canonicalName: string;
+  unit: string | null;
+  embedding: number[];
+  embeddedAt: Date | null;
 }
 
 type ItemStatus = NonNullable<ListItemsQuery["status"]>;
@@ -65,9 +77,11 @@ export interface IItemsRepository {
   findQuoteRowsForItems(itemIds: string[]): Promise<ItemQuoteRow[]>;
   findById(id: string, businessId: string): Promise<ItemRow | null>;
   updateCategory(id: string, categoryId: string | null, confirmed: boolean, aiConfidence: number | null): Promise<void>;
-  findUnclassified(businessId: string, limit: number): Promise<ItemRow[]>;
+  findUnclassified(businessId: string, limit: number): Promise<ItemForClassify[]>;
   countUnclassified(businessId: string): Promise<number>;
-  findConfirmedExamples(businessId: string, limit: number): Promise<ConfirmedExample[]>;
+  getForClassify(id: string, businessId: string): Promise<ItemForClassify | null>;
+  setEmbedding(id: string, embedding: number[]): Promise<void>;
+  findConfirmedForMatch(businessId: string): Promise<ConfirmedMatchRow[]>;
 }
 
 export class ItemsRepository implements IItemsRepository {
@@ -143,11 +157,11 @@ export class ItemsRepository implements IItemsRepository {
     });
   }
 
-  findUnclassified(businessId: string, limit: number): Promise<ItemRow[]> {
+  findUnclassified(businessId: string, limit: number): Promise<ItemForClassify[]> {
     return this.prisma.item.findMany({
       where: { businessId, categoryId: null },
       take: limit,
-      ...itemArgs,
+      select: { id: true, canonicalName: true, unit: true, embedding: true, embeddedAt: true },
     });
   }
 
@@ -155,12 +169,21 @@ export class ItemsRepository implements IItemsRepository {
     return this.prisma.item.count({ where: { businessId, categoryId: null } });
   }
 
-  findConfirmedExamples(businessId: string, limit: number): Promise<ConfirmedExample[]> {
+  getForClassify(id: string, businessId: string): Promise<ItemForClassify | null> {
+    return this.prisma.item.findFirst({
+      where: { id, businessId },
+      select: { id: true, canonicalName: true, unit: true, embedding: true, embeddedAt: true },
+    });
+  }
+
+  async setEmbedding(id: string, embedding: number[]): Promise<void> {
+    await this.prisma.item.update({ where: { id }, data: { embedding, embeddedAt: new Date() } });
+  }
+
+  findConfirmedForMatch(businessId: string): Promise<ConfirmedMatchRow[]> {
     return this.prisma.item.findMany({
       where: { businessId, categoryConfirmed: true, categoryId: { not: null } },
-      select: { canonicalName: true, categoryId: true },
-      take: limit,
-      orderBy: { updatedAt: "desc" },
-    }) as Promise<ConfirmedExample[]>;
+      select: { id: true, categoryId: true, canonicalName: true, unit: true, embedding: true, embeddedAt: true },
+    }) as Promise<ConfirmedMatchRow[]>;
   }
 }

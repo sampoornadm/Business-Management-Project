@@ -1,5 +1,8 @@
 import type { CategoryLeafDto } from "@bmp/types";
 
+import { cosineSimilarity } from "../../shared/utils/math.js";
+import { sameSpec } from "../../shared/utils/spec-match.js";
+
 export function collapseWhitespace(value: string): string {
   return value.trim().replace(/\s+/g, " ");
 }
@@ -17,6 +20,42 @@ export function deriveCanonicalName(normalizedName: string | null, description: 
 export interface ClassificationResult {
   categoryId: string | null;
   confidence: number;
+}
+
+export interface MatchCandidate {
+  categoryId: string;
+  canonicalName: string;
+  unit: string | null;
+  embedding: number[];
+}
+
+/**
+ * Rung-1 human-feedback reuse: find a human-confirmed item to copy the category from, so a
+ * confirmation on one size of a product propagates to its siblings instead of the LLM
+ * re-guessing (inconsistently) each time. Requires ALL THREE of the repo's proven signals —
+ * cosine >= threshold, identical numeric specs, matching unit — the same bar boq-enrichment
+ * uses before trusting a historical rate. Deterministic once embeddings exist; no LLM.
+ */
+export function pickConfirmedMatch(
+  target: { canonicalName: string; unit: string | null; embedding: number[] },
+  candidates: MatchCandidate[],
+  threshold: number,
+): { categoryId: string; confidence: number } | null {
+  if (target.embedding.length === 0) return null;
+
+  let best: { candidate: MatchCandidate; similarity: number } | null = null;
+  for (const candidate of candidates) {
+    if (candidate.embedding.length === 0) continue;
+    const similarity = cosineSimilarity(target.embedding, candidate.embedding);
+    if (!best || similarity > best.similarity) best = { candidate, similarity };
+  }
+  if (!best) return null;
+
+  const unitOk = target.unit === null || best.candidate.unit === target.unit;
+  if (best.similarity >= threshold && unitOk && sameSpec(target.canonicalName, best.candidate.canonicalName)) {
+    return { categoryId: best.candidate.categoryId, confidence: best.similarity };
+  }
+  return null;
 }
 
 /**

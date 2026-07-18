@@ -834,6 +834,12 @@ model Item {
   categoryConfirmed Boolean   @default(false)
   aiConfidence      Float?
 
+  // Embedding of canonicalName, populated lazily at classify time (same pattern as
+  // HistoricalRate.embedding). Used to find a human-confirmed sibling item to copy the
+  // category from before ever calling the LLM — see items.service classify path.
+  embedding  Float[]
+  embeddedAt DateTime?
+
   rfqItems RfqItem[]
 
   createdAt DateTime @default(now())

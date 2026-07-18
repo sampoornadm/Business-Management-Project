@@ -9,8 +9,9 @@ import type {
 import { env } from "../../config/env.js";
 import { BadRequestError, NotFoundError, ServiceUnavailableError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
-import { generateJson } from "../../infra/llm/ollama.client.js";
+import { embed, generateJson } from "../../infra/llm/ollama.client.js";
 import { logger } from "../../shared/logger/logger.js";
+import { cosineSimilarity } from "../../shared/utils/math.js";
 import type { CategoriesService } from "../categories/categories.service.js";
 import type { RfqService } from "../rfq/rfq.service.js";
 
@@ -18,10 +19,17 @@ import {
   buildClassifyPrompt,
   type ClassificationResult,
   deriveCanonicalName,
+  type MatchCandidate,
   parseClassification,
+  pickConfirmedMatch,
 } from "./items.helpers.js";
 import { aggregateQuotes, sortItemEntries, toItemDetailDto, toItemListEntryDto } from "./items.mapper.js";
-import type { IItemsRepository, ItemRow } from "./items.repository.js";
+import type {
+  ConfirmedMatchRow,
+  IItemsRepository,
+  ItemForClassify,
+  ItemRow,
+} from "./items.repository.js";
 
 /** Cap on quote rows shown on the detail page — an item with more history than this is rare. */
 const DETAIL_ENTRY_LIMIT = 200;
@@ -137,21 +145,20 @@ export class ItemsService {
 
   /** AI-classify a single item into the taxonomy, leaving it unconfirmed for review. */
   async classifyItem(id: string, businessId: string): Promise<ItemDetailDto> {
-    const item = await this.getItemOrThrow(id, businessId);
-    const leaves = await this.requireLeaves();
-    const examples = await this.buildExamples(businessId);
-    const result = await this.classifyOne(item, leaves, examples);
+    const item = await this.itemsRepository.getForClassify(id, businessId);
+    if (!item) throw new NotFoundError("Item not found");
+    const context = await this.loadClassifyContext(businessId);
+    const result = await this.suggestForItem(item, context);
     await this.itemsRepository.updateCategory(id, result.categoryId, false, result.confidence || null);
     return this.getItemDetail(id, businessId);
   }
 
-  /** Batch-classify a page of still-unclassified items. Small batch: each is one LLM call. */
+  /** Batch-classify a page of still-unclassified items. Small batch: each is at most one LLM call. */
   async classifyUnclassified(
     businessId: string,
     limit: number,
   ): Promise<{ classified: number; unmatched: number; failed: number; remaining: number }> {
-    const leaves = await this.requireLeaves();
-    const examples = await this.buildExamples(businessId);
+    const context = await this.loadClassifyContext(businessId);
     const items = await this.itemsRepository.findUnclassified(businessId, limit);
 
     let classified = 0;
@@ -159,7 +166,7 @@ export class ItemsService {
     let failed = 0;
     for (const item of items) {
       try {
-        const result = await this.classifyOne(item, leaves, examples);
+        const result = await this.suggestForItem(item, context);
         await this.itemsRepository.updateCategory(item.id, result.categoryId, false, result.confidence || null);
         // The model legitimately returns null ("none fit"); that is not a category, and the
         // item stays unclassified (and retryable) rather than being counted as done.
@@ -177,24 +184,102 @@ export class ItemsService {
     return { classified, unmatched, failed, remaining };
   }
 
-  private async classifyOne(
-    item: ItemRow,
-    leaves: CategoryLeafDto[],
-    examples: Array<{ name: string; path: string }>,
-  ): Promise<ClassificationResult> {
-    const prompt = buildClassifyPrompt(item.canonicalName, item.unit, leaves, examples);
-    const raw = await generateJson(prompt, env.OLLAMA_ENRICHMENT_MODEL);
-    return parseClassification(raw, new Set(leaves.map((l) => l.id)));
+  /** Leaves, category paths, and confirmed match-candidates (with embeddings ensured) for a run. */
+  private async loadClassifyContext(businessId: string): Promise<{
+    leaves: CategoryLeafDto[];
+    pathMap: Map<string, string>;
+    confirmed: ConfirmedMatchRow[];
+  }> {
+    const [leaves, pathMap, confirmed] = await Promise.all([
+      this.requireLeaves(),
+      this.categoriesService.getPathMap(),
+      this.itemsRepository.findConfirmedForMatch(businessId),
+    ]);
+
+    // Converge-on-use: embed any confirmed candidate that isn't embedded yet, so the pool of
+    // reusable human decisions grows without a separate backfill (mirrors embedPendingRates).
+    const pending = confirmed.filter((c) => !c.embeddedAt || c.embedding.length === 0);
+    if (pending.length > 0) {
+      const vectors = await this.safeEmbed(pending.map((c) => c.canonicalName));
+      for (const [index, candidate] of pending.entries()) {
+        const vector = vectors[index];
+        if (vector) {
+          candidate.embedding = vector;
+          candidate.embeddedAt = new Date();
+          await this.itemsRepository.setEmbedding(candidate.id, vector);
+        }
+      }
+    }
+
+    return { leaves, pathMap, confirmed };
   }
 
-  private async buildExamples(businessId: string): Promise<Array<{ name: string; path: string }>> {
-    const [examples, pathMap] = await Promise.all([
-      this.itemsRepository.findConfirmedExamples(businessId, CLASSIFY_EXAMPLE_LIMIT),
-      this.categoriesService.getPathMap(),
-    ]);
-    return examples
-      .map((e) => ({ name: e.canonicalName, path: pathMap.get(e.categoryId) ?? "" }))
-      .filter((e) => e.path);
+  /**
+   * The human-feedback loop, in order:
+   *   Rung 1 — reuse a confirmed sibling's category outright if one matches on all three signals
+   *            (cosine, identical specs, unit). Deterministic, no LLM, no drift across sizes.
+   *   Rung 2 — otherwise fall back to the LLM, but ground it with the NEAREST confirmed items
+   *            (by embedding) rather than arbitrary recent ones, so past confirmations steer it
+   *            (e.g. a confirmed "PU Tube 4x6 -> Piping" pulls a new "PU Tube 7x10" the same way).
+   * Either way the result lands unconfirmed for review.
+   */
+  private async suggestForItem(
+    item: ItemForClassify,
+    context: {
+      leaves: CategoryLeafDto[];
+      pathMap: Map<string, string>;
+      confirmed: ConfirmedMatchRow[];
+    },
+  ): Promise<ClassificationResult> {
+    let embedding = item.embedding;
+    if (!item.embeddedAt || embedding.length === 0) {
+      embedding = (await this.safeEmbed([item.canonicalName]))[0] ?? [];
+      if (embedding.length > 0) await this.itemsRepository.setEmbedding(item.id, embedding);
+    }
+
+    const others = context.confirmed.filter((c) => c.id !== item.id && c.embedding.length > 0);
+
+    const candidates: MatchCandidate[] = others.map((c) => ({
+      categoryId: c.categoryId,
+      canonicalName: c.canonicalName,
+      unit: c.unit,
+      embedding: c.embedding,
+    }));
+    const sibling = pickConfirmedMatch(
+      { canonicalName: item.canonicalName, unit: item.unit, embedding },
+      candidates,
+      env.AI_MATCH_THRESHOLD,
+    );
+    if (sibling) return sibling;
+
+    // Nearest confirmed examples ground the LLM — the practical "learn from feedback" lever.
+    const examples =
+      embedding.length > 0
+        ? others
+            .map((c) => ({ row: c, sim: cosineSimilarity(embedding, c.embedding) }))
+            .sort((a, b) => b.sim - a.sim)
+            .slice(0, CLASSIFY_EXAMPLE_LIMIT)
+            .map((x) => ({ name: x.row.canonicalName, path: context.pathMap.get(x.row.categoryId) ?? "" }))
+            .filter((e) => e.path)
+        : [];
+
+    const prompt = buildClassifyPrompt(item.canonicalName, item.unit, context.leaves, examples);
+    const raw = await generateJson(prompt, env.OLLAMA_ENRICHMENT_MODEL);
+    return parseClassification(raw, new Set(context.leaves.map((l) => l.id)));
+  }
+
+  /**
+   * Embeddings are an enhancement, not a hard dependency: if the embed model is unavailable
+   * (e.g. only the generation model is pulled), degrade to plain LLM classification rather than
+   * failing the whole request.
+   */
+  private async safeEmbed(texts: string[]): Promise<number[][]> {
+    try {
+      return await embed(texts);
+    } catch (err) {
+      logger.warn({ err }, "Item embedding failed; classifying without sibling reuse");
+      return [];
+    }
   }
 
   private async requireLeaves(): Promise<CategoryLeafDto[]> {
