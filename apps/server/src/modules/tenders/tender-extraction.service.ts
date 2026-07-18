@@ -1,12 +1,15 @@
 import type { TenderExtractionFields, TenderExtractionResultDto } from "@bmp/types";
 import { z } from "zod";
 
+import { env } from "../../config/env.js";
 import type { IOrganizationsRepository } from "../organizations/organizations.repository.js";
 
 import { parseIiscoHeaderFields } from "./tender-header.parser.js";
 import { parseIiscoRfqItems } from "./tender-item.parser.js";
+import { parseTenderNotes } from "./tender-notes.parser.js";
 
 export type GenerateJsonFn = (prompt: string) => Promise<unknown>;
+export type GenerateTextFn = (prompt: string) => Promise<string>;
 export type ExtractTextFn = (buffer: Buffer, mimeType: string) => Promise<string>;
 
 // Keeps local-LLM inference fast and within context — a tender/NIT's header
@@ -66,11 +69,72 @@ Document text:
 """
 `;
 
+// Notes/terms can sit deeper than the header fields (page 2+), so allow a larger window than
+// MAX_PROMPT_CHARS — but still bounded, since the item table (irrelevant here) follows.
+const MAX_NOTES_CHARS = 16_000;
+
+// Raw markdown out, not JSON — a big multi-line string wrapped in JSON is needlessly fragile
+// (small local models routinely break the escaping). See generateText.
+const NOTES_PROMPT = `You are extracting the terms, notes and instructions from a tender / bid-invitation / NIT document.
+Capture the content of any "Note", "NIT", "ITT" / "Instructions to Tenderers/Bidders", and general terms-and-conditions sections.
+
+Output ONLY markdown (no preamble, no code fences), formatted as:
+- a "## <Section Title>" line for each section
+- one point per line beneath it, each starting with "- "
+- keep every distinct point separate; do not merge or summarise points (a later step trims them)
+
+Exclude entirely: the company letterhead, addresses, GST/CIN numbers, page numbers, the item/BOQ table, and dates/amounts. If the document contains no such sections, output nothing.
+
+Document text:
+"""
+`;
+
+/** Models sometimes wrap output in a ```markdown fence despite instructions — strip it. */
+function stripCodeFence(text: string): string {
+  return text
+    .replace(/^\s*```(?:markdown|md)?\s*\n?/i, "")
+    .replace(/\n?```\s*$/i, "")
+    .trim();
+}
+
+/**
+ * Tidy the notes markdown: drop empty bullets ("- ") and any "## Header" that has no content
+ * before the next header/EOF. The LLM readily emits an empty "## NIT" / "## ITT" section when
+ * the document has no such section; this removes that noise from both AI and regex output.
+ */
+function cleanupNotes(markdown: string): string {
+  const lines = markdown.split("\n").filter((line) => {
+    const t = line.trim();
+    return t !== "-" && t !== "*" && t !== "•";
+  });
+
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const trimmed = lines[i]!.trim();
+    if (trimmed.startsWith("#")) {
+      let hasContent = false;
+      for (let j = i + 1; j < lines.length; j += 1) {
+        const next = lines[j]!.trim();
+        if (next.startsWith("#")) break;
+        if (next) {
+          hasContent = true;
+          break;
+        }
+      }
+      if (!hasContent) continue;
+    }
+    out.push(lines[i]!);
+  }
+
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 export class TenderExtractionService {
   constructor(
     private readonly organizationsRepository: IOrganizationsRepository,
     private readonly generateJson: GenerateJsonFn,
     private readonly extractText: ExtractTextFn,
+    private readonly generateText: GenerateTextFn,
   ) {}
 
   private async matchClient(
@@ -86,9 +150,31 @@ export class TenderExtractionService {
     };
   }
 
+  /**
+   * Terms & Notes extraction is independent of the header-field path above: header fields for the
+   * recognized template are deterministic (and return early), but notes should be captured either
+   * way. LLM by default (handles the messy, letterhead-interleaved prose); regex when the flag is
+   * off, or as a fallback when the LLM is unavailable/unusable.
+   */
+  private async extractNotes(text: string, warnings: string[]): Promise<string | undefined> {
+    let notes: string | undefined;
+    if (env.TENDER_NOTES_AI_ENABLED) {
+      try {
+        notes = stripCodeFence(await this.generateText(`${NOTES_PROMPT}${text.slice(0, MAX_NOTES_CHARS)}\n"""`));
+      } catch {
+        warnings.push("AI notes extraction was unavailable — used a basic parser for Terms & Notes.");
+      }
+    }
+    if (!notes) notes = parseTenderNotes(text) ?? undefined;
+    if (!notes) return undefined;
+    return cleanupNotes(notes) || undefined;
+  }
+
   async extractFromDocument(buffer: Buffer, mimeType: string): Promise<TenderExtractionResultDto> {
     const warnings: string[] = [];
     const text = await this.extractText(buffer, mimeType);
+
+    const notes = await this.extractNotes(text, warnings);
 
     // Items are parsed deterministically (regex, not the LLM) — a document
     // can have dozens of items, and the 14-digit item code (the whole point
@@ -107,7 +193,7 @@ export class TenderExtractionService {
       const { clientName, ...fields } = deterministic;
       const clientMatch = clientName ? await this.matchClient(clientName) : undefined;
       return {
-        fields,
+        fields: { ...fields, notes },
         items,
         suggestedClientId: clientMatch?.suggestedClientId,
         suggestedClientName: clientMatch?.suggestedClientName,
@@ -119,7 +205,7 @@ export class TenderExtractionService {
     const parsed = extractionSchema.safeParse(raw);
     if (!parsed.success) {
       warnings.push("The model's response did not match the expected format — no fields were extracted.");
-      return { fields: {}, items, warnings };
+      return { fields: { notes }, items, warnings };
     }
 
     const data = parsed.data;
@@ -140,6 +226,7 @@ export class TenderExtractionService {
       validityPeriodDays: data.validityPeriodDays ?? undefined,
       description: data.description ?? undefined,
       remarks: data.remarks ?? undefined,
+      notes,
     };
 
     const clientMatch = data.clientName ? await this.matchClient(data.clientName) : undefined;

@@ -87,6 +87,7 @@ export function toTenderDto(entity: TenderDetail): TenderDto {
     statusChangedAt: entity.statusChangedAt.toISOString(),
     description: entity.description,
     remarks: entity.remarks,
+    notes: entity.notes,
     dealingOfficerName: entity.dealingOfficerName,
     dealingOfficerEmail: entity.dealingOfficerEmail,
     dealingOfficerPhone: entity.dealingOfficerPhone,

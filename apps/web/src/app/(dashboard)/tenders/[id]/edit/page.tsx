@@ -60,6 +60,7 @@ export default function EditTenderPage() {
           validityPeriodDays: tender.validityPeriodDays != null ? String(tender.validityPeriodDays) : "",
           priority: tender.priority,
           description: tender.description ?? "",
+          notes: tender.notes ?? "",
           remarks: tender.remarks ?? "",
           dealingOfficerName: tender.dealingOfficerName ?? "",
           dealingOfficerEmail: tender.dealingOfficerEmail ?? "",

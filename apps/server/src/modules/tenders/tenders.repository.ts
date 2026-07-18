@@ -67,6 +67,7 @@ export interface CreateTenderData {
   priority?: TenderPriority;
   description?: string | null;
   remarks?: string | null;
+  notes?: string | null;
   dealingOfficerName?: string | null;
   dealingOfficerEmail?: string | null;
   dealingOfficerPhone?: string | null;
