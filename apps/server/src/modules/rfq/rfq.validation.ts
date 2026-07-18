@@ -1,4 +1,4 @@
-import { RFQ_STATUSES } from "@bmp/types";
+import { ITEM_PRICE_SORT_FIELDS, RFQ_STATUSES } from "@bmp/types";
 import { z } from "zod";
 
 const createRfqItemSchema = z.object({
@@ -31,6 +31,16 @@ export const listRfqsQuerySchema = z.object({
   tenderId: z.string().uuid().optional(),
 });
 export type ListRfqsQueryParsed = z.infer<typeof listRfqsQuerySchema>;
+
+export const listItemPricesQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional(),
+  pageSize: z.coerce.number().int().positive().optional(),
+  search: z.string().max(200).optional(),
+  vendorId: z.string().uuid().optional(),
+  sortBy: z.enum(ITEM_PRICE_SORT_FIELDS).optional(),
+  sortDir: z.enum(["asc", "desc"]).optional(),
+});
+export type ListItemPricesQueryParsed = z.infer<typeof listItemPricesQuerySchema>;
 
 export const addRfqVendorSchema = z.object({
   vendorId: z.string().uuid(),

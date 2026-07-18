@@ -11,6 +11,7 @@ import {
   awardRfqSchema,
   createRfqSchema,
   importQuotesSchema,
+  listItemPricesQuerySchema,
   listRfqsQuerySchema,
   quickSendPreviewSchema,
   quickSendSchema,
@@ -109,6 +110,24 @@ export function createRfqRouter(controller: RfqController): Router {
     requirePermission("rfq:create"),
     validate(quickSendSchema),
     controller.quickSend,
+  );
+
+  /**
+   * @openapi
+   * /rfqs/item-prices:
+   *   get:
+   *     tags: [RFQ]
+   *     summary: Historical vendor prices per item across all RFQs (paginated, search + vendor filter)
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       200: { description: Paginated item price history }
+   */
+  router.get(
+    "/item-prices",
+    authenticateMiddleware,
+    requirePermission("rfq:read"),
+    validate(listItemPricesQuerySchema, "query"),
+    controller.itemPrices,
   );
 
   /**

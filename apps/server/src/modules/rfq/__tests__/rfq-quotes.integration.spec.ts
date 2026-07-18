@@ -102,4 +102,24 @@ describe("RFQ quote sheet export/import (integration)", () => {
     expect(second.quotes[0].regretted).toBe(true);
     expect(second.quotes[0].rate).toBeNull();
   });
+
+  it("lists the imported price in item history and excludes the regret", async () => {
+    const res = await request(app)
+      .get("/api/v1/rfqs/item-prices")
+      .query({ vendorId })
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(200);
+
+    const rows = res.body.data.items as Array<{
+      description: string;
+      rate: number;
+      vendorId: string;
+    }>;
+    const priced = rows.filter((r) => r.vendorId === vendorId);
+    expect(priced).toHaveLength(1);
+    expect(priced[0]!.description).toBe("XLPE Cable 4C x16");
+    expect(priced[0]!.rate).toBe(152.5);
+    // The regretted second line has no price and must not appear.
+    expect(rows.some((r) => r.description === "XLPE Cable 4C x25")).toBe(false);
+  });
 });

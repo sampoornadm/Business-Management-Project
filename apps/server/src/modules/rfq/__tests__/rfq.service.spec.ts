@@ -161,6 +161,15 @@ class FakeRfqRepository implements IRfqRepository {
       }
     }
   }
+
+  // Real filtering/scoping is Postgres — covered by the integration test.
+  async listItemPrices() {
+    return { items: [] as never[], totalItems: 0 };
+  }
+
+  async findBoqItemCategories() {
+    return [];
+  }
 }
 
 class FakeTendersRepository implements Partial<ITendersRepository> {

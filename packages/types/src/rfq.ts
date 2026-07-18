@@ -128,6 +128,52 @@ export interface AwardRfqInput {
   vendorId: string;
 }
 
+// One historical price observation: a single vendor's quote for one item, across every RFQ.
+// Regretted / no-price rows are excluded server-side, so `rate` is always a real number here.
+export interface ItemPriceHistoryDto {
+  quoteId: string;
+  description: string;
+  category: string | null;
+  unit: string | null;
+  quantity: number;
+  vendorId: string;
+  vendorName: string;
+  rate: number;
+  make: string;
+  model: string;
+  quotedAt: string;
+  remarks: string | null;
+  rfqId: string;
+  rfqTitle: string;
+  // Null when the quote's RFQ is standalone (not tied to a tender).
+  tenderId: string | null;
+  tenderName: string | null;
+}
+
+// Sortable columns. Category is deliberately absent — it's resolved by a post-query
+// lookup (BoqItem), not a column Postgres can ORDER BY.
+export const ITEM_PRICE_SORT_FIELDS = [
+  "description",
+  "unit",
+  "quantity",
+  "vendorName",
+  "rate",
+  "make",
+  "quotedAt",
+  "rfqTitle",
+] as const;
+export type ItemPriceSortField = (typeof ITEM_PRICE_SORT_FIELDS)[number];
+
+export interface ListItemPricesQuery {
+  page?: number;
+  pageSize?: number;
+  // Matches item description, make, or model.
+  search?: string;
+  vendorId?: string;
+  sortBy?: ItemPriceSortField;
+  sortDir?: "asc" | "desc";
+}
+
 export interface ListRfqsQuery {
   page?: number;
   pageSize?: number;

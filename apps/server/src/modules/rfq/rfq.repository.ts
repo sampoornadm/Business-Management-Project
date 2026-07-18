@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { Prisma, PrismaClient, RfqStatus, RfqVendorStatus } from "@bmp/database";
+import type { ItemPriceSortField } from "@bmp/types";
 
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
@@ -30,6 +31,68 @@ const rfqListArgs = {
 } satisfies Prisma.RfqDefaultArgs;
 
 export type RfqListItem = Prisma.RfqGetPayload<typeof rfqListArgs>;
+
+const itemPriceArgs = {
+  select: {
+    id: true,
+    rate: true,
+    make: true,
+    model: true,
+    quotedAt: true,
+    remarks: true,
+    vendor: { select: { id: true, name: true } },
+    rfqItem: {
+      select: {
+        description: true,
+        unit: true,
+        quantity: true,
+        boqItemId: true,
+        rfq: {
+          select: { id: true, title: true, tender: { select: { id: true, title: true } } },
+        },
+      },
+    },
+  },
+} satisfies Prisma.RfqQuoteDefaultArgs;
+
+export type ItemPriceRow = Prisma.RfqQuoteGetPayload<typeof itemPriceArgs>;
+
+export interface ItemPriceFilters {
+  businessId: string;
+  // Matches item description, make, or model (case-insensitive).
+  search?: string;
+  vendorId?: string;
+  // Restrict to one resolved Item — used by the item-detail page.
+  itemId?: string;
+  sortBy?: ItemPriceSortField;
+  sortDir?: "asc" | "desc";
+}
+
+function itemPriceOrderBy(
+  sortBy: ItemPriceSortField | undefined,
+  dir: "asc" | "desc",
+): Prisma.RfqQuoteOrderByWithRelationInput {
+  switch (sortBy) {
+    case "description":
+      return { rfqItem: { description: dir } };
+    case "unit":
+      return { rfqItem: { unit: dir } };
+    case "quantity":
+      return { rfqItem: { quantity: dir } };
+    case "vendorName":
+      return { vendor: { name: dir } };
+    case "rate":
+      return { rate: dir };
+    case "make":
+      return { make: dir };
+    case "rfqTitle":
+      return { rfqItem: { rfq: { title: dir } } };
+    case "quotedAt":
+    default:
+      // Default view: most recent quotes first.
+      return { quotedAt: dir };
+  }
+}
 
 export interface CreateRfqItemData {
   boqItemId?: string | null;
@@ -83,6 +146,11 @@ export interface IRfqRepository {
   removeVendorInvite(rfqId: string, vendorId: string): Promise<void>;
   findItemById(itemId: string): Promise<{ id: string; rfqId: string; quantity: number } | null>;
   upsertQuote(rfqItemId: string, vendorId: string, data: UpsertQuoteData): Promise<void>;
+  listItemPrices(
+    pagination: PaginationParams,
+    filters: ItemPriceFilters,
+  ): Promise<{ items: ItemPriceRow[]; totalItems: number }>;
+  findBoqItemCategories(ids: string[]): Promise<{ id: string; category: string | null }[]>;
 }
 
 export class RfqRepository implements IRfqRepository {
@@ -212,6 +280,50 @@ export class RfqRepository implements IRfqRepository {
       where: { rfqItemId_vendorId: { rfqItemId, vendorId } },
       create: { id: randomUUID(), rfqItemId, vendorId, ...payload },
       update: payload,
+    });
+  }
+
+  async listItemPrices(
+    pagination: PaginationParams,
+    filters: ItemPriceFilters,
+  ): Promise<{ items: ItemPriceRow[]; totalItems: number }> {
+    const where: Prisma.RfqQuoteWhereInput = {
+      // A price-history view: skip regrets/no-price rows so every row carries a real rate.
+      regretted: false,
+      rate: { not: null },
+      vendorId: filters.vendorId,
+      rfqItem: { itemId: filters.itemId, rfq: { businessId: filters.businessId } },
+      ...(filters.search
+        ? {
+            OR: [
+              { rfqItem: { description: { contains: filters.search, mode: "insensitive" } } },
+              { make: { contains: filters.search, mode: "insensitive" } },
+              { model: { contains: filters.search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    };
+
+    const [items, totalItems] = await Promise.all([
+      this.prisma.rfqQuote.findMany({
+        where,
+        ...itemPriceArgs,
+        orderBy: itemPriceOrderBy(filters.sortBy, filters.sortDir ?? "desc"),
+        ...toSkipTake(pagination),
+      }),
+      this.prisma.rfqQuote.count({ where }),
+    ]);
+
+    return { items, totalItems };
+  }
+
+  // BoqItem is an unenforced ref from RfqItem.boqItemId (no relation), so category
+  // is resolved with a separate keyed lookup rather than an include.
+  findBoqItemCategories(ids: string[]): Promise<{ id: string; category: string | null }[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.prisma.boqItem.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, category: true },
     });
   }
 }
