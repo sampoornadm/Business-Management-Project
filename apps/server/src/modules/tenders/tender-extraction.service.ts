@@ -82,13 +82,18 @@ const MAX_NOTES_CHARS = 16_000;
 // AI-driven trimming saved for a later, explicit step.
 const NOTES_PROMPT = `You copy the notes / terms / instructions text out of a tender document, VERBATIM.
 
+Capture EVERY such section that appears — do not skip any. These sections are usually headed by:
+- a line starting with "Note" (e.g. "Note:- Anti-bribery Undertaking:", or a bare "Note:"), or
+- a heading like "Instructions to Tenderers (ITT)", "Instructions to Bidders", "NIT", or "Terms and Conditions".
+Include a section ONLY if its heading actually appears in the text. If a heading does not appear, do not create it.
+
 Rules — follow exactly:
 - Copy the text word for word. Do NOT paraphrase, summarise, translate, shorten, reword, or fix anything.
-- Use ONLY headings that literally appear in the document (e.g. a line like "Note:- Anti-bribery Undertaking:"). Render each such heading as a "## <the heading text>" line.
-- Do NOT invent, add, rename, merge, split, reorder, or categorise sections. Never output a heading such as "NIT", "ITT", or "General Terms" unless that exact label appears as a heading in the text.
-- Under each heading, put each distinct point on its own line starting with "- ", copied verbatim.
-- Exclude only the repeating page furniture: company letterhead, addresses, GST/CIN numbers, page numbers, and the item/BOQ table.
-- If the document has no such notes/terms/instructions sections, output nothing at all.
+- Render each heading that appears as a "## <the heading text>" line.
+- Do NOT invent, rename, merge, reorder, or re-categorise sections beyond what appears in the text.
+- Put each distinct point on its own line starting with "- ", copied verbatim. If several points are run together on one line (e.g. "1.Inspection... 2.Material..." or separated by "#"), split them so each numbered point is on its own line.
+- Exclude only the repeating page furniture: company letterhead, addresses, GST/CIN numbers, page numbers, dealing-officer row, and the item/BOQ table.
+- If the document has none of these sections, output nothing at all.
 
 Output ONLY the markdown (no preamble, no explanation, no code fences).
 
