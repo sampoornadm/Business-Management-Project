@@ -68,9 +68,13 @@ function splitDealingOfficerLine(line: string): { name?: string; email?: string 
       const namePart = beforeAt.slice(start, i).trim();
       const localPart = beforeAt.slice(i);
       if (!namePart || !localPart || !/^[A-Z]/.test(namePart)) continue;
-      const nameKey = namePart.toLowerCase().replace(/\s+/g, "");
-      const localKey = localPart.toLowerCase().replace(/[.+-]/g, "");
-      if (nameKey === localKey) {
+      // Compare the name and the local-part as unordered token SETS, so a "surname.firstname"
+      // email (e.g. "Mozumder.Avishek" for "Avishek Mozumder") still matches. A local part that
+      // drops a token (e.g. "niladri.dey" for "Niladri Shekhar Dey") has a different set and is
+      // correctly rejected rather than split at a guessed boundary.
+      const nameTokens = namePart.toLowerCase().split(/\s+/).filter(Boolean).sort();
+      const localTokens = localPart.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).sort();
+      if (nameTokens.length > 0 && nameTokens.join("|") === localTokens.join("|")) {
         return { name: namePart, email: `${localPart}${domain}` };
       }
     }
