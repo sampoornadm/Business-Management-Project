@@ -9,6 +9,7 @@ import type {
   AwardRfqBody,
   CreateRfqBody,
   ImportQuotesBody,
+  ListItemPricesQueryParsed,
   ListRfqsQueryParsed,
   QuickSendBody,
   QuickSendPreviewBody,
@@ -34,6 +35,19 @@ export class RfqController {
   getById = asyncHandler(async (req, res) => {
     const rfq = await this.rfqService.getById(req.params.id!, req.user!.businessId);
     sendSuccess(res, rfq, "RFQ retrieved");
+  });
+
+  itemPrices = asyncHandler(async (req, res) => {
+    const query = req.query as unknown as ListItemPricesQueryParsed;
+    const pagination = resolvePagination(query);
+    const result = await this.rfqService.listItemPrices(pagination, {
+      businessId: req.user!.businessId,
+      search: query.search,
+      vendorId: query.vendorId,
+      sortBy: query.sortBy,
+      sortDir: query.sortDir,
+    });
+    sendSuccess(res, result, "Item price history retrieved");
   });
 
   create = asyncHandler(async (req, res) => {

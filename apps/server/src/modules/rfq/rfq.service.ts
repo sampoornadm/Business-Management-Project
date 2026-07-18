@@ -1,4 +1,5 @@
 import type {
+  ItemPriceHistoryDto,
   PaginatedResult,
   RecommendedVendorDto,
   RfqComparisonDto,
@@ -24,8 +25,15 @@ import type { IVendorsRepository, VendorWithContacts } from "../vendors/vendors.
 
 import { buildQuoteSheet, parseQuoteSheet } from "./quote-sheet.js";
 import { buildRfqText } from "./rfq-document.js";
-import { toRfqDto, toRfqListItemDto } from "./rfq.mapper.js";
-import type { CreateRfqData, IRfqRepository, RfqDetail, RfqFilters, UpdateRfqData } from "./rfq.repository.js";
+import { toItemPriceHistoryDto, toRfqDto, toRfqListItemDto } from "./rfq.mapper.js";
+import type {
+  CreateRfqData,
+  IRfqRepository,
+  ItemPriceFilters,
+  RfqDetail,
+  RfqFilters,
+  UpdateRfqData,
+} from "./rfq.repository.js";
 
 const FINALIZED_STATUSES = new Set(["AWARDED", "CLOSED", "CANCELLED"]);
 
@@ -56,6 +64,28 @@ export class RfqService {
 
   async getById(id: string, businessId: string): Promise<RfqDto> {
     return toRfqDto(await this.getDetailOrThrow(id, businessId));
+  }
+
+  async listItemPrices(
+    pagination: PaginationParams,
+    filters: ItemPriceFilters,
+  ): Promise<PaginatedResult<ItemPriceHistoryDto>> {
+    const { items, totalItems } = await this.rfqRepository.listItemPrices(pagination, filters);
+    const boqItemIds = [
+      ...new Set(items.map((i) => i.rfqItem.boqItemId).filter((id): id is string => Boolean(id))),
+    ];
+    const categories = await this.rfqRepository.findBoqItemCategories(boqItemIds);
+    const categoryById = new Map(categories.map((c) => [c.id, c.category]));
+    return buildPaginatedResult(
+      items.map((row) =>
+        toItemPriceHistoryDto(
+          row,
+          row.rfqItem.boqItemId ? categoryById.get(row.rfqItem.boqItemId) ?? null : null,
+        ),
+      ),
+      totalItems,
+      pagination,
+    );
   }
 
   async create(

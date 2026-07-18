@@ -9,6 +9,7 @@ import {
   HardHat,
   LayoutDashboard,
   Landmark,
+  Package,
   ShieldCheck,
   ShoppingCart,
   Truck,
@@ -29,6 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Organizations", href: "/organizations", icon: Building2, permission: "organizations:read" },
   { label: "Vendors", href: "/vendors", icon: Truck, permission: "vendors:read" },
   { label: "RFQs", href: "/rfqs", icon: FileSpreadsheet, permission: "rfq:read" },
+  { label: "Items", href: "/items", icon: Package, permission: "rfq:read" },
   {
     label: "Purchase Orders",
     href: "/purchase-orders",

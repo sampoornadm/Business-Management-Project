@@ -138,6 +138,7 @@ model Business {
   projects        Project[]
   boqs            Boq[]
   historicalRates HistoricalRate[]
+  items           Item[]
   rfqs            Rfq[]
   purchaseOrders  PurchaseOrder[]
   goodsReceipts   GoodsReceipt[]
@@ -799,10 +800,72 @@ model RfqItem {
   quantity    Float
   sortOrder   Int     @default(0)
 
+  // Canonical item this line resolves to, for cross-tender price history. Nullable +
+  // SetNull: the line still stands on its own if the Item is deleted, and unresolved
+  // lines (itemId null) are picked up by the items module's converge-on-read backfill.
+  itemId String?
+  item   Item?   @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
   quotes RfqQuote[]
 
   @@index([rfqId])
+  @@index([itemId])
   @@map("rfq_items")
+}
+
+model Item {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Restrict)
+
+  // Canonical grouping key. Seeded from BoqItem.normalizedName (the AI's canonical rewrite)
+  // when available, else the line's cleaned description. Matched EXACTLY per business —
+  // deliberately not fuzzy/embedding-based: bge-m3 and qwen3 both measured unreliable at
+  // deciding "same item" (see boq-enrichment.service.ts). Human merging is a later feature.
+  canonicalName String
+  unit          String?
+
+  // AI-suggested-then-human-confirmed classification. categoryId points at the current best
+  // subcategory node in the Category tree; categoryConfirmed = false is an AI guess awaiting
+  // review, true is human-approved. Null categoryId = unclassified. Same "suggest, never
+  // silently clobber" rule the BOQ enrichment uses for aiCategory.
+  categoryId        String?
+  category          Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryConfirmed Boolean   @default(false)
+  aiConfidence      Float?
+
+  rfqItems RfqItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, canonicalName])
+  @@index([businessId])
+  @@index([categoryId])
+  @@map("items")
+}
+
+// Editable classification taxonomy. Self-referencing for tiers: top-level trades have
+// parentId = null, their subcategories point back at them. Two tiers today, a third needs
+// no migration. Global (not per-business) — trades are universal; scope by businessId later
+// if a business needs its own tree. Items reference a leaf (subcategory) node.
+model Category {
+  id       String     @id @default(uuid())
+  parentId String?
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children Category[] @relation("CategoryTree")
+
+  name      String
+  sortOrder Int    @default(0)
+
+  items Item[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([parentId, name])
+  @@index([parentId])
+  @@map("categories")
 }
 
 enum RfqVendorStatus {

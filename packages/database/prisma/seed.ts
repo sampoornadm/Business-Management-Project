@@ -31,6 +31,53 @@ const SAMPLE_BUSINESSES = [
   { name: "Samson Industries", code: "SAMSON" },
 ];
 
+// Starter classification taxonomy (top-level trade -> subcategories). Only the initial
+// contents live here — the tree is editable in-app after seeding, so this is a floor, not
+// the source of truth. Re-running only adds missing nodes; it never deletes user edits.
+const STARTER_TAXONOMY: Record<string, string[]> = {
+  Mechanical: ["Pumps", "Valves", "Piping", "HVAC", "Fans & Blowers", "Compressors"],
+  Electrical: ["Cable", "Switchgear", "Lighting", "Motors", "Panels & Boards", "Wiring Accessories"],
+  Civil: ["Concrete", "Reinforcement Steel", "Masonry", "Earthwork", "Formwork", "Aggregates"],
+  Plumbing: ["Pipes", "Fittings", "Fixtures", "Sanitaryware", "Water Tanks"],
+  Finishing: ["Paint", "Flooring", "Doors & Windows", "Glazing", "False Ceiling", "Waterproofing"],
+  "Fire & Safety": ["Fire Extinguishers", "Hydrants", "Sprinklers", "Detectors", "PPE"],
+  Instrumentation: ["Sensors", "Gauges", "Transmitters", "Control Valves"],
+};
+
+async function seedCategories() {
+  let created = 0;
+  let parentOrder = 0;
+
+  for (const [parentName, subs] of Object.entries(STARTER_TAXONOMY)) {
+    // Top-level nodes have parentId = null. Prisma can't upsert on a compound-unique key
+    // that includes a null, so find-or-create explicitly.
+    let parent = await prisma.category.findFirst({ where: { parentId: null, name: parentName } });
+    if (!parent) {
+      parent = await prisma.category.create({
+        data: { id: randomUUID(), name: parentName, sortOrder: parentOrder },
+      });
+      created += 1;
+    }
+    parentOrder += 1;
+
+    let subOrder = 0;
+    for (const subName of subs) {
+      const existing = await prisma.category.findFirst({
+        where: { parentId: parent.id, name: subName },
+      });
+      if (!existing) {
+        await prisma.category.create({
+          data: { id: randomUUID(), parentId: parent.id, name: subName, sortOrder: subOrder },
+        });
+        created += 1;
+      }
+      subOrder += 1;
+    }
+  }
+
+  console.warn(`Seeding taxonomy... (${created} new category nodes)`);
+}
+
 async function seedRolesAndPermissions() {
   const permissionByKey = new Map<string, string>();
 
@@ -188,6 +235,8 @@ async function main() {
 
   console.warn("Seeding businesses...");
   const businessByCode = await seedBusinesses();
+
+  await seedCategories();
 
   console.warn("Seeding sample users...");
   await seedUsers(roleByName, businessByCode);

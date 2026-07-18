@@ -5,7 +5,9 @@ import { auditRouter } from "../modules/audit/audit.module.js";
 import { authRouter } from "../modules/auth/auth.module.js";
 import { boqItemsRouter, boqRouter } from "../modules/boq/boq.module.js";
 import { businessesRouter } from "../modules/businesses/businesses.module.js";
+import { categoriesRouter } from "../modules/categories/categories.module.js";
 import { documentGenerationRouter } from "../modules/document-generation/document-generation.module.js";
+import { itemsRouter } from "../modules/items/items.module.js";
 import {
   bankAccountsRouter,
   expensesRouter,
@@ -48,6 +50,8 @@ v1Router.use("/tenders", boqRouter);
 v1Router.use("/boq-items", boqItemsRouter);
 v1Router.use("/rates", ratesRouter);
 v1Router.use("/vendors", vendorsRouter);
+v1Router.use("/categories", categoriesRouter);
+v1Router.use("/items", itemsRouter);
 v1Router.use("/rfqs", rfqRouter);
 v1Router.use("/rfq-items", rfqItemsRouter);
 v1Router.use("/purchase-orders", purchaseOrdersRouter);

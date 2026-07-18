@@ -1,4 +1,5 @@
 import type {
+  ItemPriceHistoryDto,
   RfqDto,
   RfqItemDto,
   RfqListItemDto,
@@ -6,7 +7,7 @@ import type {
   RfqVendorInviteDto,
 } from "@bmp/types";
 
-import type { RfqDetail, RfqItemDetail, RfqListItem } from "./rfq.repository.js";
+import type { ItemPriceRow, RfqDetail, RfqItemDetail, RfqListItem } from "./rfq.repository.js";
 
 function toQuoteDto(quote: RfqItemDetail["quotes"][number]): RfqQuoteDto {
   return {
@@ -53,6 +54,31 @@ export function toRfqListItemDto(entity: RfqListItem): RfqListItemDto {
     itemCount: entity._count.items,
     vendorCount: entity._count.vendorInvites,
     createdAt: entity.createdAt.toISOString(),
+  };
+}
+
+export function toItemPriceHistoryDto(
+  row: ItemPriceRow,
+  category: string | null,
+): ItemPriceHistoryDto {
+  return {
+    quoteId: row.id,
+    description: row.rfqItem.description,
+    category,
+    unit: row.rfqItem.unit,
+    quantity: row.rfqItem.quantity,
+    vendorId: row.vendor.id,
+    vendorName: row.vendor.name,
+    // Non-null: the repo filters out regretted/no-price rows.
+    rate: row.rate!,
+    make: row.make,
+    model: row.model,
+    quotedAt: row.quotedAt.toISOString(),
+    remarks: row.remarks,
+    rfqId: row.rfqItem.rfq.id,
+    rfqTitle: row.rfqItem.rfq.title,
+    tenderId: row.rfqItem.rfq.tender?.id ?? null,
+    tenderName: row.rfqItem.rfq.tender?.title ?? null,
   };
 }
 
