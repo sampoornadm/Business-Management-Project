@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveCanonicalName, parseClassification } from "../items.helpers.js";
+import { deriveCanonicalName, parseClassification, pickConfirmedMatch } from "../items.helpers.js";
 import { aggregateQuotes, sortItemEntries } from "../items.mapper.js";
 import type { ItemQuoteRow } from "../items.repository.js";
 
@@ -53,6 +53,51 @@ describe("aggregateQuotes", () => {
     expect(agg).toMatchObject({ quoteCount: 3, vendorCount: 2, minRate: 100, maxRate: 200 });
     expect(agg.avgRate).toBeCloseTo(150);
     expect(agg.lastQuotedAt.toISOString()).toBe(new Date("2026-03-01").toISOString());
+  });
+});
+
+describe("pickConfirmedMatch", () => {
+  const candidate = (categoryId: string, canonicalName: string, unit: string | null, embedding: number[]) => ({
+    categoryId,
+    canonicalName,
+    unit,
+    embedding,
+  });
+
+  it("reuses a confirmed sibling when cosine, specs and unit all agree", () => {
+    const match = pickConfirmedMatch(
+      { canonicalName: "PU Tube ID 4 OD 6", unit: "M", embedding: [1, 0] },
+      [candidate("c1", "PU Tube ID 4 OD 6", "M", [1, 0])],
+      0.98,
+    );
+    expect(match).toEqual({ categoryId: "c1", confidence: 1 });
+  });
+
+  it("refuses a spec mismatch even at cosine 1 (different size is a different item)", () => {
+    const match = pickConfirmedMatch(
+      { canonicalName: "PU Tube ID 4 OD 6", unit: "M", embedding: [1, 0] },
+      [candidate("c1", "PU Tube ID 7 OD 10", "M", [1, 0])],
+      0.98,
+    );
+    expect(match).toBeNull();
+  });
+
+  it("refuses when cosine is below threshold", () => {
+    const match = pickConfirmedMatch(
+      { canonicalName: "PU Tube ID 4 OD 6", unit: "M", embedding: [1, 0] },
+      [candidate("c1", "PU Tube ID 4 OD 6", "M", [0, 1])],
+      0.98,
+    );
+    expect(match).toBeNull();
+  });
+
+  it("refuses on a unit mismatch", () => {
+    const match = pickConfirmedMatch(
+      { canonicalName: "PU Tube ID 4 OD 6", unit: "M", embedding: [1, 0] },
+      [candidate("c1", "PU Tube ID 4 OD 6", "NOS", [1, 0])],
+      0.98,
+    );
+    expect(match).toBeNull();
   });
 });
 
