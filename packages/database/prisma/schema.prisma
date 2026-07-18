@@ -450,6 +450,11 @@ model Tender {
   priority            TenderPriority @default(MEDIUM)
   description         String?
   remarks             String?
+  // Terms & Notes: the Note/NIT/ITT sections captured from the source document, formatted
+  // as markdown (## headers + one pointer per line). Extracted by AI when
+  // TENDER_NOTES_AI_ENABLED, else by a deterministic parser. Editable; a later phase adds
+  // AI trimming with a human-feedback loop.
+  notes               String?
   dealingOfficerName  String?
   dealingOfficerEmail String?
   dealingOfficerPhone String?

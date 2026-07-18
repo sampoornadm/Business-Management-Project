@@ -9,10 +9,13 @@ import type {
   OrganizationFilters,
   OrganizationWithContacts,
 } from "../../organizations/organizations.repository.js";
-import type { ExtractTextFn, GenerateJsonFn } from "../tender-extraction.service.js";
+import type { ExtractTextFn, GenerateJsonFn, GenerateTextFn } from "../tender-extraction.service.js";
 import { TenderExtractionService } from "../tender-extraction.service.js";
 
 const fakeExtractText: ExtractTextFn = async () => "fake extracted document text";
+// Notes extraction is a separate concern from field extraction; default it to empty so these
+// field-focused tests exercise the deterministic/regex path and stay offline.
+const fakeGenerateText: GenerateTextFn = async () => "";
 
 const TEXT_WITH_ONE_ITEM = `RFQ Item Details
 Sl NoItem CodeQtyUoMExpected Delivery
@@ -147,7 +150,7 @@ describe("TenderExtractionService", () => {
       throw new Error("LLM should not be called for a recognized template");
     };
     const extractText: ExtractTextFn = async () => IISCO_TEMPLATE_TEXT;
-    const service = new TenderExtractionService(organizationsRepository, generateJson, extractText);
+    const service = new TenderExtractionService(organizationsRepository, generateJson, extractText, fakeGenerateText);
 
     const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
 
@@ -168,7 +171,7 @@ describe("TenderExtractionService", () => {
     organizationsRepository.organizations.set(org.id, org);
 
     const generateJson: GenerateJsonFn = async () => SAMPLE_PDF_TEXT_RESULT;
-    const service = new TenderExtractionService(organizationsRepository, generateJson, fakeExtractText);
+    const service = new TenderExtractionService(organizationsRepository, generateJson, fakeExtractText, fakeGenerateText);
 
     const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
 
@@ -185,7 +188,7 @@ describe("TenderExtractionService", () => {
     const organizationsRepository = new FakeOrganizationsRepository();
     const generateJson: GenerateJsonFn = async () => SAMPLE_PDF_TEXT_RESULT;
     const extractTextWithItems: ExtractTextFn = async () => TEXT_WITH_ONE_ITEM;
-    const service = new TenderExtractionService(organizationsRepository, generateJson, extractTextWithItems);
+    const service = new TenderExtractionService(organizationsRepository, generateJson, extractTextWithItems, fakeGenerateText);
 
     const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
 
@@ -197,7 +200,7 @@ describe("TenderExtractionService", () => {
   it("returns a suggestion without an id when no confident client match exists", async () => {
     const organizationsRepository = new FakeOrganizationsRepository();
     const generateJson: GenerateJsonFn = async () => SAMPLE_PDF_TEXT_RESULT;
-    const service = new TenderExtractionService(organizationsRepository, generateJson, fakeExtractText);
+    const service = new TenderExtractionService(organizationsRepository, generateJson, fakeExtractText, fakeGenerateText);
 
     const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
 
@@ -212,7 +215,7 @@ describe("TenderExtractionService", () => {
     // (e.g. the model ignoring the JSON-object instruction) actually fails
     // z.object()'s validation.
     const generateJson: GenerateJsonFn = async () => "not an object";
-    const service = new TenderExtractionService(organizationsRepository, generateJson, fakeExtractText);
+    const service = new TenderExtractionService(organizationsRepository, generateJson, fakeExtractText, fakeGenerateText);
 
     const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
 
@@ -226,7 +229,7 @@ describe("TenderExtractionService", () => {
     const generateJson: GenerateJsonFn = async () => {
       throw new ServiceUnavailableError("Ollama not reachable");
     };
-    const service = new TenderExtractionService(organizationsRepository, generateJson, fakeExtractText);
+    const service = new TenderExtractionService(organizationsRepository, generateJson, fakeExtractText, fakeGenerateText);
 
     await expect(
       service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf"),

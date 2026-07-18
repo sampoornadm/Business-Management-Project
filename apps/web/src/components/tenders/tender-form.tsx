@@ -66,6 +66,7 @@ const tenderFormSchema = z.object({
   validityPeriodDays: optionalNumericString,
   priority: z.enum(TENDER_PRIORITIES),
   description: z.string().optional(),
+  notes: z.string().optional(),
   remarks: z.string().optional(),
   dealingOfficerName: z.string().optional(),
   dealingOfficerEmail: z.string().optional(),
@@ -93,6 +94,7 @@ export function toCreateTenderInput(values: TenderFormValues): CreateTenderInput
     tenderFee: toOptionalNumber(values.tenderFee),
     documentFee: toOptionalNumber(values.documentFee),
     validityPeriodDays: toOptionalNumber(values.validityPeriodDays),
+    notes: values.notes || undefined,
     submissionDate: values.submissionDate || undefined,
     openingDate: values.openingDate || undefined,
     dealingOfficerName: values.dealingOfficerName || undefined,
@@ -122,6 +124,7 @@ const DEFAULT_VALUES: TenderFormValues = {
   validityPeriodDays: "",
   priority: "MEDIUM",
   description: "",
+  notes: "",
   remarks: "",
   dealingOfficerName: "",
   dealingOfficerEmail: "",
@@ -548,7 +551,7 @@ export function TenderForm({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Description &amp; remarks</CardTitle>
+            <CardTitle className="text-base">Description, notes &amp; remarks</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <FormField
@@ -559,6 +562,24 @@ export function TenderForm({
                   <FormLabel>Description</FormLabel>
                   <FormControl>
                     <Textarea rows={4} {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Terms &amp; Notes</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      rows={10}
+                      placeholder="Note / NIT / ITT terms captured from the document. Edit freely to remove anything unnecessary."
+                      className="font-mono text-xs"
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

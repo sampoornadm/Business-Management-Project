@@ -46,6 +46,11 @@ const envSchema = z.object({
   OLLAMA_BASE_URL: z.string().default("http://localhost:11434"),
   OLLAMA_MODEL: z.string().default("llama3.1:8b"),
 
+  // Whether the tender Note/NIT/ITT "Terms & Notes" section is extracted by the LLM (on) or
+  // a deterministic regex parser (off). On by default: the LLM handles messy, letterhead-
+  // interleaved prose far better. Falls back to regex automatically if the LLM is unavailable.
+  TENDER_NOTES_AI_ENABLED: booleanEnv("true"),
+
   // Opt-in: enriches committed BOQ items (classification, normalized name, historical
   // rate suggestion) via a background job. Off by default — every BOQ path works
   // identically with this false or with Ollama simply not running.

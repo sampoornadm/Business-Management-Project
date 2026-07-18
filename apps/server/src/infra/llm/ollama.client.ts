@@ -48,6 +48,35 @@ export async function generateJson(prompt: string, model: string = env.OLLAMA_MO
   }
 }
 
+/**
+ * Free-form text generation — no `format: "json"`, no JSON.parse. For outputs that are prose
+ * (e.g. a multi-line markdown notes block), where wrapping a big multi-line string in JSON is
+ * needlessly fragile. Same reachability/error handling and `think: false` as generateJson.
+ */
+export async function generateText(prompt: string, model: string = env.OLLAMA_MODEL): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch(`${env.OLLAMA_BASE_URL}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, prompt, stream: false, think: false }),
+    });
+  } catch {
+    throw new ServiceUnavailableError(
+      `Ollama not reachable at ${env.OLLAMA_BASE_URL} — start it with \`ollama serve\` and ensure \`${model}\` is pulled.`,
+    );
+  }
+
+  if (!response.ok) {
+    throw new ServiceUnavailableError(
+      `Ollama returned an error (${response.status}) — check that \`${model}\` is pulled (\`ollama pull ${model}\`).`,
+    );
+  }
+
+  const data = (await response.json()) as OllamaGenerateResponse;
+  return data.response;
+}
+
 /** Embeds a batch of texts. Returns one vector per input, in input order. */
 export async function embed(texts: string[], model: string = env.OLLAMA_EMBED_MODEL): Promise<number[][]> {
   if (texts.length === 0) return [];

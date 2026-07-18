@@ -1,4 +1,4 @@
-import { generateJson } from "../../infra/llm/ollama.client.js";
+import { generateJson, generateText } from "../../infra/llm/ollama.client.js";
 import { EmailService } from "../../infra/mailer/email.service.js";
 import { prisma } from "../../infra/prisma/client.js";
 import { attachmentsService } from "../attachments/attachments.module.js";
@@ -35,6 +35,7 @@ export const tenderExtractionService = new TenderExtractionService(
   organizationsRepository,
   generateJson,
   extractDocumentText,
+  generateText,
 );
 const tendersController = new TendersController(tendersService, tenderExtractionService);
 

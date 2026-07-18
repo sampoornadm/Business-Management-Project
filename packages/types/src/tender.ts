@@ -133,6 +133,7 @@ export interface TenderDto extends TenderListItemDto {
   statusChangedAt: string;
   description: string | null;
   remarks: string | null;
+  notes: string | null;
   dealingOfficerName: string | null;
   dealingOfficerEmail: string | null;
   dealingOfficerPhone: string | null;
@@ -165,6 +166,7 @@ export interface CreateTenderInput {
   priority?: TenderPriority;
   description?: string;
   remarks?: string;
+  notes?: string;
   dealingOfficerName?: string;
   dealingOfficerEmail?: string;
   dealingOfficerPhone?: string;
@@ -189,6 +191,7 @@ export interface TenderExtractionFields {
   validityPeriodDays?: number;
   description?: string;
   remarks?: string;
+  notes?: string;
   dealingOfficerName?: string;
   dealingOfficerEmail?: string;
   dealingOfficerPhone?: string;

@@ -4,7 +4,7 @@ import path from "node:path";
 import chokidar, { type FSWatcher } from "chokidar";
 
 import { ConflictError } from "../../../core/errors/HttpErrors.js";
-import { generateJson } from "../../../infra/llm/ollama.client.js";
+import { generateJson, generateText } from "../../../infra/llm/ollama.client.js";
 import { prisma } from "../../../infra/prisma/client.js";
 import { logger } from "../../../shared/logger/logger.js";
 import { auditService } from "../../audit/audit.module.js";
@@ -157,7 +157,12 @@ export async function processIncomingTenderFile(
 
 export async function startIncomingTendersWatcher(rootDirRaw: string): Promise<FSWatcher> {
   const rootDir = expandHome(rootDirRaw);
-  const extractionService = new TenderExtractionService(organizationsRepository, generateJson, extractDocumentText);
+  const extractionService = new TenderExtractionService(
+    organizationsRepository,
+    generateJson,
+    extractDocumentText,
+    generateText,
+  );
 
   const watcher = chokidar.watch(rootDir, {
     ignoreInitial: false,
