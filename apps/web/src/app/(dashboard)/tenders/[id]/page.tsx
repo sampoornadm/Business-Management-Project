@@ -15,9 +15,10 @@ import {
   Button,
   Card,
   CardContent,
+  CardHeader,
+  CardTitle,
   EMPTY_VALUE,
   formatDate,
-  MultiSelect,
   Skeleton,
   Stepper,
   Tabs,
@@ -37,6 +38,8 @@ import { TenderCompetitorsTab } from "@/components/tenders/tender-competitors-ta
 import { TenderDocumentsTab } from "@/components/tenders/tender-documents-tab";
 import { TenderHistoryTab } from "@/components/tenders/tender-history-tab";
 import { TenderItemsTab } from "@/components/tenders/tender-items-tab";
+import { TenderNotesView } from "@/components/tenders/tender-notes-view";
+import { TenderTagsCard } from "@/components/tenders/tender-tags-card";
 import { downloadUndertaking } from "@/hooks/use-document-generation";
 import { useTags } from "@/hooks/use-tags";
 import { useChangeTenderStatus, useDeleteTender, useSetTenderTags, useTender } from "@/hooks/use-tenders";
@@ -264,22 +267,30 @@ export default function TenderDetailPage() {
 
           {tender.description && (
             <Card>
-              <CardContent className="whitespace-pre-wrap pt-6 text-sm">{tender.description}</CardContent>
+              <CardHeader>
+                <CardTitle className="text-base">Description</CardTitle>
+              </CardHeader>
+              <CardContent className="whitespace-pre-wrap pt-0 text-sm">{tender.description}</CardContent>
             </Card>
           )}
 
-          <Card>
-            <CardContent className="space-y-2 pt-6">
-              <p className="text-sm font-medium">Tags</p>
-              <MultiSelect
-                options={(tagsQuery.data ?? []).map((tag) => ({ value: tag.id, label: tag.name }))}
-                selected={tender.tags.map((tag) => tag.id)}
-                onChange={(tagIds) => setTags.mutate(tagIds)}
-                placeholder="Add tags"
-                className="max-w-sm"
-              />
-            </CardContent>
-          </Card>
+          {tender.notes && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Terms &amp; Notes</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <TenderNotesView notes={tender.notes} />
+              </CardContent>
+            </Card>
+          )}
+
+          <TenderTagsCard
+            allTags={tagsQuery.data ?? []}
+            selectedTagIds={tender.tags.map((tag) => tag.id)}
+            onChange={(tagIds) => setTags.mutate(tagIds)}
+            canUpdate={canUpdate}
+          />
         </TabsContent>
 
         {canViewBoq && (
