@@ -80,6 +80,20 @@ describe("parseIiscoHeaderFields", () => {
     expect(fields!.submissionDate).toBeUndefined();
   });
 
+  it("matches a dealing officer whose e-mail reverses the name order (surname.firstname)", () => {
+    // Real example (examples/RFx 1400000020.PDF): "Officer One" /
+    // "officer.one@..." — same tokens, reversed order.
+    const text = FULL_DOCUMENT_TEXT.replace(
+      " Officer Fourofficer.four@example.in",
+      " Officer Oneofficer.one@example.in",
+    );
+
+    const fields = parseIiscoHeaderFields(text);
+
+    expect(fields!.dealingOfficerName).toBe("Officer One");
+    expect(fields!.dealingOfficerEmail).toBe("officer.one@example.in");
+  });
+
   it("gracefully omits the dealing officer when the name has more parts than the e-mail local part", () => {
     // Real example (examples/RFx 1400000019.PDF): "Officer Five" /
     // "officer.five@..." — the email drops the middle name, so there's no

@@ -10,7 +10,7 @@ import type {
   OrganizationWithContacts,
 } from "../../organizations/organizations.repository.js";
 import type { ExtractTextFn, GenerateJsonFn, GenerateTextFn } from "../tender-extraction.service.js";
-import { TenderExtractionService } from "../tender-extraction.service.js";
+import { cleanupNotes, TenderExtractionService } from "../tender-extraction.service.js";
 
 const fakeExtractText: ExtractTextFn = async () => "fake extracted document text";
 // Notes extraction is a separate concern from field extraction; default it to empty so these
@@ -222,6 +222,34 @@ describe("TenderExtractionService", () => {
     expect(result.fields).toEqual({});
     expect(result.items).toEqual([]);
     expect(result.warnings.length).toBeGreaterThan(0);
+  });
+
+  it("cleans notes markdown: merges wraps, splits run-together points, drops undertakings and empties", () => {
+    const raw = [
+      "## Note:- Anti-bribery Undertaking:",
+      "- Suppliers shall not give or take any bribe.",
+      "",
+      "## Instructions to Tenderers (ITT) :",
+      // Points run together on one line, split by "#" AND by a bare "." — and wrapped.
+      "1.Inspection to be done at MM Stores.2.Material to be used on",
+      "receipt.#3.Warranty to Accompany Supply.4.Material clearance within 05 days.",
+      "",
+      "## Empty Section",
+      "-",
+    ].join("\n");
+
+    const out = cleanupNotes(raw);
+
+    // Undertaking section dropped entirely; empty section dropped.
+    expect(out).not.toContain("Anti-bribery");
+    expect(out).not.toContain("Empty Section");
+    expect(out).toContain("## Instructions to Tenderers (ITT) :");
+    // Each numbered point on its own line, keeping its number — including the "#3" and ".4" glue.
+    expect(out).toContain("1.Inspection to be done at MM Stores.");
+    expect(out).toContain("2.Material to be used on receipt.");
+    expect(out).toContain("3.Warranty to Accompany Supply.");
+    // "within 05 days" stays inside point 4 rather than splitting into a bogus "05" point.
+    expect(out).toContain("4.Material clearance within 05 days.");
   });
 
   it("propagates ServiceUnavailableError when Ollama is unreachable", async () => {

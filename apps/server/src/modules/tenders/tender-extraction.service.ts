@@ -92,7 +92,8 @@ Rules — follow exactly:
 - Render each heading that appears as a "## <the heading text>" line.
 - Do NOT invent, rename, merge, reorder, or re-categorise sections beyond what appears in the text.
 - Put each distinct point on its own line starting with "- ", copied verbatim. If several points are run together on one line (e.g. "1.Inspection... 2.Material..." or separated by "#"), split them so each numbered point is on its own line.
-- Exclude only the repeating page furniture: company letterhead, addresses, GST/CIN numbers, page numbers, dealing-officer row, and the item/BOQ table.
+- Exclude the repeating page furniture: company letterhead, addresses, GST/CIN numbers, page numbers, dealing-officer row, and the item/BOQ table.
+- Exclude the generic participation undertakings — skip any "Anti-bribery Undertaking" section and any "Safety, Environment, Child Labour Undertaking" section entirely.
 - If the document has none of these sections, output nothing at all.
 
 Output ONLY the markdown (no preamble, no explanation, no code fences).
@@ -109,24 +110,81 @@ function stripCodeFence(text: string): string {
     .trim();
 }
 
+// Section headings to always drop — generic boilerplate the user never wants tracked. Applied
+// deterministically so it holds regardless of what the LLM emits. (A later phase generalises
+// this into a learned keep/reject loop.)
+const DROP_SECTION = /undertaking/i;
+
 /**
- * Tidy the notes markdown: drop empty bullets ("- ") and any "## Header" that has no content
- * before the next header/EOF. The LLM readily emits an empty "## NIT" / "## ITT" section when
- * the document has no such section; this removes that noise from both AI and regex output.
+ * Tidy the notes markdown so the output is faithful AND clean, regardless of AI or regex source:
+ *  - merge wrapped continuation lines back onto their bullet,
+ *  - split numbered points that got glued together with "#" (e.g. "...receipt.#3.Warranty..."),
+ *  - drop generic-undertaking sections, empty bullets, and empty headers.
  */
-function cleanupNotes(markdown: string): string {
-  const lines = markdown.split("\n").filter((line) => {
+// A boundary between two run-together numbered points on one line: either a "#" separator, or a
+// sentence-ending "." directly before "<n>. <Capital>" (e.g. "...Supply.4.Material clearance").
+// Requiring a capital after the number avoids splitting decimals/spec numbers like "1.5 M".
+const POINT_BOUNDARY = /(?:#\s*|(?<=[.)]))\s*(?=\d+[.)]\s*[A-Z])/;
+const NUMBERED_LINE = /^\d+[.)]\s*/;
+
+export function cleanupNotes(markdown: string): string {
+  const isPoint = (line: string) =>
+    line.startsWith("- ") || line.startsWith("* ") || NUMBERED_LINE.test(line);
+
+  // 1. Merge wrapped continuations (a plain line following a point) back onto that point.
+  const merged: string[] = [];
+  for (const rawLine of markdown.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) {
+      merged.push("");
+      continue;
+    }
+    const structural = line.startsWith("#") || isPoint(line);
+    const prev = merged[merged.length - 1];
+    if (!structural && prev && isPoint(prev)) {
+      merged[merged.length - 1] = `${prev} ${line}`;
+    } else {
+      merged.push(line);
+    }
+  }
+
+  // 2. Split points glued together on one line (bullet OR numbered), keeping their numbering.
+  const split: string[] = [];
+  for (const line of merged) {
+    if (line.startsWith("#") || line === "") {
+      split.push(line);
+      continue;
+    }
+    const core = line.replace(/^[-*]\s*/, "").trim();
+    if (!core) continue;
+    const pieces = core
+      .split(POINT_BOUNDARY)
+      .map((p) => p.replace(/#+\s*$/, "").trim())
+      .filter(Boolean);
+    if (pieces.length > 1 || NUMBERED_LINE.test(core)) {
+      // Numbered points keep their own "n." prefix, one per line.
+      for (const piece of pieces) split.push(piece);
+    } else {
+      split.push(`- ${core}`);
+    }
+  }
+
+  // 3. Drop empty bullets, dropped-heading sections, and empty headers.
+  const kept = split.filter((line) => {
     const t = line.trim();
     return t !== "-" && t !== "*" && t !== "•";
   });
 
   const out: string[] = [];
-  for (let i = 0; i < lines.length; i += 1) {
-    const trimmed = lines[i]!.trim();
+  let skippingSection = false;
+  for (let i = 0; i < kept.length; i += 1) {
+    const trimmed = kept[i]!.trim();
     if (trimmed.startsWith("#")) {
+      skippingSection = DROP_SECTION.test(trimmed);
+      if (skippingSection) continue;
       let hasContent = false;
-      for (let j = i + 1; j < lines.length; j += 1) {
-        const next = lines[j]!.trim();
+      for (let j = i + 1; j < kept.length; j += 1) {
+        const next = kept[j]!.trim();
         if (next.startsWith("#")) break;
         if (next) {
           hasContent = true;
@@ -134,8 +192,11 @@ function cleanupNotes(markdown: string): string {
         }
       }
       if (!hasContent) continue;
+      out.push(kept[i]!);
+    } else {
+      if (skippingSection) continue;
+      out.push(kept[i]!);
     }
-    out.push(lines[i]!);
   }
 
   return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
