@@ -75,15 +75,22 @@ const MAX_NOTES_CHARS = 16_000;
 
 // Raw markdown out, not JSON — a big multi-line string wrapped in JSON is needlessly fragile
 // (small local models routinely break the escaping). See generateText.
-const NOTES_PROMPT = `You are extracting the terms, notes and instructions from a tender / bid-invitation / NIT document.
-Capture the content of any "Note", "NIT", "ITT" / "Instructions to Tenderers/Bidders", and general terms-and-conditions sections.
+//
+// Deliberately strict/verbatim: the model must COPY the document's own notes sections, never
+// invent, rename or categorise them. An earlier, looser prompt manufactured "NIT"/"ITT"
+// headings that were not in the document — the whole point here is faithful capture, with the
+// AI-driven trimming saved for a later, explicit step.
+const NOTES_PROMPT = `You copy the notes / terms / instructions text out of a tender document, VERBATIM.
 
-Output ONLY markdown (no preamble, no code fences), formatted as:
-- a "## <Section Title>" line for each section
-- one point per line beneath it, each starting with "- "
-- keep every distinct point separate; do not merge or summarise points (a later step trims them)
+Rules — follow exactly:
+- Copy the text word for word. Do NOT paraphrase, summarise, translate, shorten, reword, or fix anything.
+- Use ONLY headings that literally appear in the document (e.g. a line like "Note:- Anti-bribery Undertaking:"). Render each such heading as a "## <the heading text>" line.
+- Do NOT invent, add, rename, merge, split, reorder, or categorise sections. Never output a heading such as "NIT", "ITT", or "General Terms" unless that exact label appears as a heading in the text.
+- Under each heading, put each distinct point on its own line starting with "- ", copied verbatim.
+- Exclude only the repeating page furniture: company letterhead, addresses, GST/CIN numbers, page numbers, and the item/BOQ table.
+- If the document has no such notes/terms/instructions sections, output nothing at all.
 
-Exclude entirely: the company letterhead, addresses, GST/CIN numbers, page numbers, the item/BOQ table, and dates/amounts. If the document contains no such sections, output nothing.
+Output ONLY the markdown (no preamble, no explanation, no code fences).
 
 Document text:
 """
