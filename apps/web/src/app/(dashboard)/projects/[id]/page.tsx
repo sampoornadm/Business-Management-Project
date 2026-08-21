@@ -22,10 +22,10 @@ import { MaterialUsageTab } from "@/components/projects/material-usage-tab";
 import { MilestonesTab } from "@/components/projects/milestones-tab";
 import { useProject, useProjectCosting, useProjectProgress } from "@/hooks/use-projects";
 
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
-  ACTIVE: "default",
+const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
+  ACTIVE: "success",
   ON_HOLD: "secondary",
-  COMPLETED: "secondary",
+  COMPLETED: "success",
   CANCELLED: "destructive",
 };
 

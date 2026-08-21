@@ -32,11 +32,11 @@ import {
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
 
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
+const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
   DRAFT: "outline",
   ISSUED: "secondary",
   PARTIALLY_RECEIVED: "secondary",
-  RECEIVED: "default",
+  RECEIVED: "success",
   CANCELLED: "destructive",
 };
 

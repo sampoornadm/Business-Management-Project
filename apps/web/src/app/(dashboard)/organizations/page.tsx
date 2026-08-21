@@ -1,9 +1,9 @@
 "use client";
 
 import type { OrganizationListItemDto } from "@bmp/types";
-import { Badge, Button, DataTable, Input } from "@bmp/ui";
+import { Badge, Button, DataTable, EmptyState, Input } from "@bmp/ui";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
-import { Building2 } from "lucide-react";
+import { Building2, SearchX } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -59,6 +59,15 @@ export default function OrganizationsPage() {
   });
 
   const canCreate = hasPermission(roleName, "organizations:create");
+  const hasActiveFilters = Boolean(debouncedSearch);
+
+  const addOrgButton = (
+    <Button asChild>
+      <Link href="/organizations/new">
+        <Building2 className="mr-2 h-4 w-4" /> Add Organization
+      </Link>
+    </Button>
+  );
 
   return (
     <div className="space-y-4">
@@ -69,13 +78,7 @@ export default function OrganizationsPage() {
             Government bodies and private companies that tenders are issued by.
           </p>
         </div>
-        {canCreate && (
-          <Button asChild>
-            <Link href="/organizations/new">
-              <Building2 className="mr-2 h-4 w-4" /> Add Organization
-            </Link>
-          </Button>
-        )}
+        {canCreate && addOrgButton}
       </div>
 
       <Input
@@ -95,6 +98,22 @@ export default function OrganizationsPage() {
         pageCount={organizationsQuery.data?.totalPages ?? 0}
         pagination={pagination}
         onPaginationChange={setPagination}
+        emptyState={
+          hasActiveFilters ? (
+            <EmptyState
+              icon={SearchX}
+              title="No organizations match your search"
+              description="Try a different name."
+            />
+          ) : (
+            <EmptyState
+              icon={Building2}
+              title="No organizations yet"
+              description="Add the government bodies and private companies that issue your tenders."
+              action={canCreate ? addOrgButton : undefined}
+            />
+          )
+        }
       />
     </div>
   );

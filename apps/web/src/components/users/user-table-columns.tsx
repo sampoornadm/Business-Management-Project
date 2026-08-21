@@ -42,7 +42,7 @@ export const userTableColumns: ColumnDef<UserDto>[] = [
     header: "Status",
     cell: ({ row }) =>
       row.original.isActive ? (
-        <Badge>Active</Badge>
+        <Badge variant="success">Active</Badge>
       ) : (
         <Badge variant="destructive">Deactivated</Badge>
       ),

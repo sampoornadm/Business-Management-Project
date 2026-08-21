@@ -50,6 +50,13 @@ module.exports = {
           DEFAULT: "hsl(var(--signal))",
           foreground: "hsl(var(--signal-foreground))",
         },
+        // Positive terminal states (Active, Paid, Received, Awarded, Completed)
+        // across status badges — kept distinct from `primary` so a status pill
+        // never reads as a clickable action.
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

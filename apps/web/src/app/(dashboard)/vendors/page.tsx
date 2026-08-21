@@ -1,9 +1,9 @@
 "use client";
 
 import type { VendorListItemDto } from "@bmp/types";
-import { Badge, Button, DataTable, Input } from "@bmp/ui";
+import { Badge, Button, DataTable, EmptyState, Input } from "@bmp/ui";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
-import { Star, Upload, UserPlus } from "lucide-react";
+import { SearchX, Star, Truck, Upload, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -54,7 +54,7 @@ const columns: ColumnDef<VendorListItemDto>[] = [
   {
     accessorKey: "isActive",
     header: "Status",
-    cell: ({ row }) => <Badge variant={row.original.isActive ? "default" : "secondary"}>{row.original.isActive ? "Active" : "Inactive"}</Badge>,
+    cell: ({ row }) => <Badge variant={row.original.isActive ? "success" : "secondary"}>{row.original.isActive ? "Active" : "Inactive"}</Badge>,
   },
 ];
 
@@ -76,6 +76,15 @@ export default function VendorsPage() {
   });
 
   const canCreate = hasPermission(roleName, "vendors:create");
+  const hasActiveFilters = Boolean(debouncedSearch);
+
+  const addVendorButton = (
+    <Button asChild>
+      <Link href="/vendors/new">
+        <UserPlus className="mr-2 h-4 w-4" /> Add Vendor
+      </Link>
+    </Button>
+  );
 
   return (
     <div className="space-y-4">
@@ -95,11 +104,7 @@ export default function VendorsPage() {
                 </Button>
               }
             />
-            <Button asChild>
-              <Link href="/vendors/new">
-                <UserPlus className="mr-2 h-4 w-4" /> Add Vendor
-              </Link>
-            </Button>
+            {addVendorButton}
           </div>
         )}
       </div>
@@ -121,6 +126,22 @@ export default function VendorsPage() {
         pageCount={vendorsQuery.data?.totalPages ?? 0}
         pagination={pagination}
         onPaginationChange={setPagination}
+        emptyState={
+          hasActiveFilters ? (
+            <EmptyState
+              icon={SearchX}
+              title="No vendors match your search"
+              description="Try a different name."
+            />
+          ) : (
+            <EmptyState
+              icon={Truck}
+              title="No vendors yet"
+              description="Add the suppliers, service providers, and subcontractors you work with."
+              action={canCreate ? addVendorButton : undefined}
+            />
+          )
+        }
       />
     </div>
   );

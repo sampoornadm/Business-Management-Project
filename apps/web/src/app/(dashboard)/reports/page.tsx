@@ -1,5 +1,6 @@
 "use client";
 
+import { TENDER_STATUS_LABELS, type TenderStatus } from "@bmp/types";
 import {
   Badge,
   Button,
@@ -8,7 +9,9 @@ import {
   CardHeader,
   CardTitle,
   Input,
+  KpiGrid,
   Skeleton,
+  StatCard,
   Table,
   TableBody,
   TableCell,
@@ -20,12 +23,16 @@ import {
   TabsList,
   TabsTrigger,
 } from "@bmp/ui";
-import { Download } from "lucide-react";
+import { Clock, Download, Percent, Timer, Wallet } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
   ResponsiveContainer,
   Tooltip,
@@ -42,6 +49,8 @@ import {
   useTenderPipelineReport,
   useVendorPerformanceReport,
 } from "@/hooks/use-reports";
+import { CHART_COLORS } from "@/lib/chart-colors";
+import { tenderStatusChartColor } from "@/lib/tender-status";
 
 const RECEIVED_COLOR = "#0072B2";
 const PAID_COLOR = "#E69F00";
@@ -60,6 +69,24 @@ function formatPercent(value: number | null | undefined): string {
   if (value === null || value === undefined) return "-";
   return `${value.toFixed(1)}%`;
 }
+
+const compactNumberFormatter = new Intl.NumberFormat("en-IN", { notation: "compact", maximumFractionDigits: 1 });
+// Chart axes need short labels ("16L" not "1,600,000") or ticks overlap when the
+// value range is narrow relative to the chart's height — full precision stays in
+// the tooltip and the table below.
+function formatCompactNumber(value: number): string {
+  return compactNumberFormatter.format(value);
+}
+
+const chartTooltipStyle = {
+  contentStyle: {
+    backgroundColor: "hsl(var(--popover))",
+    borderColor: "hsl(var(--border))",
+    color: "hsl(var(--popover-foreground))",
+    fontSize: 12,
+    borderRadius: 6,
+  },
+} as const;
 
 function ExportButtons({
   reportKey,
@@ -106,55 +133,44 @@ function KpiCards() {
   const kpis = kpisQuery.data;
 
   return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-      <Card>
-        <CardContent className="pt-6">
-          <p className="text-sm text-muted-foreground">Win rate</p>
-          {kpisQuery.isLoading ? (
-            <Skeleton className="mt-1 h-8 w-16" />
-          ) : (
-            <p className="text-2xl font-semibold">{formatPercent(kpis?.winRate)}</p>
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="pt-6">
-          <p className="text-sm text-muted-foreground">Avg BOQ turnaround</p>
-          {kpisQuery.isLoading ? (
-            <Skeleton className="mt-1 h-8 w-16" />
-          ) : (
-            <p className="text-2xl font-semibold">{formatDays(kpis?.avgBoqTurnaroundDays)}</p>
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="pt-6">
-          <p className="text-sm text-muted-foreground">Avg goods receipt lead time</p>
-          {kpisQuery.isLoading ? (
-            <Skeleton className="mt-1 h-8 w-16" />
-          ) : (
-            <p className="text-2xl font-semibold">{formatDays(kpis?.avgGoodsReceiptLeadDays)}</p>
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="pt-6">
-          <p className="text-sm text-muted-foreground">Receivables DSO</p>
-          {kpisQuery.isLoading ? (
-            <Skeleton className="mt-1 h-8 w-16" />
-          ) : (
-            <p className="text-2xl font-semibold">{formatDays(kpis?.receivablesDsoDays)}</p>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+    <KpiGrid className="md:grid-cols-4 lg:grid-cols-4">
+      <StatCard
+        label="Win rate"
+        icon={Percent}
+        isLoading={kpisQuery.isLoading}
+        value={formatPercent(kpis?.winRate)}
+      />
+      <StatCard
+        label="Avg BOQ turnaround"
+        icon={Clock}
+        isLoading={kpisQuery.isLoading}
+        value={formatDays(kpis?.avgBoqTurnaroundDays)}
+      />
+      <StatCard
+        label="Avg goods receipt lead time"
+        icon={Timer}
+        isLoading={kpisQuery.isLoading}
+        value={formatDays(kpis?.avgGoodsReceiptLeadDays)}
+      />
+      <StatCard
+        label="Receivables DSO"
+        icon={Wallet}
+        isLoading={kpisQuery.isLoading}
+        value={formatDays(kpis?.receivablesDsoDays)}
+      />
+    </KpiGrid>
   );
 }
 
 function TenderPipelineTab() {
+  const router = useRouter();
   const reportQuery = useTenderPipelineReport();
   const report = reportQuery.data;
-  const chartData = (report?.byStatus ?? []).map((row) => ({ status: row.status, count: row.count }));
+  const chartData = (report?.byStatus ?? []).map((row) => ({
+    status: row.status as TenderStatus,
+    label: TENDER_STATUS_LABELS[row.status as TenderStatus] ?? row.status,
+    count: row.count,
+  }));
 
   return (
     <div className="space-y-4">
@@ -191,7 +207,7 @@ function TenderPipelineTab() {
               <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                 <XAxis
-                  dataKey="status"
+                  dataKey="label"
                   tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                   angle={-30}
                   textAnchor="end"
@@ -199,17 +215,17 @@ function TenderPipelineTab() {
                   interval={0}
                 />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} width={28} />
-                <Tooltip
-                  cursor={{ fill: "hsl(var(--muted))" }}
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--popover))",
-                    borderColor: "hsl(var(--border))",
-                    color: "hsl(var(--popover-foreground))",
-                    fontSize: 12,
-                    borderRadius: 6,
-                  }}
-                />
-                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                <Tooltip cursor={{ fill: "hsl(var(--muted))" }} {...chartTooltipStyle} />
+                <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                  {chartData.map((entry) => (
+                    <Cell
+                      key={entry.status}
+                      fill={tenderStatusChartColor(entry.status)}
+                      cursor="pointer"
+                      onClick={() => router.push(`/tenders?status=${entry.status}`)}
+                    />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -249,22 +265,34 @@ function ProcurementSpendTab() {
             <p className="text-sm text-muted-foreground">No purchase order spend in range.</p>
           ) : (
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={report?.byMonth} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+              <AreaChart data={report?.byMonth} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                <defs>
+                  <linearGradient id="spendFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} width={48} />
-                <Tooltip
-                  cursor={{ fill: "hsl(var(--muted))" }}
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--popover))",
-                    borderColor: "hsl(var(--border))",
-                    color: "hsl(var(--popover-foreground))",
-                    fontSize: 12,
-                    borderRadius: 6,
-                  }}
+                <YAxis
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  width={48}
+                  tickFormatter={formatCompactNumber}
                 />
-                <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={40} />
-              </BarChart>
+                <Tooltip
+                  cursor={{ stroke: "hsl(var(--primary))", strokeWidth: 1 }}
+                  formatter={(value: number) => value.toLocaleString()}
+                  {...chartTooltipStyle}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="total"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  fill="url(#spendFill)"
+                  activeDot={{ r: 5 }}
+                />
+              </AreaChart>
             </ResponsiveContainer>
           )}
         </CardContent>
@@ -307,6 +335,7 @@ function ProcurementSpendTab() {
 function ProjectCostingTab() {
   const reportQuery = useProjectCostingReport();
   const report = reportQuery.data;
+  const chartData = report?.projects ?? [];
 
   return (
     <div className="space-y-4">
@@ -323,6 +352,55 @@ function ProjectCostingTab() {
         </div>
         <ExportButtons reportKey="project-costing" />
       </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Budget vs. actual by project</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {reportQuery.isLoading ? (
+            <Skeleton className="h-64 w-full" />
+          ) : chartData.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No active projects.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(120, chartData.length * 48)}>
+              <BarChart
+                data={chartData}
+                layout="vertical"
+                margin={{ top: 4, right: 24, left: 16, bottom: 4 }}
+                barGap={4}
+              >
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
+                <XAxis
+                  type="number"
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  tickFormatter={formatCompactNumber}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  width={160}
+                />
+                <Tooltip
+                  cursor={{ fill: "hsl(var(--muted))" }}
+                  formatter={(value: number) => value.toLocaleString()}
+                  {...chartTooltipStyle}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="budget" name="Budget" fill={CHART_COLORS.muted} radius={[0, 4, 4, 0]} maxBarSize={16} />
+                <Bar dataKey="actualCost" name="Actual cost" radius={[0, 4, 4, 0]} maxBarSize={16}>
+                  {chartData.map((row) => (
+                    <Cell
+                      key={row.projectId}
+                      fill={row.variance < 0 ? CHART_COLORS.destructive : CHART_COLORS.success}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
       <Card>
         <CardContent className="pt-6">
           <Table>
@@ -398,20 +476,33 @@ function FinancialSummaryTab() {
               <BarChart data={report?.months} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} width={48} />
+                <YAxis
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  width={48}
+                  tickFormatter={formatCompactNumber}
+                />
                 <Tooltip
                   cursor={{ fill: "hsl(var(--muted))" }}
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--popover))",
-                    borderColor: "hsl(var(--border))",
-                    color: "hsl(var(--popover-foreground))",
-                    fontSize: 12,
-                    borderRadius: 6,
-                  }}
+                  formatter={(value: number) => value.toLocaleString()}
+                  {...chartTooltipStyle}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="received" name="Received" fill={RECEIVED_COLOR} radius={[4, 4, 0, 0]} maxBarSize={32} />
-                <Bar dataKey="paid" name="Paid" fill={PAID_COLOR} radius={[4, 4, 0, 0]} maxBarSize={32} />
+                <Bar
+                  dataKey="received"
+                  name="Received"
+                  fill={RECEIVED_COLOR}
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={32}
+                  activeBar={{ fillOpacity: 0.75 }}
+                />
+                <Bar
+                  dataKey="paid"
+                  name="Paid"
+                  fill={PAID_COLOR}
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={32}
+                  activeBar={{ fillOpacity: 0.75 }}
+                />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -424,12 +515,59 @@ function FinancialSummaryTab() {
 function VendorPerformanceTab() {
   const reportQuery = useVendorPerformanceReport();
   const report = reportQuery.data;
+  const chartData = (report?.vendors ?? [])
+    .filter((v) => v.onTimeDeliveryRate !== null)
+    .slice(0, 10);
 
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
         <ExportButtons reportKey="vendor-performance" />
       </div>
+      {chartData.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">On-time delivery by vendor</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={Math.max(120, chartData.length * 40)}>
+              <BarChart
+                data={chartData}
+                layout="vertical"
+                margin={{ top: 4, right: 24, left: 16, bottom: 4 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
+                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis
+                  type="category"
+                  dataKey="vendorName"
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  width={160}
+                />
+                <Tooltip
+                  cursor={{ fill: "hsl(var(--muted))" }}
+                  formatter={(value: number) => `${value.toFixed(1)}%`}
+                  {...chartTooltipStyle}
+                />
+                <Bar dataKey="onTimeDeliveryRate" name="On-time delivery" radius={[0, 4, 4, 0]} maxBarSize={20}>
+                  {chartData.map((row) => (
+                    <Cell
+                      key={row.vendorId}
+                      fill={
+                        (row.onTimeDeliveryRate ?? 0) >= 90
+                          ? CHART_COLORS.success
+                          : (row.onTimeDeliveryRate ?? 0) < 70
+                            ? CHART_COLORS.destructive
+                            : CHART_COLORS.primary
+                      }
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardContent className="pt-6">
           <Table>

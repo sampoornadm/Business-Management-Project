@@ -1,7 +1,7 @@
 "use client";
 
 import type { PurchaseOrderListItemDto } from "@bmp/types";
-import { Badge, Button, DataTable, formatDate } from "@bmp/ui";
+import { Badge, Button, DataTable, EmptyState, formatDate } from "@bmp/ui";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
 import { FilePlus2 } from "lucide-react";
 import Link from "next/link";
@@ -13,12 +13,12 @@ import { hasPermission } from "@/lib/permissions";
 
 const STATUS_VARIANT: Record<
   PurchaseOrderListItemDto["status"],
-  "default" | "secondary" | "outline" | "destructive"
+  "success" | "secondary" | "outline" | "destructive"
 > = {
   DRAFT: "outline",
   ISSUED: "secondary",
   PARTIALLY_RECEIVED: "secondary",
-  RECEIVED: "default",
+  RECEIVED: "success",
   CANCELLED: "destructive",
 };
 
@@ -60,6 +60,14 @@ export default function PurchaseOrdersPage() {
   const poQuery = usePurchaseOrders({ page: pagination.pageIndex + 1, pageSize: pagination.pageSize });
   const canCreate = hasPermission(roleName, "purchase_orders:create");
 
+  const createPoButton = (
+    <Button asChild>
+      <Link href="/purchase-orders/new">
+        <FilePlus2 className="mr-2 h-4 w-4" /> Create Purchase Order
+      </Link>
+    </Button>
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -69,13 +77,7 @@ export default function PurchaseOrdersPage() {
             Track orders placed with vendors and their delivery status.
           </p>
         </div>
-        {canCreate && (
-          <Button asChild>
-            <Link href="/purchase-orders/new">
-              <FilePlus2 className="mr-2 h-4 w-4" /> Create Purchase Order
-            </Link>
-          </Button>
-        )}
+        {canCreate && createPoButton}
       </div>
 
       <DataTable
@@ -85,6 +87,14 @@ export default function PurchaseOrdersPage() {
         pageCount={poQuery.data?.totalPages ?? 0}
         pagination={pagination}
         onPaginationChange={setPagination}
+        emptyState={
+          <EmptyState
+            icon={FilePlus2}
+            title="No purchase orders yet"
+            description="Create a purchase order to start tracking deliveries from a vendor."
+            action={canCreate ? createPoButton : undefined}
+          />
+        }
       />
     </div>
   );

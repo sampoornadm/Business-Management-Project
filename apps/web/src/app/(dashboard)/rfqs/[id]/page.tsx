@@ -44,11 +44,11 @@ import { useVendors } from "@/hooks/use-vendors";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
 
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
+const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
   DRAFT: "outline",
   SENT: "secondary",
   CLOSED: "secondary",
-  AWARDED: "default",
+  AWARDED: "success",
   CANCELLED: "destructive",
 };
 

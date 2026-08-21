@@ -1,6 +1,8 @@
 "use client";
 
-import { Button, Card, CardContent, formatDateTime, Skeleton, useToast } from "@bmp/ui";
+import { Button, Card, CardContent, EmptyState, formatDateTime, Skeleton, useToast } from "@bmp/ui";
+import { Bell } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import {
@@ -8,6 +10,7 @@ import {
   useMarkNotificationRead,
   useNotifications,
 } from "@/hooks/use-notifications";
+import { notificationHref } from "@/lib/notification-href";
 
 export default function NotificationsPage() {
   const { toast } = useToast();
@@ -37,28 +40,48 @@ export default function NotificationsPage() {
         <Skeleton className="h-96 w-full" />
       ) : (
         <div className="space-y-2">
-          {(notificationsQuery.data?.items ?? []).map((notification) => (
-            <Card key={notification.id} className={notification.isRead ? "opacity-60" : undefined}>
-              <CardContent className="flex items-start justify-between gap-4 pt-4">
-                <div>
-                  <p className="text-sm font-medium">{notification.title}</p>
-                  {notification.body && (
-                    <p className="text-sm text-muted-foreground">{notification.body}</p>
-                  )}
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {formatDateTime(notification.createdAt)}
-                  </p>
-                </div>
-                {!notification.isRead && (
-                  <Button size="sm" variant="ghost" onClick={() => markRead.mutate(notification.id)}>
-                    Mark read
-                  </Button>
+          {(notificationsQuery.data?.items ?? []).map((notification) => {
+            const href = notificationHref(notification.entityType, notification.entityId);
+            const body = (
+              <>
+                <p className="text-sm font-medium">{notification.title}</p>
+                {notification.body && (
+                  <p className="text-sm text-muted-foreground">{notification.body}</p>
                 )}
-              </CardContent>
-            </Card>
-          ))}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {formatDateTime(notification.createdAt)}
+                </p>
+              </>
+            );
+            const onOpen = () => {
+              if (!notification.isRead) markRead.mutate(notification.id);
+            };
+
+            return (
+              <Card key={notification.id} className={notification.isRead ? "opacity-60" : undefined}>
+                <CardContent className="flex items-start justify-between gap-4 pt-4">
+                  {href ? (
+                    <Link href={href} className="min-w-0 flex-1 hover:underline" onClick={onOpen}>
+                      {body}
+                    </Link>
+                  ) : (
+                    <div className="min-w-0 flex-1">{body}</div>
+                  )}
+                  {!notification.isRead && (
+                    <Button size="sm" variant="ghost" onClick={onOpen}>
+                      Mark read
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
           {notificationsQuery.data?.items.length === 0 && (
-            <p className="text-sm text-muted-foreground">No notifications yet.</p>
+            <EmptyState
+              icon={Bell}
+              title="No notifications yet"
+              description="Deadline reminders and other alerts that concern you will show up here."
+            />
           )}
         </div>
       )}

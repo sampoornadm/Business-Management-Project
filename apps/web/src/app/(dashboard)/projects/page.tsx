@@ -1,8 +1,9 @@
 "use client";
 
 import type { ProjectListItemDto } from "@bmp/types";
-import { Badge, DataTable, formatDate } from "@bmp/ui";
+import { Badge, Button, DataTable, EmptyState, formatDate } from "@bmp/ui";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
+import { HardHat } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -10,11 +11,11 @@ import { useProjects } from "@/hooks/use-projects";
 
 const STATUS_VARIANT: Record<
   ProjectListItemDto["status"],
-  "default" | "secondary" | "outline" | "destructive"
+  "success" | "secondary" | "outline" | "destructive"
 > = {
-  ACTIVE: "default",
+  ACTIVE: "success",
   ON_HOLD: "secondary",
-  COMPLETED: "secondary",
+  COMPLETED: "success",
   CANCELLED: "destructive",
 };
 
@@ -66,6 +67,18 @@ export default function ProjectsPage() {
         pageCount={projectsQuery.data?.totalPages ?? 0}
         pagination={pagination}
         onPaginationChange={setPagination}
+        emptyState={
+          <EmptyState
+            icon={HardHat}
+            title="No projects yet"
+            description="Projects are created by converting a WON tender from its detail page."
+            action={
+              <Button asChild variant="outline">
+                <Link href="/tenders">Go to Tenders</Link>
+              </Button>
+            }
+          />
+        }
       />
     </div>
   );

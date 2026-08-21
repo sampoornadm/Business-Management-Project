@@ -82,7 +82,7 @@ export default function BusinessDetailPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">{business.name}</h1>
-            <Badge variant={business.isActive ? "default" : "secondary"}>
+            <Badge variant={business.isActive ? "success" : "secondary"}>
               {business.isActive ? "Active" : "Inactive"}
             </Badge>
           </div>

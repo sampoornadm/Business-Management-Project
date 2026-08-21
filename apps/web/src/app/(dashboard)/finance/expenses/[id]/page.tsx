@@ -6,10 +6,10 @@ import { useParams } from "next/navigation";
 import { RecordPaymentDialog } from "@/components/finance/record-payment-dialog";
 import { useExpense, useRecordExpensePayment } from "@/hooks/use-finance";
 
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
+const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
   UNPAID: "outline",
   PARTIALLY_PAID: "secondary",
-  PAID: "default",
+  PAID: "success",
 };
 
 export default function ExpenseDetailPage() {

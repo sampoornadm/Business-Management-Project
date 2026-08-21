@@ -4,10 +4,12 @@ import { TENDER_STATUS_LABELS, type TenderStatus } from "@bmp/types";
 import { Badge, Card, CardContent, CardHeader, CardTitle, formatDate, KpiGrid, Skeleton, StatCard } from "@bmp/ui";
 import { Activity, Database, FileClock, FileText, HardDrive, Users2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -20,6 +22,7 @@ import { useTenderDashboardStats } from "@/hooks/use-tender-dashboard-stats";
 import { useUsers } from "@/hooks/use-users";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
+import { tenderStatusChartColor } from "@/lib/tender-status";
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -42,6 +45,7 @@ function HealthDot({ ok }: { ok: boolean | undefined }) {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const canReadAudit = hasPermission(user?.role.name, "audit:read");
   const canReadTenders = hasPermission(user?.role.name, "tenders:read");
@@ -51,7 +55,8 @@ export default function DashboardPage() {
   const tenderStatsQuery = useTenderDashboardStats();
 
   const statusChartData = Object.entries(tenderStatsQuery.data?.byStatus ?? {}).map(([status, count]) => ({
-    status: TENDER_STATUS_LABELS[status as TenderStatus],
+    status: status as TenderStatus,
+    label: TENDER_STATUS_LABELS[status as TenderStatus],
     count,
   }));
 
@@ -116,7 +121,7 @@ export default function DashboardPage() {
                   <BarChart data={statusChartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis
-                      dataKey="status"
+                      dataKey="label"
                       tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                       angle={-30}
                       textAnchor="end"
@@ -138,7 +143,16 @@ export default function DashboardPage() {
                         borderRadius: 6,
                       }}
                     />
-                    <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                      {statusChartData.map((entry) => (
+                        <Cell
+                          key={entry.status}
+                          fill={tenderStatusChartColor(entry.status)}
+                          cursor="pointer"
+                          onClick={() => router.push(`/tenders?status=${entry.status}`)}
+                        />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}

@@ -32,10 +32,10 @@ import { useState } from "react";
 
 import { useAddMilestone, useDeleteMilestone, useUpdateMilestone } from "@/hooks/use-projects";
 
-const STATUS_VARIANT: Record<MilestoneStatus, "default" | "secondary" | "outline" | "destructive"> = {
+const STATUS_VARIANT: Record<MilestoneStatus, "success" | "secondary" | "outline" | "destructive"> = {
   PENDING: "outline",
   IN_PROGRESS: "secondary",
-  COMPLETED: "default",
+  COMPLETED: "success",
   DELAYED: "destructive",
 };
 

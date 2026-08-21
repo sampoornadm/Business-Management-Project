@@ -36,6 +36,9 @@
     --signal: 32 95% 44%;
     --signal-foreground: 0 0% 9%;
 
+    --success: 142 60% 30%;
+    --success-foreground: 210 40% 98%;
+
     --border: 217.7 16% 90.2%;
     --input: 217.7 16% 90.2%;
     --ring: 216 65% 34%;
@@ -70,6 +73,9 @@
 
     --signal: 32 90% 54%;
     --signal-foreground: 0 0% 9%;
+
+    --success: 142 50% 45%;
+    --success-foreground: 222 47% 11%;
 
     --border: 217 20% 18%;
     --input: 217 20% 18%;

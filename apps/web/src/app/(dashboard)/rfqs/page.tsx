@@ -1,7 +1,7 @@
 "use client";
 
 import type { RfqListItemDto } from "@bmp/types";
-import { Badge, Button, DataTable, formatDate } from "@bmp/ui";
+import { Badge, Button, DataTable, EmptyState, formatDate } from "@bmp/ui";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
 import { FilePlus2 } from "lucide-react";
 import Link from "next/link";
@@ -11,11 +11,11 @@ import { useRfqs } from "@/hooks/use-rfq";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
 
-const STATUS_VARIANT: Record<RfqListItemDto["status"], "default" | "secondary" | "outline" | "destructive"> = {
+const STATUS_VARIANT: Record<RfqListItemDto["status"], "success" | "secondary" | "outline" | "destructive"> = {
   DRAFT: "outline",
   SENT: "secondary",
   CLOSED: "secondary",
-  AWARDED: "default",
+  AWARDED: "success",
   CANCELLED: "destructive",
 };
 
@@ -50,6 +50,14 @@ export default function RfqsPage() {
   const rfqsQuery = useRfqs({ page: pagination.pageIndex + 1, pageSize: pagination.pageSize });
   const canCreate = hasPermission(roleName, "rfq:create");
 
+  const createRfqButton = (
+    <Button asChild>
+      <Link href="/rfqs/new">
+        <FilePlus2 className="mr-2 h-4 w-4" /> Create RFQ
+      </Link>
+    </Button>
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -59,13 +67,7 @@ export default function RfqsPage() {
             Request quotations from vendors and compare their rates.
           </p>
         </div>
-        {canCreate && (
-          <Button asChild>
-            <Link href="/rfqs/new">
-              <FilePlus2 className="mr-2 h-4 w-4" /> Create RFQ
-            </Link>
-          </Button>
-        )}
+        {canCreate && createRfqButton}
       </div>
 
       <DataTable
@@ -75,6 +77,14 @@ export default function RfqsPage() {
         pageCount={rfqsQuery.data?.totalPages ?? 0}
         pagination={pagination}
         onPaginationChange={setPagination}
+        emptyState={
+          <EmptyState
+            icon={FilePlus2}
+            title="No RFQs yet"
+            description="Create a request for quotation to compare vendor rates on an item list."
+            action={canCreate ? createRfqButton : undefined}
+          />
+        }
       />
     </div>
   );

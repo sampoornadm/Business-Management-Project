@@ -8,18 +8,18 @@ import { CreateExpenseDialog } from "@/components/finance/create-expense-dialog"
 import { CreateInvoiceDialog } from "@/components/finance/create-invoice-dialog";
 import { useBankAccounts, useExpenses, useFinanceSummary, useInvoices } from "@/hooks/use-finance";
 
-const INVOICE_STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
+const INVOICE_STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
   DRAFT: "outline",
   SENT: "secondary",
   PARTIALLY_PAID: "secondary",
-  PAID: "default",
+  PAID: "success",
   OVERDUE: "destructive",
 };
 
-const EXPENSE_STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
+const EXPENSE_STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
   UNPAID: "outline",
   PARTIALLY_PAID: "secondary",
-  PAID: "default",
+  PAID: "success",
 };
 
 export default function FinancePage() {

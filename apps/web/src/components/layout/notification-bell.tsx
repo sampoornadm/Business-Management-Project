@@ -19,6 +19,7 @@ import {
   useNotifications,
   useUnreadNotificationCount,
 } from "@/hooks/use-notifications";
+import { notificationHref } from "@/lib/notification-href";
 
 export function NotificationBell() {
   const unreadCountQuery = useUnreadNotificationCount();
@@ -49,22 +50,34 @@ export function NotificationBell() {
         {notifications.length === 0 ? (
           <div className="px-2 py-4 text-center text-sm text-muted-foreground">No notifications yet.</div>
         ) : (
-          notifications.map((notification) => (
-            <DropdownMenuItem
-              key={notification.id}
-              className="flex flex-col items-start gap-0.5"
-              onClick={() => {
-                if (!notification.isRead) markRead.mutate(notification.id);
-              }}
-            >
-              <span className={notification.isRead ? "text-sm" : "text-sm font-medium"}>
-                {notification.title}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {formatDateTime(notification.createdAt)}
-              </span>
-            </DropdownMenuItem>
-          ))
+          notifications.map((notification) => {
+            const href = notificationHref(notification.entityType, notification.entityId);
+            const content = (
+              <>
+                <span className={notification.isRead ? "text-sm" : "text-sm font-medium"}>
+                  {notification.title}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {formatDateTime(notification.createdAt)}
+                </span>
+              </>
+            );
+            const onClick = () => {
+              if (!notification.isRead) markRead.mutate(notification.id);
+            };
+
+            return href ? (
+              <DropdownMenuItem key={notification.id} asChild>
+                <Link href={href} className="flex flex-col items-start gap-0.5" onClick={onClick}>
+                  {content}
+                </Link>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem key={notification.id} className="flex flex-col items-start gap-0.5" onClick={onClick}>
+                {content}
+              </DropdownMenuItem>
+            );
+          })
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>

@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
   useToast,
 } from "@bmp/ui";
-import { LogOut, Settings, UserRound } from "lucide-react";
+import { LogOut, Menu, Settings, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment } from "react";
@@ -66,7 +66,11 @@ function Breadcrumbs() {
   );
 }
 
-export function Topbar() {
+export interface TopbarProps {
+  onMenuClick: () => void;
+}
+
+export function Topbar({ onMenuClick }: TopbarProps) {
   const user = useAuthStore((state) => state.user);
   const activeBusinessId = useAuthStore((state) => state.activeBusinessId);
   const availableBusinesses = useAuthStore((state) => state.availableBusinesses);
@@ -89,8 +93,19 @@ export function Topbar() {
   }
 
   return (
-    <header className="flex h-14 items-center justify-between border-b bg-background px-4">
-      <Breadcrumbs />
+    <header className="flex h-14 items-center justify-between gap-2 border-b bg-background px-4">
+      <div className="flex min-w-0 items-center gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="shrink-0 md:hidden"
+          onClick={onMenuClick}
+          aria-label="Open menu"
+        >
+          <Menu className="h-4 w-4" />
+        </Button>
+        <Breadcrumbs />
+      </div>
       <div className="flex items-center gap-2">
         <TopbarSearch />
         {availableBusinesses.length > 1 ? (
