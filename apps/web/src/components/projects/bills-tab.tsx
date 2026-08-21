@@ -28,11 +28,11 @@ import { useState } from "react";
 import { CreateInvoiceFromBillDialog } from "@/components/finance/create-invoice-from-bill-dialog";
 import { useAddBill, useBills, useUpdateBillStatus } from "@/hooks/use-projects";
 
-const STATUS_VARIANT: Record<BillStatus, "default" | "secondary" | "outline" | "destructive"> = {
+const STATUS_VARIANT: Record<BillStatus, "success" | "secondary" | "outline" | "destructive"> = {
   DRAFT: "outline",
   SUBMITTED: "secondary",
   APPROVED: "secondary",
-  PAID: "default",
+  PAID: "success",
 };
 
 function AddBillDialog({ projectId, lastCumulative }: { projectId: string; lastCumulative: number }) {

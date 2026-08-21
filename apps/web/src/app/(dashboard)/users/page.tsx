@@ -1,7 +1,8 @@
 "use client";
 
-import { DataTable, Input } from "@bmp/ui";
+import { DataTable, EmptyState, Input } from "@bmp/ui";
 import type { PaginationState } from "@tanstack/react-table";
+import { SearchX, Users2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { CreateUserDialog } from "@/components/users/create-user-dialog";
@@ -29,6 +30,7 @@ export default function UsersPage() {
 
   const canCreate = hasPermission(roleName, "users:create");
   const pageCount = usersQuery.data ? usersQuery.data.totalPages : 0;
+  const hasActiveFilters = Boolean(debouncedSearch);
 
   return (
     <div className="space-y-4">
@@ -57,6 +59,22 @@ export default function UsersPage() {
         pageCount={pageCount}
         pagination={pagination}
         onPaginationChange={setPagination}
+        emptyState={
+          hasActiveFilters ? (
+            <EmptyState
+              icon={SearchX}
+              title="No users match your search"
+              description="Try a different name or email."
+            />
+          ) : (
+            <EmptyState
+              icon={Users2}
+              title="No users yet"
+              description="Add staff accounts and assign them roles."
+              action={canCreate ? <CreateUserDialog /> : undefined}
+            />
+          )
+        }
       />
     </div>
   );

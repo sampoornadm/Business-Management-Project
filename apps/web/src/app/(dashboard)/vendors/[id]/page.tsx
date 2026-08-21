@@ -117,7 +117,7 @@ export default function VendorDetailPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">{vendor.name}</h1>
             <Badge variant="outline">{CATEGORY_LABELS[vendor.category]}</Badge>
-            <Badge variant={vendor.isActive ? "default" : "secondary"}>
+            <Badge variant={vendor.isActive ? "success" : "secondary"}>
               {vendor.isActive ? "Active" : "Inactive"}
             </Badge>
           </div>

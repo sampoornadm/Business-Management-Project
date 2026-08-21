@@ -134,7 +134,7 @@ export function TenderItemsTab({ tender }: { tender: TenderDto }) {
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
           <div className="flex items-center gap-3">
-            <Badge variant={boqQuery.data.status === "FINALIZED" ? "default" : "outline"}>
+            <Badge variant={boqQuery.data.status === "FINALIZED" ? "success" : "outline"}>
               {boqQuery.data.status}
             </Badge>
             <span className="text-sm text-muted-foreground">

@@ -204,7 +204,7 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
             {item.suggestedRate !== null && (
               <>
                 <span className="tabular-nums">{item.suggestedRate.toLocaleString()}</span>
-                <Badge variant={confidence >= 0.95 ? "default" : "outline"} className="text-xs">
+                <Badge variant={confidence >= 0.95 ? "success" : "outline"} className="text-xs">
                   {Math.round(confidence * 100)}%
                 </Badge>
                 {canEdit && item.rate !== item.suggestedRate && (

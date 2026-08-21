@@ -17,6 +17,7 @@ import {
 import type { PaginationState } from "@tanstack/react-table";
 import { FilePlus, FileText, SearchX } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { tenderTableColumns } from "@/components/tenders/tender-table-columns";
@@ -26,9 +27,13 @@ import { hasPermission } from "@/lib/permissions";
 
 export default function TendersPage() {
   const roleName = useAuthStore((state) => state.user?.role.name);
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [status, setStatus] = useState<string>("");
+  const [status, setStatus] = useState<string>(() => {
+    const fromUrl = searchParams.get("status");
+    return fromUrl && (TENDER_STATUSES as readonly string[]).includes(fromUrl) ? fromUrl : "";
+  });
   const [priority, setPriority] = useState<string>("");
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 20 });
 

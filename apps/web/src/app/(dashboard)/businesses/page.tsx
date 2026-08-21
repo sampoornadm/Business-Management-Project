@@ -1,8 +1,8 @@
 "use client";
 
-import { Badge, Button, DataTable, Input } from "@bmp/ui";
+import { Badge, Button, DataTable, EmptyState, Input } from "@bmp/ui";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
-import { Briefcase } from "lucide-react";
+import { Briefcase, SearchX } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -33,7 +33,7 @@ const columns: ColumnDef<Business>[] = [
     accessorKey: "isActive",
     header: "Status",
     cell: ({ row }) => (
-      <Badge variant={row.original.isActive ? "default" : "secondary"}>
+      <Badge variant={row.original.isActive ? "success" : "secondary"}>
         {row.original.isActive ? "Active" : "Inactive"}
       </Badge>
     ),
@@ -58,6 +58,15 @@ export default function BusinessesPage() {
   });
 
   const canCreate = hasPermission(roleName, "businesses:create");
+  const hasActiveFilters = Boolean(debouncedSearch);
+
+  const addBusinessButton = (
+    <Button asChild>
+      <Link href="/businesses/new">
+        <Briefcase className="mr-2 h-4 w-4" /> Add Business
+      </Link>
+    </Button>
+  );
 
   return (
     <div className="space-y-4">
@@ -68,13 +77,7 @@ export default function BusinessesPage() {
             Legal entities that tenders, projects, and finance records are scoped under.
           </p>
         </div>
-        {canCreate && (
-          <Button asChild>
-            <Link href="/businesses/new">
-              <Briefcase className="mr-2 h-4 w-4" /> Add Business
-            </Link>
-          </Button>
-        )}
+        {canCreate && addBusinessButton}
       </div>
 
       <Input
@@ -94,6 +97,22 @@ export default function BusinessesPage() {
         pageCount={businessesQuery.data?.totalPages ?? 0}
         pagination={pagination}
         onPaginationChange={setPagination}
+        emptyState={
+          hasActiveFilters ? (
+            <EmptyState
+              icon={SearchX}
+              title="No businesses match your search"
+              description="Try a different name."
+            />
+          ) : (
+            <EmptyState
+              icon={Briefcase}
+              title="No businesses yet"
+              description="Add the legal entities that tenders, projects, and finance records are scoped under."
+              action={canCreate ? addBusinessButton : undefined}
+            />
+          )
+        }
       />
     </div>
   );

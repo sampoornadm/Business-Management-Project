@@ -1,7 +1,8 @@
 "use client";
 
-import { Badge, Card, CardContent, DataTable, formatDateTime } from "@bmp/ui";
+import { Badge, Card, CardContent, DataTable, EmptyState, formatDateTime } from "@bmp/ui";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
+import { History } from "lucide-react";
 import { useState } from "react";
 
 import { useAuditLogs } from "@/hooks/use-audit-logs";
@@ -60,6 +61,13 @@ export default function AuditLogPage() {
             pageCount={auditQuery.data?.totalPages ?? 0}
             pagination={pagination}
             onPaginationChange={setPagination}
+            emptyState={
+              <EmptyState
+                icon={History}
+                title="No activity yet"
+                description="Security and business events will appear here as they happen."
+              />
+            }
           />
         </CardContent>
       </Card>

@@ -106,7 +106,7 @@ export default function ItemDetailPage() {
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             {item.categoryPath ? (
-              <Badge variant={item.confirmed ? "default" : "secondary"}>
+              <Badge variant={item.confirmed ? "success" : "secondary"}>
                 {item.confirmed ? item.categoryPath : `AI: ${item.categoryPath}`}
               </Badge>
             ) : (

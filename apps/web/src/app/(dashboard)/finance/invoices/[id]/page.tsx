@@ -6,11 +6,11 @@ import { useParams } from "next/navigation";
 import { RecordPaymentDialog } from "@/components/finance/record-payment-dialog";
 import { useInvoice, useRecordInvoicePayment } from "@/hooks/use-finance";
 
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
+const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
   DRAFT: "outline",
   SENT: "secondary",
   PARTIALLY_PAID: "secondary",
-  PAID: "default",
+  PAID: "success",
   OVERDUE: "destructive",
 };
 

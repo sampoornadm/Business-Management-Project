@@ -1,7 +1,7 @@
 "use client";
 
 import type { SearchEntityType } from "@bmp/types";
-import { Input } from "@bmp/ui";
+import { Button, Input } from "@bmp/ui";
 import { Building2, FileText, HardHat, Search, Truck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ComponentType, type KeyboardEvent } from "react";
@@ -41,7 +41,19 @@ export function TopbarSearch() {
   }
 
   return (
-    <div className="relative w-64">
+    <>
+      {/* Below md the w-64 input has no room next to the sidebar toggle and
+          icon cluster — collapse to an icon that jumps straight to /search. */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="shrink-0 md:hidden"
+        onClick={() => router.push("/search")}
+        aria-label="Search"
+      >
+        <Search className="h-4 w-4" />
+      </Button>
+      <div className="relative hidden w-64 md:block">
       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         value={value}
@@ -87,6 +99,7 @@ export function TopbarSearch() {
           </button>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

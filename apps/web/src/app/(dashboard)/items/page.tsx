@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   DataTable,
+  EmptyState,
   formatDate,
   Input,
   Select,
@@ -15,7 +16,7 @@ import {
   useToast,
 } from "@bmp/ui";
 import type { Column, ColumnDef, OnChangeFn, PaginationState, SortingState } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ChevronsUpDown, ListTree, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, ListTree, Package, SearchX, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -235,6 +236,21 @@ export default function ItemsPage() {
         onPaginationChange={setPagination}
         sorting={sorting}
         onSortingChange={handleSortingChange}
+        emptyState={
+          debouncedSearch || status !== ALL ? (
+            <EmptyState
+              icon={SearchX}
+              title="No items match your filters"
+              description="Try adjusting your search or status filter."
+            />
+          ) : (
+            <EmptyState
+              icon={Package}
+              title="No items yet"
+              description="Items appear here once they're quoted on an RFQ or BOQ."
+            />
+          )
+        }
       />
     </div>
   );

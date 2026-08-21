@@ -1,31 +1,39 @@
 "use client";
 
-import {
-  Button,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@bmp/ui";
-import { Moon, Sun } from "lucide-react";
+import { Button } from "@bmp/ui";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
+
+type ThemeOption = "light" | "dark" | "system";
+
+const THEME_ICON = { light: Sun, dark: Moon, system: Monitor };
+const THEME_LABEL = { light: "Light", dark: "Dark", system: "System" };
+const NEXT_THEME: Record<ThemeOption, ThemeOption> = { light: "dark", dark: "system", system: "light" };
+
+function nextTheme(current: ThemeOption): ThemeOption {
+  return NEXT_THEME[current];
+}
 
 export function ThemeToggle() {
-  const { setTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
+  // `theme` is undefined until next-themes reads localStorage on mount — render
+  // a neutral placeholder until then so the icon doesn't flash/mismatch on hydration.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const current = mounted ? ((theme as ThemeOption) ?? "system") : "system";
+  const Icon = THEME_ICON[current];
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Toggle theme">
-          <Sun className="h-5 w-5 rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
-          <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => setTheme("light")}>Light</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("dark")}>Dark</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("system")}>System</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => setTheme(nextTheme(current))}
+      aria-label={`Theme: ${THEME_LABEL[current]}. Click to switch to ${THEME_LABEL[nextTheme(current)]}.`}
+      title={`Theme: ${THEME_LABEL[current]}`}
+    >
+      {mounted && <Icon className="h-5 w-5" />}
+    </Button>
   );
 }
