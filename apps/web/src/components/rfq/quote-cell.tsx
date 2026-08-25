@@ -1,7 +1,7 @@
 "use client";
 
 import { Input } from "@bmp/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function QuoteCell({
   initialRate,
@@ -13,6 +13,15 @@ export function QuoteCell({
   disabled?: boolean;
 }) {
   const [value, setValue] = useState(initialRate !== null ? String(initialRate) : "");
+
+  // initialRate can change without this component remounting — e.g. a quote-sheet import for
+  // this same vendor invalidates the whole RFQ query, and React reuses this exact input rather
+  // than recreating it. Without this, the input keeps showing whatever it displayed at mount
+  // (blank, if no rate existed yet) even after the real rate is saved and used everywhere else
+  // (comparison totals, "Lowest" badge) — the data is correct, only this input goes stale.
+  useEffect(() => {
+    setValue(initialRate !== null ? String(initialRate) : "");
+  }, [initialRate]);
 
   return (
     <Input
