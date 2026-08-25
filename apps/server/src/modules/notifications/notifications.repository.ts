@@ -7,6 +7,7 @@ import { toSkipTake } from "../../shared/utils/pagination.js";
 
 export interface CreateNotificationData {
   userId: string;
+  businessId: string;
   type: string;
   title: string;
   body?: string | null;
@@ -22,16 +23,23 @@ export interface NotificationFilters {
 export interface INotificationsRepository {
   create(data: CreateNotificationData): Promise<Notification>;
   createMany(data: CreateNotificationData[]): Promise<void>;
-  findById(id: string): Promise<Notification | null>;
+  findById(id: string, businessId: string): Promise<Notification | null>;
   findMany(
     userId: string,
+    businessIds: string[],
     pagination: PaginationParams,
     filters: NotificationFilters,
   ): Promise<{ items: Notification[]; totalItems: number }>;
-  countUnread(userId: string): Promise<number>;
+  countUnread(userId: string, businessIds: string[]): Promise<number>;
   markRead(id: string): Promise<void>;
-  markAllRead(userId: string): Promise<void>;
-  existsForEntity(entityType: string, entityId: string, type: string, metadataMatch: Record<string, unknown>): Promise<boolean>;
+  markAllRead(userId: string, businessIds: string[]): Promise<void>;
+  existsForEntity(
+    entityType: string,
+    entityId: string,
+    type: string,
+    metadataMatch: Record<string, unknown>,
+    businessId: string,
+  ): Promise<boolean>;
 }
 
 export class NotificationsRepository implements INotificationsRepository {
@@ -48,16 +56,24 @@ export class NotificationsRepository implements INotificationsRepository {
     });
   }
 
-  findById(id: string): Promise<Notification | null> {
-    return this.prisma.notification.findUnique({ where: { id } });
+  findById(id: string, businessId: string): Promise<Notification | null> {
+    // findFirst (not findUnique) because `id` alone isn't the unique key we're filtering by
+    // here — businessId must also match, and there's no compound (id, businessId) unique
+    // constraint on Notification.
+    return this.prisma.notification.findFirst({ where: { id, businessId } });
   }
 
   async findMany(
     userId: string,
+    businessIds: string[],
     pagination: PaginationParams,
     filters: NotificationFilters,
   ): Promise<{ items: Notification[]; totalItems: number }> {
-    const where: Prisma.NotificationWhereInput = { userId, isRead: filters.isRead };
+    const where: Prisma.NotificationWhereInput = {
+      userId,
+      businessId: { in: businessIds },
+      isRead: filters.isRead,
+    };
 
     const [items, totalItems] = await Promise.all([
       this.prisma.notification.findMany({
@@ -71,8 +87,10 @@ export class NotificationsRepository implements INotificationsRepository {
     return { items, totalItems };
   }
 
-  countUnread(userId: string): Promise<number> {
-    return this.prisma.notification.count({ where: { userId, isRead: false } });
+  countUnread(userId: string, businessIds: string[]): Promise<number> {
+    return this.prisma.notification.count({
+      where: { userId, businessId: { in: businessIds }, isRead: false },
+    });
   }
 
   async markRead(id: string): Promise<void> {
@@ -82,9 +100,9 @@ export class NotificationsRepository implements INotificationsRepository {
     });
   }
 
-  async markAllRead(userId: string): Promise<void> {
+  async markAllRead(userId: string, businessIds: string[]): Promise<void> {
     await this.prisma.notification.updateMany({
-      where: { userId, isRead: false },
+      where: { userId, businessId: { in: businessIds }, isRead: false },
       data: { isRead: true, readAt: new Date() },
     });
   }
@@ -94,9 +112,10 @@ export class NotificationsRepository implements INotificationsRepository {
     entityId: string,
     type: string,
     metadataMatch: Record<string, unknown>,
+    businessId: string,
   ): Promise<boolean> {
     const candidates = await this.prisma.notification.findMany({
-      where: { entityType, entityId, type },
+      where: { entityType, entityId, type, businessId },
       select: { metadata: true },
     });
     return candidates.some((c) => {

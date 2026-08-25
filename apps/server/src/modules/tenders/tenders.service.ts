@@ -196,6 +196,7 @@ export class TendersService {
 
     if (recipientIds.size > 0) {
       await this.notificationsService.createMany([...recipientIds], {
+        businessId: context.businessId,
         type: "TENDER_STATUS_CHANGED",
         title: `Tender ${updated.tenderNumber} status changed to ${input.status}`,
         body: updated.title,
@@ -255,6 +256,7 @@ export class TendersService {
 
     await this.notificationsService.create({
       userId: input.userId,
+      businessId,
       type: "TENDER_ASSIGNED",
       title: `You were assigned to tender ${tender.tenderNumber}`,
       body: tender.title,
