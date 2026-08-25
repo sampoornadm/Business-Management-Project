@@ -244,7 +244,7 @@ export default function RfqDetailPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
           <CardTitle className="text-base">Items & quotes</CardTitle>
-          {canUpdate && !isFinalized && rfq.vendorInvites.length > 0 && (
+          {canUpdate && !isFinalized && (
             <QuoteSheetActions
               rfqId={rfq.id}
               vendors={rfq.vendorInvites.map((v) => ({ id: v.vendor.id, name: v.vendor.name }))}
