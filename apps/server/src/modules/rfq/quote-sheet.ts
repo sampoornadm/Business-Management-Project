@@ -1,5 +1,7 @@
 import ExcelJS from "exceljs";
 
+import type { RfrDocumentData } from "./rfq-document.js";
+
 /**
  * Column layout. Export and import MUST agree, which is why both live in this file.
  * Column A holds the rfqItemId and is hidden: rows are matched back by id, never by
@@ -7,11 +9,12 @@ import ExcelJS from "exceljs";
  * text-based match would silently attach a rate to the wrong item.
  */
 const COLUMNS = [
-  { header: "rfqItemId", key: "rfqItemId", width: 38, hidden: true },
+  { header: "rfqItemId", key: "rfqItemId", width: 38 },
   { header: "Item Code", key: "itemCode", width: 16 },
   { header: "Description", key: "description", width: 60 },
   { header: "Unit", key: "unit", width: 10 },
   { header: "Qty", key: "quantity", width: 10 },
+  { header: "Instructions", key: "instructions", width: 30 },
   { header: "Rate", key: "rate", width: 14 },
   { header: "Make", key: "make", width: 18 },
   { header: "Model", key: "model", width: 18 },
@@ -19,14 +22,25 @@ const COLUMNS = [
   { header: "Remarks", key: "remarks", width: 30 },
 ] as const;
 
-const HEADER_ROW = 1;
+// A fixed-size business/RFQ header block above the item table, so the number of rows to
+// skip on import never depends on which fields happen to be present — an RFQ with no
+// instructions still reserves the row, just blank.
+const BUSINESS_NAME_ROW = 1;
+const BUSINESS_ADDRESS_ROW = 2;
+const RFQ_META_ROW = 3;
+const INSTRUCTIONS_ROW = 4;
+// Row 5 is a blank spacer.
+export const ITEM_TABLE_HEADER_ROW = 6;
 
-export interface QuoteSheetRow {
-  rfqItemId: string;
-  description: string;
-  unit: string | null;
-  quantity: number;
-}
+// Column positions (1-based). parseQuoteSheet reads by number, not by ExcelJS column key —
+// a workbook reloaded from bytes (the vendor's filled-in upload) does not retain the key
+// mapping set at write time, only genuine column position and row number.
+const COL_RFQ_ITEM_ID = 1;
+const COL_RATE = 7;
+const COL_MAKE = 8;
+const COL_MODEL = 9;
+const COL_REGRET = 10;
+const COL_REMARKS = 11;
 
 export interface ParsedQuoteRow {
   rfqItemId: string;
@@ -52,21 +66,52 @@ function toSheetName(title: string): string {
   return cleaned || "Quotes";
 }
 
-export async function buildQuoteSheet(rfqTitle: string, rows: QuoteSheetRow[]): Promise<Buffer> {
+export async function buildQuoteSheet(data: RfrDocumentData): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet(toSheetName(rfqTitle));
-  sheet.columns = COLUMNS.map((c) => ({ header: c.header, key: c.key, width: c.width }));
-  sheet.getColumn("rfqItemId").hidden = true;
-  sheet.getRow(HEADER_ROW).font = { bold: true };
+  const sheet = workbook.addWorksheet(toSheetName(data.rfqTitle));
+  sheet.columns = COLUMNS.map((c) => ({ key: c.key, width: c.width }));
 
-  for (const row of rows) {
+  const nameRow = sheet.addRow([data.businessName]);
+  nameRow.font = { bold: true, size: 14 };
+
+  const addressLine = [
+    data.businessAddress,
+    data.businessGstNumber ? `GSTIN: ${data.businessGstNumber}` : null,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+  sheet.addRow([addressLine]);
+
+  const metaLine = [
+    `RFQ: ${data.rfqTitle}`,
+    data.tenderNumber ? `Tender Ref: ${data.tenderNumber}` : null,
+    data.dueDate ? `Due Date: ${data.dueDate}` : null,
+  ]
+    .filter(Boolean)
+    .join("   ");
+  sheet.addRow([metaLine]);
+
+  sheet.addRow([data.instructions ? `Instructions: ${data.instructions}` : ""]);
+  sheet.addRow([]); // spacer
+
+  for (const row of [BUSINESS_NAME_ROW, BUSINESS_ADDRESS_ROW, RFQ_META_ROW, INSTRUCTIONS_ROW]) {
+    sheet.mergeCells(row, 1, row, COLUMNS.length);
+  }
+
+  const headerRow = sheet.addRow(COLUMNS.map((c) => c.header));
+  headerRow.font = { bold: true };
+
+  for (const item of data.items) {
     sheet.addRow({
-      rfqItemId: row.rfqItemId,
-      description: row.description,
-      unit: row.unit ?? "",
-      quantity: row.quantity,
+      rfqItemId: item.rfqItemId,
+      description: item.description,
+      unit: item.unit ?? "",
+      quantity: item.quantity,
+      instructions: item.instructions ?? "",
     });
   }
+
+  sheet.getColumn("rfqItemId").hidden = true;
 
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
@@ -90,11 +135,11 @@ export async function parseQuoteSheet(buffer: Buffer): Promise<ParsedQuoteSheet>
   const errors: string[] = [];
 
   sheet.eachRow((row, rowNumber) => {
-    if (rowNumber === HEADER_ROW) return;
+    if (rowNumber <= ITEM_TABLE_HEADER_ROW) return;
 
-    const rfqItemId = text(row.getCell(1));
-    const rateText = text(row.getCell(6));
-    const regretted = text(row.getCell(9)).toUpperCase().startsWith("Y");
+    const rfqItemId = text(row.getCell(COL_RFQ_ITEM_ID));
+    const rateText = text(row.getCell(COL_RATE));
+    const regretted = text(row.getCell(COL_REGRET)).toUpperCase().startsWith("Y");
 
     // An untouched row is not an answer. Storing it would be inventing a rate of 0.
     if (!regretted && rateText === "") return;
@@ -114,9 +159,9 @@ export async function parseQuoteSheet(buffer: Buffer): Promise<ParsedQuoteSheet>
       rate = parsed;
     }
 
-    const make = text(row.getCell(7));
-    const model = text(row.getCell(8));
-    const remarks = text(row.getCell(10));
+    const make = text(row.getCell(COL_MAKE));
+    const model = text(row.getCell(COL_MODEL));
+    const remarks = text(row.getCell(COL_REMARKS));
 
     rows.push({
       rfqItemId,
