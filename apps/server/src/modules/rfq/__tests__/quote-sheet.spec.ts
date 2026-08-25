@@ -81,6 +81,34 @@ describe("quote sheet", () => {
     expect(errors[0]).toContain(`row ${FIRST_ITEM_ROW}`);
   });
 
+  it("still imports rates when rows above the header block are deleted (header shifts up)", async () => {
+    const buffer = await fill((sheet) => {
+      sheet.getCell(`G${FIRST_ITEM_ROW}`).value = 152.5;
+      // A vendor deleting the business-name/address/meta/instructions/spacer rows before
+      // re-uploading shifts everything up by 5 — the header that was at ITEM_TABLE_HEADER_ROW
+      // (6) is now at row 1. parseQuoteSheet must find it via its full-sheet scan fallback
+      // rather than silently returning 0 rows because row 6 no longer holds the header.
+      sheet.spliceRows(1, 5);
+    });
+
+    const { rows, errors } = await parseQuoteSheet(buffer);
+
+    expect(errors).toEqual([]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ rfqItemId: "item-1", rate: 152.5, regretted: false });
+  });
+
+  it("returns an explicit error when the header row is nowhere in the sheet", async () => {
+    const buffer = await fill((sheet) => {
+      sheet.getCell(`A${ITEM_TABLE_HEADER_ROW}`).value = "";
+    });
+
+    const { rows, errors } = await parseQuoteSheet(buffer);
+
+    expect(rows).toEqual([]);
+    expect(errors).toEqual(["column A (rfqItemId) is missing — re-download the quote sheet"]);
+  });
+
   it("builds a sheet for an RFQ title containing characters Excel forbids", async () => {
     // Real titles come from tender titles, e.g. "MJ/C06/2025/2395-PU TUBE". ExcelJS throws
     // on : \ / ? * [ ] in a sheet name rather than sanitising it.
