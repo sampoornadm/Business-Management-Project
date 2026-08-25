@@ -37,6 +37,26 @@ export function QuoteSheetActions({
     URL.revokeObjectURL(url);
   }
 
+  async function downloadPdf() {
+    const response = await apiClient.get(`/rfqs/${rfqId}/documents/pdf`, { responseType: "blob" });
+    const url = URL.createObjectURL(response.data as Blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `RFR-${rfqId}.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function downloadWord() {
+    const response = await apiClient.get(`/rfqs/${rfqId}/documents/word`, { responseType: "blob" });
+    const url = URL.createObjectURL(response.data as Blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `RFR-${rfqId}.docx`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function onFile(file: File) {
     try {
       const result = await importQuotes.mutateAsync({ vendorId, file });
@@ -60,6 +80,12 @@ export function QuoteSheetActions({
     <div className="flex flex-wrap items-center gap-2">
       <Button size="sm" variant="outline" onClick={() => void download()}>
         <Download className="mr-2 h-4 w-4" /> Download quote sheet
+      </Button>
+      <Button size="sm" variant="outline" onClick={() => void downloadWord()}>
+        <Download className="mr-2 h-4 w-4" /> Download Word
+      </Button>
+      <Button size="sm" variant="outline" onClick={() => void downloadPdf()}>
+        <Download className="mr-2 h-4 w-4" /> Download PDF
       </Button>
 
       <Select value={vendorId} onValueChange={setVendorId}>
