@@ -37,10 +37,11 @@ interface DraftItem {
   description: string;
   unit: string;
   quantity: string;
+  instructions: string;
 }
 
 function emptyItem(): DraftItem {
-  return { description: "", unit: "", quantity: "" };
+  return { description: "", unit: "", quantity: "", instructions: "" };
 }
 
 function flattenBoqItems(items: BoqItemDto[]): BoqItemDto[] {
@@ -58,8 +59,10 @@ export default function NewRfqPage() {
   const [title, setTitle] = useState("");
   const [tenderId, setTenderId] = useState<string>("");
   const [dueDate, setDueDate] = useState("");
+  const [instructions, setInstructions] = useState("");
   const [items, setItems] = useState<DraftItem[]>([emptyItem()]);
   const [selectedBoqItemIds, setSelectedBoqItemIds] = useState<string[]>([]);
+  const [boqItemInstructions, setBoqItemInstructions] = useState<Record<string, string>>({});
   const [vendorIds, setVendorIds] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<RfqVendorSuggestionsDto>();
 
@@ -112,6 +115,7 @@ export default function NewRfqPage() {
             description: item.description,
             unit: item.unit ?? undefined,
             quantity: item.quantity ?? 0,
+            instructions: boqItemInstructions[item.id]?.trim() || undefined,
           }))
       : items
           .filter((item) => item.description.trim() && item.quantity.trim())
@@ -119,6 +123,7 @@ export default function NewRfqPage() {
             description: item.description.trim(),
             unit: item.unit.trim() || undefined,
             quantity: Number(item.quantity),
+            instructions: item.instructions.trim() || undefined,
           }));
 
     if (preparedItems.length === 0) {
@@ -131,6 +136,7 @@ export default function NewRfqPage() {
         title: title.trim(),
         tenderId: tenderId || undefined,
         dueDate: dueDate || undefined,
+        instructions: instructions.trim() || undefined,
         items: preparedItems,
         vendorIds: vendorIds.length > 0 ? vendorIds : undefined,
       });
@@ -192,6 +198,14 @@ export default function NewRfqPage() {
             </div>
           </div>
           <div className="space-y-1">
+            <label className="text-sm font-medium">Instructions (optional)</label>
+            <Input
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              placeholder="e.g. Delivery within 15 days, payment against invoice"
+            />
+          </div>
+          <div className="space-y-1">
             <label className="text-sm font-medium">Invite vendors (optional, can add later)</label>
             <MultiSelect
               options={(vendorsQuery.data?.items ?? []).map((v) => ({ value: v.id, label: v.name }))}
@@ -237,6 +251,7 @@ export default function NewRfqPage() {
                     <TableHead>Description</TableHead>
                     <TableHead className="w-24">Unit</TableHead>
                     <TableHead className="w-24">Quantity</TableHead>
+                    <TableHead className="w-48">Instructions</TableHead>
                     <TableHead className="w-56">Suggested vendors</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -254,6 +269,15 @@ export default function NewRfqPage() {
                         <TableCell className="max-w-md text-sm">{item.description}</TableCell>
                         <TableCell>{item.unit ?? "-"}</TableCell>
                         <TableCell>{item.quantity ?? "-"}</TableCell>
+                        <TableCell>
+                          <Input
+                            value={boqItemInstructions[item.id] ?? ""}
+                            onChange={(e) =>
+                              setBoqItemInstructions((prev) => ({ ...prev, [item.id]: e.target.value }))
+                            }
+                            placeholder="ISI marked only"
+                          />
+                        </TableCell>
                         <TableCell>
                           {perItem && perItem.suggestedVendors.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
@@ -288,6 +312,7 @@ export default function NewRfqPage() {
                     <TableHead>Description</TableHead>
                     <TableHead className="w-32">Unit</TableHead>
                     <TableHead className="w-32">Quantity</TableHead>
+                    <TableHead className="w-48">Instructions</TableHead>
                     <TableHead className="w-10" />
                   </TableRow>
                 </TableHeader>
@@ -310,6 +335,13 @@ export default function NewRfqPage() {
                           value={item.quantity}
                           onChange={(e) => updateItem(index, { quantity: e.target.value })}
                           placeholder="500"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={item.instructions}
+                          onChange={(e) => updateItem(index, { instructions: e.target.value })}
+                          placeholder="ISI marked only"
                         />
                       </TableCell>
                       <TableCell>
