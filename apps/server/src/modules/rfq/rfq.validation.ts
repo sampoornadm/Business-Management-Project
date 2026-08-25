@@ -6,6 +6,7 @@ const createRfqItemSchema = z.object({
   description: z.string().min(1).max(1000),
   unit: z.string().max(50).optional(),
   quantity: z.number().positive(),
+  instructions: z.string().max(500).optional(),
   sortOrder: z.number().int().optional(),
 });
 
@@ -13,6 +14,7 @@ export const createRfqSchema = z.object({
   title: z.string().min(1).max(200),
   tenderId: z.string().uuid().optional(),
   dueDate: z.string().datetime().or(z.string().date()).optional(),
+  instructions: z.string().max(2000).optional(),
   items: z.array(createRfqItemSchema).min(1, "At least one RFQ item is required"),
   vendorIds: z.array(z.string().uuid()).optional(),
 });
@@ -21,6 +23,7 @@ export type CreateRfqBody = z.infer<typeof createRfqSchema>;
 export const updateRfqSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   dueDate: z.string().datetime().or(z.string().date()).optional(),
+  instructions: z.string().max(2000).optional(),
 });
 export type UpdateRfqBody = z.infer<typeof updateRfqSchema>;
 

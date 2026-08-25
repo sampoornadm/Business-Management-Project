@@ -44,8 +44,9 @@ describe("RFQ quote sheet export/import (integration)", () => {
       .set("Authorization", `Bearer ${token}`)
       .send({
         title: "Quote Sheet Integration RFQ",
+        instructions: "Deliver to the site office, weekday mornings only",
         items: [
-          { description: "XLPE Cable 4C x16", unit: "m", quantity: 100 },
+          { description: "XLPE Cable 4C x16", unit: "m", quantity: 100, instructions: "ISI marked only" },
           { description: "XLPE Cable 4C x25", unit: "m", quantity: 50 },
         ],
         vendorIds: [vendorId],
@@ -121,5 +122,15 @@ describe("RFQ quote sheet export/import (integration)", () => {
     expect(priced[0]!.rate).toBe(152.5);
     // The regretted second line has no price and must not appear.
     expect(rows.some((r) => r.description === "XLPE Cable 4C x25")).toBe(false);
+  });
+
+  it("round-trips RFQ-level and per-item instructions", async () => {
+    const response = await request(app)
+      .get(`/api/v1/rfqs/${rfqId}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.body.data.instructions).toBe("Deliver to the site office, weekday mornings only");
+    expect(response.body.data.items[0].instructions).toBe("ISI marked only");
+    expect(response.body.data.items[1].instructions).toBeNull();
   });
 });

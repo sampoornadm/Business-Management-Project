@@ -99,6 +99,7 @@ export interface CreateRfqItemData {
   description: string;
   unit?: string | null;
   quantity: number;
+  instructions?: string | null;
   sortOrder?: number;
 }
 
@@ -107,11 +108,12 @@ export interface CreateRfqData {
   tenderId?: string | null;
   businessId: string;
   dueDate?: Date | null;
+  instructions?: string | null;
   createdById: string;
   items: CreateRfqItemData[];
 }
 
-export type UpdateRfqData = Partial<Pick<CreateRfqData, "title" | "dueDate">>;
+export type UpdateRfqData = Partial<Pick<CreateRfqData, "title" | "dueDate" | "instructions">>;
 
 export interface UpsertQuoteData {
   // Null is a regret — the absence of a price, never 0. See RfqQuote.rate in schema.prisma.
@@ -166,6 +168,7 @@ export class RfqRepository implements IRfqRepository {
           tenderId: data.tenderId ?? null,
           businessId: data.businessId,
           dueDate: data.dueDate ?? null,
+          instructions: data.instructions ?? null,
           createdById: data.createdById,
         },
       }),
@@ -177,6 +180,7 @@ export class RfqRepository implements IRfqRepository {
           description: item.description,
           unit: item.unit ?? null,
           quantity: item.quantity,
+          instructions: item.instructions ?? null,
           sortOrder: item.sortOrder ?? index,
         })),
       }),

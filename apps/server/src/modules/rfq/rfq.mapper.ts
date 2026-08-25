@@ -29,6 +29,7 @@ function toItemDto(item: RfqItemDetail): RfqItemDto {
     description: item.description,
     unit: item.unit,
     quantity: item.quantity,
+    instructions: item.instructions,
     sortOrder: item.sortOrder,
     quotes: item.quotes.map(toQuoteDto),
   };
@@ -89,6 +90,7 @@ export function toRfqDto(entity: RfqDetail): RfqDto {
     tenderId: entity.tenderId,
     status: entity.status,
     dueDate: entity.dueDate ? entity.dueDate.toISOString() : null,
+    instructions: entity.instructions,
     awardedVendorId: entity.awardedVendorId,
     itemCount: entity.items.length,
     vendorCount: entity.vendorInvites.length,

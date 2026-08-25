@@ -780,6 +780,11 @@ model Rfq {
   status     RfqStatus @default(DRAFT)
   dueDate    DateTime?
 
+  // Shown once, above the item table, on every generated RFR document (Word/Excel/PDF) —
+  // e.g. delivery or payment terms. Distinct from RfqItem.instructions (per line) and from
+  // RfqQuote.remarks (the vendor's reply, the opposite direction).
+  instructions String?
+
   awardedVendorId String?
   awardedVendor   Vendor? @relation("RfqAwardedVendor", fields: [awardedVendorId], references: [id], onDelete: SetNull)
 
@@ -807,6 +812,11 @@ model RfqItem {
   unit        String?
   quantity    Float
   sortOrder   Int     @default(0)
+
+  // Per-line instruction on the generated RFR (e.g. "ISI marked only"). Set only when the
+  // item is added — RfqItem has no update path today, so this follows description/unit/
+  // quantity in being fixed at creation.
+  instructions String?
 
   // Canonical item this line resolves to, for cross-tender price history. Nullable +
   // SetNull: the line still stands on its own if the Item is deleted, and unresolved
