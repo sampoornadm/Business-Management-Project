@@ -6,6 +6,7 @@ import { BadRequestError, ConflictError, NotFoundError } from "../../../core/err
 import type { EmailService } from "../../../infra/mailer/email.service.js";
 import type { AuditService } from "../../audit/audit.service.js";
 import type { BoqItemWithBreakdown, IBoqRepository } from "../../boq/boq.repository.js";
+import type { IBusinessesRepository } from "../../businesses/businesses.repository.js";
 import type { ITendersRepository } from "../../tenders/tenders.repository.js";
 import type { IUsersRepository } from "../../users/users.repository.js";
 import type { IVendorsRepository, VendorItemTypeMatch } from "../../vendors/vendors.repository.js";
@@ -225,12 +226,21 @@ class FakeBoqRepository implements Partial<IBoqRepository> {
   }
 }
 
+class FakeBusinessesRepository implements Partial<IBusinessesRepository> {
+  businesses = new Map<string, { name: string; address: string | null; gstNumber: string | null }>();
+
+  async findById(id: string) {
+    return (this.businesses.get(id) ?? null) as never;
+  }
+}
+
 describe("RfqService", () => {
   let repository: FakeRfqRepository;
   let tendersRepository: FakeTendersRepository;
   let vendorsRepository: FakeVendorsRepository;
   let boqRepository: FakeBoqRepository;
   let usersRepository: FakeUsersRepository;
+  let businessesRepository: FakeBusinessesRepository;
   let emailService: { queueRfqEmail: ReturnType<typeof vi.fn> };
   let auditService: AuditService;
   let service: RfqService;
@@ -245,6 +255,7 @@ describe("RfqService", () => {
     vendorsRepository = new FakeVendorsRepository();
     boqRepository = new FakeBoqRepository();
     usersRepository = new FakeUsersRepository();
+    businessesRepository = new FakeBusinessesRepository();
     vendorsRepository.vendorIds.add(vendorA);
     vendorsRepository.vendorIds.add(vendorB);
     usersRepository.users.set(actorId, {
@@ -261,6 +272,7 @@ describe("RfqService", () => {
       vendorsRepository as unknown as IVendorsRepository,
       boqRepository as unknown as IBoqRepository,
       usersRepository as unknown as IUsersRepository,
+      businessesRepository as unknown as IBusinessesRepository,
       emailService as unknown as EmailService,
       auditService,
     );
@@ -468,6 +480,22 @@ describe("RfqService", () => {
 
   it("throws for an unknown RFQ id", async () => {
     await expect(service.getById(randomUUID(), businessId)).rejects.toThrow(NotFoundError);
+  });
+
+  it("builds a PDF request-for-rates document for an existing RFQ", async () => {
+    businessesRepository.businesses.set(businessId, { name: "Archie Udyog", address: null, gstNumber: null });
+    const rfq = await createBasicRfq();
+
+    const { filename, buffer } = await service.buildRfrPdfFor(rfq.id, businessId);
+
+    expect(filename).toMatch(/\.pdf$/);
+    expect(buffer.length).toBeGreaterThan(0);
+  });
+
+  it("throws NotFoundError when the business record is missing", async () => {
+    const rfq = await createBasicRfq();
+
+    await expect(service.buildRfrPdfFor(rfq.id, businessId)).rejects.toThrow(NotFoundError);
   });
 
   describe("reopen", () => {

@@ -260,6 +260,50 @@ export function createRfqRouter(controller: RfqController): Router {
 
   /**
    * @openapi
+   * /rfqs/{id}/documents/pdf:
+   *   get:
+   *     tags: [RFQ]
+   *     summary: Download a Request-for-Rates PDF for this RFQ's items
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: pdf file }
+   */
+  router.get(
+    "/:id/documents/pdf",
+    authenticateMiddleware,
+    requirePermission("rfq:read"),
+    controller.downloadRfrPdf,
+  );
+
+  /**
+   * @openapi
+   * /rfqs/{id}/documents/word:
+   *   get:
+   *     tags: [RFQ]
+   *     summary: Download a Request-for-Rates Word document for this RFQ's items
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: docx file }
+   */
+  router.get(
+    "/:id/documents/word",
+    authenticateMiddleware,
+    requirePermission("rfq:read"),
+    controller.downloadRfrWord,
+  );
+
+  /**
+   * @openapi
    * /rfqs/{id}/quotes/import:
    *   post:
    *     tags: [RFQ]

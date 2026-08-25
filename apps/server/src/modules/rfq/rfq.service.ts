@@ -19,12 +19,13 @@ import type { EmailService } from "../../infra/mailer/email.service.js";
 import { round2 } from "../../shared/utils/math.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { IBoqRepository } from "../boq/boq.repository.js";
+import type { IBusinessesRepository } from "../businesses/businesses.repository.js";
 import type { ITendersRepository } from "../tenders/tenders.repository.js";
 import type { IUsersRepository } from "../users/users.repository.js";
 import type { IVendorsRepository, VendorWithContacts } from "../vendors/vendors.repository.js";
 
 import { buildQuoteSheet, parseQuoteSheet } from "./quote-sheet.js";
-import { buildRfqText } from "./rfq-document.js";
+import { buildRfrDocx, buildRfrPdf, buildRfqText, toRfrDocumentData } from "./rfq-document.js";
 import { toItemPriceHistoryDto, toRfqDto, toRfqListItemDto } from "./rfq.mapper.js";
 import type {
   CreateRfqData,
@@ -44,6 +45,7 @@ export class RfqService {
     private readonly vendorsRepository: IVendorsRepository,
     private readonly boqRepository: IBoqRepository,
     private readonly usersRepository: IUsersRepository,
+    private readonly businessesRepository: IBusinessesRepository,
     private readonly emailService: EmailService,
     private readonly auditService: AuditService,
   ) {}
@@ -259,6 +261,34 @@ export class RfqService {
     );
     const safeTitle = rfq.title.replace(/[^a-zA-Z0-9-_]+/g, "-").slice(0, 60);
     return { filename: `quotes-${safeTitle || rfqId}.xlsx`, buffer };
+  }
+
+  private async loadRfrDocumentData(rfqId: string, businessId: string) {
+    const rfq = await this.getDetailOrThrow(rfqId, businessId);
+    const business = await this.businessesRepository.findById(businessId);
+    if (!business) throw new NotFoundError("Business not found");
+
+    let tenderNumber: string | null = null;
+    if (rfq.tenderId) {
+      const tender = await this.tendersRepository.findById(rfq.tenderId, businessId);
+      tenderNumber = tender?.tenderNumber ?? null;
+    }
+
+    const data = toRfrDocumentData(rfq, business, tenderNumber);
+    const safeTitle = rfq.title.replace(/[^a-zA-Z0-9-_]+/g, "-").slice(0, 60);
+    return { data, safeTitle };
+  }
+
+  async buildRfrPdfFor(rfqId: string, businessId: string): Promise<{ filename: string; buffer: Buffer }> {
+    const { data, safeTitle } = await this.loadRfrDocumentData(rfqId, businessId);
+    const buffer = await buildRfrPdf(data);
+    return { filename: `RFR-${safeTitle || rfqId}.pdf`, buffer };
+  }
+
+  async buildRfrDocxFor(rfqId: string, businessId: string): Promise<{ filename: string; buffer: Buffer }> {
+    const { data, safeTitle } = await this.loadRfrDocumentData(rfqId, businessId);
+    const buffer = await buildRfrDocx(data);
+    return { filename: `RFR-${safeTitle || rfqId}.docx`, buffer };
   }
 
   async importQuotes(
