@@ -35,7 +35,9 @@ export function createApp(): Express {
   app.use(httpLoggerMiddleware);
   app.use(metricsMiddleware);
   app.use((req, res, next) => (req.path.startsWith(docsPath) ? docsHelmet(req, res, next) : apiHelmet(req, res, next)));
-  app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+  // File downloads (quote sheet, RFR documents) set a real filename via Content-Disposition;
+  // browsers hide that header from JS on a cross-origin response unless explicitly exposed.
+  app.use(cors({ origin: env.CORS_ORIGIN, credentials: true, exposedHeaders: ["Content-Disposition"] }));
   app.use(compression());
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true }));

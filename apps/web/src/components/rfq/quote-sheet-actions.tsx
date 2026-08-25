@@ -15,6 +15,25 @@ import { useRef, useState } from "react";
 import { useImportQuotes } from "@/hooks/use-rfq";
 import { apiClient } from "@/lib/axios";
 
+// The server names every downloaded file after the RFQ's title (see rfq.service.ts's
+// safeTitle) via Content-Disposition — read it back rather than falling to the RFQ's raw
+// UUID, which is meaningless once the file is sitting in someone's Downloads folder.
+function filenameFromContentDisposition(disposition: unknown, fallback: string): string {
+  const match = typeof disposition === "string" ? /filename="?([^";]+)"?/.exec(disposition) : null;
+  return match?.[1] ?? fallback;
+}
+
+async function downloadFile(path: string, fallbackFilename: string) {
+  const response = await apiClient.get(path, { responseType: "blob" });
+  const filename = filenameFromContentDisposition(response.headers["content-disposition"], fallbackFilename);
+  const url = URL.createObjectURL(response.data as Blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export function QuoteSheetActions({
   rfqId,
   vendors,
@@ -28,33 +47,15 @@ export function QuoteSheetActions({
   const importQuotes = useImportQuotes(rfqId);
 
   async function download() {
-    const response = await apiClient.get(`/rfqs/${rfqId}/quote-sheet`, { responseType: "blob" });
-    const url = URL.createObjectURL(response.data as Blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `quotes-${rfqId}.xlsx`;
-    link.click();
-    URL.revokeObjectURL(url);
+    await downloadFile(`/rfqs/${rfqId}/quote-sheet`, `quotes-${rfqId}.xlsx`);
   }
 
   async function downloadPdf() {
-    const response = await apiClient.get(`/rfqs/${rfqId}/documents/pdf`, { responseType: "blob" });
-    const url = URL.createObjectURL(response.data as Blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `RFR-${rfqId}.pdf`;
-    link.click();
-    URL.revokeObjectURL(url);
+    await downloadFile(`/rfqs/${rfqId}/documents/pdf`, `RFR-${rfqId}.pdf`);
   }
 
   async function downloadWord() {
-    const response = await apiClient.get(`/rfqs/${rfqId}/documents/word`, { responseType: "blob" });
-    const url = URL.createObjectURL(response.data as Blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `RFR-${rfqId}.docx`;
-    link.click();
-    URL.revokeObjectURL(url);
+    await downloadFile(`/rfqs/${rfqId}/documents/word`, `RFR-${rfqId}.docx`);
   }
 
   async function onFile(file: File) {
