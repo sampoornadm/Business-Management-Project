@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 
-import type { RfrDocumentData } from "./rfq-document.js";
+import { buildAddressLine, type RfrDocumentData } from "./rfq-document.js";
 
 /**
  * Column layout. Export and import MUST agree, which is why both live in this file.
@@ -74,13 +74,7 @@ export async function buildQuoteSheet(data: RfrDocumentData): Promise<Buffer> {
   const nameRow = sheet.addRow([data.businessName]);
   nameRow.font = { bold: true, size: 14 };
 
-  const addressLine = [
-    data.businessAddress,
-    data.businessGstNumber ? `GSTIN: ${data.businessGstNumber}` : null,
-  ]
-    .filter(Boolean)
-    .join(" | ");
-  sheet.addRow([addressLine]);
+  sheet.addRow([buildAddressLine(data.businessAddress, data.businessGstNumber)]);
 
   const metaLine = [
     `RFQ: ${data.rfqTitle}`,
@@ -131,11 +125,30 @@ export async function parseQuoteSheet(buffer: Buffer): Promise<ParsedQuoteSheet>
   const sheet = workbook.worksheets[0];
   if (!sheet) return { rows: [], errors: ["The workbook has no sheets"] };
 
+  // The header block is normally at a fixed row, but a vendor can delete rows above it
+  // (e.g. the business-name row) before re-uploading, shifting everything up. Falling back
+  // to a full scan for the "rfqItemId" header text avoids silently importing 0 rows in that
+  // case — see Finding 2 in the RFR final review.
+  let headerRow = ITEM_TABLE_HEADER_ROW;
+  let headerFound = text(sheet.getRow(ITEM_TABLE_HEADER_ROW).getCell(COL_RFQ_ITEM_ID)) === "rfqItemId";
+  if (!headerFound) {
+    for (let n = 1; n <= sheet.rowCount; n++) {
+      if (text(sheet.getRow(n).getCell(COL_RFQ_ITEM_ID)) === "rfqItemId") {
+        headerRow = n;
+        headerFound = true;
+        break;
+      }
+    }
+  }
+  if (!headerFound) {
+    return { rows: [], errors: ["column A (rfqItemId) is missing — re-download the quote sheet"] };
+  }
+
   const rows: ParsedQuoteRow[] = [];
   const errors: string[] = [];
 
   sheet.eachRow((row, rowNumber) => {
-    if (rowNumber <= ITEM_TABLE_HEADER_ROW) return;
+    if (rowNumber <= headerRow) return;
 
     const rfqItemId = text(row.getCell(COL_RFQ_ITEM_ID));
     const rateText = text(row.getCell(COL_RATE));

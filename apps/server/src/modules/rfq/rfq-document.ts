@@ -91,6 +91,25 @@ export interface RfrSourceRfq {
   items: RfrSourceItem[];
 }
 
+export function buildAddressLine(businessAddress: string | null, businessGstNumber: string | null): string {
+  return [businessAddress, businessGstNumber ? `GSTIN: ${businessGstNumber}` : null]
+    .filter(Boolean)
+    .join(" | ");
+}
+
+export function buildMetaLine(tenderNumber: string | null, dueDate: string | null): string {
+  return [
+    tenderNumber ? `Tender Ref: ${tenderNumber}` : null,
+    dueDate ? `Due Date: ${dueDate}` : null,
+  ]
+    .filter(Boolean)
+    .join("   ");
+}
+
+export function buildInstructionsLine(instructions: string | null): string {
+  return instructions ? `Instructions: ${instructions}` : "";
+}
+
 export function toRfrDocumentData(
   rfq: RfrSourceRfq,
   business: { name: string; address: string | null; gstNumber: string | null },
@@ -138,26 +157,17 @@ export function buildRfrPdf(data: RfrDocumentData): Promise<Buffer> {
     const startX = doc.page.margins.left;
 
     doc.fontSize(14).font("Helvetica-Bold").text(data.businessName, { align: "center" });
-    const addressLine = [
-      data.businessAddress,
-      data.businessGstNumber ? `GSTIN: ${data.businessGstNumber}` : null,
-    ]
-      .filter(Boolean)
-      .join(" | ");
+    const addressLine = buildAddressLine(data.businessAddress, data.businessGstNumber);
     if (addressLine) {
       doc.fontSize(9).font("Helvetica").text(addressLine, { align: "center" });
     }
     doc.moveDown();
 
     doc.fontSize(12).font("Helvetica-Bold").text(`Request for Rates: ${data.rfqTitle}`);
-    const metaLine = [
-      data.tenderNumber ? `Tender Ref: ${data.tenderNumber}` : null,
-      data.dueDate ? `Due Date: ${data.dueDate}` : null,
-    ]
-      .filter(Boolean)
-      .join("   ");
+    const metaLine = buildMetaLine(data.tenderNumber, data.dueDate);
     if (metaLine) doc.fontSize(9).font("Helvetica").text(metaLine);
-    if (data.instructions) doc.fontSize(9).font("Helvetica").text(`Instructions: ${data.instructions}`);
+    const instructionsLine = buildInstructionsLine(data.instructions);
+    if (instructionsLine) doc.fontSize(9).font("Helvetica").text(instructionsLine);
     doc.moveDown();
 
     let y = doc.y;
@@ -166,15 +176,20 @@ export function buildRfrPdf(data: RfrDocumentData): Promise<Buffer> {
     }
 
     function drawRow(values: string[], bold: boolean) {
-      if (y > doc.page.height - doc.page.margins.bottom - 20) {
+      doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(8);
+      const rowHeight = Math.max(
+        18,
+        ...values.map((value, index) => doc.heightOfString(value, { width: RFR_COLUMN_WIDTHS[index]! }) + 4),
+      );
+
+      if (y + rowHeight > doc.page.height - doc.page.margins.bottom) {
         doc.addPage();
         y = doc.page.margins.top;
       }
-      doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(8);
       values.forEach((value, index) => {
         doc.text(value, columnX(index), y, { width: RFR_COLUMN_WIDTHS[index]! });
       });
-      y += 18;
+      y += rowHeight;
     }
 
     drawRow(RFR_COLUMN_HEADERS, true);
@@ -197,12 +212,10 @@ export async function buildRfrDocx(data: RfrDocumentData): Promise<Buffer> {
   const templateBuffer = await readFile(RFR_TEMPLATE_PATH);
   return fillDocxTemplate(templateBuffer, {
     businessName: data.businessName,
-    businessAddress: data.businessAddress ?? "",
-    businessGstNumber: data.businessGstNumber ?? "",
+    addressLine: buildAddressLine(data.businessAddress, data.businessGstNumber),
     rfqTitle: data.rfqTitle,
-    tenderNumber: data.tenderNumber ?? "",
-    dueDate: data.dueDate ?? "",
-    instructions: data.instructions ?? "",
+    metaLine: buildMetaLine(data.tenderNumber, data.dueDate),
+    instructionsLine: buildInstructionsLine(data.instructions),
     items: data.items.map((item) => ({
       description: item.description,
       unit: item.unit ?? "",
