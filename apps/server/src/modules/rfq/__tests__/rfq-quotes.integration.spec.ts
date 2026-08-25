@@ -124,6 +124,37 @@ describe("RFQ quote sheet export/import (integration)", () => {
     expect(rows.some((r) => r.description === "XLPE Cable 4C x25")).toBe(false);
   });
 
+  it("downloads a PDF request-for-rates document", async () => {
+    const response = await request(app)
+      .get(`/api/v1/rfqs/${rfqId}/documents/pdf`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toBe("application/pdf");
+    expect(response.body.length).toBeGreaterThan(0);
+  });
+
+  it("downloads a Word request-for-rates document", async () => {
+    // Unlike application/pdf, superagent has no built-in binary parser for the docx MIME
+    // type — without an explicit parser it falls back to text, mangling the bytes. Same
+    // .buffer(true).parse(...) dance as the quote-sheet (xlsx) download above.
+    const response = await request(app)
+      .get(`/api/v1/rfqs/${rfqId}/documents/word`)
+      .set("Authorization", `Bearer ${token}`)
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+        res.on("end", () => callback(null, Buffer.concat(chunks)));
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toBe(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    expect(response.body.length).toBeGreaterThan(0);
+  });
+
   it("round-trips RFQ-level and per-item instructions", async () => {
     const response = await request(app)
       .get(`/api/v1/rfqs/${rfqId}`)

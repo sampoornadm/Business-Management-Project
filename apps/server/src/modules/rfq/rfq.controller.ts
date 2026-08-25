@@ -129,6 +129,23 @@ export class RfqController {
     res.send(buffer);
   });
 
+  downloadRfrPdf = asyncHandler(async (req, res) => {
+    const { filename, buffer } = await this.rfqService.buildRfrPdfFor(req.params.id!, req.user!.businessId);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(buffer);
+  });
+
+  downloadRfrWord = asyncHandler(async (req, res) => {
+    const { filename, buffer } = await this.rfqService.buildRfrDocxFor(req.params.id!, req.user!.businessId);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(buffer);
+  });
+
   importQuotes = asyncHandler(async (req, res) => {
     if (!req.file) throw new BadRequestError("No file provided");
     const body = req.body as ImportQuotesBody;
