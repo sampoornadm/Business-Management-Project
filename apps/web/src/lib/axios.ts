@@ -1,4 +1,4 @@
-import type { AvailableBusiness } from "@bmp/types";
+import type { ApiErrorResponse, AvailableBusiness } from "@bmp/types";
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 
 import { getAccessToken, useAuthStore } from "./auth-store";
@@ -40,9 +40,21 @@ async function refreshAccessToken(): Promise<string> {
   return accessToken;
 }
 
+// axios rejects with a generic "Request failed with status code N" message on any non-2xx
+// response — it never looks at the response body. Every error handler in this app that does
+// `error instanceof Error ? error.message : ...` depends on this being the server's real
+// message (errorHandlerMiddleware always sends { success: false, error: { message } }), so the
+// rewrite happens once here rather than in every individual catch block.
+export function extractApiErrorMessage(error: AxiosError): string {
+  const data = error.response?.data as ApiErrorResponse | undefined;
+  return data?.error?.message ?? error.message;
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
+    error.message = extractApiErrorMessage(error);
+
     const originalRequest = error.config as RetryableConfig | undefined;
     const status = error.response?.status;
     const url = originalRequest?.url ?? "";
