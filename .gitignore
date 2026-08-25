@@ -69,3 +69,9 @@ skills-lock.json
 
 # isolated workspace for superpowers-driven implementation work
 .worktrees/
+ai-extraction-algorithm.drawio
+project-flow.drawio
+.gitignore
+.gitignore
+project-flow.png
+start.sh

@@ -1,7 +1,19 @@
 "use client";
 
-import { Button, Card, CardContent, EmptyState, formatDateTime, Skeleton, useToast } from "@bmp/ui";
+import {
+  Button,
+  Card,
+  CardContent,
+  EmptyState,
+  formatDateTime,
+  Skeleton,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  useToast,
+} from "@bmp/ui";
 import { Bell } from "lucide-react";
+import { useTheme } from "next-themes";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -10,17 +22,26 @@ import {
   useMarkNotificationRead,
   useNotifications,
 } from "@/hooks/use-notifications";
+import { useAuthStore } from "@/lib/auth-store";
 import { notificationHref } from "@/lib/notification-href";
+import { THEME_COLORS } from "@/lib/theme-colors";
 
 export default function NotificationsPage() {
   const { toast } = useToast();
+  const { resolvedTheme } = useTheme();
+  const mode = resolvedTheme === "dark" ? "dark" : "light";
+  const availableBusinesses = useAuthStore((state) => state.availableBusinesses);
+  const businessById = new Map(availableBusinesses.map((b) => [b.businessId, b]));
+  const canSeeMultipleBusinesses = availableBusinesses.length > 1;
+
   const [page, setPage] = useState(1);
-  const notificationsQuery = useNotifications({ page, pageSize: 20 });
+  const [allBusinesses, setAllBusinesses] = useState(false);
+  const notificationsQuery = useNotifications({ page, pageSize: 20, allBusinesses });
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
 
   async function handleMarkAllRead() {
-    await markAllRead.mutateAsync();
+    await markAllRead.mutateAsync(allBusinesses);
     toast({ title: "All notifications marked as read" });
   }
 
@@ -36,15 +57,47 @@ export default function NotificationsPage() {
         </Button>
       </div>
 
+      {canSeeMultipleBusinesses && (
+        <Tabs
+          value={allBusinesses ? "all" : "active"}
+          onValueChange={(v) => {
+            setAllBusinesses(v === "all");
+            setPage(1);
+          }}
+        >
+          <TabsList>
+            <TabsTrigger value="active">This business</TabsTrigger>
+            <TabsTrigger value="all">All my businesses</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
       {notificationsQuery.isLoading ? (
         <Skeleton className="h-96 w-full" />
       ) : (
         <div className="space-y-2">
           {(notificationsQuery.data?.items ?? []).map((notification) => {
             const href = notificationHref(notification.entityType, notification.entityId);
+            const business = businessById.get(notification.businessId);
+            const showBusinessTag = allBusinesses && canSeeMultipleBusinesses && business;
             const body = (
               <>
-                <p className="text-sm font-medium">{notification.title}</p>
+                <div className="flex items-center gap-2">
+                  {!notification.isRead && (
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+                  )}
+                  <p className="text-sm font-medium">{notification.title}</p>
+                  {showBusinessTag && (
+                    <span className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      <span
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{ backgroundColor: `hsl(${THEME_COLORS[business.themeColor][mode].primary})` }}
+                        aria-hidden
+                      />
+                      {business.businessCode}
+                    </span>
+                  )}
+                </div>
                 {notification.body && (
                   <p className="text-sm text-muted-foreground">{notification.body}</p>
                 )}
@@ -58,7 +111,7 @@ export default function NotificationsPage() {
             };
 
             return (
-              <Card key={notification.id} className={notification.isRead ? "opacity-60" : undefined}>
+              <Card key={notification.id} className={notification.isRead ? undefined : "bg-accent/50"}>
                 <CardContent className="flex items-start justify-between gap-4 pt-4">
                   {href ? (
                     <Link href={href} className="min-w-0 flex-1 hover:underline" onClick={onOpen}>

@@ -146,6 +146,7 @@ model Business {
   invoices        Invoice[]
   expenses        Expense[]
   payments        Payment[]
+  notifications   Notification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -523,6 +524,8 @@ model Notification {
   id         String    @id @default(uuid())
   userId     String
   user       User      @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  businessId String
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   type       String
   title      String
   body       String?
@@ -534,7 +537,7 @@ model Notification {
 
   createdAt DateTime @default(now())
 
-  @@index([userId, isRead, createdAt])
+  @@index([userId, businessId, isRead, createdAt])
   @@index([entityType, entityId])
   @@map("notifications")
 }

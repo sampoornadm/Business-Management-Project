@@ -1,5 +1,6 @@
 export interface NotificationDto {
   id: string;
+  businessId: string;
   type: string;
   title: string;
   body: string | null;
@@ -13,4 +14,5 @@ export interface ListNotificationsQuery {
   page?: number;
   pageSize?: number;
   isRead?: boolean;
+  allBusinesses?: boolean;
 }

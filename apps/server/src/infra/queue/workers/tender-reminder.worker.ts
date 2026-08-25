@@ -50,6 +50,7 @@ export async function checkDeadlinesForBusiness(businessId: string): Promise<voi
         tender.id,
         "TENDER_DEADLINE_REMINDER",
         { thresholdDays: daysRemaining },
+        businessId,
       );
       if (alreadySent) continue;
 
@@ -61,6 +62,7 @@ export async function checkDeadlinesForBusiness(businessId: string): Promise<voi
 
       const dayLabel = daysRemaining === 1 ? "1 day" : `${daysRemaining} days`;
       await notificationsService.createMany([...recipients.keys()], {
+        businessId,
         type: "TENDER_DEADLINE_REMINDER",
         title: `Submission deadline in ${dayLabel}`,
         body: `${tender.tenderNumber} — ${tender.title}`,

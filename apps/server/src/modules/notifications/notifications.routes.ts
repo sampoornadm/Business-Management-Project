@@ -4,7 +4,7 @@ import { authenticateMiddleware } from "../../shared/middleware/authenticate.mid
 import { validate } from "../../shared/middleware/validate.middleware.js";
 
 import type { NotificationsController } from "./notifications.controller.js";
-import { listNotificationsQuerySchema } from "./notifications.validation.js";
+import { listNotificationsQuerySchema, markAllReadQuerySchema } from "./notifications.validation.js";
 
 export function createNotificationsRouter(controller: NotificationsController): Router {
   const router = Router();
@@ -48,7 +48,12 @@ export function createNotificationsRouter(controller: NotificationsController): 
    *     responses:
    *       200: { description: All notifications marked as read }
    */
-  router.patch("/read-all", authenticateMiddleware, controller.markAllRead);
+  router.patch(
+    "/read-all",
+    authenticateMiddleware,
+    validate(markAllReadQuerySchema, "query"),
+    controller.markAllRead,
+  );
 
   /**
    * @openapi
