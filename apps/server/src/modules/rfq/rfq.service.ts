@@ -245,21 +245,9 @@ export class RfqService {
     return this.getById(item.rfqId, businessId);
   }
 
-  async buildQuoteSheetFor(
-    rfqId: string,
-    businessId: string,
-  ): Promise<{ filename: string; buffer: Buffer }> {
-    const rfq = await this.getDetailOrThrow(rfqId, businessId);
-    const buffer = await buildQuoteSheet(
-      rfq.title,
-      rfq.items.map((item) => ({
-        rfqItemId: item.id,
-        description: item.description,
-        unit: item.unit,
-        quantity: item.quantity,
-      })),
-    );
-    const safeTitle = rfq.title.replace(/[^a-zA-Z0-9-_]+/g, "-").slice(0, 60);
+  async buildQuoteSheetFor(rfqId: string, businessId: string): Promise<{ filename: string; buffer: Buffer }> {
+    const { data, safeTitle } = await this.loadRfrDocumentData(rfqId, businessId);
+    const buffer = await buildQuoteSheet(data);
     return { filename: `quotes-${safeTitle || rfqId}.xlsx`, buffer };
   }
 

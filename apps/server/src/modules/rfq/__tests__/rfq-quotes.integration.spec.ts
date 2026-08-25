@@ -80,9 +80,9 @@ describe("RFQ quote sheet export/import (integration)", () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(sheet.body as unknown as ArrayBuffer);
     const ws = workbook.worksheets[0]!;
-    ws.getCell("F2").value = 152.5; // Rate for the first item
-    ws.getCell("I2").value = "N";
-    ws.getCell("I3").value = "Y"; // Second item: regret
+    ws.getCell("G7").value = 152.5; // Rate for the first item
+    ws.getCell("J7").value = "N";
+    ws.getCell("J8").value = "Y"; // Second item: regret
     const filled = Buffer.from(await workbook.xlsx.writeBuffer());
 
     const imported = await request(app)
