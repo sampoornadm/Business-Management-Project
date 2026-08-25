@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildRfqText } from "../rfq-document.js";
+import { buildRfrPdf, buildRfqText, toRfrDocumentData } from "../rfq-document.js";
 
 describe("buildRfqText", () => {
   it("builds a plain-text RFQ with an itemized list and a signature", () => {
@@ -44,5 +44,84 @@ describe("buildRfqText", () => {
     });
 
     expect(text).toContain("1. Item — Qty: 5\n");
+  });
+});
+
+describe("toRfrDocumentData", () => {
+  it("shapes business, RFQ and item data into one document payload", () => {
+    const data = toRfrDocumentData(
+      {
+        title: "Cement Supply RFQ",
+        instructions: "Deliver to site within 15 days",
+        dueDate: new Date(2026, 8, 1),
+        items: [
+          { id: "item-1", description: "OPC Cement", unit: "bag", quantity: 500, instructions: "ISI marked only" },
+          { id: "item-2", description: "TMT Bars", unit: "kg", quantity: 1200, instructions: null },
+        ],
+      },
+      { name: "Archie Udyog", address: "Pune, MH", gstNumber: "27AAAAA0000A1Z5" },
+      "TND-0001",
+    );
+
+    expect(data).toEqual({
+      businessName: "Archie Udyog",
+      businessAddress: "Pune, MH",
+      businessGstNumber: "27AAAAA0000A1Z5",
+      rfqTitle: "Cement Supply RFQ",
+      tenderNumber: "TND-0001",
+      dueDate: "01-09-2026",
+      instructions: "Deliver to site within 15 days",
+      items: [
+        {
+          rfqItemId: "item-1",
+          description: "OPC Cement",
+          unit: "bag",
+          quantity: 500,
+          instructions: "ISI marked only",
+        },
+        { rfqItemId: "item-2", description: "TMT Bars", unit: "kg", quantity: 1200, instructions: null },
+      ],
+    });
+  });
+
+  it("carries nulls through when there is no tender, due date or instructions", () => {
+    const data = toRfrDocumentData(
+      { title: "Standalone RFQ", instructions: null, dueDate: null, items: [] },
+      { name: "Archie Udyog", address: null, gstNumber: null },
+      null,
+    );
+
+    expect(data.tenderNumber).toBeNull();
+    expect(data.dueDate).toBeNull();
+    expect(data.instructions).toBeNull();
+  });
+});
+
+describe("buildRfrPdf", () => {
+  it("renders a valid PDF containing the business, RFQ, and item content", async () => {
+    const buffer = await buildRfrPdf({
+      businessName: "Archie Udyog",
+      businessAddress: "Pune, MH",
+      businessGstNumber: "27AAAAA0000A1Z5",
+      rfqTitle: "Cement Supply RFQ",
+      tenderNumber: "TND-0001",
+      dueDate: "01-09-2026",
+      instructions: "Deliver to site within 15 days",
+      items: [
+        {
+          rfqItemId: "item-1",
+          description: "OPC Cement",
+          unit: "bag",
+          quantity: 500,
+          instructions: "ISI marked only",
+        },
+      ],
+    });
+
+    expect(buffer.subarray(0, 4).toString("latin1")).toBe("%PDF");
+    expect(buffer.subarray(-6).toString("latin1").trim()).toBe("%%EOF");
+    // A doc with a header block + a 9-column table row should run well past a few hundred
+    // bytes — this is a floor against a truncated/empty stream, not a content check.
+    expect(buffer.length).toBeGreaterThan(500);
   });
 });
