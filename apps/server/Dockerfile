@@ -33,6 +33,7 @@ COPY --from=build /app/packages/database ./packages/database
 COPY --from=build /app/packages/types ./packages/types
 COPY --from=build /app/apps/server/dist ./apps/server/dist
 COPY --from=build /app/apps/server/src ./apps/server/src
+COPY --from=build /app/apps/server/templates ./apps/server/templates
 COPY --from=build /app/apps/server/package.json ./apps/server/package.json
 COPY --from=build /app/apps/server/node_modules ./apps/server/node_modules
 USER bmp

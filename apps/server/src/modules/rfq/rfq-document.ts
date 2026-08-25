@@ -1,6 +1,16 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import PDFDocument from "pdfkit";
 
-import { formatDate } from "../document-generation/document-generation.service.js";
+import { fillDocxTemplate, formatDate } from "../document-generation/document-generation.service.js";
+
+// Resolves to apps/server regardless of whether this runs from src (tsx, dev) or dist
+// (compiled, prod) — both live two levels under apps/server/src/modules/rfq. Same technique
+// as apps/server/src/docs/swagger.ts.
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const RFR_TEMPLATE_PATH = path.join(currentDir, "../../../templates/rfr.docx");
 
 export interface RfqTextItem {
   description: string;
@@ -180,5 +190,24 @@ export function buildRfrPdf(data: RfrDocumentData): Promise<Buffer> {
     }
 
     doc.end();
+  });
+}
+
+export async function buildRfrDocx(data: RfrDocumentData): Promise<Buffer> {
+  const templateBuffer = await readFile(RFR_TEMPLATE_PATH);
+  return fillDocxTemplate(templateBuffer, {
+    businessName: data.businessName,
+    businessAddress: data.businessAddress ?? "",
+    businessGstNumber: data.businessGstNumber ?? "",
+    rfqTitle: data.rfqTitle,
+    tenderNumber: data.tenderNumber ?? "",
+    dueDate: data.dueDate ?? "",
+    instructions: data.instructions ?? "",
+    items: data.items.map((item) => ({
+      description: item.description,
+      unit: item.unit ?? "",
+      quantity: String(item.quantity),
+      instructions: item.instructions ?? "",
+    })),
   });
 }
