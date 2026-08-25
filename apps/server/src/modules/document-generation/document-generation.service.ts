@@ -57,7 +57,7 @@ export async function getTemplateStatus(
   }
 }
 
-export function fillDocxTemplate(templateBuffer: Buffer, data: Record<string, string>): Buffer {
+export function fillDocxTemplate(templateBuffer: Buffer, data: Record<string, unknown>): Buffer {
   const zip = new PizZip(templateBuffer);
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,

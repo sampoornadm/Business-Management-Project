@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import PizZip from "pizzip";
 
-import { buildRfrPdf, buildRfqText, toRfrDocumentData } from "../rfq-document.js";
+import { buildRfrDocx, buildRfrPdf, buildRfqText, toRfrDocumentData } from "../rfq-document.js";
 
 describe("buildRfqText", () => {
   it("builds a plain-text RFQ with an itemized list and a signature", () => {
@@ -123,5 +124,45 @@ describe("buildRfrPdf", () => {
     // A doc with a header block + a 9-column table row should run well past a few hundred
     // bytes — this is a floor against a truncated/empty stream, not a content check.
     expect(buffer.length).toBeGreaterThan(500);
+  });
+});
+
+describe("buildRfrDocx", () => {
+  it("fills the bundled template with business, RFQ and item data", async () => {
+    const buffer = await buildRfrDocx({
+      businessName: "Archie Udyog",
+      businessAddress: "Pune, MH",
+      businessGstNumber: "27AAAAA0000A1Z5",
+      rfqTitle: "Cement Supply RFQ",
+      tenderNumber: "TND-0001",
+      dueDate: "01-09-2026",
+      instructions: "Deliver to site within 15 days",
+      items: [
+        {
+          rfqItemId: "item-1",
+          description: "OPC Cement",
+          unit: "bag",
+          quantity: 500,
+          instructions: "ISI marked only",
+        },
+        { rfqItemId: "item-2", description: "TMT Bars", unit: "kg", quantity: 1200, instructions: null },
+      ],
+    });
+
+    const zip = new PizZip(buffer);
+    const documentXml = zip.file("word/document.xml")!.asText();
+
+    expect(documentXml).toContain("Archie Udyog");
+    expect(documentXml).toContain("Cement Supply RFQ");
+    expect(documentXml).toContain("TND-0001");
+    expect(documentXml).toContain("Deliver to site within 15 days");
+    expect(documentXml).toContain("OPC Cement");
+    expect(documentXml).toContain("ISI marked only");
+    expect(documentXml).toContain("TMT Bars");
+    expect(documentXml).not.toContain("{{#items}}");
+    expect(documentXml).not.toContain("{{/items}}");
+    // Two items in the loop must produce two separate table rows, not one merged row.
+    expect(documentXml.split("OPC Cement")).toHaveLength(2);
+    expect(documentXml.split("TMT Bars")).toHaveLength(2);
   });
 });
