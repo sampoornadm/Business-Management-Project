@@ -88,37 +88,41 @@ export function QuoteSheetActions({
         <Download className="mr-2 h-4 w-4" /> Download PDF
       </Button>
 
-      <Select value={vendorId} onValueChange={setVendorId}>
-        <SelectTrigger className="h-9 w-56">
-          <SelectValue placeholder="Vendor to import for" />
-        </SelectTrigger>
-        <SelectContent>
-          {vendors.map((v) => (
-            <SelectItem key={v.id} value={v.id}>
-              {v.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {vendors.length > 0 && (
+        <>
+          <Select value={vendorId} onValueChange={setVendorId}>
+            <SelectTrigger className="h-9 w-56">
+              <SelectValue placeholder="Vendor to import for" />
+            </SelectTrigger>
+            <SelectContent>
+              {vendors.map((v) => (
+                <SelectItem key={v.id} value={v.id}>
+                  {v.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-      <input
-        ref={fileInput}
-        type="file"
-        accept=".xlsx"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) void onFile(file);
-          e.target.value = "";
-        }}
-      />
-      <Button
-        size="sm"
-        disabled={!vendorId || importQuotes.isPending}
-        onClick={() => fileInput.current?.click()}
-      >
-        <Upload className="mr-2 h-4 w-4" /> Import filled sheet
-      </Button>
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void onFile(file);
+              e.target.value = "";
+            }}
+          />
+          <Button
+            size="sm"
+            disabled={!vendorId || importQuotes.isPending}
+            onClick={() => fileInput.current?.click()}
+          >
+            <Upload className="mr-2 h-4 w-4" /> Import filled sheet
+          </Button>
+        </>
+      )}
     </div>
   );
 }
