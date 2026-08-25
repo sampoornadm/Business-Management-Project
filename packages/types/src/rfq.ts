@@ -23,6 +23,7 @@ export interface RfqItemDto {
   description: string;
   unit: string | null;
   quantity: number;
+  instructions: string | null;
   sortOrder: number;
   quotes: RfqQuoteDto[];
 }
@@ -52,6 +53,7 @@ export interface RfqListItemDto {
 }
 
 export interface RfqDto extends RfqListItemDto {
+  instructions: string | null;
   items: RfqItemDto[];
   vendorInvites: RfqVendorInviteDto[];
   createdBy: { id: string; firstName: string; lastName: string };
@@ -63,6 +65,7 @@ export interface CreateRfqItemInput {
   description: string;
   unit?: string;
   quantity: number;
+  instructions?: string;
   sortOrder?: number;
 }
 
@@ -70,11 +73,12 @@ export interface CreateRfqInput {
   title: string;
   tenderId?: string;
   dueDate?: string;
+  instructions?: string;
   items: CreateRfqItemInput[];
   vendorIds?: string[];
 }
 
-export type UpdateRfqInput = Partial<Pick<CreateRfqInput, "title" | "dueDate">>;
+export type UpdateRfqInput = Partial<Pick<CreateRfqInput, "title" | "dueDate" | "instructions">>;
 
 export interface AddRfqVendorInput {
   vendorId: string;

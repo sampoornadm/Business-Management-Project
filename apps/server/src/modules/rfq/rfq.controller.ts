@@ -57,6 +57,7 @@ export class RfqController {
         title: body.title,
         tenderId: body.tenderId,
         dueDate: body.dueDate ? new Date(body.dueDate) : undefined,
+        instructions: body.instructions,
         items: body.items,
         vendorIds: body.vendorIds,
       },
@@ -70,7 +71,11 @@ export class RfqController {
     const body = req.body as UpdateRfqBody;
     const rfq = await this.rfqService.update(
       req.params.id!,
-      { title: body.title, dueDate: body.dueDate ? new Date(body.dueDate) : undefined },
+      {
+        title: body.title,
+        dueDate: body.dueDate ? new Date(body.dueDate) : undefined,
+        instructions: body.instructions,
+      },
       req.user!.id,
       req.user!.businessId,
     );
