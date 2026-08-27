@@ -135,11 +135,27 @@ git commit -m "feat(server): add DOCUMENT_INDEXING_ENABLED and DOCUMENT_MATCH_TH
 
 - [ ] **Step 1: Write the failing tests**
 
+`pdf-parse@1.1.4`'s bundled pdf.js (an old, 2017-era webpack build) cannot run inside vitest's
+module pipeline at all — verified directly: three different real and synthetic PDF buffers
+(hand-written minimal PDF, `pdfkit` output, a genuine Ghostscript-produced PDF) each threw a
+*different* parse error (`bad XRef entry`, `Illegal character: 41`, ...) under vitest, while the
+exact same bytes parsed correctly via plain `node -e` outside any bundler. `createRequire` doesn't
+help — the failure persists regardless of how `pdf-parse` is imported. No test anywhere in this
+codebase has ever exercised real `pdf-parse` through vitest before (existing PDF-parser tests in
+`apps/server/src/modules/tenders/__tests__/tender-header.parser.spec.ts` etc. test pre-extracted
+*text strings*, one layer below the actual `pdfParse()` call — they never hit this problem because
+they never call it for real). So: mock `pdf-parse` for this test, the same way `embed`/
+`generateJson` are already mocked elsewhere in this plan. This tests `extractText`'s own logic
+(dispatch by mime type, trim-or-null, catch-and-null) rather than pdf-parse's internal parsing
+correctness — which was never actually this task's concern.
+
 ```ts
-import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
-import PDFDocument from "pdfkit";
-import { describe, expect, it } from "vitest";
+import PizZip from "pizzip";
+import { describe, expect, it, vi } from "vitest";
+
+const { pdfParseMock } = vi.hoisted(() => ({ pdfParseMock: vi.fn() }));
+vi.mock("pdf-parse", () => ({ default: pdfParseMock }));
 
 import { extractText } from "../document-indexing.service.js";
 
@@ -171,23 +187,23 @@ function buildTestDocxBuffer(bodyText: string): Buffer {
   return zip.generate({ type: "nodebuffer" });
 }
 
-function buildTestPdfBuffer(text: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument();
-    const chunks: Buffer[] = [];
-    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-    doc.text(text);
-    doc.end();
-  });
-}
-
 describe("extractText", () => {
   it("extracts text from a PDF buffer", async () => {
-    const buffer = await buildTestPdfBuffer("Notice Inviting Tender for XLPE Cable Supply");
-    const result = await extractText(buffer, "application/pdf");
-    expect(result).toContain("Notice Inviting Tender for XLPE Cable Supply");
+    pdfParseMock.mockResolvedValue({ text: "Notice Inviting Tender for XLPE Cable Supply" });
+    const result = await extractText(Buffer.from("fake pdf bytes"), "application/pdf");
+    expect(result).toBe("Notice Inviting Tender for XLPE Cable Supply");
+  });
+
+  it("returns null when pdf-parse finds no extractable text", async () => {
+    pdfParseMock.mockResolvedValue({ text: "   " });
+    const result = await extractText(Buffer.from("fake pdf bytes"), "application/pdf");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when pdf-parse throws", async () => {
+    pdfParseMock.mockRejectedValue(new Error("corrupt PDF"));
+    const result = await extractText(Buffer.from("fake pdf bytes"), "application/pdf");
+    expect(result).toBeNull();
   });
 
   it("extracts text from a DOCX buffer", async () => {
@@ -254,7 +270,7 @@ export async function extractText(buffer: Buffer, mimeType: string): Promise<str
 - [ ] **Step 4: Run tests, confirm they pass**
 
 Run: `pnpm --filter @bmp/server exec vitest run src/modules/attachments/__tests__/document-indexing.service.spec.ts`
-Expected: PASS (3 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -295,9 +311,16 @@ needed.)
 
 - [ ] **Step 2: Write the failing integration test**
 
-This hits real Postgres and real MinIO (this project's existing test infra) but mocks the Ollama
-embed call — same hybrid approach `boq-enrichment.service.spec.ts` uses for the LLM piece, since
-a live Ollama isn't guaranteed available wherever this test runs.
+This hits real Postgres and real MinIO (this project's existing test infra). It mocks two things:
+the Ollama `embed` call — same hybrid approach `boq-enrichment.service.spec.ts` uses for the LLM
+piece, since a live Ollama isn't guaranteed available wherever this test runs — and `pdf-parse`
+itself. The `pdf-parse` mock isn't optional: `pdf-parse@1.1.4`'s bundled pdf.js (2017-era webpack
+build) cannot run inside vitest's module pipeline at all — verified directly, three different real
+and synthetic PDF buffers each threw a *different* parse error under vitest while parsing
+correctly via plain `node -e` outside any bundler. Real PDF bytes are therefore pointless here:
+this test is about `indexAttachment`'s own orchestration (extract → truncate → embed → store,
+including the partial-success paths), not about pdf-parse's internal correctness, so mocking what
+extraction returns is the right level of test regardless.
 
 ```ts
 // apps/server/src/modules/attachments/__tests__/document-indexing.service.integration.spec.ts
@@ -306,12 +329,17 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@bmp/database";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-const { embedMock } = vi.hoisted(() => ({ embedMock: vi.fn() }));
+const { embedMock, pdfParseMock } = vi.hoisted(() => ({ embedMock: vi.fn(), pdfParseMock: vi.fn() }));
 vi.mock("../../../infra/llm/ollama.client.js", () => ({ embed: embedMock }));
+vi.mock("pdf-parse", () => ({ default: pdfParseMock }));
 
 import { ServiceUnavailableError } from "../../../core/errors/HttpErrors.js";
 import { s3Service } from "../../../infra/storage/s3.service.js";
 import { indexAttachment } from "../document-indexing.service.js";
+
+// pdf-parse is mocked (see above) — the buffer's actual bytes are never really parsed, only its
+// presence in S3 matters (indexAttachment fetches it before calling extractText).
+const PLACEHOLDER_PDF_BYTES = Buffer.from("placeholder — content is irrelevant, pdf-parse is mocked");
 
 describe("indexAttachment (integration)", () => {
   let businessId: string;
@@ -337,11 +365,7 @@ describe("indexAttachment (integration)", () => {
     });
     userId = user.id;
 
-    await s3Service.putObject({
-      key: storagePath,
-      body: Buffer.from("%PDF-1.4\nplaceholder — extraction failure is fine for this test"),
-      contentType: "application/pdf",
-    });
+    await s3Service.putObject({ key: storagePath, body: PLACEHOLDER_PDF_BYTES, contentType: "application/pdf" });
 
     const attachment = await prisma.attachment.create({
       data: {
@@ -370,12 +394,13 @@ describe("indexAttachment (integration)", () => {
   });
 
   it("extracts text, embeds it, and stores both on the attachment", async () => {
+    pdfParseMock.mockResolvedValue({ text: "Notice inviting tender for cable supply" });
     embedMock.mockResolvedValue([[0.1, 0.2, 0.3]]);
 
     await indexAttachment(attachmentId);
 
     const updated = await prisma.attachment.findUniqueOrThrow({ where: { id: attachmentId } });
-    expect(updated.extractedText).not.toBeNull();
+    expect(updated.extractedText).toBe("Notice inviting tender for cable supply");
     expect(updated.embedding).toEqual([0.1, 0.2, 0.3]);
     expect(updated.embeddedAt).not.toBeNull();
   });
@@ -385,13 +410,10 @@ describe("indexAttachment (integration)", () => {
   });
 
   it("truncates extracted text to 8000 characters before embedding", async () => {
+    pdfParseMock.mockResolvedValue({ text: "x".repeat(9000) });
     embedMock.mockResolvedValue([[0.4, 0.5, 0.6]]);
     const longTextPath = `tender/${randomUUID()}/${randomUUID()}-original.pdf`;
-    await s3Service.putObject({
-      key: longTextPath,
-      body: await buildLongPdfBuffer(9000), // helper below — a real PDF whose extracted text exceeds 8000 chars
-      contentType: "application/pdf",
-    });
+    await s3Service.putObject({ key: longTextPath, body: PLACEHOLDER_PDF_BYTES, contentType: "application/pdf" });
     const longAttachment = await prisma.attachment.create({
       data: {
         id: randomUUID(),
@@ -418,13 +440,10 @@ describe("indexAttachment (integration)", () => {
   });
 
   it("stores extracted text even when Ollama is unavailable, without an embedding", async () => {
+    pdfParseMock.mockResolvedValue({ text: "Notice inviting tender for cable supply" });
     embedMock.mockRejectedValue(new ServiceUnavailableError("Ollama not reachable"));
     const noOllamaPath = `tender/${randomUUID()}/${randomUUID()}-original.pdf`;
-    await s3Service.putObject({
-      key: noOllamaPath,
-      body: await buildLongPdfBuffer(50),
-      contentType: "application/pdf",
-    });
+    await s3Service.putObject({ key: noOllamaPath, body: PLACEHOLDER_PDF_BYTES, contentType: "application/pdf" });
     const attachmentNoOllama = await prisma.attachment.create({
       data: {
         id: randomUUID(),
@@ -452,28 +471,6 @@ describe("indexAttachment (integration)", () => {
     await s3Service.deleteObject(noOllamaPath);
   });
 });
-```
-
-Add this helper near the top of the test file, alongside the other imports — builds a real PDF
-whose extracted text is at least `minChars` long, by repeating a line pdfkit will wrap across
-enough pages:
-
-```ts
-import PDFDocument from "pdfkit";
-
-function buildLongPdfBuffer(minChars: number): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument();
-    const chunks: Buffer[] = [];
-    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-    const line = "Notice inviting tender for cable supply. ";
-    const repeats = Math.ceil(minChars / line.length);
-    doc.text(line.repeat(repeats));
-    doc.end();
-  });
-}
 ```
 
 - [ ] **Step 3: Run test, confirm it fails**
@@ -1185,8 +1182,11 @@ import { prisma } from "@bmp/database";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-const { embedMock } = vi.hoisted(() => ({ embedMock: vi.fn() }));
+const { embedMock, pdfParseMock } = vi.hoisted(() => ({ embedMock: vi.fn(), pdfParseMock: vi.fn() }));
 vi.mock("../../../infra/llm/ollama.client.js", () => ({ embed: embedMock }));
+// pdf-parse@1.1.4's bundled pdf.js cannot run inside vitest (see Task 3/4) — mocked here too so
+// indexAttachment's extraction step succeeds instead of silently no-op'ing on a caught parse error.
+vi.mock("pdf-parse", () => ({ default: pdfParseMock }));
 
 import { createApp } from "../../../app.js";
 import { indexAttachment } from "../../attachments/document-indexing.service.js";
@@ -1246,6 +1246,7 @@ describe("GET /search — attachments (integration)", () => {
     });
     attachmentId = attachment.id;
 
+    pdfParseMock.mockResolvedValue({ text: "Notice inviting tender for XLPE cable supply" });
     embedMock.mockResolvedValue([[0.1, 0.2, 0.3]]);
     await indexAttachment(attachmentId);
   });
