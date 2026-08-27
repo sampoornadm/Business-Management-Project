@@ -18,7 +18,7 @@ function toBillItemDto(item: BillDetail["items"][number]): BillItemDto {
 }
 
 export function toBillListItemDto(entity: BillListItem): BillListItemDto {
-  const total = entity.items.reduce((sum, item) => sum + item.quantity * item.rate, 0);
+  const total = entity.items.reduce((sum, item) => sum + round2(item.quantity * item.rate), 0);
   return {
     id: entity.id,
     billNumber: entity.billNumber,
