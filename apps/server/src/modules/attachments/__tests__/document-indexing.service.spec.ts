@@ -1,6 +1,9 @@
-import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
-import { describe, expect, it } from "vitest";
+import PizZip from "pizzip";
+import { describe, expect, it, vi } from "vitest";
+
+const { pdfParseMock } = vi.hoisted(() => ({ pdfParseMock: vi.fn() }));
+vi.mock("pdf-parse", () => ({ default: pdfParseMock }));
 
 import { extractText } from "../document-indexing.service.js";
 
@@ -32,36 +35,23 @@ function buildTestDocxBuffer(bodyText: string): Buffer {
   return zip.generate({ type: "nodebuffer" });
 }
 
-function buildTestPdfBuffer(text: string): Buffer {
-  const content = `BT /F1 12 Tf 72 712 Td (${text}) Tj ET`;
-  const objs = [
-    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
-    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
-    "3 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 5 0 R >> >> /MediaBox [0 0 612 792] /Contents 4 0 R >>\nendobj\n",
-    `4 0 obj\n<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj\n`,
-    "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
-  ];
-
-  let pdf = "%PDF-1.4\n";
-  const offsets: number[] = [0];
-  for (const obj of objs) {
-    offsets.push(Buffer.byteLength(pdf, "utf8"));
-    pdf += obj;
-  }
-  const xrefStart = Buffer.byteLength(pdf, "utf8");
-  pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
-  for (let i = 1; i <= objs.length; i++) {
-    pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
-  }
-  pdf += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
-  return Buffer.from(pdf, "utf8");
-}
-
 describe("extractText", () => {
   it("extracts text from a PDF buffer", async () => {
-    const buffer = buildTestPdfBuffer("Notice Inviting Tender for XLPE Cable Supply");
-    const result = await extractText(buffer, "application/pdf");
-    expect(result).toContain("Notice Inviting Tender for XLPE Cable Supply");
+    pdfParseMock.mockResolvedValue({ text: "Notice Inviting Tender for XLPE Cable Supply" });
+    const result = await extractText(Buffer.from("fake pdf bytes"), "application/pdf");
+    expect(result).toBe("Notice Inviting Tender for XLPE Cable Supply");
+  });
+
+  it("returns null when pdf-parse finds no extractable text", async () => {
+    pdfParseMock.mockResolvedValue({ text: "   " });
+    const result = await extractText(Buffer.from("fake pdf bytes"), "application/pdf");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when pdf-parse throws", async () => {
+    pdfParseMock.mockRejectedValue(new Error("corrupt PDF"));
+    const result = await extractText(Buffer.from("fake pdf bytes"), "application/pdf");
+    expect(result).toBeNull();
   });
 
   it("extracts text from a DOCX buffer", async () => {
