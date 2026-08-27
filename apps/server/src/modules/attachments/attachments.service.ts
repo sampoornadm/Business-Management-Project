@@ -2,7 +2,9 @@ import { randomUUID } from "node:crypto";
 
 import { fileTypeFromBuffer } from "file-type";
 
+import { env } from "../../config/env.js";
 import { BadRequestError, NotFoundError } from "../../core/errors/HttpErrors.js";
+import { documentIndexingQueue } from "../../infra/queue/queues.js";
 import { imageService } from "../../infra/storage/image.service.js";
 import { s3Service } from "../../infra/storage/s3.service.js";
 import { sha256 } from "../../shared/utils/hash.js";
@@ -114,6 +116,10 @@ export class AttachmentsService {
       // Reflect the just-set value on the object we're about to return, since
       // the row we hold in memory predates that update.
       original.documentGroupId = original.id;
+    }
+
+    if (env.DOCUMENT_INDEXING_ENABLED) {
+      await documentIndexingQueue.add("index-document", { attachmentId: original.id });
     }
 
     let thumbnail: AttachmentWithUploader | null = null;
