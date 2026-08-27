@@ -29,4 +29,11 @@ export class BillsController {
     );
     sendSuccess(res, bill, "Bill created", 201);
   });
+
+  downloadPdf = asyncHandler(async (req, res) => {
+    const { filename, buffer } = await this.billsService.buildBillPdfFor(req.params.id!, req.user!.businessId);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(buffer);
+  });
 }

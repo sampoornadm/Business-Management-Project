@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 import { prisma } from "@bmp/database";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApp } from "../../../app.js";
+import { env } from "../../../config/env.js";
 import {
   cleanupIntegrationTestUser,
   createIntegrationTestUser,
@@ -19,11 +23,32 @@ describe("Bills (integration)", () => {
   let clientOrgId: string;
   let tenderId: string;
   let billId: string;
+  let templatesDir: string;
+  let businessCode: string;
+  const TINY_PNG = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    "base64",
+  );
+  const originalBusinessesRootDir = env.BUSINESSES_ROOT_DIR;
 
   beforeAll(async () => {
+    templatesDir = await mkdtemp(path.join(tmpdir(), "bmp-bills-integration-"));
+    env.BUSINESSES_ROOT_DIR = templatesDir;
+
     testUser = await createIntegrationTestUser(app);
     token = testUser.accessToken;
     userId = testUser.userId;
+
+    const business = await prisma.business.findUnique({
+      where: { id: testUser.businessId },
+      select: { code: true },
+    });
+    businessCode = business!.code;
+
+    // Create signature file for PDF download test
+    const businessTemplatesDir = path.join(templatesDir, businessCode, "templates");
+    await mkdir(businessTemplatesDir, { recursive: true });
+    await writeFile(path.join(businessTemplatesDir, "signature.png"), TINY_PNG);
 
     const client = await prisma.organization.create({
       data: { id: randomUUID(), name: "IISCO", type: "GOVERNMENT", createdById: userId },
@@ -52,6 +77,8 @@ describe("Bills (integration)", () => {
     if (tenderId) await prisma.tender.deleteMany({ where: { id: tenderId } });
     if (clientOrgId) await prisma.organization.deleteMany({ where: { id: clientOrgId } });
     await cleanupIntegrationTestUser(testUser);
+    await rm(templatesDir, { recursive: true, force: true });
+    env.BUSINESSES_ROOT_DIR = originalBusinessesRootDir;
     await prisma.$disconnect();
   });
 
@@ -104,5 +131,15 @@ describe("Bills (integration)", () => {
     expect(getResponse.status).toBe(200);
     expect(getResponse.body.data.grnNumber).toBe("GRN-2201");
     expect(getResponse.body.data.clientName).toBe("IISCO");
+  });
+
+  it("downloads the bill as a PDF", async () => {
+    const response = await request(app)
+      .get(`/api/v1/bills/${billId}/pdf`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toBe("application/pdf");
+    expect(response.body.length).toBeGreaterThan(0);
   });
 });

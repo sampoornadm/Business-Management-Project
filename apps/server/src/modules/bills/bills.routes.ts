@@ -59,5 +59,22 @@ export function createBillsRouter(controller: BillsController): Router {
    */
   router.get("/:id", authenticateMiddleware, requirePermission("bills:read"), controller.getById);
 
+  /**
+   * @openapi
+   * /bills/{id}/pdf:
+   *   get:
+   *     tags: [Bills]
+   *     summary: Download the bill as a signed PDF
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: pdf file }
+   */
+  router.get("/:id/pdf", authenticateMiddleware, requirePermission("bills:read"), controller.downloadPdf);
+
   return router;
 }
