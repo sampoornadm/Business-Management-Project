@@ -63,6 +63,8 @@ export const PERMISSION_KEYS = [
   "projects:read",
   "projects:update",
   "projects:delete",
+  "bills:create",
+  "bills:read",
   "finance:create",
   "finance:read",
   "finance:update",
@@ -143,6 +145,8 @@ const TENDER_MANAGER_PERMISSIONS: PermissionKey[] = [
   // selected BOQ items — Tender Manager needs rfq:create to use it without
   // requiring a separate Purchase Manager account for this one step.
   "rfq:create",
+  "bills:create",
+  "bills:read",
 ];
 
 // Estimators fill in tender details/upload documents but don't own
@@ -186,6 +190,8 @@ const PROJECT_MANAGER_PERMISSIONS: PermissionKey[] = [
 // payments, invoices, taxes, GST, and financial reports").
 const ACCOUNTS_PERMISSIONS: PermissionKey[] = [
   ...OPERATIONAL_ROLE_PERMISSIONS,
+  "bills:create",
+  "bills:read",
   "finance:create",
   "finance:update",
   "finance:delete",
@@ -194,6 +200,7 @@ const ACCOUNTS_PERMISSIONS: PermissionKey[] = [
 const VIEWER_PERMISSIONS: PermissionKey[] = [
   "users:read",
   "attachments:read",
+  "bills:read",
   ...TENDER_VIEW_BASELINE,
 ];
 
