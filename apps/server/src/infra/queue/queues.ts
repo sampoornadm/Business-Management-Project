@@ -65,3 +65,22 @@ export const aiEnrichmentQueue = new Queue<AiEnrichmentJobPayload, void, "enrich
     },
   },
 );
+
+export interface DocumentIndexingJobPayload {
+  attachmentId: string;
+}
+
+export const DOCUMENT_INDEXING_QUEUE_NAME = "document-indexing";
+
+export const documentIndexingQueue = new Queue<DocumentIndexingJobPayload, void, "index-document">(
+  DOCUMENT_INDEXING_QUEUE_NAME,
+  {
+    connection: redis,
+    defaultJobOptions: {
+      attempts: 2,
+      backoff: { type: "exponential", delay: 10_000 },
+      removeOnComplete: 50,
+      removeOnFail: 100,
+    },
+  },
+);
