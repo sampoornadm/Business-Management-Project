@@ -81,6 +81,16 @@ const envSchema = z.object({
   // Tender/Organization/Boq rows with zero human review. An environment that already
   // has LOCAL_DOCS_SYNC_ENABLED=true for the former must not silently gain the latter.
   INCOMING_TENDERS_INGESTION_ENABLED: booleanEnv("false"),
+
+  // Opt-in: extracts text and embeds every tender-document Attachment in the background, so it
+  // becomes searchable via /search and /assistant. Off by default — same convention as
+  // AI_ENRICHMENT_ENABLED (extraction/embedding costs CPU on every upload otherwise).
+  DOCUMENT_INDEXING_ENABLED: booleanEnv("false"),
+  // Cosine similarity a document's content embedding must clear to appear as a content match in
+  // search. Unmeasured placeholder — unlike AI_MATCH_THRESHOLD (calibrated against real BOQ
+  // items), no real indexed documents exist yet to measure against. Re-measure once they do,
+  // same way AI_MATCH_THRESHOLD was measured against bge-m3 rather than guessed.
+  DOCUMENT_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.5),
 });
 
 export type Env = z.infer<typeof envSchema>;
