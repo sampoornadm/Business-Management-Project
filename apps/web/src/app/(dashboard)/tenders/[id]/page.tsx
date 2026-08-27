@@ -29,7 +29,7 @@ import {
 } from "@bmp/ui";
 import { Download, Pencil, Receipt, ScrollText, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 import { ConvertToProjectDialog } from "@/components/projects/convert-to-project-dialog";
 import { StatusChangeDialog } from "@/components/tenders/status-change-dialog";
@@ -52,6 +52,8 @@ import { buildTenderSteps, isOnHappyPath } from "@/lib/tender-stepper";
 export default function TenderDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab") ?? "overview";
   const { toast } = useToast();
   const roleName = useAuthStore((state) => state.user?.role.name);
 
@@ -199,7 +201,7 @@ export default function TenderDetailPage() {
         </Card>
       ) : null}
 
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           {canViewBoq && <TabsTrigger value="items">Items</TabsTrigger>}
