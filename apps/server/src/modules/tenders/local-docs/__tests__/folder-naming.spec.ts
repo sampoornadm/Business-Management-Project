@@ -93,7 +93,18 @@ describe("ensureTenderFolders", () => {
     const tenderDir = path.join(rootDir, "ARCHIE", "tenders", "TND-1 - Road Works");
     const subfolders = await readdir(tenderDir);
     expect(subfolders.sort()).toEqual(
-      ["Addendum", "BOQ", "Corrigendum", "Drawings", "General", "NIT", "Technical Specs", "Tender Notice"].sort(),
+      [
+        "Addendum",
+        "Bills",
+        "BOQ",
+        "Corrigendum",
+        "Drawings",
+        "General",
+        "NIT",
+        "Technical Specs",
+        "Tender Notice",
+        "Undertakings",
+      ].sort(),
     );
   });
 
@@ -103,8 +114,8 @@ describe("ensureTenderFolders", () => {
 
     const archieDir = path.join(rootDir, "ARCHIE", "tenders", "TND-3 - Shared Number");
     const samsonDir = path.join(rootDir, "SAMSON", "tenders", "TND-3 - Shared Number");
-    await expect(readdir(archieDir)).resolves.toHaveLength(8);
-    await expect(readdir(samsonDir)).resolves.toHaveLength(8);
+    await expect(readdir(archieDir)).resolves.toHaveLength(10);
+    await expect(readdir(samsonDir)).resolves.toHaveLength(10);
   });
 
   it("is idempotent when called again for the same tender", async () => {

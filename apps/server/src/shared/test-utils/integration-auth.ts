@@ -69,6 +69,10 @@ export async function createIntegrationTestUser(app: Express): Promise<Integrati
 }
 
 export async function cleanupIntegrationTestUser(testUser: IntegrationTestUser): Promise<void> {
+  // Attachment.uploadedById is onDelete: Restrict — any test that uploads a file (or, since
+  // generated-documents.ts, downloads a bill/undertaking) as this user must have its attachments
+  // cleared before the user itself can be deleted.
+  await prisma.attachment.deleteMany({ where: { uploadedById: testUser.userId } });
   await prisma.userBusiness.deleteMany({ where: { userId: testUser.userId } });
   await prisma.business.deleteMany({ where: { id: { in: [testUser.businessId, testUser.secondBusinessId] } } });
   await prisma.user.deleteMany({ where: { id: testUser.userId } });

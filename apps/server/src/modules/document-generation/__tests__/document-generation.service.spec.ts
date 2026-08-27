@@ -147,10 +147,11 @@ describe("generateUndertaking", () => {
     const { generateUndertaking } = await import("../document-generation.service.js");
     const result = await generateUndertaking(fakeTendersRepository, "tender-1", "business-1");
 
-    const resultZip = new PizZip(result);
+    const resultZip = new PizZip(result.buffer);
     const documentXml = resultZip.file("word/document.xml")!.asText();
     expect(documentXml).toContain("Dear Acme Corp, re: TEN-001 - Road Widening, from Archie Udyog (GST 27AAAAA0000A1Z5).");
     expect(fakeTendersRepository.findForDocumentGeneration).toHaveBeenCalledWith("tender-1", "business-1");
+    expect(result.filename).toMatch(/^Undertaking-TEN-001-\d{2}-\d{2}-\d{4}\.docx$/);
   });
 
   it("throws NotFoundError when the tender doesn't exist for that business", async () => {

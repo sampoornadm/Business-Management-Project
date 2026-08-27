@@ -170,6 +170,20 @@ describe("Bills (integration)", () => {
     expect(listResponse.status).toBe(200);
     expect(listResponse.body.data.items.some((b: { id: string }) => b.id === billId)).toBe(true);
 
+    const filteredListResponse = await request(app)
+      .get("/api/v1/bills")
+      .query({ tenderId })
+      .set("Authorization", `Bearer ${token}`);
+    expect(filteredListResponse.status).toBe(200);
+    expect(filteredListResponse.body.data.items.some((b: { id: string }) => b.id === billId)).toBe(true);
+
+    const otherTenderListResponse = await request(app)
+      .get("/api/v1/bills")
+      .query({ tenderId: randomUUID() })
+      .set("Authorization", `Bearer ${token}`);
+    expect(otherTenderListResponse.status).toBe(200);
+    expect(otherTenderListResponse.body.data.items).toHaveLength(0);
+
     const getResponse = await request(app)
       .get(`/api/v1/bills/${billId}`)
       .set("Authorization", `Bearer ${token}`);
