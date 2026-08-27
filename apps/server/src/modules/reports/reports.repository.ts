@@ -27,6 +27,17 @@ export interface PurchaseOrderForOnTimeRow {
   expectedDeliveryDate: Date | null;
 }
 
+export interface AttachmentMetadataRow {
+  id: string;
+  originalName: string;
+  documentType: string | null;
+  entityId: string; // the tender id (Attachment.entityType/entityId is an unenforced generic reference)
+}
+
+export interface EmbeddedAttachmentRow extends AttachmentMetadataRow {
+  embedding: number[];
+}
+
 export interface IReportsRepository {
   findTenderStatusCounts(businessId: string): Promise<{ status: TenderStatus; count: number }[]>;
   findTenderDates(businessId: string): Promise<{ createdAt: Date; submissionDate: Date | null }[]>;
@@ -58,6 +69,9 @@ export interface IReportsRepository {
   searchOrganizations(query: string): Promise<{ id: string; name: string }[]>;
   searchVendors(query: string): Promise<{ id: string; name: string }[]>;
   searchProjects(businessId: string, query: string): Promise<{ id: string; name: string }[]>;
+  findTenderIdsForBusiness(businessId: string): Promise<{ id: string; tenderNumber: string }[]>;
+  searchAttachmentsByMetadata(tenderIds: string[], query: string): Promise<AttachmentMetadataRow[]>;
+  findEmbeddedAttachments(tenderIds: string[]): Promise<EmbeddedAttachmentRow[]>;
 }
 
 const SEARCH_LIMIT = 5;
@@ -241,5 +255,44 @@ export class ReportsRepository implements IReportsRepository {
       select: { id: true, name: true },
       take: SEARCH_LIMIT,
     });
+  }
+
+  findTenderIdsForBusiness(businessId: string): Promise<{ id: string; tenderNumber: string }[]> {
+    return this.prisma.tender.findMany({
+      where: { businessId },
+      select: { id: true, tenderNumber: true },
+    });
+  }
+
+  async searchAttachmentsByMetadata(tenderIds: string[], query: string): Promise<AttachmentMetadataRow[]> {
+    if (tenderIds.length === 0) return [];
+    const rows = await this.prisma.attachment.findMany({
+      where: {
+        entityType: "Tender",
+        entityId: { in: tenderIds },
+        variant: "ORIGINAL",
+        OR: [
+          { originalName: { contains: query, mode: "insensitive" } },
+          { documentType: { contains: query, mode: "insensitive" } },
+        ],
+      },
+      select: { id: true, originalName: true, documentType: true, entityId: true },
+      take: SEARCH_LIMIT,
+    });
+    return rows.map((row) => ({ ...row, entityId: row.entityId! }));
+  }
+
+  async findEmbeddedAttachments(tenderIds: string[]): Promise<EmbeddedAttachmentRow[]> {
+    if (tenderIds.length === 0) return [];
+    const rows = await this.prisma.attachment.findMany({
+      where: {
+        entityType: "Tender",
+        entityId: { in: tenderIds },
+        variant: "ORIGINAL",
+        embeddedAt: { not: null },
+      },
+      select: { id: true, originalName: true, documentType: true, entityId: true, embedding: true },
+    });
+    return rows.map((row) => ({ ...row, entityId: row.entityId! }));
   }
 }
