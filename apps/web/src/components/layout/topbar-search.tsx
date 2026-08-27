@@ -2,7 +2,7 @@
 
 import type { SearchEntityType } from "@bmp/types";
 import { Button, Input } from "@bmp/ui";
-import { Building2, FileText, HardHat, Search, Truck } from "lucide-react";
+import { Building2, FileSearch, FileText, HardHat, Search, Truck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ComponentType, type KeyboardEvent } from "react";
 
@@ -13,6 +13,7 @@ const ENTITY_ICONS: Record<SearchEntityType, ComponentType<{ className?: string 
   Organization: Building2,
   Vendor: Truck,
   Project: HardHat,
+  Attachment: FileSearch,
 };
 
 export function TopbarSearch() {

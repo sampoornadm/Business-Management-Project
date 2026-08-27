@@ -2,7 +2,7 @@
 
 import type { SearchEntityType } from "@bmp/types";
 import { Card, CardContent, Input } from "@bmp/ui";
-import { Building2, FileText, HardHat, Search, Truck } from "lucide-react";
+import { Building2, FileSearch, FileText, HardHat, Search, Truck } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type ComponentType } from "react";
@@ -14,6 +14,7 @@ const ENTITY_ICONS: Record<SearchEntityType, ComponentType<{ className?: string 
   Organization: Building2,
   Vendor: Truck,
   Project: HardHat,
+  Attachment: FileSearch,
 };
 
 export default function SearchPage() {
