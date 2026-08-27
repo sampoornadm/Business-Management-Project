@@ -46,7 +46,6 @@ export function toBillDto(entity: BillDetail): BillDto {
     itemCount: items.length,
     grnNumber: entity.grnNumber,
     grnDate: entity.grnDate ? entity.grnDate.toISOString() : null,
-    notes: entity.notes,
     items,
     createdBy: {
       id: entity.createdBy.id,

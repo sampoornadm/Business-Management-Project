@@ -1,7 +1,7 @@
 # Bill Generation (Tender-Scoped, v1 — No GST) — Design
 
 **Date:** 2026-08-27
-**Status:** Approved, not yet implemented
+**Status:** Implemented
 
 ## Context
 

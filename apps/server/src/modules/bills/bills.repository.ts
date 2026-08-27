@@ -41,7 +41,6 @@ export interface CreateBillData {
   tenderId: string;
   grnNumber?: string | null;
   grnDate?: Date | null;
-  notes?: string | null;
   createdById: string;
   items: CreateBillItemData[];
 }
@@ -71,7 +70,6 @@ export class BillsRepository implements IBillsRepository {
           billNumber,
           grnNumber: data.grnNumber ?? null,
           grnDate: data.grnDate ?? null,
-          notes: data.notes ?? null,
           createdById: data.createdById,
         },
       }),

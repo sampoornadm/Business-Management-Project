@@ -61,6 +61,7 @@ export function buildBillPdf(data: BillDocumentData, signatureBuffer: Buffer): P
     doc.moveDown();
 
     let y = doc.y;
+    const tableWidth = BILL_COLUMN_WIDTHS.reduce((sum, w) => sum + w, 0);
     function columnX(index: number): number {
       return startX + BILL_COLUMN_WIDTHS.slice(0, index).reduce((sum, w) => sum + w, 0);
     }
@@ -76,6 +77,7 @@ export function buildBillPdf(data: BillDocumentData, signatureBuffer: Buffer): P
       if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 100) {
         doc.addPage();
         y = doc.page.margins.top;
+        drawTableHeader();
       }
       values.forEach((value, index) => {
         doc.text(value, columnX(index), y, {
@@ -86,10 +88,16 @@ export function buildBillPdf(data: BillDocumentData, signatureBuffer: Buffer): P
       y += rowHeight;
     }
 
-    drawRow(BILL_COLUMN_HEADERS, true);
-    const tableWidth = BILL_COLUMN_WIDTHS.reduce((sum, w) => sum + w, 0);
-    doc.moveTo(startX, y).lineTo(startX + tableWidth, y).stroke();
-    y += 4;
+    // Draws the column header row plus its underline rule. Called once before the first item
+    // and again immediately after every page break, so a continuation page never shows
+    // unlabeled data.
+    function drawTableHeader() {
+      drawRow(BILL_COLUMN_HEADERS, true);
+      doc.moveTo(startX, y).lineTo(startX + tableWidth, y).stroke();
+      y += 4;
+    }
+
+    drawTableHeader();
 
     let total = 0;
     for (const item of data.items) {
@@ -105,14 +113,14 @@ export function buildBillPdf(data: BillDocumentData, signatureBuffer: Buffer): P
     doc
       .font("Helvetica-Bold")
       .fontSize(10)
-      .text(`Total: ${round2(total).toFixed(2)}`, columnX(3), y, {
+      .text(`Total: Rs. ${round2(total).toFixed(2)}`, columnX(3), y, {
         width: BILL_COLUMN_WIDTHS[3]! + BILL_COLUMN_WIDTHS[4]!,
         align: "right",
       });
     y += 40;
 
     const signatureWidth = 120;
-    doc.image(signatureBuffer, startX + tableWidth - signatureWidth, y, { width: signatureWidth });
+    doc.image(signatureBuffer, startX + tableWidth - signatureWidth, y, { fit: [signatureWidth, 45] });
     doc
       .fontSize(9)
       .font("Helvetica")

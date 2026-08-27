@@ -93,7 +93,6 @@ export class BillsService {
       tenderId: input.tenderId,
       grnNumber: input.grnNumber,
       grnDate: input.grnDate ? new Date(input.grnDate) : undefined,
-      notes: input.notes,
       createdById: actorId,
       items: input.items,
     });
