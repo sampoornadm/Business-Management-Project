@@ -11,12 +11,13 @@ import type {
 } from "@bmp/types";
 
 import { REPORT_CACHE_TTL_SECONDS } from "../../config/constants.js";
-import { isTest } from "../../config/env.js";
-import { BadRequestError } from "../../core/errors/HttpErrors.js";
+import { env, isTest } from "../../config/env.js";
+import { BadRequestError, ServiceUnavailableError } from "../../core/errors/HttpErrors.js";
+import { embed } from "../../infra/llm/ollama.client.js";
 import { getCachedJson, setCachedJson } from "../../infra/redis/cache.js";
-import { round2 } from "../../shared/utils/math.js";
+import { cosineSimilarity, round2 } from "../../shared/utils/math.js";
 
-import type { IReportsRepository } from "./reports.repository.js";
+import type { AttachmentMetadataRow, IReportsRepository } from "./reports.repository.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -271,12 +272,17 @@ export class ReportsService {
     const trimmed = query.trim();
     if (trimmed.length < 2) throw new BadRequestError("Search query must be at least 2 characters");
 
-    const [tenders, organizations, vendors, projects] = await Promise.all([
+    const [tenders, organizations, vendors, projects, tenderIdRows] = await Promise.all([
       this.reportsRepository.searchTenders(businessId, trimmed),
       this.reportsRepository.searchOrganizations(trimmed),
       this.reportsRepository.searchVendors(trimmed),
       this.reportsRepository.searchProjects(businessId, trimmed),
+      this.reportsRepository.findTenderIdsForBusiness(businessId),
     ]);
+
+    const tenderNumberById = new Map(tenderIdRows.map((t) => [t.id, t.tenderNumber]));
+    const tenderIds = tenderIdRows.map((t) => t.id);
+    const attachmentResults = await this.searchAttachments(tenderIds, trimmed, tenderNumberById);
 
     const results: SearchResultItemDto[] = [
       ...tenders.map((t) => ({
@@ -307,9 +313,52 @@ export class ReportsService {
         subtitle: null,
         href: `/projects/${p.id}`,
       })),
+      ...attachmentResults,
     ];
 
     return { query: trimmed, results };
+  }
+
+  private async searchAttachments(
+    tenderIds: string[],
+    query: string,
+    tenderNumberById: Map<string, string>,
+  ): Promise<SearchResultItemDto[]> {
+    if (tenderIds.length === 0) return [];
+
+    const [metadataMatches, embeddedRows] = await Promise.all([
+      this.reportsRepository.searchAttachmentsByMetadata(tenderIds, query),
+      this.reportsRepository.findEmbeddedAttachments(tenderIds),
+    ]);
+
+    let contentMatches: AttachmentMetadataRow[] = [];
+    if (embeddedRows.length > 0) {
+      try {
+        const [queryVector] = await embed([query]);
+        if (queryVector) {
+          contentMatches = embeddedRows
+            .map((row) => ({ row, similarity: cosineSimilarity(queryVector, row.embedding) }))
+            .filter(({ similarity }) => similarity >= env.DOCUMENT_MATCH_THRESHOLD)
+            .sort((a, b) => b.similarity - a.similarity)
+            .map(({ row }) => row);
+        }
+      } catch (err) {
+        // Content search is an enhancement on top of metadata search — Ollama being down must
+        // not take down search entirely, same philosophy as document-indexing.worker.ts.
+        if (!(err instanceof ServiceUnavailableError)) throw err;
+      }
+    }
+
+    const merged = new Map<string, AttachmentMetadataRow>();
+    for (const row of [...metadataMatches, ...contentMatches]) merged.set(row.id, row);
+
+    return [...merged.values()].slice(0, 5).map((row) => ({
+      type: "Attachment" as const,
+      id: row.id,
+      title: row.originalName,
+      subtitle: tenderNumberById.get(row.entityId) ?? null,
+      href: `/tenders/${row.entityId}?tab=documents`,
+    }));
   }
 
   async getExportableTable(businessId: string, reportKey: ReportKey, from?: Date, to?: Date): Promise<ExportableTable> {
