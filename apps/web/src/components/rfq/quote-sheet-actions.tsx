@@ -13,26 +13,7 @@ import { Download, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { useImportQuotes } from "@/hooks/use-rfq";
-import { apiClient } from "@/lib/axios";
-
-// The server names every downloaded file after the RFQ's title (see rfq.service.ts's
-// safeTitle) via Content-Disposition — read it back rather than falling to the RFQ's raw
-// UUID, which is meaningless once the file is sitting in someone's Downloads folder.
-function filenameFromContentDisposition(disposition: unknown, fallback: string): string {
-  const match = typeof disposition === "string" ? /filename="?([^";]+)"?/.exec(disposition) : null;
-  return match?.[1] ?? fallback;
-}
-
-async function downloadFile(path: string, fallbackFilename: string) {
-  const response = await apiClient.get(path, { responseType: "blob" });
-  const filename = filenameFromContentDisposition(response.headers["content-disposition"], fallbackFilename);
-  const url = URL.createObjectURL(response.data as Blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
+import { downloadFile } from "@/lib/download";
 
 export function QuoteSheetActions({
   rfqId,
