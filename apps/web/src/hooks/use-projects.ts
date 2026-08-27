@@ -2,7 +2,7 @@
 
 import type {
   ApiResponse,
-  CreateBillInput,
+  CreateProjectBillInput,
   CreateLaborEntryInput,
   CreateMaterialUsageInput,
   CreateMilestoneInput,
@@ -194,7 +194,7 @@ export function useBills(projectId: string | undefined) {
 export function useAddBill(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: CreateBillInput) => {
+    mutationFn: async (input: CreateProjectBillInput) => {
       const response = await apiClient.post<ApiResponse<ProjectBillDto[]>>(
         `/projects/${projectId}/bills`,
         input,
