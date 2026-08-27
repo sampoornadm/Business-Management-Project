@@ -143,7 +143,7 @@ export interface CreateLaborEntryInput {
   remarks?: string;
 }
 
-export interface CreateBillInput {
+export interface CreateProjectBillInput {
   billNumber: string;
   billDate?: string;
   cumulativeAmount: number;

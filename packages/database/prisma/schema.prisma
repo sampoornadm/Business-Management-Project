@@ -56,6 +56,7 @@ model User {
   createdProjectBills    ProjectBill[]          @relation("ProjectBillCreatedBy")
   createdBankAccounts    BankAccount[]          @relation("BankAccountCreatedBy")
   createdInvoices        Invoice[]              @relation("InvoiceCreatedBy")
+  createdBills           Bill[]                 @relation("BillCreatedBy")
   createdExpenses        Expense[]              @relation("ExpenseCreatedBy")
   recordedPayments       Payment[]              @relation("PaymentRecordedBy")
 
@@ -146,6 +147,7 @@ model Business {
   invoices        Invoice[]
   expenses        Expense[]
   payments        Payment[]
+  bills           Bill[]
   notifications   Notification[]
 
   createdAt DateTime @default(now())
@@ -472,6 +474,7 @@ model Tender {
   boqs           Boq[]
   rfqs           Rfq[]
   purchaseOrders PurchaseOrder[]
+  bills          Bill[]
   project        Project?
 
   createdAt DateTime @default(now())
@@ -1268,6 +1271,49 @@ model Invoice {
 
   @@index([businessId])
   @@map("invoices")
+}
+
+model Bill {
+  id          String    @id @default(uuid())
+  businessId  String
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  tenderId    String
+  tender      Tender    @relation(fields: [tenderId], references: [id], onDelete: Restrict)
+  billNumber  String    @unique
+  billDate    DateTime  @default(now())
+  grnNumber   String?
+  grnDate     DateTime?
+  notes       String?
+
+  items BillItem[]
+
+  createdById String
+  createdBy   User   @relation("BillCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([tenderId])
+  @@map("bills")
+}
+
+model BillItem {
+  id          String  @id @default(uuid())
+  billId      String
+  bill        Bill    @relation(fields: [billId], references: [id], onDelete: Cascade)
+  // Unenforced reference to the BOQ line this was picked from — same convention as
+  // RfqItem.boqItemId. A snapshot, not a live link: editing the BOQ later must not change
+  // what an already-issued bill says.
+  boqItemId   String?
+  description String
+  unit        String?
+  quantity    Float
+  rate        Float
+  sortOrder   Int     @default(0)
+
+  @@index([billId])
+  @@map("bill_items")
 }
 
 enum ExpenseCategory {

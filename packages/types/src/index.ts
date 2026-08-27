@@ -2,6 +2,7 @@ export * from "./api.js";
 export * from "./attachment.js";
 export * from "./audit.js";
 export * from "./auth.js";
+export * from "./bills.js";
 export * from "./boq.js";
 export * from "./business.js";
 export * from "./category.js";
