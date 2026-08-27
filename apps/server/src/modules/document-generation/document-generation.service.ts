@@ -76,11 +76,20 @@ export function formatDate(date: Date): string {
   return `${day}-${month}-${date.getFullYear()}`;
 }
 
+export interface GeneratedUndertaking {
+  buffer: Buffer;
+  filename: string;
+  tenderId: string;
+  tenderNumber: string;
+  tenderTitle: string;
+  businessCode: string;
+}
+
 export async function generateUndertaking(
   tendersRepository: Pick<ITendersRepository, "findForDocumentGeneration">,
   tenderId: string,
   businessId: string,
-): Promise<Buffer> {
+): Promise<GeneratedUndertaking> {
   const tender = await tendersRepository.findForDocumentGeneration(tenderId, businessId);
   if (!tender) throw new NotFoundError("Tender not found");
 
@@ -92,6 +101,7 @@ export async function generateUndertaking(
   }
 
   const templateBuffer = await readFile(status.path);
+  const generatedDate = formatDate(new Date());
   const data: Record<string, string> = {
     tenderNumber: tender.tenderNumber,
     tenderTitle: tender.title,
@@ -102,8 +112,17 @@ export async function generateUndertaking(
     businessPanNumber: tender.business.panNumber ?? "",
     clientOrganizationName: tender.client.name,
     clientOrganizationAddress: tender.client.address ?? "",
-    generatedDate: formatDate(new Date()),
+    generatedDate,
   };
 
-  return fillDocxTemplate(templateBuffer, data);
+  const buffer = fillDocxTemplate(templateBuffer, data);
+
+  return {
+    buffer,
+    filename: `Undertaking-${tender.tenderNumber}-${generatedDate}.docx`,
+    tenderId,
+    tenderNumber: tender.tenderNumber,
+    tenderTitle: tender.title,
+    businessCode: tender.business.code,
+  };
 }

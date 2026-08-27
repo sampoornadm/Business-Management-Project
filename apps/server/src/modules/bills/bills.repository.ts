@@ -47,6 +47,7 @@ export interface CreateBillData {
 
 export interface BillFilters {
   businessId: string;
+  tenderId?: string;
 }
 
 export interface IBillsRepository {
@@ -100,7 +101,7 @@ export class BillsRepository implements IBillsRepository {
     pagination: PaginationParams,
     filters: BillFilters,
   ): Promise<{ items: BillListItem[]; totalItems: number }> {
-    const where: Prisma.BillWhereInput = { businessId: filters.businessId };
+    const where: Prisma.BillWhereInput = { businessId: filters.businessId, tenderId: filters.tenderId };
     const [items, totalItems] = await Promise.all([
       this.prisma.bill.findMany({
         where,

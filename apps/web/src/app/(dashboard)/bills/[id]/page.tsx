@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, formatDate, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@bmp/ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, formatDate, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast } from "@bmp/ui";
 import { Download } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -10,6 +10,7 @@ import { downloadFile } from "@/lib/download";
 
 export default function BillDetailPage() {
   const params = useParams<{ id: string }>();
+  const { toast } = useToast();
   const billQuery = useBill(params.id);
 
   if (billQuery.isLoading || !billQuery.data) {
@@ -22,6 +23,18 @@ export default function BillDetailPage() {
   }
 
   const bill = billQuery.data;
+
+  async function handleDownload() {
+    try {
+      await downloadFile(`/bills/${bill.id}/pdf`, `${bill.billNumber}.pdf`);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not download PDF",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -36,10 +49,7 @@ export default function BillDetailPage() {
             · {bill.clientName}
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => void downloadFile(`/bills/${bill.id}/pdf`, `${bill.billNumber}.pdf`)}
-        >
+        <Button variant="outline" onClick={() => void handleDownload()}>
           <Download className="mr-2 h-4 w-4" /> Download PDF
         </Button>
       </div>

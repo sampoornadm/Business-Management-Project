@@ -53,6 +53,8 @@ export const TENDER_DOCUMENT_TYPES = [
   "CORRIGENDUM",
   "TENDER_NOTICE",
   "ADDENDUM",
+  "BILL",
+  "UNDERTAKING",
   "GENERAL",
 ] as const;
 export type TenderDocumentType = (typeof TENDER_DOCUMENT_TYPES)[number];
@@ -71,6 +73,8 @@ export const TENDER_DOCUMENT_TYPE_FOLDER_NAMES: Record<TenderDocumentType, strin
   CORRIGENDUM: "Corrigendum",
   TENDER_NOTICE: "Tender Notice",
   ADDENDUM: "Addendum",
+  BILL: "Bills",
+  UNDERTAKING: "Undertakings",
   GENERAL: "General",
 };
 

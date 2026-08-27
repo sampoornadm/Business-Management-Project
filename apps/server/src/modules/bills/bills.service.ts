@@ -29,8 +29,9 @@ export class BillsService {
   async listBills(
     pagination: PaginationParams,
     businessId: string,
+    tenderId?: string,
   ): Promise<PaginatedResult<ReturnType<typeof toBillListItemDto>>> {
-    const { items, totalItems } = await this.billsRepository.findMany(pagination, { businessId });
+    const { items, totalItems } = await this.billsRepository.findMany(pagination, { businessId, tenderId });
     return buildPaginatedResult(items.map(toBillListItemDto), totalItems, pagination);
   }
 
@@ -38,7 +39,17 @@ export class BillsService {
     return toBillDto(await this.getDetailOrThrow(id, businessId));
   }
 
-  async buildBillPdfFor(billId: string, businessId: string): Promise<{ filename: string; buffer: Buffer }> {
+  async buildBillPdfFor(
+    billId: string,
+    businessId: string,
+  ): Promise<{
+    filename: string;
+    buffer: Buffer;
+    tenderId: string;
+    tenderNumber: string;
+    tenderTitle: string;
+    businessCode: string;
+  }> {
     const bill = await this.getDetailOrThrow(billId, businessId);
     const tender = await this.tendersRepository.findForDocumentGeneration(bill.tenderId, businessId);
     if (!tender) throw new NotFoundError("Tender not found");
@@ -72,7 +83,16 @@ export class BillsService {
 
     const buffer = await buildBillPdf(data, signatureBuffer);
     const safeBillNumber = bill.billNumber.replace(/[^a-zA-Z0-9-_]+/g, "-");
-    return { filename: `${safeBillNumber}.pdf`, buffer };
+    const filename = `${safeBillNumber}.pdf`;
+
+    return {
+      filename,
+      buffer,
+      tenderId: bill.tenderId,
+      tenderNumber: tender.tenderNumber,
+      tenderTitle: tender.title,
+      businessCode: tender.business.code,
+    };
   }
 
   async createBill(

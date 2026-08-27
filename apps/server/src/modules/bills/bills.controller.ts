@@ -1,6 +1,7 @@
 import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 import { resolvePagination } from "../../shared/utils/pagination.js";
+import { saveGeneratedTenderDocument } from "../tenders/local-docs/generated-documents.js";
 
 import type { BillsService } from "./bills.service.js";
 import type { CreateBillBody, ListBillsQueryParsed } from "./bills.validation.js";
@@ -11,7 +12,7 @@ export class BillsController {
   list = asyncHandler(async (req, res) => {
     const query = req.query as unknown as ListBillsQueryParsed;
     const pagination = resolvePagination(query);
-    const result = await this.billsService.listBills(pagination, req.user!.businessId);
+    const result = await this.billsService.listBills(pagination, req.user!.businessId, query.tenderId);
     sendSuccess(res, result, "Bills retrieved");
   });
 
@@ -31,9 +32,22 @@ export class BillsController {
   });
 
   downloadPdf = asyncHandler(async (req, res) => {
-    const { filename, buffer } = await this.billsService.buildBillPdfFor(req.params.id!, req.user!.businessId);
+    const result = await this.billsService.buildBillPdfFor(req.params.id!, req.user!.businessId);
+
+    await saveGeneratedTenderDocument({
+      tenderId: result.tenderId,
+      tenderNumber: result.tenderNumber,
+      tenderTitle: result.tenderTitle,
+      businessCode: result.businessCode,
+      documentType: "BILL",
+      filename: result.filename,
+      buffer: result.buffer,
+      mimeType: "application/pdf",
+      uploadedById: req.user!.id,
+    });
+
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.send(buffer);
+    res.setHeader("Content-Disposition", `attachment; filename="${result.filename}"`);
+    res.send(result.buffer);
   });
 }

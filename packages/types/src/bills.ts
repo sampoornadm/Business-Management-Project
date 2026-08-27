@@ -47,4 +47,5 @@ export interface BillDto extends BillListItemDto {
 export interface ListBillsQuery {
   page?: number;
   pageSize?: number;
+  tenderId?: string;
 }

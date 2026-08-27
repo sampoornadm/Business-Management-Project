@@ -19,5 +19,6 @@ export type CreateBillBody = z.infer<typeof createBillSchema>;
 export const listBillsQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().optional(),
+  tenderId: z.string().uuid().optional(),
 });
 export type ListBillsQueryParsed = z.infer<typeof listBillsQuerySchema>;

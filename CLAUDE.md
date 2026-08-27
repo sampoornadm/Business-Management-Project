@@ -174,6 +174,16 @@ receiving status.
   the static matrix while the server's `requirePermission` middleware reads the DB-backed
   `RolePermission` rows — until the seed runs, the two can disagree: a role sees the nav link but
   the route 403s, which looks like a broken feature rather than an unseeded environment.
+- `packages/database/generated/client` (gitignored, `prisma generate` output) can go stale after a
+  new model is added to `schema.prisma` and migrated — the DB table exists, `schema.prisma` has the
+  model, but the generated client's `PrismaClient` instance simply has no delegate for it
+  (`prisma.bill` was `undefined`, e.g.). Every route on that model then 500s with a generic
+  "An unexpected error occurred" (`TypeError: Cannot read properties of undefined (reading
+  'create')` in the actual stack — server logs go to the `pnpm dev` terminal's stdout, not a file,
+  so reproduce via a standalone `tsx` script importing the `*.module.ts` singleton to see it). Fix:
+  `pnpm db:generate`; `tsx watch` picks up the new generated files and auto-restarts the server on
+  its own. Happened after the Bills feature (Phase 6+) shipped — always re-run `pnpm db:generate`
+  after pulling/adding new Prisma models, don't assume `prisma migrate dev` alone regenerated it.
 
 ## graphify
 

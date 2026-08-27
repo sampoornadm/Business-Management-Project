@@ -27,7 +27,7 @@ import {
   TabsTrigger,
   useToast,
 } from "@bmp/ui";
-import { Download, Pencil, Receipt, Trash2 } from "lucide-react";
+import { Download, Pencil, Receipt, ScrollText, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
@@ -68,6 +68,7 @@ export default function TenderDetailPage() {
   const canViewBoq = hasPermission(roleName, "boq:read");
   const canCreateProject = hasPermission(roleName, "projects:create");
   const canCreateBill = hasPermission(roleName, "bills:create");
+  const canViewBills = hasPermission(roleName, "bills:read");
   const canGenerateDocument = hasPermission(roleName, "tenders:generate_document");
 
   async function handleStatusChange(values: Parameters<typeof changeStatus.mutateAsync>[0]) {
@@ -143,6 +144,13 @@ export default function TenderDetailPage() {
             <Button variant="outline" asChild>
               <Link href={`/bills/new?tenderId=${tender.id}`}>
                 <Receipt className="mr-2 h-4 w-4" /> Create Bill
+              </Link>
+            </Button>
+          )}
+          {canViewBills && (
+            <Button variant="outline" asChild>
+              <Link href={`/bills?tenderId=${tender.id}`}>
+                <ScrollText className="mr-2 h-4 w-4" /> View Bills
               </Link>
             </Button>
           )}
