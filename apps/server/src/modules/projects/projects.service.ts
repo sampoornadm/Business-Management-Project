@@ -1,7 +1,7 @@
 import {
   BILL_STATUS_TRANSITIONS,
   type BillStatus,
-  type CreateBillInput,
+  type CreateProjectBillInput,
   type CreateLaborEntryInput,
   type CreateMaterialUsageInput,
   type CreateMilestoneInput,
@@ -280,7 +280,7 @@ export class ProjectsService {
     return entries.map(toLaborEntryDto);
   }
 
-  async addBill(projectId: string, input: CreateBillInput, actorId: string, businessId: string) {
+  async addBill(projectId: string, input: CreateProjectBillInput, actorId: string, businessId: string) {
     await this.getDetailOrThrow(projectId, businessId);
     const existingBills = await this.projectsRepository.findBills(projectId);
     const previousCumulative = existingBills.at(-1)?.cumulativeAmount ?? 0;
