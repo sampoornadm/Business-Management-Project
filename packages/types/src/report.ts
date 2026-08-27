@@ -92,7 +92,7 @@ export interface KpiDto {
   receivablesDsoDays: number | null;
 }
 
-export const SEARCH_ENTITY_TYPES = ["Tender", "Organization", "Vendor", "Project"] as const;
+export const SEARCH_ENTITY_TYPES = ["Tender", "Organization", "Vendor", "Project", "Attachment"] as const;
 export type SearchEntityType = (typeof SEARCH_ENTITY_TYPES)[number];
 
 export interface SearchResultItemDto {
