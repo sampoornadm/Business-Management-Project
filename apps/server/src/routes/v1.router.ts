@@ -1,5 +1,6 @@
 import { Router } from "express";
 
+import { assistantRouter } from "../modules/assistant/assistant.module.js";
 import { attachmentsRouter } from "../modules/attachments/attachments.module.js";
 import { auditRouter } from "../modules/audit/audit.module.js";
 import { authRouter } from "../modules/auth/auth.module.js";
@@ -65,3 +66,4 @@ v1Router.use("/expenses", expensesRouter);
 v1Router.use("/finance", financeReportsRouter);
 v1Router.use("/reports", reportsRouter);
 v1Router.use("/search", searchRouter);
+v1Router.use("/assistant", assistantRouter);
