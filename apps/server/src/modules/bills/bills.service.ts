@@ -1,11 +1,15 @@
+import { readFile } from "node:fs/promises";
+
 import type { BillDto, CreateBillInput } from "@bmp/types";
 
 import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams, type PaginatedResult } from "../../core/interfaces/pagination.js";
 import type { ScopedRequestContext } from "../../core/interfaces/request-context.js";
 import type { AuditService } from "../audit/audit.service.js";
+import { getTemplateStatus, formatDate } from "../document-generation/document-generation.service.js";
 import type { ITendersRepository } from "../tenders/tenders.repository.js";
 
+import { buildBillPdf, type BillDocumentData } from "./bill-document.js";
 import { toBillDto, toBillListItemDto } from "./bills.mapper.js";
 import type { BillDetail, IBillsRepository } from "./bills.repository.js";
 
@@ -32,6 +36,43 @@ export class BillsService {
 
   async getById(id: string, businessId: string): Promise<BillDto> {
     return toBillDto(await this.getDetailOrThrow(id, businessId));
+  }
+
+  async buildBillPdfFor(billId: string, businessId: string): Promise<{ filename: string; buffer: Buffer }> {
+    const bill = await this.getDetailOrThrow(billId, businessId);
+    const tender = await this.tendersRepository.findForDocumentGeneration(bill.tenderId, businessId);
+    if (!tender) throw new NotFoundError("Tender not found");
+
+    const status = await getTemplateStatus(tender.business.code, "signature");
+    if (!status.exists) {
+      throw new NotFoundError(
+        `Signature not found for ${tender.business.code}. Place it at ${status.path}`,
+      );
+    }
+    const signatureBuffer = await readFile(status.path);
+
+    const data: BillDocumentData = {
+      businessName: tender.business.name,
+      businessAddress: tender.business.address,
+      businessGstNumber: tender.business.gstNumber,
+      clientName: tender.client.name,
+      clientAddress: tender.client.address,
+      billNumber: bill.billNumber,
+      billDate: formatDate(bill.billDate),
+      tenderNumber: tender.tenderNumber,
+      grnNumber: bill.grnNumber,
+      grnDate: bill.grnDate ? formatDate(bill.grnDate) : null,
+      items: bill.items.map((item) => ({
+        description: item.description,
+        unit: item.unit,
+        quantity: item.quantity,
+        rate: item.rate,
+      })),
+    };
+
+    const buffer = await buildBillPdf(data, signatureBuffer);
+    const safeBillNumber = bill.billNumber.replace(/[^a-zA-Z0-9-_]+/g, "-");
+    return { filename: `${safeBillNumber}.pdf`, buffer };
   }
 
   async createBill(
