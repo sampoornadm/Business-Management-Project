@@ -27,7 +27,7 @@ import {
   TabsTrigger,
   useToast,
 } from "@bmp/ui";
-import { Download, Pencil, Trash2 } from "lucide-react";
+import { Download, Pencil, Receipt, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
@@ -67,6 +67,7 @@ export default function TenderDetailPage() {
   const canChangeStatus = hasPermission(roleName, "tenders:change_status");
   const canViewBoq = hasPermission(roleName, "boq:read");
   const canCreateProject = hasPermission(roleName, "projects:create");
+  const canCreateBill = hasPermission(roleName, "bills:create");
   const canGenerateDocument = hasPermission(roleName, "tenders:generate_document");
 
   async function handleStatusChange(values: Parameters<typeof changeStatus.mutateAsync>[0]) {
@@ -137,6 +138,13 @@ export default function TenderDetailPage() {
         <div className="flex shrink-0 gap-2">
           {canCreateProject && tender.status === "WON" && (
             <ConvertToProjectDialog tenderId={tender.id} />
+          )}
+          {canCreateBill && tender.status === "WON" && (
+            <Button variant="outline" asChild>
+              <Link href={`/bills/new?tenderId=${tender.id}`}>
+                <Receipt className="mr-2 h-4 w-4" /> Create Bill
+              </Link>
+            </Button>
           )}
           {canChangeStatus && (
             <StatusChangeDialog currentStatus={tender.status} onSubmit={handleStatusChange} />
