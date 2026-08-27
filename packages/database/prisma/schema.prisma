@@ -1283,7 +1283,6 @@ model Bill {
   billDate    DateTime  @default(now())
   grnNumber   String?
   grnDate     DateTime?
-  notes       String?
 
   items BillItem[]
 

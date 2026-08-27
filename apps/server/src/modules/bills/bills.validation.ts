@@ -12,7 +12,6 @@ export const createBillSchema = z.object({
   tenderId: z.string().uuid(),
   grnNumber: z.string().max(100).optional(),
   grnDate: z.string().datetime().or(z.string().date()).optional(),
-  notes: z.string().max(1000).optional(),
   items: z.array(createBillItemSchema).min(1, "At least one bill item is required"),
 });
 export type CreateBillBody = z.infer<typeof createBillSchema>;

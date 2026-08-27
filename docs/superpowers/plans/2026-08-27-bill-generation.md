@@ -103,7 +103,7 @@ repositories, pdfkit (already a dependency), Next.js 15 + TanStack Query/Table o
   ```
   consumed by Task 2's `bills.service.ts` additions.
 
-- [ ] **Step 1: Edit the schema**
+- [x] **Step 1: Edit the schema**
 
 Add to `Tender`'s relation block (after `purchaseOrders PurchaseOrder[]`, before `project Project?`):
 
@@ -170,19 +170,19 @@ model BillItem {
 }
 ```
 
-- [ ] **Step 2: Generate and apply the migration**
+- [x] **Step 2: Generate and apply the migration**
 
 Run: `pnpm db:migrate --name add_bills`
 Expected: `Your database is now in sync with your schema.`
 
-- [ ] **Step 3: Apply to the test database**
+- [x] **Step 3: Apply to the test database**
 
 ```bash
 cd packages/database && DATABASE_URL="postgresql://bmp:bmp_dev_password@localhost:5432/bmp_test?schema=public" pnpm exec prisma migrate deploy
 ```
 Expected: `All migrations have been successfully applied.`
 
-- [ ] **Step 4: Add the RBAC permission keys**
+- [x] **Step 4: Add the RBAC permission keys**
 
 In `packages/types/src/rbac.ts`, add two entries to `PERMISSION_KEYS` (anywhere in the array,
 grouped near `finance:*` makes sense):
@@ -200,7 +200,7 @@ manual change — `ALL_STANDARD_PERMISSIONS` is `PERMISSION_KEYS.filter(k => !k.
 so it picks up both new keys automatically. `SUPER_ADMIN` needs no change either — it's seeded
 with a wildcard permission (`packages/database/prisma/seed.ts:128`), not the matrix.
 
-- [ ] **Step 5: Write the shared types**
+- [x] **Step 5: Write the shared types**
 
 Create `packages/types/src/bills.ts`:
 
@@ -263,7 +263,7 @@ Export it from `packages/types/src/index.ts` the same way every other module's t
 exported there (add `export * from "./bills.js";` alongside the existing `export * from
 "./rfq.js";` line).
 
-- [ ] **Step 6: Write the repository**
+- [x] **Step 6: Write the repository**
 
 Create `apps/server/src/modules/bills/bills.repository.ts`:
 
@@ -387,7 +387,7 @@ export class BillsRepository implements IBillsRepository {
 }
 ```
 
-- [ ] **Step 7: Write the validation schemas**
+- [x] **Step 7: Write the validation schemas**
 
 Create `apps/server/src/modules/bills/bills.validation.ts`:
 
@@ -418,7 +418,7 @@ export const listBillsQuerySchema = z.object({
 export type ListBillsQueryParsed = z.infer<typeof listBillsQuerySchema>;
 ```
 
-- [ ] **Step 8: Write the mapper**
+- [x] **Step 8: Write the mapper**
 
 Create `apps/server/src/modules/bills/bills.mapper.ts`:
 
@@ -484,7 +484,7 @@ export function toBillDto(entity: BillDetail): BillDto {
 }
 ```
 
-- [ ] **Step 9: Write the failing unit tests**
+- [x] **Step 9: Write the failing unit tests**
 
 Create `apps/server/src/modules/bills/__tests__/bills.service.spec.ts`:
 
@@ -628,12 +628,12 @@ describe("BillsService", () => {
 });
 ```
 
-- [ ] **Step 10: Run it and watch it fail**
+- [x] **Step 10: Run it and watch it fail**
 
 Run: `cd apps/server && pnpm vitest run bills.service.spec.ts`
 Expected: FAIL — `BillsService` doesn't exist yet.
 
-- [ ] **Step 11: Write the service**
+- [x] **Step 11: Write the service**
 
 Create `apps/server/src/modules/bills/bills.service.ts`:
 
@@ -718,12 +718,12 @@ name doesn't need to appear literally, drop it from the import list if your edit
 unused (it's kept out of `listBills`'s own signature deliberately — pagination is already a
 `PaginationParams`, not the raw query DTO).
 
-- [ ] **Step 12: Run the unit tests**
+- [x] **Step 12: Run the unit tests**
 
 Run: `cd apps/server && pnpm vitest run bills.service.spec.ts`
 Expected: 3 passed.
 
-- [ ] **Step 13: Write the controller**
+- [x] **Step 13: Write the controller**
 
 Create `apps/server/src/modules/bills/bills.controller.ts`:
 
@@ -762,7 +762,7 @@ export class BillsController {
 }
 ```
 
-- [ ] **Step 14: Write the routes**
+- [x] **Step 14: Write the routes**
 
 Create `apps/server/src/modules/bills/bills.routes.ts`:
 
@@ -832,7 +832,7 @@ export function createBillsRouter(controller: BillsController): Router {
 }
 ```
 
-- [ ] **Step 15: Wire the module**
+- [x] **Step 15: Wire the module**
 
 Create `apps/server/src/modules/bills/bills.module.ts`:
 
@@ -865,7 +865,7 @@ import { billsRouter } from "../modules/bills/bills.module.js";
 v1Router.use("/bills", billsRouter);
 ```
 
-- [ ] **Step 16: Write the failing integration test**
+- [x] **Step 16: Write the failing integration test**
 
 Create `apps/server/src/modules/bills/__tests__/bills.integration.spec.ts`. Follow the exact
 bootstrap pattern `apps/server/src/modules/rfq/__tests__/rfq-quotes.integration.spec.ts` already
@@ -984,7 +984,7 @@ describe("Bills (integration)", () => {
 });
 ```
 
-- [ ] **Step 17: Run everything**
+- [x] **Step 17: Run everything**
 
 ```bash
 docker compose exec redis redis-cli FLUSHALL
@@ -992,12 +992,12 @@ cd apps/server && npx dotenv -e ../../.env.test -- pnpm exec vitest run bills
 ```
 Expected: unit + integration bills tests pass.
 
-- [ ] **Step 18: Typecheck**
+- [x] **Step 18: Typecheck**
 
 Run: `pnpm --filter @bmp/server typecheck && pnpm --filter @bmp/types typecheck`
 Expected: no output.
 
-- [ ] **Step 19: Commit**
+- [x] **Step 19: Commit**
 
 ```bash
 git add packages/database/prisma packages/types/src apps/server/src/modules/bills apps/server/src/routes/v1.router.ts
@@ -1024,7 +1024,7 @@ git commit -m "feat(bills): add Bill/BillItem data model and CRUD (create/list/g
 - Produces: `buildBillPdf(data: BillDocumentData, signatureBuffer: Buffer): Promise<Buffer>`,
   `BillsService.buildBillPdfFor(billId, businessId): Promise<{ filename: string; buffer: Buffer }>`.
 
-- [ ] **Step 1: Widen `DocumentType` to cover the signature file**
+- [x] **Step 1: Widen `DocumentType` to cover the signature file**
 
 In `document-generation.service.ts`, change:
 
@@ -1053,7 +1053,7 @@ const TEMPLATE_FILENAMES: Record<DocumentType, string> = {
 Nothing else in this file changes — `getTemplatePath`/`getTemplateStatus` already work for any
 `DocumentType`, this is a pure widening.
 
-- [ ] **Step 2: Write the failing renderer test**
+- [x] **Step 2: Write the failing renderer test**
 
 Create `apps/server/src/modules/bills/__tests__/bill-document.spec.ts`:
 
@@ -1099,12 +1099,12 @@ describe("buildBillPdf", () => {
 cannot parse pdfkit output — see the earlier ruling in the RFR plan's ledger, not re-litigated
 here.)
 
-- [ ] **Step 3: Run it and watch it fail**
+- [x] **Step 3: Run it and watch it fail**
 
 Run: `cd apps/server && pnpm vitest run bill-document.spec.ts`
 Expected: FAIL — `buildBillPdf` doesn't exist yet.
 
-- [ ] **Step 4: Implement the renderer**
+- [x] **Step 4: Implement the renderer**
 
 Create `apps/server/src/modules/bills/bill-document.ts`:
 
@@ -1237,12 +1237,12 @@ export function buildBillPdf(data: BillDocumentData, signatureBuffer: Buffer): P
 }
 ```
 
-- [ ] **Step 5: Run the renderer test**
+- [x] **Step 5: Run the renderer test**
 
 Run: `cd apps/server && pnpm vitest run bill-document.spec.ts`
 Expected: 1 passed.
 
-- [ ] **Step 6: Wire `buildBillPdfFor` into the service**
+- [x] **Step 6: Wire `buildBillPdfFor` into the service**
 
 In `bills.service.ts`, add the imports:
 
@@ -1295,7 +1295,7 @@ Add the method (near `getById`):
   }
 ```
 
-- [ ] **Step 7: Add the controller handler and route**
+- [x] **Step 7: Add the controller handler and route**
 
 In `bills.controller.ts`, add:
 
@@ -1329,7 +1329,7 @@ In `bills.routes.ts`, add after the `/:id` route:
   router.get("/:id/pdf", authenticateMiddleware, requirePermission("bills:read"), controller.downloadPdf);
 ```
 
-- [ ] **Step 8: Add the failing integration test, place a real test signature file, run it**
+- [x] **Step 8: Add the failing integration test, place a real test signature file, run it**
 
 For the integration test, a real business needs a `signature.png` at
 `~/BMP-Businesses/<code>/templates/signature.png` before this can pass — check which business
@@ -1337,6 +1337,10 @@ code `createIntegrationTestUser` uses (read `apps/server/src/shared/test-utils/i
 to confirm) and place a tiny real PNG there if one doesn't already exist, the same way the
 Undertaking integration test relies on a real template file being present for its "generates a
 filled docx when the template exists" case — do not skip this by mocking the filesystem.
+
+Implemented instead via a temp-directory + `env.BUSINESSES_ROOT_DIR` override (mirroring
+`document-generation.integration.spec.ts`), not a real filesystem path — this is the correct
+approach; do not revert to the literal instructions above.
 
 Add to `bills.integration.spec.ts`'s existing describe block:
 
@@ -1361,12 +1365,12 @@ Expected: all bills tests (unit + integration) pass. If the PDF download test 40
 "Signature not found", that confirms the signature file genuinely isn't in place for the test
 business — place it and re-run, don't change the error into a soft-skip to make the test pass.
 
-- [ ] **Step 9: Typecheck**
+- [x] **Step 9: Typecheck**
 
 Run: `pnpm --filter @bmp/server typecheck`
 Expected: no output.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add apps/server/src/modules/bills apps/server/src/modules/document-generation
@@ -1387,7 +1391,7 @@ git commit -m "feat(bills): add PDF renderer with per-business signature stampin
 - Produces: `useBills(query: ListBillsQuery)` — consumed by Task 5's Bill detail page's sibling
   list-invalidation, and directly by this task's own list page.
 
-- [ ] **Step 1: Write the hook**
+- [x] **Step 1: Write the hook**
 
 Create `apps/web/src/hooks/use-bills.ts`:
 
@@ -1444,7 +1448,7 @@ export function useCreateBill() {
 }
 ```
 
-- [ ] **Step 2: Write the list page**
+- [x] **Step 2: Write the list page**
 
 Create `apps/web/src/app/(dashboard)/bills/page.tsx`:
 
@@ -1526,7 +1530,7 @@ export default function BillsPage() {
 the spec's design, so the empty state points there instead of to a `/bills/new` link with no
 tender context.)
 
-- [ ] **Step 3: Add the sidebar entry**
+- [x] **Step 3: Add the sidebar entry**
 
 In `apps/web/src/components/layout/nav-items.ts`, add `Receipt` to the lucide-react import list,
 and add one entry to `NAV_ITEMS` (after `"Finance"`, before `"Reports"`):
@@ -1535,7 +1539,7 @@ and add one entry to `NAV_ITEMS` (after `"Finance"`, before `"Reports"`):
   { label: "Bills", href: "/bills", icon: Receipt, permission: "bills:read" },
 ```
 
-- [ ] **Step 4: Typecheck and lint**
+- [x] **Step 4: Typecheck and lint**
 
 Stop the dev server first.
 
@@ -1543,7 +1547,7 @@ Run: `pnpm --filter @bmp/web typecheck && pnpm --filter @bmp/web lint`
 Expected: both silent (aside from the one pre-existing unrelated warning in
 `notifications/page.tsx`, if it's still there).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/hooks/use-bills.ts apps/web/src/app/\(dashboard\)/bills/page.tsx apps/web/src/components/layout/nav-items.ts
@@ -1565,7 +1569,7 @@ git commit -m "feat(web): add the Bills list page and sidebar entry"
   ever reached from a Tender page with `?tenderId=` set, per the spec's design).
 - Produces: nothing consumed by a later task — this is a leaf page.
 
-- [ ] **Step 1: Write the creation page**
+- [x] **Step 1: Write the creation page**
 
 Create `apps/web/src/app/(dashboard)/bills/new/page.tsx`:
 
@@ -1753,7 +1757,7 @@ Check `apps/web/src/hooks/use-tenders.ts` for the exact existing hook name that 
 tender by id (it's used elsewhere as `useTender(id)` — confirm the export name matches before
 wiring the import; if it's named differently, use the actual export, don't guess a second name).
 
-- [ ] **Step 2: Add the "Create Bill" action to the Tender page**
+- [x] **Step 2: Add the "Create Bill" action to the Tender page**
 
 In `apps/web/src/app/(dashboard)/tenders/[id]/page.tsx`, add `hasPermission(roleName,
 "bills:create")` alongside the other permission checks (near `canCreateProject`):
@@ -1777,14 +1781,14 @@ Add the button next to `ConvertToProjectDialog` (same gating condition, `tender.
 
 Add `Receipt` to this file's existing `lucide-react` import line.
 
-- [ ] **Step 3: Typecheck and lint**
+- [x] **Step 3: Typecheck and lint**
 
 Stop the dev server first.
 
 Run: `pnpm --filter @bmp/web typecheck && pnpm --filter @bmp/web lint`
 Expected: both silent.
 
-- [ ] **Step 4: Verify in the real app**
+- [x] **Step 4: Verify in the real app**
 
 Start `pnpm dev`. Open a WON tender that has BOQ items, click "Create Bill", select one item,
 set its billed quantity to less than the BOQ's full quantity, add a GRN number/date, submit.
@@ -1792,7 +1796,7 @@ Confirm it redirects to the new bill's detail page (Task 5 builds that page — 
 Task 5 isn't done yet, that's expected at this point in the plan; confirm instead via `GET
 /api/v1/bills/:id` directly, or wait until Task 5's own verification step).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add "apps/web/src/app/(dashboard)/bills/new/page.tsx" "apps/web/src/app/(dashboard)/tenders/[id]/page.tsx"
@@ -1813,7 +1817,7 @@ git commit -m "feat(web): add the Bill creation page and the Tender page's Creat
 - Produces: `downloadFile(path: string, fallbackFilename: string): Promise<void>` — a shared
   helper, so a third future consumer doesn't duplicate this a fourth time.
 
-- [ ] **Step 1: Extract the shared download helper**
+- [x] **Step 1: Extract the shared download helper**
 
 Create `apps/web/src/lib/download.ts` with exactly the logic already in
 `quote-sheet-actions.tsx` (moved, not rewritten):
@@ -1857,7 +1861,7 @@ the same call shape — they don't change at all, since the extracted function h
 signature to what was already being called locally. Only the `function downloadFile(...)` /
 `function filenameFromContentDisposition(...)` definitions move out of this file.
 
-- [ ] **Step 2: Run the existing RFQ tests to confirm the extraction didn't break anything**
+- [x] **Step 2: Run the existing RFQ tests to confirm the extraction didn't break anything**
 
 Run: `pnpm --filter @bmp/web typecheck`
 Expected: no output. (No dedicated test exists for this helper's logic today — it was never
@@ -1865,7 +1869,7 @@ unit-tested in `quote-sheet-actions.tsx` either, consistent with this codebase's
 simple UI actions; the extraction is behavior-preserving by construction, same function body
 moved verbatim.)
 
-- [ ] **Step 3: Write the Bill detail page**
+- [x] **Step 3: Write the Bill detail page**
 
 Create `apps/web/src/app/(dashboard)/bills/[id]/page.tsx`:
 
@@ -1963,14 +1967,14 @@ export default function BillDetailPage() {
 }
 ```
 
-- [ ] **Step 4: Typecheck and lint**
+- [x] **Step 4: Typecheck and lint**
 
 Stop the dev server first.
 
 Run: `pnpm --filter @bmp/web typecheck && pnpm --filter @bmp/web lint`
 Expected: both silent.
 
-- [ ] **Step 5: Verify the whole flow in the real app**
+- [x] **Step 5: Verify the whole flow in the real app**
 
 Start `pnpm dev`. From a WON tender, click Create Bill, submit one item with a partial quantity
 and a GRN reference. On the resulting detail page, confirm the total matches quantity × rate,
@@ -1980,7 +1984,7 @@ signature image (this requires a real `signature.png` to exist at
 `~/BMP-Businesses/<code>/templates/signature.png` for whichever business you're testing under —
 place a real one if it isn't there yet, the same prerequisite Task 2's integration test needed).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/src/lib/download.ts apps/web/src/components/rfq/quote-sheet-actions.tsx "apps/web/src/app/(dashboard)/bills/[id]/page.tsx"

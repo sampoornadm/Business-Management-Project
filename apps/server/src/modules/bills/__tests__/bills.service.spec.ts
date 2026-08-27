@@ -23,7 +23,6 @@ class FakeBillsRepository implements IBillsRepository {
       billDate: new Date(),
       grnNumber: data.grnNumber ?? null,
       grnDate: data.grnDate ?? null,
-      notes: data.notes ?? null,
       createdById: data.createdById,
       createdBy: CREATOR,
       tender: { id: data.tenderId, title: "Test Tender", tenderNumber: "TND-1", client: { name: "IISCO" } },

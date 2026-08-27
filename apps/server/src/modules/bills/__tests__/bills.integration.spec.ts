@@ -12,8 +12,10 @@ import { env } from "../../../config/env.js";
 import {
   cleanupIntegrationTestUser,
   createIntegrationTestUser,
+  switchToSecondBusiness,
   type IntegrationTestUser,
 } from "../../../shared/test-utils/integration-auth.js";
+import { hashPassword } from "../../../shared/utils/hash.js";
 
 describe("Bills (integration)", () => {
   const app = createApp();
@@ -25,6 +27,13 @@ describe("Bills (integration)", () => {
   let billId: string;
   let templatesDir: string;
   let businessCode: string;
+  // A role with zero permission rows, and a user placed under it in testUser's business — used
+  // to prove `requirePermission("bills:create"/"bills:read")` is actually enforced. Every other
+  // test in this suite runs as `createIntegrationTestUser`'s SUPER_ADMIN (wildcard permission),
+  // which would never catch a missing/broken `requirePermission` call on a route.
+  let noPermsRoleId: string;
+  let noPermsUserId: string;
+  let noPermsToken: string;
   const TINY_PNG = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
     "base64",
@@ -67,6 +76,38 @@ describe("Bills (integration)", () => {
       },
     });
     tenderId = tender.id;
+
+    // A freshly created role has no RolePermission rows at all (not even the seeded matrix,
+    // since that only lands via `pnpm db:seed`), so it's a reliable "lacks bills:create/read" fixture.
+    const noPermsRoleName = `BILLS_IT_NO_PERMS_${randomUUID().slice(0, 8)}`;
+    const noPermsRole = await prisma.role.create({
+      data: { id: randomUUID(), name: noPermsRoleName, description: "No permissions (test)", isSystem: false },
+    });
+    noPermsRoleId = noPermsRole.id;
+
+    const noPermsEmail = `integration-noperms-${randomUUID()}@example.com`;
+    const noPermsPassword = "Password123";
+    const noPermsUser = await prisma.user.create({
+      data: {
+        id: randomUUID(),
+        email: noPermsEmail,
+        passwordHash: await hashPassword(noPermsPassword),
+        firstName: "NoPerms",
+        lastName: "Tester",
+        isActive: true,
+        isEmailVerified: true,
+      },
+    });
+    noPermsUserId = noPermsUser.id;
+
+    await prisma.userBusiness.create({
+      data: { userId: noPermsUserId, businessId: testUser.businessId, roleId: noPermsRoleId },
+    });
+
+    const noPermsLogin = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: noPermsEmail, password: noPermsPassword });
+    noPermsToken = noPermsLogin.body.data.accessToken as string;
   });
 
   afterAll(async () => {
@@ -76,6 +117,10 @@ describe("Bills (integration)", () => {
     }
     if (tenderId) await prisma.tender.deleteMany({ where: { id: tenderId } });
     if (clientOrgId) await prisma.organization.deleteMany({ where: { id: clientOrgId } });
+    // User delete cascades its UserBusiness rows; the role can only be deleted once nothing
+    // references it (UserBusiness.roleId is onDelete: Restrict).
+    if (noPermsUserId) await prisma.user.deleteMany({ where: { id: noPermsUserId } });
+    if (noPermsRoleId) await prisma.role.deleteMany({ where: { id: noPermsRoleId } });
     await cleanupIntegrationTestUser(testUser);
     await rm(templatesDir, { recursive: true, force: true });
     env.BUSINESSES_ROOT_DIR = originalBusinessesRootDir;
@@ -141,5 +186,33 @@ describe("Bills (integration)", () => {
     expect(response.status).toBe(200);
     expect(response.headers["content-type"]).toBe("application/pdf");
     expect(response.body.length).toBeGreaterThan(0);
+  });
+
+  it("does not return a bill across businesses (404 on get, absent from list)", async () => {
+    const secondBusinessToken = await switchToSecondBusiness(app, testUser);
+
+    const getResponse = await request(app)
+      .get(`/api/v1/bills/${billId}`)
+      .set("Authorization", `Bearer ${secondBusinessToken}`);
+    expect(getResponse.status).toBe(404);
+
+    const listResponse = await request(app)
+      .get("/api/v1/bills")
+      .set("Authorization", `Bearer ${secondBusinessToken}`);
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body.data.items.some((b: { id: string }) => b.id === billId)).toBe(false);
+  });
+
+  it("rejects create and read for a user whose role lacks the bills permissions", async () => {
+    const createResponse = await request(app)
+      .post("/api/v1/bills")
+      .set("Authorization", `Bearer ${noPermsToken}`)
+      .send({ tenderId, items: [{ description: "Flange", quantity: 10, rate: 500 }] });
+    expect(createResponse.status).toBe(403);
+
+    const getResponse = await request(app)
+      .get(`/api/v1/bills/${billId}`)
+      .set("Authorization", `Bearer ${noPermsToken}`);
+    expect(getResponse.status).toBe(403);
   });
 });

@@ -1,5 +1,5 @@
-import { auditService } from "../audit/audit.module.js";
 import { prisma } from "../../infra/prisma/client.js";
+import { auditService } from "../audit/audit.module.js";
 import { TendersRepository } from "../tenders/tenders.repository.js";
 
 import { BillsController } from "./bills.controller.js";

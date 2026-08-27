@@ -165,6 +165,15 @@ receiving status.
   `localhost` (needs `host.docker.internal`), so it fails with a confusing `SERVICE_UNAVAILABLE`
   even when Ollama is running fine on the host. If you only need infra for `pnpm dev`, run
   `docker compose up -d postgres redis minio minio-init mailhog` instead.
+- Adding new `PERMISSION_KEYS`/`ROLE_PERMISSION_MATRIX` entries (e.g. Bills' `bills:create`/
+  `bills:read`) requires `pnpm db:seed` on **every existing environment** (dev, staging, prod)
+  before non-SUPER_ADMIN roles can actually use the new permission — the seed script is
+  idempotent but does not run itself, so a key that only exists in `packages/types/src/rbac.ts`
+  is invisible to the database until someone re-runs it. SUPER_ADMIN is unaffected (seeded with a
+  wildcard permission, not the matrix), but the sidebar's client-side `hasPermission` check reads
+  the static matrix while the server's `requirePermission` middleware reads the DB-backed
+  `RolePermission` rows — until the seed runs, the two can disagree: a role sees the nav link but
+  the route 403s, which looks like a broken feature rather than an unseeded environment.
 
 ## graphify
 

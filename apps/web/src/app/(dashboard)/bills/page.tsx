@@ -3,11 +3,12 @@
 import type { BillListItemDto } from "@bmp/types";
 import { Button, DataTable, EmptyState, formatDate } from "@bmp/ui";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
-import { Receipt } from "lucide-react";
+import { Download, Receipt } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { useBills } from "@/hooks/use-bills";
+import { downloadFile } from "@/lib/download";
 
 const columns: ColumnDef<BillListItemDto>[] = [
   {
@@ -30,6 +31,20 @@ const columns: ColumnDef<BillListItemDto>[] = [
     accessorKey: "total",
     header: "Total",
     cell: ({ row }) => row.original.total.toLocaleString(),
+  },
+  {
+    id: "download",
+    header: "",
+    cell: ({ row }) => (
+      <Button
+        variant="ghost"
+        size="sm"
+        title="Download PDF"
+        onClick={() => void downloadFile(`/bills/${row.original.id}/pdf`, `${row.original.billNumber}.pdf`)}
+      >
+        <Download className="h-4 w-4" />
+      </Button>
+    ),
   },
 ];
 
