@@ -31,6 +31,12 @@ export const s3Service = {
     );
   },
 
+  async getObject(key: string): Promise<Buffer> {
+    const response = await s3Client.send(new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
+    const bytes = await response.Body!.transformToByteArray();
+    return Buffer.from(bytes);
+  },
+
   async getPresignedUrl(key: string): Promise<string> {
     const command = new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key });
     return getSignedUrl(s3Client, command, { expiresIn: PRESIGNED_URL_TTL_SECONDS });
