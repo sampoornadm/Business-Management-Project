@@ -12,9 +12,9 @@ describe("tenderStatusBadgeVariant", () => {
     expect(tenderStatusBadgeVariant("CANCELLED")).toBe("destructive");
   });
 
-  it("returns default for submitted-and-beyond states", () => {
-    expect(tenderStatusBadgeVariant("SUBMITTED")).toBe("default");
-    expect(tenderStatusBadgeVariant("WON")).toBe("default");
+  it("returns secondary for submitted, success for won", () => {
+    expect(tenderStatusBadgeVariant("SUBMITTED")).toBe("secondary");
+    expect(tenderStatusBadgeVariant("WON")).toBe("success");
   });
 });
 
