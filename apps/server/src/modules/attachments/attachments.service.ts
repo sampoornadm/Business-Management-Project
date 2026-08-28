@@ -7,6 +7,7 @@ import { BadRequestError, NotFoundError } from "../../core/errors/HttpErrors.js"
 import { documentIndexingQueue } from "../../infra/queue/queues.js";
 import { imageService } from "../../infra/storage/image.service.js";
 import { s3Service } from "../../infra/storage/s3.service.js";
+import { logger } from "../../shared/logger/logger.js";
 import { sha256 } from "../../shared/utils/hash.js";
 
 import type { AttachmentWithUploader, IAttachmentsRepository } from "./attachments.repository.js";
@@ -119,7 +120,9 @@ export class AttachmentsService {
     }
 
     if (env.DOCUMENT_INDEXING_ENABLED) {
-      await documentIndexingQueue.add("index-document", { attachmentId: original.id });
+      documentIndexingQueue.add("index-document", { attachmentId: original.id }).catch((err: unknown) => {
+        logger.warn({ attachmentId: original.id, err }, "Failed to enqueue document-indexing job");
+      });
     }
 
     let thumbnail: AttachmentWithUploader | null = null;

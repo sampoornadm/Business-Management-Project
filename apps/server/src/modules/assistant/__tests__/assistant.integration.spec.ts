@@ -25,6 +25,7 @@ describe("POST /assistant/query (integration)", () => {
   const app = createApp();
   let testUser: IntegrationTestUser;
   let tenderId: string;
+  let tenderNumber: string;
   let clientId: string;
 
   beforeAll(async () => {
@@ -45,6 +46,7 @@ describe("POST /assistant/query (integration)", () => {
       },
     });
     tenderId = tender.id;
+    tenderNumber = tender.tenderNumber;
   });
 
   afterAll(async () => {
@@ -56,20 +58,23 @@ describe("POST /assistant/query (integration)", () => {
 
   it("finds a tender by natural-language message referencing its number", async () => {
     generateJsonMock.mockResolvedValue({
-      tenderNumber: null,
-      documentType: null,
-      freeTextQuery: tenderId, // not realistic LLM output, but exercises the real search fallback path
+      tenderNumber,
+      documentType: "NIT",
+      freeTextQuery: "tender notice",
     });
     generateTextMock.mockResolvedValue("Found it.");
 
     const response = await request(app)
       .post("/api/v1/assistant/query")
       .set("Authorization", `Bearer ${testUser.accessToken}`)
-      .send({ message: `find tender ${tenderId}` });
+      .send({ message: `find the tender numbered ${tenderNumber}` });
 
     expect(response.status).toBe(200);
     expect(typeof response.body.data.reply).toBe("string");
     expect(Array.isArray(response.body.data.results)).toBe(true);
+    expect(
+      response.body.data.results.some((r: { type: string; id: string }) => r.type === "Tender" && r.id === tenderId),
+    ).toBe(true);
   });
 
   it("rejects an empty message with a validation error", async () => {

@@ -88,9 +88,11 @@ const envSchema = z.object({
   DOCUMENT_INDEXING_ENABLED: booleanEnv("false"),
   // Cosine similarity a document's content embedding must clear to appear as a content match in
   // search. Unmeasured placeholder — unlike AI_MATCH_THRESHOLD (calibrated against real BOQ
-  // items), no real indexed documents exist yet to measure against. Re-measure once they do,
+  // items), no real indexed documents exist yet to measure against. Set above bge-m3's documented
+  // unrelated-pair noise ceiling (0.843-0.860, see CLAUDE.md) rather than below it: 0.5 let nearly
+  // every embedded document through as a "match". Re-measure once real indexed documents exist,
   // same way AI_MATCH_THRESHOLD was measured against bge-m3 rather than guessed.
-  DOCUMENT_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.5),
+  DOCUMENT_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.9),
 });
 
 export type Env = z.infer<typeof envSchema>;
