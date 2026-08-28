@@ -316,13 +316,15 @@ async findNearestAttachments(
            1 - ("embeddingVector" <=> ${vectorLiteral}::vector) AS similarity
     FROM attachments
     WHERE "entityType" = 'Tender' AND "entityId" = ANY(${tenderIds})
-      AND "embeddingVector" IS NOT NULL
+      AND variant = 'ORIGINAL' AND "embeddingVector" IS NOT NULL
       AND 1 - ("embeddingVector" <=> ${vectorLiteral}::vector) >= ${threshold}
     ORDER BY "embeddingVector" <=> ${vectorLiteral}::vector
     LIMIT ${limit}
   `;
 }
 ```
+
+(`variant = 'ORIGINAL'` matches the exact filter `findEmbeddedAttachments`/`searchAttachmentsByMetadata` already apply today — without it, thumbnail variant rows would compete in the ranking alongside their originals.)
 
 `reports.service.ts#searchAttachments` calls this directly with `env.DOCUMENT_MATCH_THRESHOLD` and
 the existing cap (5), instead of fetching every embedded row and cosine-ranking in JS. The
@@ -340,26 +342,48 @@ query). The surrounding logic downstream of the ranked list — `AI_MATCH_THRESH
 just consumes an array of `{ rate, similarity }` in descending-similarity order, which the SQL
 query now produces directly.
 
-**`Item`**: `items.repository.ts` gets a new `findNearestConfirmedMatch(businessId, excludeItemId,
-queryVector, limit)`, same `WHERE businessId = ... AND "categoryConfirmed" = true AND "categoryId"
-IS NOT NULL` filter `findConfirmedForMatch` already uses, **plus `AND id != excludeItemId`** — the
-item being classified must not match against itself. Today this exclusion happens in
-`items.service.ts`'s classify path (`context.confirmed.filter((c) => c.id !== item.id && ...)`,
-*before* the filtered rows are ever shaped into the `MatchCandidate[]` that
-`items.helpers.ts#pickConfirmedMatch` receives — `MatchCandidate` itself carries no `id` field, so
-there's nowhere downstream of that filter to re-derive it). The exclusion needs to move into this
-new method's `WHERE` clause; missing it would let an item's own embedding "match" itself at
-similarity 1.0 every time, silently breaking the whole feature.
+**`Item`**: `items.service.ts#suggestForItem` actually has *two* separate brute-force cosine
+consumers of the same "confirmed items" pool, not one — a fact the earlier draft of this section
+missed:
+
+1. `pickConfirmedMatch()` — the deterministic sibling-reuse check, needs only the single nearest
+   candidate.
+2. A second, separate scan building the LLM's few-shot grounding examples (`CLASSIFY_EXAMPLE_LIMIT
+   = 20`): rank every confirmed candidate by cosine, take the top 20, map to `{name, path}`.
+
+Both draw from the identical candidate pool and the identical query vector (the item being
+classified) — they differ only in how many of the ranked results each one uses. One ANN query
+serves both: `items.repository.ts` gets a new `findNearestConfirmedMatch(businessId, excludeItemId,
+queryVector, limit): Promise<(ConfirmedMatchRow & { similarity: number })[]>`, same `WHERE
+businessId = ... AND "categoryConfirmed" = true AND "categoryId" IS NOT NULL` filter
+`findConfirmedForMatch` already uses, **plus `AND id != excludeItemId`**, ordered nearest-first,
+**unfiltered by threshold** (unlike the `Attachment` read path — the examples consumer wants the
+top 20 regardless of similarity, and the sibling check applies its own threshold downstream to just
+the first row), `LIMIT` = `CLASSIFY_EXAMPLE_LIMIT` (20, comfortably covering both consumers in one
+round trip).
+
+The exclusion (`AND id != excludeItemId`) matters: today it happens in `items.service.ts`'s
+classify path (`context.confirmed.filter((c) => c.id !== item.id && ...)`, *before* the filtered
+rows are ever shaped into the `MatchCandidate[]` that `items.helpers.ts#pickConfirmedMatch`
+receives — `MatchCandidate` itself carries no `id` field, so there's nowhere downstream of that
+filter to re-derive it). Missing it in the new method would let an item's own embedding "match"
+itself at similarity 1.0 every time, silently breaking the whole feature.
 
 `items.helpers.ts#pickConfirmedMatch(target, candidates, threshold)` today does two jobs in one
 loop: find the highest-cosine candidate, *then* check it clears `threshold` AND has a matching
 `unit` AND passes `sameSpec()`. Only the first job (the scan-and-rank) moves into SQL. Simplify
-`pickConfirmedMatch` to take the single best candidate SQL already found (or `null`, if nothing
-cleared the threshold) instead of a candidate array — it keeps the `unit`/`sameSpec()` checks
-exactly as they are today (those aren't cosine-based and have no SQL equivalent), just applied to
-one pre-selected candidate instead of found via its own loop. `items.service.ts`'s classify path
-calls the new repository method instead of `findConfirmedForMatch`, and passes its single result
-into the simplified `pickConfirmedMatch`.
+`pickConfirmedMatch` to take the single best candidate SQL already found (or `null`, if the result
+list was empty) instead of a candidate array — it keeps the `unit`/`sameSpec()` checks exactly as
+they are today (those aren't cosine-based and have no SQL equivalent), just applied to one
+pre-selected candidate instead of found via its own loop.
+
+`items.service.ts#suggestForItem` calls `findNearestConfirmedMatch` once per item, feeds its first
+result into the simplified `pickConfirmedMatch` for the sibling check, and — only if that returns
+null — maps the same result array (up to 20 rows) into the LLM's `examples` list. This also lets
+`loadClassifyContext` drop `confirmed: ConfirmedMatchRow[]` from what it hands to `suggestForItem`
+for matching purposes; it still bulk-fetches confirmed items via `findConfirmedForMatch`, but only
+to drive its unrelated "embed any confirmed item that isn't embedded yet" convergence step, not for
+ranking.
 
 `cosineSimilarity()` in `shared/utils/math.ts` has no remaining callers once all three read paths
 are migrated — confirmed via `grep -rl cosineSimilarity apps/server/src` before removing it; delete
