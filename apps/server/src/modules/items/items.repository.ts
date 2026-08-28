@@ -178,6 +178,8 @@ export class ItemsRepository implements IItemsRepository {
 
   async setEmbedding(id: string, embedding: number[]): Promise<void> {
     await this.prisma.item.update({ where: { id }, data: { embedding, embeddedAt: new Date() } });
+    const vectorLiteral = `[${embedding.join(",")}]`;
+    await this.prisma.$executeRaw`UPDATE items SET "embeddingVector" = ${vectorLiteral}::vector WHERE id = ${id}`;
   }
 
   findConfirmedForMatch(businessId: string): Promise<ConfirmedMatchRow[]> {

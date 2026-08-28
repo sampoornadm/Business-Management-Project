@@ -101,6 +101,8 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
       where: { id },
       data: { embedding, embeddedAt: new Date() },
     });
+    const vectorLiteral = `[${embedding.join(",")}]`;
+    await this.prisma.$executeRaw`UPDATE historical_rates SET "embeddingVector" = ${vectorLiteral}::vector WHERE id = ${id}`;
   }
 
   findEmbedded(businessId: string): Promise<HistoricalRateVector[]> {
