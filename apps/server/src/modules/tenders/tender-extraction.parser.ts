@@ -1,12 +1,7 @@
 import mammoth from "mammoth";
-import pdfParse from "pdf-parse";
 
 import { BadRequestError } from "../../core/errors/HttpErrors.js";
-
-async function extractPdfText(buffer: Buffer): Promise<string> {
-  const data = await pdfParse(buffer);
-  return data.text;
-}
+import { extractPdfText } from "../../shared/utils/pdf-text.js";
 
 async function extractDocxText(buffer: Buffer): Promise<string> {
   const result = await mammoth.extractRawText({ buffer });
