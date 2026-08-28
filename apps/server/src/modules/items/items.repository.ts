@@ -192,9 +192,15 @@ export class ItemsRepository implements IItemsRepository {
   }
 
   async setEmbedding(id: string, embedding: number[]): Promise<void> {
-    await this.prisma.item.update({ where: { id }, data: { embedding, embeddedAt: new Date() } });
     const vectorLiteral = `[${embedding.join(",")}]`;
-    await this.prisma.$executeRaw`UPDATE items SET "embeddingVector" = ${vectorLiteral}::vector WHERE id = ${id}`;
+    // One transaction: loadClassifyContext's `pending` filter keys off `embeddedAt`, so a partial
+    // write (embeddedAt set, embeddingVector still NULL) would permanently hide the row from ANN
+    // search and from the self-healing re-embed pass alike.
+    await this.prisma.$transaction([
+      this.prisma.item.update({ where: { id }, data: { embedding, embeddedAt: new Date() } }),
+      this.prisma
+        .$executeRaw`UPDATE items SET "embeddingVector" = ${vectorLiteral}::vector WHERE id = ${id}`,
+    ]);
   }
 
   findConfirmedForMatch(businessId: string): Promise<ConfirmedMatchRow[]> {

@@ -83,6 +83,44 @@ describe("findNearest (HistoricalRate ANN, integration)", () => {
     expect(results[2]?.itemName).toBe("PVC Pipe 100mm");
   });
 
+  // setEmbedding writes embedding/embeddedAt (Prisma) and embeddingVector (raw SQL) in one
+  // $transaction — a partial write would leave embeddedAt set with embeddingVector NULL, which
+  // findUnembedded() would never revisit. Asserts both columns land, and that a bad-dimension
+  // vector rolls the whole pair back instead of half-committing.
+  it("setEmbedding writes both embedding columns atomically", async () => {
+    const id = randomUUID();
+    await prisma.historicalRate.create({
+      data: {
+        id,
+        businessId,
+        category: "MATERIAL",
+        itemName: "Atomic Write Probe",
+        unit: "nos",
+        rate: 100,
+        effectiveDate: new Date(),
+        createdById: userId,
+      },
+    });
+    rateIds.push(id);
+
+    const vector = new Array(1024).fill(0);
+    vector[0] = 1;
+    await repository.setEmbedding(id, vector);
+
+    const [row] = await prisma.$queryRaw<{ embeddedAt: Date | null; hasVector: boolean }[]>`
+      SELECT "embeddedAt", "embeddingVector" IS NOT NULL AS "hasVector"
+      FROM historical_rates WHERE id = ${id}
+    `;
+    expect(row?.embeddedAt).not.toBeNull();
+    expect(row?.hasVector).toBe(true);
+
+    // Wrong dimensions -> the ::vector cast throws; embeddedAt must NOT have advanced.
+    const before = row?.embeddedAt;
+    await expect(repository.setEmbedding(id, [0.1, 0.2, 0.3])).rejects.toThrow();
+    const after = await prisma.historicalRate.findUnique({ where: { id }, select: { embeddedAt: true } });
+    expect(after?.embeddedAt?.getTime()).toBe(before?.getTime());
+  });
+
   it("scopes results to the given business", async () => {
     const otherBusiness = await prisma.business.create({
       data: { id: randomUUID(), name: "Other ANN Business", code: `OTHR${randomUUID().slice(0, 8)}` },

@@ -107,12 +107,18 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
   }
 
   async setEmbedding(id: string, embedding: number[]): Promise<void> {
-    await this.prisma.historicalRate.update({
-      where: { id },
-      data: { embedding, embeddedAt: new Date() },
-    });
     const vectorLiteral = `[${embedding.join(",")}]`;
-    await this.prisma.$executeRaw`UPDATE historical_rates SET "embeddingVector" = ${vectorLiteral}::vector WHERE id = ${id}`;
+    // One transaction: findUnembedded() keys off `embeddedAt`, so a partial write (embeddedAt set,
+    // embeddingVector still NULL) would permanently hide the row from ANN search and from the
+    // self-healing re-embed pass alike.
+    await this.prisma.$transaction([
+      this.prisma.historicalRate.update({
+        where: { id },
+        data: { embedding, embeddedAt: new Date() },
+      }),
+      this.prisma
+        .$executeRaw`UPDATE historical_rates SET "embeddingVector" = ${vectorLiteral}::vector WHERE id = ${id}`,
+    ]);
   }
 
   findNearest(
