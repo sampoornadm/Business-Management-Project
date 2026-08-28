@@ -813,6 +813,7 @@ git commit -m "feat(server): sync embeddingVector column on every embedding writ
 **Files:**
 - Modify: `apps/server/src/modules/reports/reports.repository.ts`
 - Modify: `apps/server/src/modules/reports/reports.service.ts`
+- Modify: `apps/server/src/modules/reports/__tests__/reports.service.spec.ts`
 - Create: `apps/server/src/modules/reports/__tests__/reports-attachment-ann.integration.spec.ts`
 
 **Interfaces:**
@@ -820,20 +821,17 @@ git commit -m "feat(server): sync embeddingVector column on every embedding writ
   limit: number, threshold: number): Promise<(AttachmentMetadataRow & { similarity: number })[]>`.
 - Consumes: `AttachmentMetadataRow` (already defined in `reports.repository.ts`: `{ id,
   originalName, documentType, entityId }`).
-- `findEmbeddedAttachments` and `EmbeddedAttachmentRow` are removed — nothing else in the codebase
-  calls `findEmbeddedAttachments` (confirmed: `reports.service.ts#searchAttachments` is its only
-  caller).
+- `findEmbeddedAttachments` is removed from `IReportsRepository` — its only production caller is
+  `reports.service.ts#searchAttachments` (confirmed). `EmbeddedAttachmentRow` stays exported
+  (unlike `findEmbeddedAttachments`, which becomes dead): `reports.service.spec.ts`'s
+  `FakeReportsRepository implements IReportsRepository` uses it as its content-match fixture shape,
+  same treatment as `HistoricalRateVector` in Task 9.
 
 - [ ] **Step 1: Add `findNearestAttachments`, remove `findEmbeddedAttachments`**
 
-In `apps/server/src/modules/reports/reports.repository.ts`, delete the `EmbeddedAttachmentRow`
-interface and the `findEmbeddedAttachments` method (and its entry in `IReportsRepository`):
-
-```ts
-export interface EmbeddedAttachmentRow extends AttachmentMetadataRow {
-  embedding: number[];
-}
-```
+In `apps/server/src/modules/reports/reports.repository.ts`, delete the `findEmbeddedAttachments`
+method (and its entry in `IReportsRepository`) — leave the `EmbeddedAttachmentRow` interface
+declaration in place, it's still used as a test fixture type (Step 3 below):
 
 ```ts
   findEmbeddedAttachments(tenderIds: string[]): Promise<EmbeddedAttachmentRow[]>;
@@ -961,7 +959,48 @@ with:
 import { round2 } from "../../shared/utils/math.js";
 ```
 
-- [ ] **Step 3: Write the integration test**
+- [ ] **Step 3: Update `reports.service.spec.ts`'s fake repository**
+
+`FakeReportsRepository implements IReportsRepository` (`apps/server/src/modules/reports/__tests__/
+reports.service.spec.ts`) has an `embeddedAttachments: EmbeddedAttachmentRow[]` fixture array and a
+`findEmbeddedAttachments` method the interface no longer declares. Three existing tests
+("includes a content-matched attachment...", "excludes a content match below threshold...",
+"dedupes an attachment that matches both...") set `repository.embeddedAttachments` and rely on
+`searchAttachments` doing the cosine-rank-and-threshold-filter — that logic is moving into
+`findNearestAttachments`, so the fake needs to do it instead, in-memory, to keep simulating what
+the real SQL would return.
+
+Add this import:
+
+```ts
+import { cosineSimilarity } from "../../../shared/utils/math.js";
+```
+
+Replace the fake's `findEmbeddedAttachments` method:
+
+```ts
+  async findEmbeddedAttachments(_tenderIds: string[]) {
+    return this.embeddedAttachments;
+  }
+```
+
+with:
+
+```ts
+  async findNearestAttachments(_tenderIds: string[], queryVector: number[], limit: number, threshold: number) {
+    return this.embeddedAttachments
+      .map((row) => ({ ...row, similarity: cosineSimilarity(queryVector, row.embedding) }))
+      .filter((row) => row.similarity >= threshold)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, limit);
+  }
+```
+
+No other line in any of the three existing test bodies needs to change — they only ever set
+`repository.embeddedAttachments = [...]` and assert on `result.results`, both untouched by this
+swap.
+
+- [ ] **Step 4: Write the integration test**
 
 ```ts
 import { randomUUID } from "node:crypto";
@@ -1080,13 +1119,13 @@ describe("findNearestAttachments (integration)", () => {
 });
 ```
 
-- [ ] **Step 4: Run the new test and the existing reports test suite**
+- [ ] **Step 5: Run the new test and the existing reports test suite**
 
 Run: `pnpm --filter @bmp/server exec vitest run src/modules/reports`
-Expected: PASS, including the two new ANN tests and every pre-existing `reports.service.spec.ts`
-test (which uses a fake repository and is unaffected by this task's real-SQL change).
+Expected: PASS, including the two new ANN integration tests and the updated
+`reports.service.spec.ts` (fake repository, all existing assertions unchanged).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add apps/server/src/modules/reports
