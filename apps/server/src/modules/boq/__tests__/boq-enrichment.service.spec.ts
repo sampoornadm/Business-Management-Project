@@ -3,8 +3,10 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ServiceUnavailableError } from "../../../core/errors/HttpErrors.js";
+import { cosineSimilarity } from "../../../shared/utils/math.js";
 import type {
   CreateHistoricalRateData,
+  HistoricalRateMatch,
   HistoricalRateVector,
   HistoricalRateWithCreator,
   IHistoricalRatesRepository,
@@ -89,8 +91,18 @@ class FakeRatesRepository implements Partial<IHistoricalRatesRepository> {
     this.unembedded = this.unembedded.filter((rate) => rate.id !== id);
   }
 
-  async findEmbedded(): Promise<HistoricalRateVector[]> {
-    return this.embedded;
+  async findNearest(_businessId: string, queryVector: number[], limit: number): Promise<HistoricalRateMatch[]> {
+    return this.embedded
+      .map((rate) => ({
+        id: rate.id,
+        itemName: rate.itemName,
+        unit: rate.unit,
+        rate: rate.rate,
+        category: rate.category,
+        similarity: cosineSimilarity(queryVector, rate.embedding),
+      }))
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, limit);
   }
 
   async findMany(_filters: ListHistoricalRatesFilters): Promise<HistoricalRateWithCreator[]> {

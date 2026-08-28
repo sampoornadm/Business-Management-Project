@@ -39,6 +39,16 @@ export interface HistoricalRateVector {
   embedding: number[];
 }
 
+/** A ranked ANN result — flat, no `embedding` column, since nothing downstream needs the vector. */
+export interface HistoricalRateMatch {
+  id: string;
+  itemName: string;
+  unit: string;
+  rate: number;
+  category: HistoricalRateCategory;
+  similarity: number;
+}
+
 export interface IHistoricalRatesRepository {
   findMany(filters: ListHistoricalRatesFilters): Promise<HistoricalRateWithCreator[]>;
   suggest(
@@ -50,7 +60,7 @@ export interface IHistoricalRatesRepository {
   create(data: CreateHistoricalRateData): Promise<HistoricalRateWithCreator>;
   findUnembedded(businessId: string): Promise<{ id: string; itemName: string }[]>;
   setEmbedding(id: string, embedding: number[]): Promise<void>;
-  findEmbedded(businessId: string): Promise<HistoricalRateVector[]>;
+  findNearest(businessId: string, queryVector: number[], limit: number): Promise<HistoricalRateMatch[]>;
 }
 
 export class HistoricalRatesRepository implements IHistoricalRatesRepository {
@@ -105,10 +115,19 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
     await this.prisma.$executeRaw`UPDATE historical_rates SET "embeddingVector" = ${vectorLiteral}::vector WHERE id = ${id}`;
   }
 
-  findEmbedded(businessId: string): Promise<HistoricalRateVector[]> {
-    return this.prisma.historicalRate.findMany({
-      where: { businessId, embeddedAt: { not: null } },
-      select: { id: true, itemName: true, unit: true, rate: true, category: true, embedding: true },
-    });
+  findNearest(
+    businessId: string,
+    queryVector: number[],
+    limit: number,
+  ): Promise<HistoricalRateMatch[]> {
+    const vectorLiteral = `[${queryVector.join(",")}]`;
+    return this.prisma.$queryRaw`
+      SELECT id, "itemName", unit, rate, category,
+             1 - ("embeddingVector" <=> ${vectorLiteral}::vector) AS similarity
+      FROM historical_rates
+      WHERE "businessId" = ${businessId} AND "embeddingVector" IS NOT NULL
+      ORDER BY "embeddingVector" <=> ${vectorLiteral}::vector
+      LIMIT ${limit}
+    `;
   }
 }
