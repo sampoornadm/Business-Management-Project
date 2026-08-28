@@ -64,12 +64,17 @@ export async function indexAttachment(attachmentId: string): Promise<void> {
       await prisma.attachment.update({ where: { id: attachmentId }, data: { extractedText: truncated } });
       return;
     }
-    await prisma.attachment.update({
-      where: { id: attachmentId },
-      data: { extractedText: truncated, embedding: vector, embeddedAt: new Date() },
-    });
     const vectorLiteral = `[${vector.join(",")}]`;
-    await prisma.$executeRaw`UPDATE attachments SET "embeddingVector" = ${vectorLiteral}::vector WHERE id = ${attachmentId}`;
+    // One transaction: `embeddedAt` is what the "needs indexing" queries key off, so a partial
+    // write (embeddedAt set, embeddingVector still NULL — e.g. a dimension-mismatch throw from
+    // the ::vector cast) would permanently hide the row from ANN search with nothing to re-find it.
+    await prisma.$transaction([
+      prisma.attachment.update({
+        where: { id: attachmentId },
+        data: { extractedText: truncated, embedding: vector, embeddedAt: new Date() },
+      }),
+      prisma.$executeRaw`UPDATE attachments SET "embeddingVector" = ${vectorLiteral}::vector WHERE id = ${attachmentId}`,
+    ]);
   } catch (err) {
     if (!(err instanceof ServiceUnavailableError)) throw err;
     // Extraction doesn't need Ollama — store the text now and let a later re-index (or a
