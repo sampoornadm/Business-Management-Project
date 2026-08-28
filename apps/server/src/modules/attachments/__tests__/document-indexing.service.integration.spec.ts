@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@bmp/database";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-const { embedMock, pdfParseMock } = vi.hoisted(() => ({ embedMock: vi.fn(), pdfParseMock: vi.fn() }));
+const { embedMock, extractPdfTextMock } = vi.hoisted(() => ({ embedMock: vi.fn(), extractPdfTextMock: vi.fn() }));
 vi.mock("../../../infra/llm/ollama.client.js", () => ({ embed: embedMock }));
-vi.mock("pdf-parse", () => ({ default: pdfParseMock }));
+vi.mock("../../../shared/utils/pdf-text.js", () => ({ extractPdfText: extractPdfTextMock }));
 
 import { ServiceUnavailableError } from "../../../core/errors/HttpErrors.js";
 import { s3Service } from "../../../infra/storage/s3.service.js";
@@ -68,7 +68,7 @@ describe("indexAttachment (integration)", () => {
   });
 
   it("extracts text, embeds it, and stores both on the attachment", async () => {
-    pdfParseMock.mockResolvedValue({ text: "Notice inviting tender for cable supply" });
+    extractPdfTextMock.mockResolvedValue("Notice inviting tender for cable supply");
     embedMock.mockResolvedValue([[0.1, 0.2, 0.3]]);
 
     await indexAttachment(attachmentId);
@@ -84,7 +84,7 @@ describe("indexAttachment (integration)", () => {
   });
 
   it("truncates extracted text to 8000 characters before embedding", async () => {
-    pdfParseMock.mockResolvedValue({ text: "x".repeat(9000) });
+    extractPdfTextMock.mockResolvedValue("x".repeat(9000));
     embedMock.mockResolvedValue([[0.4, 0.5, 0.6]]);
     const longTextPath = `tender/${randomUUID()}/${randomUUID()}-original.pdf`;
     await s3Service.putObject({ key: longTextPath, body: PLACEHOLDER_PDF_BYTES, contentType: "application/pdf" });
@@ -114,7 +114,7 @@ describe("indexAttachment (integration)", () => {
   });
 
   it("stores extracted text even when Ollama is unavailable, without an embedding", async () => {
-    pdfParseMock.mockResolvedValue({ text: "Notice inviting tender for cable supply" });
+    extractPdfTextMock.mockResolvedValue("Notice inviting tender for cable supply");
     embedMock.mockRejectedValue(new ServiceUnavailableError("Ollama not reachable"));
     const noOllamaPath = `tender/${randomUUID()}/${randomUUID()}-original.pdf`;
     await s3Service.putObject({ key: noOllamaPath, body: PLACEHOLDER_PDF_BYTES, contentType: "application/pdf" });

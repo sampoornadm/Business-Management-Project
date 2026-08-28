@@ -1,5 +1,4 @@
 import Docxtemplater from "docxtemplater";
-import pdfParse from "pdf-parse";
 import PizZip from "pizzip";
 
 import { ServiceUnavailableError } from "../../core/errors/HttpErrors.js";
@@ -7,6 +6,7 @@ import { embed } from "../../infra/llm/ollama.client.js";
 import { prisma } from "../../infra/prisma/client.js";
 import { s3Service } from "../../infra/storage/s3.service.js";
 import { logger } from "../../shared/logger/logger.js";
+import { extractPdfText } from "../../shared/utils/pdf-text.js";
 
 const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const MAX_EXTRACT_CHARS = 8000;
@@ -20,8 +20,8 @@ const MAX_EXTRACT_CHARS = 8000;
 export async function extractText(buffer: Buffer, mimeType: string): Promise<string | null> {
   if (mimeType === "application/pdf") {
     try {
-      const data = await pdfParse(buffer);
-      return data.text.trim() || null;
+      const text = await extractPdfText(buffer);
+      return text.trim() || null;
     } catch {
       return null;
     }
