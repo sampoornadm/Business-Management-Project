@@ -10,7 +10,11 @@ import { spawn } from "node:child_process";
  */
 export function extractPdfText(buffer: Buffer): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn("pdftotext", ["-", "-"]);
+    // timeout: two call sites (BOQ parse, tender extraction) are synchronous user-upload request
+    // paths — a PDF that makes pdftotext hang would hold the HTTP request open forever. Node
+    // SIGTERMs the child on timeout, which fires the `close` handler below with a non-zero/null
+    // code and rejects like any other pdftotext failure.
+    const child = spawn("pdftotext", ["-", "-"], { timeout: 30_000 });
     const stdout: Buffer[] = [];
     let stderr = "";
 
@@ -27,6 +31,11 @@ export function extractPdfText(buffer: Buffer): Promise<string> {
       resolve(Buffer.concat(stdout).toString("utf8"));
     });
 
+    // A child that dies before draining stdin (killed by the timeout above, or exiting early on a
+    // malformed file) makes this write emit EPIPE — unhandled, that's an *uncaught exception* that
+    // takes the process down, not a rejected promise. Swallow it: the real failure is already
+    // reported through the `close` handler's non-zero exit code.
+    child.stdin.on("error", () => {});
     child.stdin.write(buffer);
     child.stdin.end();
   });
