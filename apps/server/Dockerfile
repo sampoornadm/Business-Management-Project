@@ -36,6 +36,7 @@ COPY --from=build /app/apps/server/src ./apps/server/src
 COPY --from=build /app/apps/server/templates ./apps/server/templates
 COPY --from=build /app/apps/server/package.json ./apps/server/package.json
 COPY --from=build /app/apps/server/node_modules ./apps/server/node_modules
+RUN apk add --no-cache poppler-utils
 USER bmp
 EXPOSE 4000
 # @bmp/database (like @bmp/types/@bmp/ui) is an intentionally unbuilt raw-TS workspace package —
