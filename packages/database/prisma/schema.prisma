@@ -302,8 +302,10 @@ model Attachment {
   isCurrent        Boolean      @default(true)
 
   // Content search (#2/#3 — see docs/superpowers/specs/2026-08-27-document-search-assistant-design.md).
-  // Populated lazily by the document-indexing worker. Plain Float[] + brute-force cosine in
-  // application code, same convention as HistoricalRate.embedding below — not pgvector.
+  // Populated lazily by the document-indexing worker. Real content search now queries
+  // embeddingVector below via pgvector ANN (see reports.repository.ts#findNearestAttachments) —
+  // this Float[] is kept only per the design doc's Non-goals (smaller diff; nothing reads it as a
+  // plain array anymore), not because anything still needs it.
   extractedText String?
   embedding     Float[]
   embeddedAt    DateTime?
