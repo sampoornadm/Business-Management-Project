@@ -2093,7 +2093,7 @@ describe("findNearestConfirmedMatch (Item ANN, integration)", () => {
     });
     businessId = business.id;
     const category = await prisma.category.create({
-      data: { id: randomUUID(), name: "ANN Test Category", path: "ANN Test Category" },
+      data: { id: randomUUID(), name: "ANN Test Category" },
     });
     categoryId = category.id;
   });
