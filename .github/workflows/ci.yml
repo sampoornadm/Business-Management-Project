@@ -29,7 +29,10 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16-alpine
+        # pgvector image, not stock postgres — the pgvector migration's first statement is
+        # `CREATE EXTENSION IF NOT EXISTS vector;`, which fails on stock postgres. Matches
+        # docker-compose.yml's local dev image.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: bmp
           POSTGRES_PASSWORD: bmp_test_password
@@ -70,6 +73,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # extractPdfText shells out to poppler's `pdftotext`; ubuntu-latest runners don't ship it.
+      # Same convention as the minio service's MINIO_DEFAULT_BUCKETS: test infra dependencies get
+      # provisioned in CI, not just documented as a local prerequisite.
+      - name: Install poppler-utils
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
 
       - name: Lint
         run: pnpm lint
@@ -143,7 +152,8 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16-alpine
+        # pgvector image — see the build-and-test job's note; this job runs migrate:deploy too.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: bmp
           POSTGRES_PASSWORD: bmp_test_password
