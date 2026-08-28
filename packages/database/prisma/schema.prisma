@@ -307,6 +307,10 @@ model Attachment {
   extractedText String?
   embedding     Float[]
   embeddedAt    DateTime?
+  // pgvector column kept in sync with `embedding` on every write — see
+  // docs/superpowers/specs/2026-08-28-pdf-extraction-and-ann-search-design.md. `Float[]` above
+  // stays for now; this column is what ANN reads actually query.
+  embeddingVector Unsupported("vector(1024)")?
 
   uploadedById String
   uploadedBy   User   @relation("AttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
@@ -679,6 +683,7 @@ model HistoricalRate {
   // cosine sweep ever shows up in the job's timing logs.
   embedding  Float[]
   embeddedAt DateTime?
+  embeddingVector Unsupported("vector(1024)")?
 
   createdById String
   createdBy   User   @relation("HistoricalRateCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
@@ -867,6 +872,7 @@ model Item {
   // category from before ever calling the LLM — see items.service classify path.
   embedding  Float[]
   embeddedAt DateTime?
+  embeddingVector Unsupported("vector(1024)")?
 
   rfqItems RfqItem[]
 
