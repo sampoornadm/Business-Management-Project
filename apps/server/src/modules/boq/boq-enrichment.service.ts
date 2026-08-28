@@ -2,10 +2,10 @@ import { env } from "../../config/env.js";
 import { ServiceUnavailableError } from "../../core/errors/HttpErrors.js";
 import { embed, generateJson } from "../../infra/llm/ollama.client.js";
 import { logger } from "../../shared/logger/logger.js";
-import { cosineSimilarity, round2 } from "../../shared/utils/math.js";
+import { round2 } from "../../shared/utils/math.js";
 import { sameSpec } from "../../shared/utils/spec-match.js";
 import type {
-  HistoricalRateVector,
+  HistoricalRateMatch,
   IHistoricalRatesRepository,
 } from "../rates/rates.repository.js";
 
@@ -13,6 +13,9 @@ import type { IBoqRepository, UpdateBoqItemEnrichmentData } from "./boq.reposito
 
 /** How many historical candidates get handed to the LLM as context on the fallback path. */
 const LLM_CONTEXT_CANDIDATES = 3;
+
+/** How many nearest historical rates the ANN query returns per item, before threshold filtering. */
+const RATE_MATCH_CANDIDATES = 10;
 
 /**
  * The LLM self-reports its own confidence, which is not calibrated against anything.
@@ -28,11 +31,6 @@ interface LlmClassification {
   category: string;
   subcategory: string | null;
   confidence: number;
-}
-
-interface Match {
-  rate: HistoricalRateVector;
-  similarity: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -61,9 +59,9 @@ function parseClassification(raw: unknown): LlmClassification | null {
  * included purely so it reuses this company's own category vocabulary instead of inventing
  * new labels for the same trade.
  */
-function buildPrompt(description: string, unit: string | null, candidates: Match[]): string {
+function buildPrompt(description: string, unit: string | null, candidates: HistoricalRateMatch[]): string {
   const context = candidates.length
-    ? candidates.map((c) => `  - "${c.rate.itemName}" (category: ${c.rate.category})`).join("\n")
+    ? candidates.map((c) => `  - "${c.itemName}" (category: ${c.category})`).join("\n")
     : "  (none)";
 
   return [
@@ -107,16 +105,10 @@ export class BoqEnrichmentService {
     logger.info({ businessId, count: pending.length }, "Embedded historical rates");
   }
 
-  private rank(itemVector: number[], rates: HistoricalRateVector[]): Match[] {
-    return rates
-      .map((rate) => ({ rate, similarity: cosineSimilarity(itemVector, rate.embedding) }))
-      .sort((a, b) => b.similarity - a.similarity);
-  }
-
   private async classify(
     description: string,
     unit: string | null,
-    matches: Match[],
+    matches: HistoricalRateMatch[],
   ): Promise<UpdateBoqItemEnrichmentData> {
     const best = matches[0];
 
@@ -126,8 +118,8 @@ export class BoqEnrichmentService {
     const matched =
       best !== undefined &&
       best.similarity >= env.AI_MATCH_THRESHOLD &&
-      sameSpec(description, best.rate.itemName) &&
-      (unit === null || best.rate.unit === unit)
+      sameSpec(description, best.itemName) &&
+      (unit === null || best.unit === unit)
         ? best
         : null;
 
@@ -148,7 +140,7 @@ export class BoqEnrichmentService {
     if (!parsed) throw new ServiceUnavailableError("Ollama returned an unusable classification.");
 
     return {
-      normalizedName: matched ? matched.rate.itemName : parsed.normalizedName,
+      normalizedName: matched ? matched.itemName : parsed.normalizedName,
       aiCategory: parsed.category,
       aiSubcategory: parsed.subcategory,
       // A matched rate is backed by a measured near-exact match; a classification is only the
@@ -156,9 +148,9 @@ export class BoqEnrichmentService {
       aiConfidence: matched
         ? round2(matched.similarity)
         : round2(Math.min(parsed.confidence, LLM_CONFIDENCE_CEILING)),
-      suggestedRate: matched?.rate.rate ?? null,
+      suggestedRate: matched?.rate ?? null,
       aiSource: matched ? "historical" : "llm",
-      aiRateSourceId: matched?.rate.id ?? null,
+      aiRateSourceId: matched?.id ?? null,
       aiEnrichedAt: new Date(),
     };
   }
@@ -174,7 +166,6 @@ export class BoqEnrichmentService {
     if (leaves.length === 0) return;
 
     await this.embedPendingRates(businessId);
-    const rates = await this.ratesRepository.findEmbedded(businessId);
     const itemVectors = await embed(leaves.map((item) => item.description));
 
     let enriched = 0;
@@ -184,7 +175,8 @@ export class BoqEnrichmentService {
 
       // One bad item (unusable LLM output) must not abandon the rest of the BOQ.
       try {
-        const enrichment = await this.classify(item.description, item.unit, this.rank(vector, rates));
+        const matches = await this.ratesRepository.findNearest(businessId, vector, RATE_MATCH_CANDIDATES);
+        const enrichment = await this.classify(item.description, item.unit, matches);
         await this.boqRepository.updateItemEnrichment(item.id, enrichment);
         enriched += 1;
       } catch (err) {
