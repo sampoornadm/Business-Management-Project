@@ -1,8 +1,8 @@
 import type { BoqColumnField, BoqParsePreviewRow } from "@bmp/types";
 import ExcelJS from "exceljs";
-import pdfParse from "pdf-parse";
 
 import { BadRequestError } from "../../core/errors/HttpErrors.js";
+import { extractPdfText } from "../../shared/utils/pdf-text.js";
 
 export interface ParsedBoqFile {
   columns: string[];
@@ -92,8 +92,8 @@ async function parseExcelBuffer(buffer: Buffer): Promise<ParsedBoqFile> {
  * for Excel — see phase-3-boq-estimation.md's PDF scope decision.
  */
 async function parsePdfBuffer(buffer: Buffer): Promise<ParsedBoqFile> {
-  const data = await pdfParse(buffer);
-  const lines = data.text
+  const text = await extractPdfText(buffer);
+  const lines = text
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
