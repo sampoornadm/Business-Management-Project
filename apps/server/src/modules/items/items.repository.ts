@@ -53,6 +53,15 @@ export interface ConfirmedMatchRow {
   embeddedAt: Date | null;
 }
 
+/** A ranked ANN result — flat, no `embedding`/`embeddedAt`, since nothing downstream needs them. */
+export interface NearestConfirmedMatch {
+  id: string;
+  categoryId: string;
+  canonicalName: string;
+  unit: string | null;
+  similarity: number;
+}
+
 type ItemStatus = NonNullable<ListItemsQuery["status"]>;
 
 function statusWhere(status: ItemStatus | undefined): Prisma.ItemWhereInput {
@@ -82,6 +91,12 @@ export interface IItemsRepository {
   getForClassify(id: string, businessId: string): Promise<ItemForClassify | null>;
   setEmbedding(id: string, embedding: number[]): Promise<void>;
   findConfirmedForMatch(businessId: string): Promise<ConfirmedMatchRow[]>;
+  findNearestConfirmedMatch(
+    businessId: string,
+    excludeItemId: string,
+    queryVector: number[],
+    limit: number,
+  ): Promise<NearestConfirmedMatch[]>;
 }
 
 export class ItemsRepository implements IItemsRepository {
@@ -187,5 +202,23 @@ export class ItemsRepository implements IItemsRepository {
       where: { businessId, categoryConfirmed: true, categoryId: { not: null } },
       select: { id: true, categoryId: true, canonicalName: true, unit: true, embedding: true, embeddedAt: true },
     }) as Promise<ConfirmedMatchRow[]>;
+  }
+
+  findNearestConfirmedMatch(
+    businessId: string,
+    excludeItemId: string,
+    queryVector: number[],
+    limit: number,
+  ): Promise<NearestConfirmedMatch[]> {
+    const vectorLiteral = `[${queryVector.join(",")}]`;
+    return this.prisma.$queryRaw`
+      SELECT id, "categoryId", "canonicalName", unit,
+             1 - ("embeddingVector" <=> ${vectorLiteral}::vector) AS similarity
+      FROM items
+      WHERE "businessId" = ${businessId} AND "categoryConfirmed" = true AND "categoryId" IS NOT NULL
+        AND id != ${excludeItemId} AND "embeddingVector" IS NOT NULL
+      ORDER BY "embeddingVector" <=> ${vectorLiteral}::vector
+      LIMIT ${limit}
+    `;
   }
 }

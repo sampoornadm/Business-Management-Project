@@ -57,17 +57,17 @@ describe("aggregateQuotes", () => {
 });
 
 describe("pickConfirmedMatch", () => {
-  const candidate = (categoryId: string, canonicalName: string, unit: string | null, embedding: number[]) => ({
+  const candidate = (categoryId: string, canonicalName: string, unit: string | null, similarity: number) => ({
     categoryId,
     canonicalName,
     unit,
-    embedding,
+    similarity,
   });
 
   it("reuses a confirmed sibling when cosine, specs and unit all agree", () => {
     const match = pickConfirmedMatch(
-      { canonicalName: "PU Tube ID 4 OD 6", unit: "M", embedding: [1, 0] },
-      [candidate("c1", "PU Tube ID 4 OD 6", "M", [1, 0])],
+      { canonicalName: "PU Tube ID 4 OD 6", unit: "M" },
+      candidate("c1", "PU Tube ID 4 OD 6", "M", 1),
       0.98,
     );
     expect(match).toEqual({ categoryId: "c1", confidence: 1 });
@@ -75,8 +75,8 @@ describe("pickConfirmedMatch", () => {
 
   it("refuses a spec mismatch even at cosine 1 (different size is a different item)", () => {
     const match = pickConfirmedMatch(
-      { canonicalName: "PU Tube ID 4 OD 6", unit: "M", embedding: [1, 0] },
-      [candidate("c1", "PU Tube ID 7 OD 10", "M", [1, 0])],
+      { canonicalName: "PU Tube ID 4 OD 6", unit: "M" },
+      candidate("c1", "PU Tube ID 7 OD 10", "M", 1),
       0.98,
     );
     expect(match).toBeNull();
@@ -84,8 +84,8 @@ describe("pickConfirmedMatch", () => {
 
   it("refuses when cosine is below threshold", () => {
     const match = pickConfirmedMatch(
-      { canonicalName: "PU Tube ID 4 OD 6", unit: "M", embedding: [1, 0] },
-      [candidate("c1", "PU Tube ID 4 OD 6", "M", [0, 1])],
+      { canonicalName: "PU Tube ID 4 OD 6", unit: "M" },
+      candidate("c1", "PU Tube ID 4 OD 6", "M", 0),
       0.98,
     );
     expect(match).toBeNull();
@@ -93,11 +93,15 @@ describe("pickConfirmedMatch", () => {
 
   it("refuses on a unit mismatch", () => {
     const match = pickConfirmedMatch(
-      { canonicalName: "PU Tube ID 4 OD 6", unit: "M", embedding: [1, 0] },
-      [candidate("c1", "PU Tube ID 4 OD 6", "NOS", [1, 0])],
+      { canonicalName: "PU Tube ID 4 OD 6", unit: "M" },
+      candidate("c1", "PU Tube ID 4 OD 6", "NOS", 1),
       0.98,
     );
     expect(match).toBeNull();
+  });
+
+  it("returns null when there is no candidate", () => {
+    expect(pickConfirmedMatch({ canonicalName: "PU Tube ID 4 OD 6", unit: "M" }, null, 0.98)).toBeNull();
   });
 });
 
