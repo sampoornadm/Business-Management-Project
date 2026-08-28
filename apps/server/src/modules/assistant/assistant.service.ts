@@ -48,9 +48,7 @@ export class AssistantService {
       const raw = await generateJson(buildIntentPrompt(message));
       const intent = parseIntent(raw);
       if (intent) {
-        searchQuery = [intent.tenderNumber, intent.documentType, intent.freeTextQuery]
-          .filter((part): part is string => Boolean(part))
-          .join(" ");
+        searchQuery = intent.tenderNumber ?? intent.freeTextQuery;
       }
     } catch (err) {
       if (!(err instanceof ServiceUnavailableError)) throw err;

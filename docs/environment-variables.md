@@ -128,6 +128,13 @@ historical-rate lookup for those.
 | `AI_MATCH_THRESHOLD` | No (default `0.98`) | No | Cosine similarity required before a historical rate can be suggested. Calibrated for `bge-m3`: a same-item restatement measures 0.989, but a 10x spec difference ("x16" vs "x1.6") still measures 0.948 — hence 0.98, not 0.95. |
 | `AI_CONTEXT_FLOOR` | No (default `0.75`) | No | Retrieval floor: candidates below this aren't shown to the LLM as category context. Unrelated trades measure 0.31-0.38, same-trade items 0.84+. |
 
+## Document search & assistant (optional)
+
+| Variable | Required | Sensitive | Notes |
+|---|---|---|---|
+| `DOCUMENT_INDEXING_ENABLED` | No (default `false`) | No | Master switch. When false, uploaded attachments are never queued for text extraction/embedding and `/search` and `/assistant` only match on structured fields (tender number, title, etc.), not document content. |
+| `DOCUMENT_MATCH_THRESHOLD` | No (default `0.9`) | No | Cosine similarity a document's content embedding must clear to appear as a content match. Unmeasured placeholder — unlike `AI_MATCH_THRESHOLD`, no real indexed documents exist yet to measure against. Set above bge-m3's documented unrelated-pair noise ceiling (0.843-0.860) rather than below it, so it errs toward under- not over-matching. Re-measure once real indexed documents exist. |
+
 ## Web (Next.js)
 
 | Variable | Required | Sensitive | Notes |
