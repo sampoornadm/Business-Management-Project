@@ -15,7 +15,7 @@ import { env, isTest } from "../../config/env.js";
 import { BadRequestError, ServiceUnavailableError } from "../../core/errors/HttpErrors.js";
 import { embed } from "../../infra/llm/ollama.client.js";
 import { getCachedJson, setCachedJson } from "../../infra/redis/cache.js";
-import { cosineSimilarity, round2 } from "../../shared/utils/math.js";
+import { round2 } from "../../shared/utils/math.js";
 
 import type { AttachmentMetadataRow, IReportsRepository } from "./reports.repository.js";
 
@@ -326,28 +326,10 @@ export class ReportsService {
   ): Promise<SearchResultItemDto[]> {
     if (tenderIds.length === 0) return [];
 
-    const [metadataMatches, embeddedRows] = await Promise.all([
+    const [metadataMatches, contentMatches] = await Promise.all([
       this.reportsRepository.searchAttachmentsByMetadata(tenderIds, query),
-      this.reportsRepository.findEmbeddedAttachments(tenderIds),
+      this.findContentMatches(tenderIds, query),
     ]);
-
-    let contentMatches: AttachmentMetadataRow[] = [];
-    if (embeddedRows.length > 0) {
-      try {
-        const [queryVector] = await embed([query]);
-        if (queryVector) {
-          contentMatches = embeddedRows
-            .map((row) => ({ row, similarity: cosineSimilarity(queryVector, row.embedding) }))
-            .filter(({ similarity }) => similarity >= env.DOCUMENT_MATCH_THRESHOLD)
-            .sort((a, b) => b.similarity - a.similarity)
-            .map(({ row }) => row);
-        }
-      } catch (err) {
-        // Content search is an enhancement on top of metadata search — Ollama being down must
-        // not take down search entirely, same philosophy as document-indexing.worker.ts.
-        if (!(err instanceof ServiceUnavailableError)) throw err;
-      }
-    }
 
     const merged = new Map<string, AttachmentMetadataRow>();
     for (const row of [...metadataMatches, ...contentMatches]) merged.set(row.id, row);
@@ -359,6 +341,22 @@ export class ReportsService {
       subtitle: tenderNumberById.get(row.entityId) ?? null,
       href: `/tenders/${row.entityId}?tab=documents`,
     }));
+  }
+
+  private async findContentMatches(
+    tenderIds: string[],
+    query: string,
+  ): Promise<AttachmentMetadataRow[]> {
+    try {
+      const [queryVector] = await embed([query]);
+      if (!queryVector) return [];
+      return this.reportsRepository.findNearestAttachments(tenderIds, queryVector, 5, env.DOCUMENT_MATCH_THRESHOLD);
+    } catch (err) {
+      // Content search is an enhancement on top of metadata search — Ollama being down must
+      // not take down search entirely, same philosophy as document-indexing.worker.ts.
+      if (err instanceof ServiceUnavailableError) return [];
+      throw err;
+    }
   }
 
   async getExportableTable(businessId: string, reportKey: ReportKey, from?: Date, to?: Date): Promise<ExportableTable> {
