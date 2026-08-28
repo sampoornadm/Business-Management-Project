@@ -117,6 +117,26 @@ receiving status.
   poppler` locally, `apk add poppler-utils` in `apps/server/Dockerfile`'s runner stage (already
   done). If PDF content search / BOQ PDF upload / tender-extraction-from-PDF suddenly all return
   empty text, check `pdftotext` is on `PATH` before suspecting the code.
+- Prisma's schema DSL can't express either `CREATE EXTENSION` or an index on an
+  `Unsupported("vector(1024)")` column, so it sees the pgvector migration's three
+  `*_embeddingVector_hnsw_idx` HNSW indexes as **undeclared drift**. Running plain `prisma migrate
+  dev` (not `--create-only`, not `migrate deploy`) therefore hits an interactive prompt offering to
+  generate a "corrective" migration — one that would very likely `DROP INDEX` on
+  `attachments_embeddingVector_hnsw_idx` / `historical_rates_embeddingVector_hnsw_idx` /
+  `items_embeddingVector_hnsw_idx` and silently turn every ANN query back into a full scan. **Cancel
+  that prompt** (Ctrl-C / decline); never accept a proposed corrective migration without reading its
+  generated SQL first. Use `prisma migrate deploy`, or `migrate dev --create-only` plus hand-written
+  SQL, neither of which triggers it.
+- pgvector ANN correctness here depends on a **per-database** setting, not just the extension and
+  the indexes: `hnsw.iterative_scan = 'strict_order'` (applied by
+  `migrations/20260828173000_set_hnsw_iterative_scan`, which uses `current_database()` so it lands
+  on whichever DB it's run against). Without it, HNSW hands back only `hnsw.ef_search` (default 40)
+  global candidates *before* the query's tenant `WHERE` filter runs, so a tenant whose rows are a
+  small slice of the table silently gets fewer results or misses its true best match — no error,
+  just "the AI stopped matching things". Any fresh database (new environment, restored backup —
+  `ALTER DATABASE ... SET` is not carried by a plain `pg_dump` of table data) needs the migration
+  run, and the setting only takes effect on **new** sessions. Verify with `SHOW hnsw.iterative_scan;`
+  after reconnecting.
 - Repeatedly re-running integration tests against the same Redis burns through the login rate
   limiter (`RATE_LIMITS.LOGIN`) and integration tests will start failing with 429s that look like
   real bugs. `docker compose exec redis redis-cli FLUSHALL` before a fresh run if that happens.

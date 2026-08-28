@@ -11,7 +11,6 @@ const { embedMock } = vi.hoisted(() => ({ embedMock: vi.fn() }));
 vi.mock("../../../infra/llm/ollama.client.js", () => ({ embed: embedMock, generateJson: vi.fn(), generateText: vi.fn() }));
 
 import { createApp } from "../../../app.js";
-import { indexAttachment } from "../../attachments/document-indexing.service.js";
 import { s3Service } from "../../../infra/storage/s3.service.js";
 import {
   cleanupIntegrationTestUser,
@@ -70,8 +69,11 @@ describe("GET /search — attachments (integration)", () => {
     });
     attachmentId = attachment.id;
 
-    embedMock.mockResolvedValue([[0.1, 0.2, 0.3]]);
-    await indexAttachment(attachmentId);
+    // This test covers the metadata (filename) half of search only — the fixture is a placeholder
+    // buffer, not a real PDF, so there is nothing to embed. An empty embed() result makes
+    // findContentMatches short-circuit before the ANN query, which is the honest no-op; do NOT
+    // put a short placeholder vector here, it would blow up the ::vector(1024) cast.
+    embedMock.mockResolvedValue([]);
   });
 
   afterAll(async () => {
