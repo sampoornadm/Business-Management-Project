@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BadRequestError } from "../../../core/errors/HttpErrors.js";
+import { cosineSimilarity } from "../../../shared/utils/math.js";
 import type {
   AttachmentMetadataRow,
   EmbeddedAttachmentRow,
@@ -104,8 +105,12 @@ class FakeReportsRepository implements IReportsRepository {
   async searchAttachmentsByMetadata(_tenderIds: string[], _query: string) {
     return this.attachmentMetadataMatches;
   }
-  async findEmbeddedAttachments(_tenderIds: string[]) {
-    return this.embeddedAttachments;
+  async findNearestAttachments(_tenderIds: string[], queryVector: number[], limit: number, threshold: number) {
+    return this.embeddedAttachments
+      .map((row) => ({ ...row, similarity: cosineSimilarity(queryVector, row.embedding) }))
+      .filter((row) => row.similarity >= threshold)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, limit);
   }
 }
 
@@ -119,6 +124,11 @@ describe("ReportsService", () => {
   beforeEach(() => {
     repository = new FakeReportsRepository();
     service = new ReportsService(repository);
+    // findContentMatches now calls embed() unconditionally (no more "skip if nothing embedded"
+    // pre-check — that check lived on the since-removed findEmbeddedAttachments). Default to an
+    // empty result so tests that don't care about content-matching don't need to stub this;
+    // individual tests below still override it via embedMock.mockResolvedValue(...).
+    embedMock.mockReset().mockResolvedValue([]);
   });
 
   it("returns a null win rate when no tenders have been decided", async () => {

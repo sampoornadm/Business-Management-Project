@@ -71,7 +71,12 @@ export interface IReportsRepository {
   searchProjects(businessId: string, query: string): Promise<{ id: string; name: string }[]>;
   findTenderIdsForBusiness(businessId: string): Promise<{ id: string; tenderNumber: string }[]>;
   searchAttachmentsByMetadata(tenderIds: string[], query: string): Promise<AttachmentMetadataRow[]>;
-  findEmbeddedAttachments(tenderIds: string[]): Promise<EmbeddedAttachmentRow[]>;
+  findNearestAttachments(
+    tenderIds: string[],
+    queryVector: number[],
+    limit: number,
+    threshold: number,
+  ): Promise<(AttachmentMetadataRow & { similarity: number })[]>;
 }
 
 const SEARCH_LIMIT = 5;
@@ -282,17 +287,23 @@ export class ReportsRepository implements IReportsRepository {
     return rows.map((row) => ({ ...row, entityId: row.entityId! }));
   }
 
-  async findEmbeddedAttachments(tenderIds: string[]): Promise<EmbeddedAttachmentRow[]> {
+  async findNearestAttachments(
+    tenderIds: string[],
+    queryVector: number[],
+    limit: number,
+    threshold: number,
+  ): Promise<(AttachmentMetadataRow & { similarity: number })[]> {
     if (tenderIds.length === 0) return [];
-    const rows = await this.prisma.attachment.findMany({
-      where: {
-        entityType: "Tender",
-        entityId: { in: tenderIds },
-        variant: "ORIGINAL",
-        embeddedAt: { not: null },
-      },
-      select: { id: true, originalName: true, documentType: true, entityId: true, embedding: true },
-    });
-    return rows.map((row) => ({ ...row, entityId: row.entityId! }));
+    const vectorLiteral = `[${queryVector.join(",")}]`;
+    return this.prisma.$queryRaw`
+      SELECT id, "originalName", "documentType", "entityId",
+             1 - ("embeddingVector" <=> ${vectorLiteral}::vector) AS similarity
+      FROM attachments
+      WHERE "entityType" = 'Tender' AND "entityId" = ANY(${tenderIds})
+        AND variant = 'ORIGINAL' AND "embeddingVector" IS NOT NULL
+        AND 1 - ("embeddingVector" <=> ${vectorLiteral}::vector) >= ${threshold}
+      ORDER BY "embeddingVector" <=> ${vectorLiteral}::vector
+      LIMIT ${limit}
+    `;
   }
 }
