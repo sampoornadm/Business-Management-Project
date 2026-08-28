@@ -11,7 +11,6 @@ import { BadRequestError, NotFoundError, ServiceUnavailableError } from "../../c
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
 import { embed, generateJson } from "../../infra/llm/ollama.client.js";
 import { logger } from "../../shared/logger/logger.js";
-import { cosineSimilarity } from "../../shared/utils/math.js";
 import type { CategoriesService } from "../categories/categories.service.js";
 import type { RfqService } from "../rfq/rfq.service.js";
 
@@ -19,13 +18,11 @@ import {
   buildClassifyPrompt,
   type ClassificationResult,
   deriveCanonicalName,
-  type MatchCandidate,
   parseClassification,
   pickConfirmedMatch,
 } from "./items.helpers.js";
 import { aggregateQuotes, sortItemEntries, toItemDetailDto, toItemListEntryDto } from "./items.mapper.js";
 import type {
-  ConfirmedMatchRow,
   IItemsRepository,
   ItemForClassify,
   ItemRow,
@@ -148,7 +145,7 @@ export class ItemsService {
     const item = await this.itemsRepository.getForClassify(id, businessId);
     if (!item) throw new NotFoundError("Item not found");
     const context = await this.loadClassifyContext(businessId);
-    const result = await this.suggestForItem(item, context);
+    const result = await this.suggestForItem(item, context, businessId);
     await this.itemsRepository.updateCategory(id, result.categoryId, false, result.confidence || null);
     return this.getItemDetail(id, businessId);
   }
@@ -166,7 +163,7 @@ export class ItemsService {
     let failed = 0;
     for (const item of items) {
       try {
-        const result = await this.suggestForItem(item, context);
+        const result = await this.suggestForItem(item, context, businessId);
         await this.itemsRepository.updateCategory(item.id, result.categoryId, false, result.confidence || null);
         // The model legitimately returns null ("none fit"); that is not a category, and the
         // item stays unclassified (and retryable) rather than being counted as done.
@@ -188,7 +185,6 @@ export class ItemsService {
   private async loadClassifyContext(businessId: string): Promise<{
     leaves: CategoryLeafDto[];
     pathMap: Map<string, string>;
-    confirmed: ConfirmedMatchRow[];
   }> {
     const [leaves, pathMap, confirmed] = await Promise.all([
       this.requireLeaves(),
@@ -198,20 +194,18 @@ export class ItemsService {
 
     // Converge-on-use: embed any confirmed candidate that isn't embedded yet, so the pool of
     // reusable human decisions grows without a separate backfill (mirrors embedPendingRates).
+    // This fetch is unrelated to matching (that's ANN, per-item, in suggestForItem below) — it
+    // exists purely to find rows that still need an embedding at all.
     const pending = confirmed.filter((c) => !c.embeddedAt || c.embedding.length === 0);
     if (pending.length > 0) {
       const vectors = await this.safeEmbed(pending.map((c) => c.canonicalName));
       for (const [index, candidate] of pending.entries()) {
         const vector = vectors[index];
-        if (vector) {
-          candidate.embedding = vector;
-          candidate.embeddedAt = new Date();
-          await this.itemsRepository.setEmbedding(candidate.id, vector);
-        }
+        if (vector) await this.itemsRepository.setEmbedding(candidate.id, vector);
       }
     }
 
-    return { leaves, pathMap, confirmed };
+    return { leaves, pathMap };
   }
 
   /**
@@ -225,11 +219,8 @@ export class ItemsService {
    */
   private async suggestForItem(
     item: ItemForClassify,
-    context: {
-      leaves: CategoryLeafDto[];
-      pathMap: Map<string, string>;
-      confirmed: ConfirmedMatchRow[];
-    },
+    context: { leaves: CategoryLeafDto[]; pathMap: Map<string, string> },
+    businessId: string,
   ): Promise<ClassificationResult> {
     let embedding = item.embedding;
     if (!item.embeddedAt || embedding.length === 0) {
@@ -237,31 +228,24 @@ export class ItemsService {
       if (embedding.length > 0) await this.itemsRepository.setEmbedding(item.id, embedding);
     }
 
-    const others = context.confirmed.filter((c) => c.id !== item.id && c.embedding.length > 0);
+    // One ANN query serves both downstream consumers: the sibling-reuse check (needs only the
+    // nearest candidate) and the LLM's few-shot examples (needs up to CLASSIFY_EXAMPLE_LIMIT).
+    const nearest =
+      embedding.length > 0
+        ? await this.itemsRepository.findNearestConfirmedMatch(businessId, item.id, embedding, CLASSIFY_EXAMPLE_LIMIT)
+        : [];
 
-    const candidates: MatchCandidate[] = others.map((c) => ({
-      categoryId: c.categoryId,
-      canonicalName: c.canonicalName,
-      unit: c.unit,
-      embedding: c.embedding,
-    }));
     const sibling = pickConfirmedMatch(
-      { canonicalName: item.canonicalName, unit: item.unit, embedding },
-      candidates,
+      { canonicalName: item.canonicalName, unit: item.unit },
+      nearest[0] ?? null,
       env.AI_MATCH_THRESHOLD,
     );
     if (sibling) return sibling;
 
     // Nearest confirmed examples ground the LLM — the practical "learn from feedback" lever.
-    const examples =
-      embedding.length > 0
-        ? others
-            .map((c) => ({ row: c, sim: cosineSimilarity(embedding, c.embedding) }))
-            .sort((a, b) => b.sim - a.sim)
-            .slice(0, CLASSIFY_EXAMPLE_LIMIT)
-            .map((x) => ({ name: x.row.canonicalName, path: context.pathMap.get(x.row.categoryId) ?? "" }))
-            .filter((e) => e.path)
-        : [];
+    const examples = nearest
+      .map((row) => ({ name: row.canonicalName, path: context.pathMap.get(row.categoryId) ?? "" }))
+      .filter((e) => e.path);
 
     const prompt = buildClassifyPrompt(item.canonicalName, item.unit, context.leaves, examples);
     const raw = await generateJson(prompt, env.OLLAMA_ENRICHMENT_MODEL);
