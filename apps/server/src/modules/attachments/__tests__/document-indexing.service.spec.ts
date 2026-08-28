@@ -2,8 +2,8 @@ import Docxtemplater from "docxtemplater";
 import PizZip from "pizzip";
 import { describe, expect, it, vi } from "vitest";
 
-const { pdfParseMock } = vi.hoisted(() => ({ pdfParseMock: vi.fn() }));
-vi.mock("pdf-parse", () => ({ default: pdfParseMock }));
+const { extractPdfTextMock } = vi.hoisted(() => ({ extractPdfTextMock: vi.fn() }));
+vi.mock("../../../shared/utils/pdf-text.js", () => ({ extractPdfText: extractPdfTextMock }));
 
 import { extractText } from "../document-indexing.service.js";
 
@@ -37,19 +37,19 @@ function buildTestDocxBuffer(bodyText: string): Buffer {
 
 describe("extractText", () => {
   it("extracts text from a PDF buffer", async () => {
-    pdfParseMock.mockResolvedValue({ text: "Notice Inviting Tender for XLPE Cable Supply" });
+    extractPdfTextMock.mockResolvedValue("Notice Inviting Tender for XLPE Cable Supply");
     const result = await extractText(Buffer.from("fake pdf bytes"), "application/pdf");
     expect(result).toBe("Notice Inviting Tender for XLPE Cable Supply");
   });
 
-  it("returns null when pdf-parse finds no extractable text", async () => {
-    pdfParseMock.mockResolvedValue({ text: "   " });
+  it("returns null when pdftotext finds no extractable text", async () => {
+    extractPdfTextMock.mockResolvedValue("   ");
     const result = await extractText(Buffer.from("fake pdf bytes"), "application/pdf");
     expect(result).toBeNull();
   });
 
-  it("returns null when pdf-parse throws", async () => {
-    pdfParseMock.mockRejectedValue(new Error("corrupt PDF"));
+  it("returns null when pdftotext throws", async () => {
+    extractPdfTextMock.mockRejectedValue(new Error("corrupt PDF"));
     const result = await extractText(Buffer.from("fake pdf bytes"), "application/pdf");
     expect(result).toBeNull();
   });
