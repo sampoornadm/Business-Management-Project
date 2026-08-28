@@ -68,6 +68,8 @@ export async function indexAttachment(attachmentId: string): Promise<void> {
       where: { id: attachmentId },
       data: { extractedText: truncated, embedding: vector, embeddedAt: new Date() },
     });
+    const vectorLiteral = `[${vector.join(",")}]`;
+    await prisma.$executeRaw`UPDATE attachments SET "embeddingVector" = ${vectorLiteral}::vector WHERE id = ${attachmentId}`;
   } catch (err) {
     if (!(err instanceof ServiceUnavailableError)) throw err;
     // Extraction doesn't need Ollama — store the text now and let a later re-index (or a

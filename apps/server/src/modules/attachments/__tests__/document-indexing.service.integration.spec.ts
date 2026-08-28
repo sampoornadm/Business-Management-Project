@@ -69,13 +69,13 @@ describe("indexAttachment (integration)", () => {
 
   it("extracts text, embeds it, and stores both on the attachment", async () => {
     extractPdfTextMock.mockResolvedValue("Notice inviting tender for cable supply");
-    embedMock.mockResolvedValue([[0.1, 0.2, 0.3]]);
+    embedMock.mockResolvedValue([Array(1024).fill(0).map((_, i) => (i + 1) / 10000)]);
 
     await indexAttachment(attachmentId);
 
     const updated = await prisma.attachment.findUniqueOrThrow({ where: { id: attachmentId } });
     expect(updated.extractedText).toBe("Notice inviting tender for cable supply");
-    expect(updated.embedding).toEqual([0.1, 0.2, 0.3]);
+    expect(updated.embedding).toHaveLength(1024);
     expect(updated.embeddedAt).not.toBeNull();
   });
 
@@ -85,7 +85,7 @@ describe("indexAttachment (integration)", () => {
 
   it("truncates extracted text to 8000 characters before embedding", async () => {
     extractPdfTextMock.mockResolvedValue("x".repeat(9000));
-    embedMock.mockResolvedValue([[0.4, 0.5, 0.6]]);
+    embedMock.mockResolvedValue([Array(1024).fill(0).map((_, i) => (i + 2) / 10000)]);
     const longTextPath = `tender/${randomUUID()}/${randomUUID()}-original.pdf`;
     await s3Service.putObject({ key: longTextPath, body: PLACEHOLDER_PDF_BYTES, contentType: "application/pdf" });
     const longAttachment = await prisma.attachment.create({
