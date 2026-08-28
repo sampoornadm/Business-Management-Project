@@ -4,14 +4,11 @@ import { prisma } from "@bmp/database";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-const { embedMock, pdfParseMock } = vi.hoisted(() => ({ embedMock: vi.fn(), pdfParseMock: vi.fn() }));
+const { embedMock } = vi.hoisted(() => ({ embedMock: vi.fn() }));
 // createApp() pulls in tenders.module.ts, which imports generateJson/generateText from this same
 // module at eval time — ESM linking requires the mock to expose every name importers statically
 // reference, even ones this test never calls, so they're stubbed alongside embedMock here.
 vi.mock("../../../infra/llm/ollama.client.js", () => ({ embed: embedMock, generateJson: vi.fn(), generateText: vi.fn() }));
-// pdf-parse@1.1.4's bundled pdf.js cannot run inside vitest (see Task 3/4) — mocked here too so
-// indexAttachment's extraction step succeeds instead of silently no-op'ing on a caught parse error.
-vi.mock("pdf-parse", () => ({ default: pdfParseMock }));
 
 import { createApp } from "../../../app.js";
 import { indexAttachment } from "../../attachments/document-indexing.service.js";
@@ -73,7 +70,6 @@ describe("GET /search — attachments (integration)", () => {
     });
     attachmentId = attachment.id;
 
-    pdfParseMock.mockResolvedValue({ text: "Notice inviting tender for XLPE cable supply" });
     embedMock.mockResolvedValue([[0.1, 0.2, 0.3]]);
     await indexAttachment(attachmentId);
   });

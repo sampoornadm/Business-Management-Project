@@ -677,12 +677,14 @@ model HistoricalRate {
   sourceTenderId String?
   notes          String?
 
-  // Embedding of `itemName`, populated lazily by the ai-enrichment worker.
-  // ponytail: plain Float[] + brute-force cosine in the service — fine to ~100k rows
-  // per business. Swap to pgvector (Unsupported("vector(N)") + $queryRaw + HNSW) if a
-  // cosine sweep ever shows up in the job's timing logs.
+  // Embedding of `itemName`, populated lazily by the ai-enrichment worker. Real rate matching
+  // now queries embeddingVector below via pgvector ANN (see boq-enrichment.service.ts) — this
+  // Float[] is kept only per the design doc's Non-goals (smaller diff; nothing reads it as a
+  // plain array anymore), not because anything still needs it.
   embedding  Float[]
   embeddedAt DateTime?
+  // pgvector column kept in sync with `embedding` on every write — see
+  // docs/superpowers/specs/2026-08-28-pdf-extraction-and-ann-search-design.md.
   embeddingVector Unsupported("vector(1024)")?
 
   createdById String
