@@ -107,9 +107,16 @@ receiving status.
 - MinIO's `minio-init` service only creates the dev bucket by default; `docker-compose.yml` now also
   creates `<S3_BUCKET>-test` for integration tests that upload files (BOQ parse, tender documents).
   If a fresh clone's integration tests 500 on upload, re-run `docker compose up -d minio-init`.
-- `pdf-parse` v2 is a heavy pdfjs-based rewrite (canvas/worker deps) with a different class API;
-  we deliberately pinned `pdf-parse@1.1.4` (simple `pdfParse(buffer) -> {text}`) since BOQ PDF
-  extraction is explicitly best-effort — don't "helpfully" upgrade it.
+- PDF text extraction (`shared/utils/pdf-text.ts#extractPdfText`) shells out to poppler's
+  `pdftotext` CLI, not any npm PDF library — `pdf-parse@1.1.4`'s bundled pdf.js build was confirmed
+  broken under both `tsx` (production) and vitest, throwing on real PDFs with genuine embedded
+  text (three different PDFs, three different internal pdf.js errors), while the identical bytes
+  parse fine via plain `node -e require("pdf-parse")` — a loader/bundling incompatibility, not a
+  content problem. `pdftotext` sidesteps it entirely since it's a subprocess call, not a Node
+  module. Requires `poppler-utils` installed wherever the server/worker actually run: `brew install
+  poppler` locally, `apk add poppler-utils` in `apps/server/Dockerfile`'s runner stage (already
+  done). If PDF content search / BOQ PDF upload / tender-extraction-from-PDF suddenly all return
+  empty text, check `pdftotext` is on `PATH` before suspecting the code.
 - Repeatedly re-running integration tests against the same Redis burns through the login rate
   limiter (`RATE_LIMITS.LOGIN`) and integration tests will start failing with 429s that look like
   real bugs. `docker compose exec redis redis-cli FLUSHALL` before a fresh run if that happens.
