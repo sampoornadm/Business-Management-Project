@@ -138,7 +138,7 @@ export default function TenderDetailPage() {
             {tender.tenderNumber} · {tender.client.name}
           </p>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           {canCreateProject && tender.status === "WON" && (
             <ConvertToProjectDialog tenderId={tender.id} />
           )}
