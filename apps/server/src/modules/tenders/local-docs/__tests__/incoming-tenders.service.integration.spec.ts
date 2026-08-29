@@ -11,47 +11,64 @@ import { TenderExtractionService } from "../../tender-extraction.service.js";
 import { organizationsRepository } from "../../../organizations/organizations.module.js";
 import { processIncomingTenderFile } from "../incoming-tenders.service.js";
 
-// Real text shape from the SAIL/IISCO template's scrambled header layout (see
-// tender-header.parser.ts's own doc comment) — enough for parseIiscoHeaderFields to
-// recognize it and extract deterministically, no LLM/Ollama needed. Parameterized by
-// tenderNumber/clientName so each test case gets its own unique values — tenderNumber
-// is a real @unique DB column and this file's tests share one Postgres, so two tests
-// using the same literal number would collide (the whole point of the "duplicate"
-// test below is to prove a collision is handled — it must not happen by accident
-// between unrelated tests too).
+// Real text shape from the actual `pdftotext` CLI's output for the SAIL/IISCO
+// template (see tender-header.parser.ts's own doc comment) — enough for
+// parseIiscoHeaderFields to recognize it and extract deterministically, no
+// LLM/Ollama needed. Parameterized by tenderNumber/clientName so each test case
+// gets its own unique values — tenderNumber is a real @unique DB column and this
+// file's tests share one Postgres, so two tests using the same literal number
+// would collide (the whole point of the "duplicate" test below is to prove a
+// collision is handled — it must not happen by accident between unrelated tests
+// too).
 function buildSailFixtureText(tenderNumber: string, clientName: string): string {
-  return `${clientName}
+  return `BID INVITATION
+(Kindly scrutinize the dates carefully for timely response submission)
+
+TE No:
+RFQ Title:
+
+${tenderNumber}
+MJ/C04/2026/3699-SLEEVE
+
+TE Date:
+13.07.2026
+Amendment No:
+
+Contracting Agency:
+Amendment Date:
+
+${clientName}
 ISP GST : 19AAACS7062F6Z6
 Corporate Identity No:
 L27109DL1973GOI006454
-BID INVITATION
-(Kindly scrutinize the dates carefully for timely response submission)
 ISP MATERIAL MANAGEMENT DEPARTMENT
-Amendment Date:Amendment No:
-Contracting Agency:13.07.2026TE Date:
-MJ/C04/2026/3699-SLEEVE
-${tenderNumber}
-RFQ Title:
-TE No:
-07.07.2026 15:00:00 HrsBid Submission Deadline
-90Quotation validity in days
-Two Part Bid ResponseBid Type
-Namasri Banerjeenamasri.banerjee@mjunction.in
+
+07.07.2026 15:00:00 Hrs
+
 RFQ Item Details
-Sl NoItem CodeQtyUoMExpected Delivery
-Date
- 171301005600045         250.000 M11.04.2026
-Material Long Description
-:
-TUBE MATERIAL: POLYURETHANE
+RFQ Description :
+Procurement of sleeves
+
+Sl No
+
+Item Code
+
+Qty
+
+UoM
+
+1
+71301005600045
+250.000
+M
+Material Long Description TUBE MATERIAL: POLYURETHANE
 Item Additional
 Description:`;
-  // The "RFQ Item Details" block above is the exact, already-proven fixture shape
-  // from tender-extraction.service.spec.ts's own TEXT_WITH_ONE_ITEM constant —
-  // reused verbatim so parseIiscoRfqItems (a separate function from the header
-  // parser, scanning this same full text for its own anchor) produces one real
-  // item. Without it, result.items would be empty and boqService.commitBoq would
-  // never be called, so Test 1 below wouldn't actually exercise the BOQ-commit path.
+  // The item table above is enough for parseIiscoRfqItems (a separate function
+  // from the header parser, scanning this same full text for its own anchor)
+  // to produce one real item. Without it, result.items would be empty and
+  // boqService.commitBoq would never be called, so Test 1 below wouldn't
+  // actually exercise the BOQ-commit path.
 }
 
 const NO_TENDER_NUMBER_TEXT = "This document has no recognizable tender fields at all.";

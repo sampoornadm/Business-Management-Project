@@ -1,86 +1,61 @@
 import type { TenderExtractionFields } from "@bmp/types";
 
-// This template's header/detail tables are drawn such that pdf-parse extracts
-// the VALUE immediately before its LABEL, with no separator — e.g. the raw
-// text literally reads "Contracting Agency:30.06.2026TE Date:" and
-// "07.07.2026 15:00:00 HrsBid Submission Deadline". Verified directly against
-// examples/BID1400013656.PDF and examples/RFx 1400012649.PDF (same template).
-// Feeding this scrambled text straight to the LLM produced wrong values
-// (it picked the RFQ Title's value for tenderNumber) — tenderNumber is the
-// DB's @unique key, so it gets the same zero-tolerance treatment item codes
-// already get in tender-item.parser.ts: deterministic regex, not the model.
+// This template's header/detail tables are drawn such that pdftotext groups
+// each table CELL's text into its own line, but orders whole COLUMNS before
+// rows: all of a row-group's labels print first, then all of its values,
+// with unrelated page furniture (the letterhead box, a neighboring mini
+// table sharing the same vertical band) interleaved between the two groups
+// — e.g. "TE No:\nRFQ Title:\n\n1400013427\nMJ/C07/2026/3465\n\nTE Date:".
+// Verified directly against a real IISCO/SAIL BID INVITATION sample
+// (TE No 1400013427, "FKM O Ring") run through the actual `pdftotext` CLI —
+// not a hand-typed guess at its output.
 
 const TE_NO_ANCHOR = /TE No\s*:/;
 
-// The issuing company name is always the very first line of the document,
-// followed by its GST number — distinct from "department" (a sub-unit
-// within it, e.g. "ISP MATERIAL MANAGEMENT DEPARTMENT").
-const CLIENT_NAME = /^([^\n]+)\nISP GST/;
+// The issuing company name is the first line of the letterhead box, followed
+// by its GST number. It is not necessarily the first line of the whole
+// document — pdftotext places the "BID INVITATION" title before it.
+const CLIENT_NAME = /([^\n]+)\nISP GST/;
 
-// The RFQ Title and TE No values both appear, in that order, in a block
-// BEFORE their own labels (which then appear in the same order): the block
-// between "TE Date:" and "TE No:" is "<RFQ Title, 1-2 lines>\n<TE No>\n
-// RFQ Title:\n" — so within that block, the LAST line is TE No's value and
-// everything before it is RFQ Title's value.
-const NUMBER_AND_TITLE_BLOCK = /TE Date\s*:\s*\n([\s\S]*?)RFQ Title\s*:\s*\n?TE No\s*:/;
+// TE No's and RFQ Title's labels print together, then their values print
+// together in the same order — TE No's value line first, then RFQ Title's
+// (which may wrap onto more than one line for a long title).
+const NUMBER_AND_TITLE_BLOCK = /TE No\s*:\s*\nRFQ Title\s*:\s*\n\n([\s\S]*?)\n\nTE Date\s*:/;
 
-// TE Date's value sits directly before its own label, no separator.
-const OPENING_DATE = /(\d{2}\.\d{2}\.\d{4})TE Date\s*:/;
+// TE Date's value sits on its own line directly under its label.
+const OPENING_DATE = /TE Date\s*:\s*\n(\d{2}\.\d{2}\.\d{4})/;
 
-// Department/contracting agency is the plain line right after the standard
-// "(Kindly scrutinize...)" instruction line, before the scrambled table run
-// starts — not extracted from the scrambled block itself.
-const DEPARTMENT = /\(Kindly scrutinize the dates carefully for timely response submission\)\s*\n([^\n]+)\n/;
+// Contracting Agency's value is displaced all the way to the end of the
+// letterhead box that happens to share its row's vertical band — it's the
+// line right after the CIN number.
+const DEPARTMENT = /Corporate Identity No\s*:\s*\n[^\n]+\n([^\n]+)\n\n/;
 
-const SUBMISSION_DATE = /(\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}:\d{2})\s*Hrs\s*Bid Submission Deadline/;
-const VALIDITY_DAYS = /(\d+)Quotation validity in days/;
-const BID_TYPE = /Quotation validity in days([\s\S]*?)Bid Type/;
+// The submission-deadline value's own format ("06.06.2026 15:00:00 Hrs") is
+// distinctive enough to match directly, without needing to anchor on its
+// label's position (which floats depending on what else shares the page).
+const SUBMISSION_DATE = /(\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}:\d{2})\s*Hrs/;
 
-// Dealing Officer name + e-mail are concatenated with no separator at all
-// ("Paramita Sinhaparamita.sinha@mjunction.in") — a plain regex split
-// backtracks to whatever the *shortest* valid email match is (e.g. splits
-// after "Sinhaparamit" / before "a.sinha@..."), not the real word boundary,
-// since nothing in the raw characters marks where the name ends. Instead,
-// this exploits the "email local-part mirrors the name, lowercased" naming
-// convention visible in every sample document: try each possible split
-// point and accept the one where the local-part (dots removed, lowercased)
-// exactly equals the name candidate (spaces removed, lowercased).
-const DEALING_OFFICER_ROW = /Mobile No\s*\n([\s\S]*?)Tender Header Information/;
-const EMAIL_ANCHOR = /[a-z][\w.+-]*@[\w.-]+\.[a-zA-Z]{2,}/;
+// Quotation validity's value ("60") is a bare number, so unlike the
+// submission date it does need a label anchor — the next standalone
+// digits-only line after the label, skipping over the letterhead box that
+// gets interleaved between them.
+const VALIDITY_DAYS = /Quotation validity in days[\s\S]*?\n\n(\d+)\n/;
 
-function splitDealingOfficerLine(line: string): { name?: string; email?: string } {
-  const emailMatch = line.match(EMAIL_ANCHOR);
-  if (!emailMatch) return {};
-  const atIndex = line.indexOf("@", emailMatch.index);
-  const domain = line.slice(atIndex);
-  const beforeAt = line.slice(0, atIndex);
+// Bid Type's value is the first entry of a whole group of values (Bid Type,
+// Type, Price Bid Option, ...) that only appears once, right after the
+// group's last label ("Sources for Supply / Execution") and the interleaved
+// TE Date/Amendment No pair that always follows it in this template.
+const BID_TYPE =
+  /Sources for Supply\s*\/\s*Execution\s*\n\s*\nTE Date\s*:\s*\n\d{2}\.\d{2}\.\d{4}\s*\nAmendment No\s*:\s*\n\n([^\n]+)\n/;
 
-  // Name candidates must start right after a real space (a genuine word
-  // boundary) — not just at position 0 — since the Pur Grp/Case File values
-  // earlier in the same row are equally unseparated from what precedes them
-  // (e.g. "METAL PIPESMJ/C06/...-FLANGE SLIP Paramita Sinha..."); anchoring
-  // only at position 0 would require that whole prefix to also satisfy the
-  // equality check below, which it never does.
-  const starts = [0, ...[...beforeAt].map((ch, i) => (ch === " " ? i + 1 : -1)).filter((i) => i >= 0)];
-
-  for (const start of starts) {
-    for (let i = start + 1; i < beforeAt.length; i++) {
-      const namePart = beforeAt.slice(start, i).trim();
-      const localPart = beforeAt.slice(i);
-      if (!namePart || !localPart || !/^[A-Z]/.test(namePart)) continue;
-      // Compare the name and the local-part as unordered token SETS, so a "surname.firstname"
-      // email (e.g. "Mozumder.Avishek" for "Avishek Mozumder") still matches. A local part that
-      // drops a token (e.g. "niladri.dey" for "Niladri Shekhar Dey") has a different set and is
-      // correctly rejected rather than split at a guessed boundary.
-      const nameTokens = namePart.toLowerCase().split(/\s+/).filter(Boolean).sort();
-      const localTokens = localPart.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).sort();
-      if (nameTokens.length > 0 && nameTokens.join("|") === localTokens.join("|")) {
-        return { name: namePart, email: `${localPart}${domain}` };
-      }
-    }
-  }
-  return {};
-}
+// Pur Grp/Case File/Dealing Officer/E-mail's labels print together, then
+// their values print together, each value its own blank-line-separated
+// chunk (a long e-mail may itself wrap onto a second line mid-domain, e.g.
+// "Mozumder.Avishek@mjunction.\nin"). The officer's name and e-mail are
+// always the last two chunks, regardless of whether the earlier columns
+// (Pur Grp, Case File) are populated.
+const DEALING_OFFICER_BLOCK = /E-mail\s*\n\n([\s\S]*?)\n\nMobile No/;
+const EMAIL_PATTERN = /^[a-z][\w.+-]*@[\w.-]+\.[a-zA-Z]{2,}$/i;
 
 const RFQ_DESCRIPTION = /RFQ Description\s*:?\s*\n?([\s\S]*?)Instructions to Tenderers/;
 const ITT_BLOCK = /Instructions to Tenderers\s*\(ITT\)\s*:?\s*\n?([\s\S]*?)Sl\s*No\s*Item\s*Code/i;
@@ -90,8 +65,8 @@ function normalizeWhitespace(text: string): string {
 }
 
 // Some documents leave this deadline unset, rendered literally as
-// "00.00.0000 00:00:00" (verified against examples/RFx 1400012609.PDF and
-// others) rather than omitting the field — treat an all-zero date as absent.
+// "00.00.0000 00:00:00" rather than omitting the field — treat an all-zero
+// date as absent.
 function ddmmyyyyToIso(value: string): string | undefined {
   const [day, month, year] = value.split(".");
   if (day === "00" || month === "00" || year === "0000") return undefined;
@@ -123,8 +98,8 @@ export function parseIiscoHeaderFields(text: string): ParsedIiscoHeaderFields | 
   if (numberAndTitle) {
     const lines = numberAndTitle[1]!.split("\n").map((line) => line.trim()).filter(Boolean);
     if (lines.length > 0) {
-      fields.tenderNumber = lines[lines.length - 1];
-      fields.title = normalizeWhitespace(lines.slice(0, -1).join(" "));
+      fields.tenderNumber = lines[0];
+      fields.title = normalizeWhitespace(lines.slice(1).join(" "));
     }
   }
 
@@ -145,17 +120,16 @@ export function parseIiscoHeaderFields(text: string): ParsedIiscoHeaderFields | 
   const bidType = text.match(BID_TYPE);
   if (bidType) fields.type = normalizeWhitespace(bidType[1]!);
 
-  const dealingOfficerRow = text.match(DEALING_OFFICER_ROW);
-  if (dealingOfficerRow) {
-    // Join on empty string (not a space) — this reassembles column-width
-    // word-wraps that split mid-token (e.g. "...@mjunction.\nin", verified
-    // against examples/RFx 1400012649.PDF) while still preserving genuine
-    // spaces that already existed at a line's own start/end (e.g. the
-    // leading space before the officer's name itself).
-    const joinedRow = dealingOfficerRow[1]!.split("\n").join("").trim();
-    const { name, email } = splitDealingOfficerLine(joinedRow);
+  const dealingOfficerBlock = text.match(DEALING_OFFICER_BLOCK);
+  if (dealingOfficerBlock) {
+    const chunks = dealingOfficerBlock[1]!
+      .split(/\n\s*\n/)
+      .map((chunk) => chunk.replace(/\n/g, "").trim())
+      .filter(Boolean);
+    const email = chunks[chunks.length - 1];
+    const name = chunks[chunks.length - 2];
+    if (email && EMAIL_PATTERN.test(email)) fields.dealingOfficerEmail = email;
     if (name) fields.dealingOfficerName = name;
-    if (email) fields.dealingOfficerEmail = email;
   }
 
   const description = text.match(RFQ_DESCRIPTION);

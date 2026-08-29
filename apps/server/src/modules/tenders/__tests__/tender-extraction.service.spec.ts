@@ -17,13 +17,25 @@ const fakeExtractText: ExtractTextFn = async () => "fake extracted document text
 // field-focused tests exercise the deterministic/regex path and stay offline.
 const fakeGenerateText: GenerateTextFn = async () => "";
 
+// Real `pdftotext` CLI output (not a hand-typed guess) — see
+// tender-header.parser.spec.ts for why that matters.
 const TEXT_WITH_ONE_ITEM = `RFQ Item Details
-Sl NoItem CodeQtyUoMExpected Delivery
-Date
- 171301005600045         250.000 M11.04.2026
-Material Long Description
-:
-TUBE MATERIAL: POLYURETHANE
+RFQ Description :
+AUTO COUPLER O RING 42 MM
+
+Sl No
+
+Item Code
+
+Qty
+
+UoM
+
+1
+71804001603937
+1,500.000
+EA
+Material Long Description O-RING MATERIAL : FKM
 Item Additional
 Description:`;
 
@@ -108,37 +120,116 @@ const SAMPLE_PDF_TEXT_RESULT = {
   clientName: "IISCO Steel Plant",
 };
 
-const IISCO_TEMPLATE_TEXT = `IISCO STEEL PLANT
+// Real `pdftotext` CLI output (not a hand-typed guess) — see
+// tender-header.parser.spec.ts for why that matters.
+const IISCO_TEMPLATE_TEXT = `BID INVITATION
+(Kindly scrutinize the dates carefully for timely response submission)
+
+TE No:
+RFQ Title:
+
+1400013427
+MJ/C07/2026/3465
+
+TE Date:
+30.05.2026
+Amendment No:
+
+Contracting Agency:
+Amendment Date:
+
+IISCO STEEL PLANT
 ISP GST : 19AAACS7062F6Z6
 Corporate Identity No:
 L27109DL1973GOI006454
+ISP MATERIAL MANAGEMENT DEPARTMENT
+
+Pur Grp
+
+Case File
+
+Dealing Officer
+
+E-mail
+
+PACKAG, RUBBER MATL
+
+MJ/C07/2026/3465
+
+Avishek Mozumder
+
+Mozumder.Avishek@mjunction.
+in
+
+Mobile No
+
+Tender Header Information
+
+Page i / 3
+
 BID INVITATION
 (Kindly scrutinize the dates carefully for timely response submission)
-ISP MATERIAL MANAGEMENT DEPARTMENT
-Amendment Date:Amendment No:
-Contracting Agency:30.06.2026TE Date:
-MJ/C06/2026/3776-FLANGE
-SLIP
-1400013656
-RFQ Title:
+
 TE No:
-Pur GrpCase FileDealing OfficerE-mailMobile No
-METAL PIPESMJ/C06/2026/3776-
-FLANGE SLIP
- Paramita Sinhaparamita.sinha@mjunction.in
-Tender Header Information
-      Page i / *
-1Sources for Supply / Execution
-07.07.2026 15:00:00 HrsBid Submission Deadline
-60Quotation validity in daysTwo Part Bid ResponseBid Type
+RFQ Title:
+
+1400013427
+MJ/C07/2026/3465
+
+Bid Type
+Type
+Price Bid Option
+RA Applicable
+Evaluation Criteria
+Bid Submission Deadline
+Sources for Supply / Execution
+
+TE Date:
+30.05.2026
+Amendment No:
+
+Two Part Bid Response
+e-Procurement
+e-Procurement
+No
+Overall
+06.06.2026 15:00:00 Hrs
+1
+
+Contracting Agency:
+Amendment Date:
+
+Quotation validity in days
+
+IISCO STEEL PLANT
+ISP GST : 19AAACS7062F6Z6
+Corporate Identity No:
+L27109DL1973GOI006454
+ISP MATERIAL MANAGEMENT DEPARTMENT
+
+60
+
 RFQ Item Details
 RFQ Description :
-Procurement of FLANGE SLIP
+AUTO COUPLER O RING 42 MM
 Instructions to Tenderers (ITT) :
 Deliver within 120 days.
-Sl No Item Code Qty UoM Expected Delivery
-Date
- 171313000100594 30.000 EA30.10.2026`;
+
+Sl No
+
+Item Code
+
+Qty
+
+UoM
+
+1
+71804001603937
+1,500.000
+EA
+Material Long Description O-RING MATERIAL : FKM
+Item Additional
+Description:`;
 
 describe("TenderExtractionService", () => {
   it("extracts fields deterministically for a recognized template and never calls the LLM", async () => {
@@ -154,14 +245,14 @@ describe("TenderExtractionService", () => {
 
     const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
 
-    expect(result.fields.tenderNumber).toBe("1400013656");
-    expect(result.fields.title).toBe("MJ/C06/2026/3776-FLANGE SLIP");
-    expect(result.fields.dealingOfficerName).toBe("Paramita Sinha");
-    expect(result.fields.dealingOfficerEmail).toBe("paramita.sinha@mjunction.in");
+    expect(result.fields.tenderNumber).toBe("1400013427");
+    expect(result.fields.title).toBe("MJ/C07/2026/3465");
+    expect(result.fields.dealingOfficerName).toBe("Avishek Mozumder");
+    expect(result.fields.dealingOfficerEmail).toBe("Mozumder.Avishek@mjunction.in");
     expect(result.suggestedClientId).toBe(org.id);
     expect(result.suggestedClientName).toBe("IISCO STEEL PLANT");
     expect(result.items).toEqual([
-      { itemCode: "71313000100594", description: "", quantity: 30, unit: "EA" },
+      { itemCode: "71804001603937", description: "O-RING MATERIAL : FKM", quantity: 1500, unit: "EA" },
     ]);
   });
 
@@ -193,7 +284,7 @@ describe("TenderExtractionService", () => {
     const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
 
     expect(result.items).toEqual([
-      { itemCode: "71301005600045", description: "TUBE MATERIAL: POLYURETHANE", quantity: 250, unit: "M" },
+      { itemCode: "71804001603937", description: "O-RING MATERIAL : FKM", quantity: 1500, unit: "EA" },
     ]);
   });
 

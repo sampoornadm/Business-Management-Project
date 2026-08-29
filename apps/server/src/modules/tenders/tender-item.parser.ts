@@ -1,44 +1,39 @@
 import type { ExtractedTenderItem } from "@bmp/types";
 
-// pdf-parse's raw text repeats this exact block on every page (header/footer
-// boilerplate). When an item row lands on a page boundary, this text gets
-// interleaved between the item-table anchor and the item's data line —
-// stripping it first is required or those rows fail to parse (verified
-// against examples/RFx 1400012649.PDF, a 13-item document with two items
-// straddling a page break).
-// The page-count token isn't always a digit: the footer reads "Page 2 / *"
-// (total not yet known) until the total becomes fixed later in the document,
-// e.g. "Page 10 / 13" (verified against examples/BID1400013656.PDF, an
-// 18-item document where the "\d+" — digits-only — version of this pattern
-// silently failed to strip the boilerplate on 9 of 13 pages, dropping 12 of
-// 18 items). "\S+" matches "*", roman numerals, and digits alike.
-const PAGE_BOILERPLATE = /ISP MATERIAL MANAGEMENT DEPARTMENT[\s\S]*?Page\s+\S+\s*\/\s*\S+\n?/g;
-
 // This header line repeats verbatim before every item row in IISCO/SAIL's
 // "RFQ Item Details" table — it's the anchor that splits the text into one
-// chunk per item, regardless of how many items the document has.
-const ITEM_ANCHOR = /Sl\s*No\s*Item\s*Code\s*Qty\s*UoM\s*Expected\s*Delivery\s*\n?\s*Date/gi;
+// chunk per item, regardless of how many items the document has. Scoped to
+// just "Sl No/Item Code/Qty/UoM" (not the full column list) since
+// pdftotext pushes "Expected Delivery Date" to the end of each item's block
+// rather than keeping it adjacent to the other column headers.
+const ITEM_ANCHOR = /Sl\s*No\s*\n\s*\nItem\s*Code\s*\n\s*\nQty\s*\n\s*\nUoM/gi;
 
-// slNo (1-3 digits) and the item code run together with no separator in the
-// raw text (e.g. "171301005600045" = slNo "1" + itemCode "71301005600045").
-// The item code is consistently 14 digits in every sample document, so a
-// non-greedy slNo capture followed by an exact 14-digit run reliably
-// separates the two via backtracking.
-// Qty can carry a thousands-separator comma (e.g. "1,200.000" — verified
-// against examples/RFx 1400012634.PDF, where the plain "[\d.]+" version of
-// this pattern failed to match the row at all, silently dropping the
-// document's only item).
-const ITEM_ROW = /^\s*(\d{1,3}?)(\d{14})\s+([\d,.]+)\s+([A-Za-z]+)(\d{2}\.\d{2}\.\d{4})/;
+// pdftotext gives each cell its own line (unlike pdf-parse, which glued
+// slNo+itemCode with no separator) — a row is 4 consecutive whole lines:
+// slNo (1-3 digits), the item code (consistently 14 digits in every sample
+// document), qty (may carry a thousands-separator comma, e.g. "1,500.000"),
+// then UoM. Anchoring each capture to a whole line (^...$/m) means
+// unrelated digit runs elsewhere in the chunk (GST/CIN numbers, page
+// markers) can't be mistaken for a row.
+const ITEM_ROW = /^(\d{1,3})\n(\d{14})\n([\d,]+\.\d+)\n([A-Za-z]+)$/m;
 
-const DESCRIPTION_BLOCK = /Material Long Description\s*:?\s*\n?([\s\S]*?)Item Additional/;
+// The label and the value's first line print on the same source line
+// ("Material Long Description O-RING MATERIAL : FKM ..."); the label's own
+// wrapped ":" then lands alone on the next line. Both are stripped below.
+const DESCRIPTION_BLOCK = /Material Long Description([\s\S]*?)Item Additional/;
 
 // Scoped to the IISCO/SAIL RFQ item-table layout only — other clients' bid
 // formats are a separate, later addition, not attempted here. If the anchor
 // never appears (a non-IISCO document, or one with no item table), this
 // returns an empty array and the caller still gets header-field extraction.
+//
+// Verified against a real single-item sample run through the actual
+// `pdftotext` CLI. Multi-item documents are assumed (not directly verified)
+// to repeat this same per-item anchor+row shape, mirroring how pdf-parse's
+// equivalent anchor was documented to repeat per row in 13- and 18-item
+// samples — flag it if a multi-item document extracts wrong.
 export function parseIiscoRfqItems(text: string): ExtractedTenderItem[] {
-  const cleaned = text.replace(PAGE_BOILERPLATE, "");
-  const chunks = cleaned.split(ITEM_ANCHOR);
+  const chunks = text.split(ITEM_ANCHOR);
 
   const items: ExtractedTenderItem[] = [];
   for (const chunk of chunks.slice(1)) {
@@ -47,7 +42,15 @@ export function parseIiscoRfqItems(text: string): ExtractedTenderItem[] {
 
     const [, , itemCode, quantity, unit] = rowMatch;
     const descriptionMatch = chunk.match(DESCRIPTION_BLOCK);
-    const description = descriptionMatch ? descriptionMatch[1]!.replace(/\s+/g, " ").trim() : "";
+    const description = descriptionMatch
+      ? descriptionMatch[1]!
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line && line !== ":")
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim()
+      : "";
 
     items.push({
       itemCode: itemCode!,
