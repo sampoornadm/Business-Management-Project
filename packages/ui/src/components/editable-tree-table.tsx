@@ -87,9 +87,23 @@ function EditableCell<TRow extends EditableTreeRow>({
   // Long free text (item descriptions run to ~180 chars) can't be read in a single-line
   // input at any column width — it wraps and auto-grows instead. Enter still commits;
   // Shift+Enter inserts a newline.
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+
+  // Sized off the textarea's own scrollHeight rather than a chars-per-line guess — a
+  // fixed divisor can't know the column's real rendered width (which varies with viewport
+  // size and how many other columns are present), so it either wastes space or, worse,
+  // undershoots and silently clips text behind a barely-visible native scrollbar.
+  React.useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+
   if (column.inputType === "textarea") {
     return (
       <Textarea
+        ref={textareaRef}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onBlur={commit}
@@ -99,8 +113,8 @@ function EditableCell<TRow extends EditableTreeRow>({
             e.currentTarget.blur();
           }
         }}
-        rows={Math.min(6, Math.ceil(value.length / 60) || 1)}
-        className="min-h-8 w-full resize-y py-1 text-sm"
+        rows={1}
+        className="min-h-8 w-full resize-y overflow-hidden py-1 text-sm"
       />
     );
   }

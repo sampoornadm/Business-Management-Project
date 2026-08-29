@@ -139,9 +139,10 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
       editable: canEdit,
       // Real tender descriptions run to ~180 chars ("TUBE MATERIAL : POLYURETHANE WORKING
       // PRESSURE : ... HARDNESS: SHORE A98, MINIMUM BEND RADIUS: 30 MM") — no single-line
-      // input shows that at any width, so this wraps and takes the lion's share of the row.
+      // input shows that at any width, so this wraps (now correctly auto-sized to fit,
+      // see EditableTreeTable) rather than needing a wide column to avoid wrapping.
       inputType: "textarea",
-      widthClassName: "w-[38%] min-w-[22rem]",
+      widthClassName: "w-[26%] min-w-[14rem]",
       getValue: (item) => item.description,
       onCommit: (item, value) => void commitField(item, "description", value),
       render: (item) => <span className="whitespace-pre-wrap break-words">{item.description}</span>,
