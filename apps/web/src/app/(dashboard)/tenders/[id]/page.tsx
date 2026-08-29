@@ -124,7 +124,7 @@ export default function TenderDetailPage() {
   const tender = tenderQuery.data;
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="max-w-6xl space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
