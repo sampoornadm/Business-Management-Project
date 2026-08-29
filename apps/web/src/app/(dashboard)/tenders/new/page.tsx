@@ -126,6 +126,7 @@ export default function NewTenderPage() {
   const [hint, setHint] = useState<string>();
   const [suggestedClientName, setSuggestedClientName] = useState<string>();
   const [extractedItems, setExtractedItems] = useState<ExtractedTenderItem[]>([]);
+  const [extractedFile, setExtractedFile] = useState<File>();
   const [isCommittingItems, setIsCommittingItems] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -136,6 +137,7 @@ export default function NewTenderPage() {
       const result = await extract.mutateAsync(file);
       setDefaultValues(toFormDefaults(result));
       setExtractedItems(result.items);
+      setExtractedFile(file);
       // Bumping the key forces TenderForm (and its react-hook-form instance)
       // to remount, since RHF only reads defaultValues on mount.
       setFormKey((key) => key + 1);
@@ -168,6 +170,33 @@ export default function NewTenderPage() {
   async function handleSubmit(values: TenderFormValues) {
     try {
       const tender = await createTender.mutateAsync(toCreateTenderInput(values));
+
+      // The source document itself is only ever held in browser memory up to
+      // this point (see the upload card's own "Nothing is saved until you
+      // review and submit" copy) — save it as the tender's NIT now that the
+      // tender exists to attach it to. Same non-blocking pattern as the BOQ
+      // commit below: a second call, not a transaction, so a failure here
+      // doesn't lose the tender — just toast and let the user re-upload it
+      // from the tender's Documents tab.
+      if (extractedFile) {
+        try {
+          const formData = new FormData();
+          formData.append("file", extractedFile);
+          formData.append("documentType", "NIT");
+          await apiClient.post(`/tenders/${tender.id}/documents`, formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+        } catch (error) {
+          toast({
+            variant: "destructive",
+            title: "Tender created, but the document could not be saved",
+            description:
+              error instanceof Error
+                ? error.message
+                : "Upload it from the tender's Documents tab instead.",
+          });
+        }
+      }
 
       // Items extracted from a document are committed as the tender's first
       // BOQ right away — no separate upload/parse/commit trip. Rate is left
