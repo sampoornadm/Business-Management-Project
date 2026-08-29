@@ -146,7 +146,7 @@ describe("incoming-tenders ingestion (integration)", () => {
     const tender = await prisma.tender.findFirst({ where: { businessId, tenderNumber } });
     expect(tender).not.toBeNull();
     expect(tender?.status).toBe("DRAFT");
-    expect(tender?.remarks).toContain("Placeholder values");
+    expect(tender?.remarks).toContain("Left blank — not stated in the source document");
 
     const organization = await prisma.organization.findFirst({ where: { name: clientName } });
     expect(organization).not.toBeNull();
