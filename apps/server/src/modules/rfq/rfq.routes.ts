@@ -397,6 +397,23 @@ export function createRfqRouter(controller: RfqController): Router {
    */
   router.post("/:id/reopen", authenticateMiddleware, requirePermission("rfq:update"), controller.reopen);
 
+  /**
+   * @openapi
+   * /rfqs/{id}/push-rates-to-tender:
+   *   post:
+   *     tags: [RFQ]
+   *     summary: Push awarded rates from RFQ to create or update a Tender version
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Rates pushed to tender }
+   */
+  router.post("/:id/push-rates-to-tender", authenticateMiddleware, requirePermission("rfq:update"), controller.pushRatesToTender);
+
   return router;
 }
 
