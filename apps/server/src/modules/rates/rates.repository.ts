@@ -49,6 +49,17 @@ export interface HistoricalRateMatch {
   similarity: number;
 }
 
+export interface RecordFromRfqQuoteData {
+  businessId: string;
+  itemName: string;
+  unit: string;
+  rate: number;
+  vendorId: string;
+  rfqQuoteId: string;
+  sourceTenderId?: string | null;
+  createdById: string;
+}
+
 export interface IHistoricalRatesRepository {
   findMany(filters: ListHistoricalRatesFilters): Promise<HistoricalRateWithCreator[]>;
   suggest(
@@ -61,6 +72,7 @@ export interface IHistoricalRatesRepository {
   findUnembedded(businessId: string): Promise<{ id: string; itemName: string }[]>;
   setEmbedding(id: string, embedding: number[]): Promise<void>;
   findNearest(businessId: string, queryVector: number[], limit: number): Promise<HistoricalRateMatch[]>;
+  recordFromRfqQuote(data: RecordFromRfqQuoteData): Promise<void>;
 }
 
 export class HistoricalRatesRepository implements IHistoricalRatesRepository {
@@ -135,5 +147,33 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
       ORDER BY "embeddingVector" <=> ${vectorLiteral}::vector
       LIMIT ${limit}
     `;
+  }
+
+  async recordFromRfqQuote(data: RecordFromRfqQuoteData): Promise<void> {
+    // Business rule (not a DB constraint): at most one isDefault=true row per (businessId,
+    // itemName). Clearing the prior default and inserting the new one must be atomic, or a
+    // crash mid-way could leave either zero or two defaults for the same item.
+    await this.prisma.$transaction([
+      this.prisma.historicalRate.updateMany({
+        where: { businessId: data.businessId, itemName: data.itemName, isDefault: true },
+        data: { isDefault: false },
+      }),
+      this.prisma.historicalRate.create({
+        data: {
+          id: randomUUID(),
+          businessId: data.businessId,
+          category: "MATERIAL",
+          itemName: data.itemName,
+          unit: data.unit,
+          rate: data.rate,
+          effectiveDate: new Date(),
+          sourceTenderId: data.sourceTenderId ?? null,
+          vendorId: data.vendorId,
+          rfqQuoteId: data.rfqQuoteId,
+          isDefault: true,
+          createdById: data.createdById,
+        },
+      }),
+    ]);
   }
 }
