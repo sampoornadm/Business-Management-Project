@@ -191,6 +191,8 @@ export interface HistoricalRateDto {
   effectiveDate: string;
   sourceTenderId: string | null;
   notes: string | null;
+  vendorId: string | null;
+  isDefault: boolean;
   createdBy: { id: string; firstName: string; lastName: string };
   createdAt: string;
 }
