@@ -11,6 +11,7 @@ export function QuoteCell({
   isSelected,
   onSelect,
   selectable,
+  canSelect = true,
 }: {
   initialRate: number | null;
   onCommit: (rate: number) => void;
@@ -18,6 +19,7 @@ export function QuoteCell({
   isSelected?: boolean;
   onSelect?: () => void;
   selectable?: boolean;
+  canSelect?: boolean;
 }) {
   const [value, setValue] = useState(initialRate !== null ? String(initialRate) : "");
 
@@ -56,6 +58,7 @@ export function QuoteCell({
           size="icon"
           variant={isSelected ? "default" : "outline"}
           className="h-8 w-8 shrink-0"
+          disabled={!canSelect}
           onClick={onSelect}
           aria-label={isSelected ? "Selected as final rate" : "Select as final rate"}
           title={isSelected ? "Selected as final rate" : "Select as final rate"}
