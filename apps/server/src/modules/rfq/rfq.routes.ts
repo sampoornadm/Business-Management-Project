@@ -385,7 +385,7 @@ export function createRfqRouter(controller: RfqController): Router {
    * /rfqs/{id}/reopen:
    *   post:
    *     tags: [RFQ]
-   *     summary: Reopen a finalized RFQ (AWARDED/CLOSED/CANCELLED) for further quotes or a re-award
+   *     summary: Reopen a finalized RFQ (CLOSED/CANCELLED) back to SENT/DRAFT for further quotes
    *     security: [{ bearerAuth: [] }]
    *     parameters:
    *       - in: path
@@ -402,7 +402,7 @@ export function createRfqRouter(controller: RfqController): Router {
    * /rfqs/{id}/push-rates-to-tender:
    *   post:
    *     tags: [RFQ]
-   *     summary: Push awarded rates from RFQ to create or update a Tender version
+   *     summary: Push each RFQ item's selected vendor quote onto its linked tender BOQ item's rate
    *     security: [{ bearerAuth: [] }]
    *     parameters:
    *       - in: path

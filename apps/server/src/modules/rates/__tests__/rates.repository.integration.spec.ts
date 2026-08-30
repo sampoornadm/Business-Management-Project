@@ -89,4 +89,38 @@ describe("HistoricalRatesRepository.recordFromRfqQuote (integration)", () => {
     expect(defaults).toHaveLength(1);
     expect(defaults[0]!.rfqQuoteId).toBe(second);
   });
+
+  // "Push rates to tender" is re-clickable indefinitely on a CLOSED RFQ (no "already pushed"
+  // indicator) — a second push for the same, unchanged selected quote must update in place, not
+  // throw P2002 on the rfqQuoteId unique constraint.
+  it("is idempotent: recording the same rfqQuoteId twice updates the row in place instead of throwing", async () => {
+    const quoteId = await createRfqQuote();
+
+    await repository.recordFromRfqQuote({
+      businessId,
+      itemName: "OPC Cement",
+      unit: "bag",
+      rate: 400,
+      vendorId,
+      rfqQuoteId: quoteId,
+      createdById: userId,
+    });
+
+    await expect(
+      repository.recordFromRfqQuote({
+        businessId,
+        itemName: "OPC Cement",
+        unit: "bag",
+        rate: 380,
+        vendorId,
+        rfqQuoteId: quoteId,
+        createdById: userId,
+      }),
+    ).resolves.not.toThrow();
+
+    const rows = await prisma.historicalRate.findMany({ where: { businessId, rfqQuoteId: quoteId } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.rate).toBe(380);
+    expect(rows[0]!.isDefault).toBe(true);
+  });
 });

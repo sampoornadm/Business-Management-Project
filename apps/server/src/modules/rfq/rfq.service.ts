@@ -442,10 +442,10 @@ export class RfqService {
     return this.getById(rfqId, businessId);
   }
 
-  // Reopening AWARDED clears the award (a fresh award has to be made again);
-  // reopening CLOSED/CANCELLED goes back to SENT if vendors were already
-  // invited, else DRAFT — mirroring how the RFQ got to SENT in the first
-  // place (see addVendorInvite below).
+  // Reopening a finalized (CLOSED/CANCELLED) RFQ goes back to SENT if vendors were already
+  // invited, else DRAFT — mirroring how the RFQ got to SENT in the first place (see
+  // addVendorInvite below). There's no "award" to clear: awards are now per-item quote
+  // selections, not a whole-RFQ status.
   async reopen(rfqId: string, actorId: string, context: ScopedRequestContext): Promise<RfqDto> {
     const rfq = await this.getDetailOrThrow(rfqId, context.businessId);
     if (!FINALIZED_STATUSES.has(rfq.status)) {
@@ -604,6 +604,12 @@ export class RfqService {
     let updatedItems = 0;
     for (const item of rfq.items) {
       if (!item.boqItemId) continue;
+      // boqItemId is client-supplied at RFQ-creation time with only UUID-format validation (no
+      // ownership check) and BoqRepository#updateItem has no business filter — the batch fetch
+      // above IS the business-scope check. `.has()` (not `.get() ?? null`) because a real BOQ
+      // item can legitimately have a null quantity; only "absent from the map" means "didn't
+      // resolve for this business," and that's what must be skipped, not written to.
+      if (!quantityByBoqItemId.has(item.boqItemId)) continue;
       const selected = item.quotes.find((q) => q.isSelected);
       if (!selected || selected.rate === null) continue;
 

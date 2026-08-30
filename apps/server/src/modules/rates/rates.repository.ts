@@ -153,13 +153,18 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
     // Business rule (not a DB constraint): at most one isDefault=true row per (businessId,
     // itemName). Clearing the prior default and inserting the new one must be atomic, or a
     // crash mid-way could leave either zero or two defaults for the same item.
+    //
+    // upsert (not create): rfqQuoteId is @unique, and "push rates to tender" is re-clickable on a
+    // CLOSED RFQ indefinitely — a repeat push for a quote already recorded must update the
+    // existing row, not throw P2002.
     await this.prisma.$transaction([
       this.prisma.historicalRate.updateMany({
         where: { businessId: data.businessId, itemName: data.itemName, isDefault: true },
         data: { isDefault: false },
       }),
-      this.prisma.historicalRate.create({
-        data: {
+      this.prisma.historicalRate.upsert({
+        where: { rfqQuoteId: data.rfqQuoteId },
+        create: {
           id: randomUUID(),
           businessId: data.businessId,
           category: "MATERIAL",
@@ -172,6 +177,15 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
           rfqQuoteId: data.rfqQuoteId,
           isDefault: true,
           createdById: data.createdById,
+        },
+        update: {
+          itemName: data.itemName,
+          unit: data.unit,
+          rate: data.rate,
+          effectiveDate: new Date(),
+          sourceTenderId: data.sourceTenderId ?? null,
+          vendorId: data.vendorId,
+          isDefault: true,
         },
       }),
     ]);

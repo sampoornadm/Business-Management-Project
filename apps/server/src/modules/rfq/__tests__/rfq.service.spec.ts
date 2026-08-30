@@ -809,6 +809,32 @@ describe("RfqService", () => {
       expect(ratesRepository.recorded).toHaveLength(0);
     });
 
+    it("skips an item whose boqItemId doesn't resolve to a real BOQ item for this business (never writes it)", async () => {
+      const unresolvedBoqItemId = randomUUID();
+      // Deliberately never added to boqRepository.items — simulates a boqItemId that the
+      // business-scoped batch fetch (findItemsByIds) didn't resolve: a nonexistent id, or one
+      // belonging to another business's BOQ. boqItemId is only UUID-format validated at RFQ
+      // creation, so this is reachable from client input.
+      const rfq = await service.create(
+        {
+          title: "Unresolved BOQ Link RFQ",
+          items: [{ boqItemId: unresolvedBoqItemId, description: "Ghost Item", unit: "unit", quantity: 5 }],
+        },
+        actorId,
+        { businessId },
+      );
+      await repository.addVendorInvite(rfq.id, vendorA);
+      await service.upsertQuote(rfq.items[0]!.id, vendorA, { rate: 100, regretted: false }, actorId, businessId);
+      await service.close(rfq.id, actorId, businessId);
+
+      const result = await service.pushRatesToTender(rfq.id, actorId, businessId);
+
+      expect(result.updatedItems).toBe(0);
+      expect(boqRepository.updatedRates.has(unresolvedBoqItemId)).toBe(false);
+      expect(boqRepository.updatedAmounts.has(unresolvedBoqItemId)).toBe(false);
+      expect(ratesRepository.recorded).toHaveLength(0);
+    });
+
     it("skips a linked BOQ item whose only quote is regretted (no selected, priced quote)", async () => {
       const boqItemId = randomUUID();
       boqRepository.items.set(boqItemId, { id: boqItemId, quantity: 10 } as unknown as BoqItemWithBreakdown);
