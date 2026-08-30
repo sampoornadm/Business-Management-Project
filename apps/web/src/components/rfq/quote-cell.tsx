@@ -1,16 +1,23 @@
 "use client";
 
-import { Input } from "@bmp/ui";
+import { Button, Input } from "@bmp/ui";
+import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function QuoteCell({
   initialRate,
   onCommit,
   disabled,
+  isSelected,
+  onSelect,
+  selectable,
 }: {
   initialRate: number | null;
   onCommit: (rate: number) => void;
   disabled?: boolean;
+  isSelected?: boolean;
+  onSelect?: () => void;
+  selectable?: boolean;
 }) {
   const [value, setValue] = useState(initialRate !== null ? String(initialRate) : "");
 
@@ -24,23 +31,38 @@ export function QuoteCell({
   }, [initialRate]);
 
   return (
-    <Input
-      type="number"
-      step="0.01"
-      value={value}
-      disabled={disabled}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={() => {
-        const parsed = Number(value);
-        if (value.trim() !== "" && !Number.isNaN(parsed) && parsed !== initialRate) {
-          onCommit(parsed);
-        }
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") e.currentTarget.blur();
-      }}
-      placeholder="Rate"
-      className="h-8 w-28"
-    />
+    <div className="flex items-center gap-1">
+      <Input
+        type="number"
+        step="0.01"
+        value={value}
+        disabled={disabled}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => {
+          const parsed = Number(value);
+          if (value.trim() !== "" && !Number.isNaN(parsed) && parsed !== initialRate) {
+            onCommit(parsed);
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+        placeholder="Rate"
+        className="h-8 w-28"
+      />
+      {selectable && initialRate !== null && (
+        <Button
+          type="button"
+          size="icon"
+          variant={isSelected ? "default" : "outline"}
+          className="h-8 w-8 shrink-0"
+          onClick={onSelect}
+          aria-label={isSelected ? "Selected as final rate" : "Select as final rate"}
+          title={isSelected ? "Selected as final rate" : "Select as final rate"}
+        >
+          <Check className="h-4 w-4" />
+        </Button>
+      )}
+    </div>
   );
 }
