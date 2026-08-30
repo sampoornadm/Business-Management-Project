@@ -190,6 +190,11 @@ export class RfqController {
     sendSuccess(res, rfq, "RFQ reopened");
   });
 
+  pushRatesToTender = asyncHandler(async (req, res) => {
+    const result = await this.rfqService.pushRatesToTender(req.params.id!, req.user!.id, req.user!.businessId);
+    sendSuccess(res, result, "Rates pushed to tender");
+  });
+
   suggestVendors = asyncHandler(async (req, res) => {
     const body = req.body as SuggestVendorsBody;
     const suggestions = await this.rfqService.suggestVendors(body.boqItemIds, req.user!.businessId);
