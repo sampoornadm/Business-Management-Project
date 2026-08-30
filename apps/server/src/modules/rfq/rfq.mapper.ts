@@ -11,6 +11,7 @@ import type { ItemPriceRow, RfqDetail, RfqItemDetail, RfqListItem } from "./rfq.
 
 function toQuoteDto(quote: RfqItemDetail["quotes"][number]): RfqQuoteDto {
   return {
+    id: quote.id,
     vendorId: quote.vendorId,
     rate: quote.rate,
     regretted: quote.regretted,
@@ -19,6 +20,7 @@ function toQuoteDto(quote: RfqItemDetail["quotes"][number]): RfqQuoteDto {
     quotedAt: quote.quotedAt.toISOString(),
     remarks: quote.remarks,
     updatedAt: quote.updatedAt.toISOString(),
+    isSelected: quote.isSelected,
   };
 }
 
