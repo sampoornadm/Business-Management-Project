@@ -64,7 +64,7 @@ export function useCreatePurchaseOrderFromRfq() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: CreatePurchaseOrderFromRfqInput) => {
-      const response = await apiClient.post<ApiResponse<PurchaseOrderDto>>(
+      const response = await apiClient.post<ApiResponse<PurchaseOrderDto[]>>(
         "/purchase-orders/from-rfq",
         input,
       );
