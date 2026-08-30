@@ -15,7 +15,6 @@ const STATUS_VARIANT: Record<RfqListItemDto["status"], "success" | "secondary" |
   DRAFT: "outline",
   SENT: "secondary",
   CLOSED: "secondary",
-  AWARDED: "success",
   CANCELLED: "destructive",
 };
 
