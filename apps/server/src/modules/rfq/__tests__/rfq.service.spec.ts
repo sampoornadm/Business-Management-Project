@@ -34,7 +34,6 @@ class FakeRfqRepository implements IRfqRepository {
       status: "DRAFT",
       dueDate: data.dueDate ?? null,
       instructions: data.instructions ?? null,
-      awardedVendorId: null,
       createdById: data.createdById,
       createdBy: CREATOR,
       items: data.items.map((item, index) => ({
@@ -60,6 +59,13 @@ class FakeRfqRepository implements IRfqRepository {
   // enforced) scoping; isolation itself is covered by the integration test.
   async findById(id: string, _businessId: string) {
     return this.rfqs.get(id) ?? null;
+  }
+
+  async findRfqByItemId(itemId: string, _businessId: string) {
+    for (const rfq of this.rfqs.values()) {
+      if (rfq.items.some((i) => i.id === itemId)) return rfq;
+    }
+    return null;
   }
 
   async findMany(_pagination: unknown, filters: RfqFilters) {
@@ -94,7 +100,6 @@ class FakeRfqRepository implements IRfqRepository {
     const rfq = this.rfqs.get(id);
     if (!rfq) throw new Error("not found");
     rfq.status = status;
-    rfq.awardedVendorId = null;
   }
 
   async findVendorInvite(rfqId: string, vendorId: string) {
@@ -459,21 +464,62 @@ describe("RfqService", () => {
     expect(totals[0]!.vendorId).toBe(vendorB);
   });
 
-  it("awards the RFQ to an invited vendor and rejects further quote/invite changes", async () => {
+  it("selects a specific quote for an item, unselecting any prior selection", async () => {
     const rfq = await createBasicRfq();
-    await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
-    const awarded = await service.award(rfq.id, vendorA, actorId, businessId);
-    expect(awarded.status).toBe("AWARDED");
-    expect(awarded.awardedVendorId).toBe(vendorA);
+    await repository.addVendorInvite(rfq.id, vendorA);
+    await repository.addVendorInvite(rfq.id, vendorB);
+    const itemId = rfq.items[0]!.id;
+    await service.upsertQuote(itemId, vendorA, { rate: 400, regretted: false }, actorId, businessId);
+    await service.upsertQuote(itemId, vendorB, { rate: 380, regretted: false }, actorId, businessId);
 
-    await expect(service.addVendorInvite(rfq.id, vendorB, actorId, businessId)).rejects.toThrow(
-      ConflictError,
-    );
+    // vendorA was the only quote on the item when it arrived, so auto-select-lowest
+    // picked it. vendorB's later, cheaper quote does not silently steal the
+    // selection — that's the whole point of the "only when nothing is selected
+    // yet" guard, exercised more directly by the next test.
+    let current = await service.getById(rfq.id, businessId);
+    expect(current.items[0]!.quotes.find((q) => q.vendorId === vendorA)!.isSelected).toBe(true);
+    expect(current.items[0]!.quotes.find((q) => q.vendorId === vendorB)!.isSelected).toBe(false);
+
+    // repository fake keys quotes by vendorId, not a separate id — selectQuote takes the
+    // quote's own id, which the fake generates; fetch it via the raw map.
+    const rawItem = repository.rfqs.get(rfq.id)!.items[0]!;
+    const rawQuoteB = (rawItem.quotes as { id: string; vendorId: string }[]).find((q) => q.vendorId === vendorB)!;
+
+    // An explicit selectQuote call moves the selection regardless — including away
+    // from whichever quote got there first via auto-select.
+    await service.selectQuote(rfq.id, itemId, rawQuoteB.id, actorId, businessId);
+
+    current = await service.getById(rfq.id, businessId);
+    expect(current.items[0]!.quotes.find((q) => q.vendorId === vendorA)!.isSelected).toBe(false);
+    expect(current.items[0]!.quotes.find((q) => q.vendorId === vendorB)!.isSelected).toBe(true);
   });
 
-  it("rejects awarding to a vendor that was never invited", async () => {
+  it("does not override an explicit selection when a cheaper quote arrives later", async () => {
     const rfq = await createBasicRfq();
-    await expect(service.award(rfq.id, vendorA, actorId, businessId)).rejects.toThrow(BadRequestError);
+    await repository.addVendorInvite(rfq.id, vendorA);
+    await repository.addVendorInvite(rfq.id, vendorB);
+    const itemId = rfq.items[0]!.id;
+    await service.upsertQuote(itemId, vendorA, { rate: 400, regretted: false }, actorId, businessId);
+    // Only one quote exists — vendorA gets auto-selected.
+    let current = await service.getById(rfq.id, businessId);
+    expect(current.items[0]!.quotes.find((q) => q.vendorId === vendorA)!.isSelected).toBe(true);
+
+    // A cheaper quote arrives — must NOT silently steal the selection.
+    await service.upsertQuote(itemId, vendorB, { rate: 350, regretted: false }, actorId, businessId);
+    current = await service.getById(rfq.id, businessId);
+    expect(current.items[0]!.quotes.find((q) => q.vendorId === vendorA)!.isSelected).toBe(true);
+    expect(current.items[0]!.quotes.find((q) => q.vendorId === vendorB)!.isSelected).toBe(false);
+  });
+
+  it("rejects selecting a quote id that doesn't belong to the given item", async () => {
+    const rfq = await createBasicRfq();
+    await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
+    const itemId = rfq.items[0]!.id;
+    await service.upsertQuote(itemId, vendorA, { rate: 400, regretted: false }, actorId, businessId);
+
+    await expect(
+      service.selectQuote(rfq.id, itemId, randomUUID(), actorId, businessId),
+    ).rejects.toThrow(BadRequestError);
   });
 
   it("closes an RFQ", async () => {
@@ -503,15 +549,12 @@ describe("RfqService", () => {
   });
 
   describe("reopen", () => {
-    it("reopens an AWARDED RFQ back to SENT and clears the awarded vendor", async () => {
+    it("reopens a CLOSED RFQ back to SENT", async () => {
       const rfq = await createBasicRfq();
-      await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
-      const awarded = await service.award(rfq.id, vendorA, actorId, businessId);
-      expect(awarded.status).toBe("AWARDED");
-
+      await repository.addVendorInvite(rfq.id, vendorA);
+      await service.close(rfq.id, actorId, businessId);
       const reopened = await service.reopen(rfq.id, actorId, { businessId });
       expect(reopened.status).toBe("SENT");
-      expect(reopened.awardedVendorId).toBeNull();
     });
 
     it("reopens a CLOSED RFQ with no vendor invites back to DRAFT", async () => {
@@ -606,11 +649,7 @@ describe("RfqService", () => {
     });
   });
 
-  describe("quick send", () => {
-    function boqItem(id: string, description: string, quantity: number, unit: string | null): BoqItemWithBreakdown {
-      return { id, description, quantity, unit } as unknown as BoqItemWithBreakdown;
-    }
-
+  describe("invite vendor", () => {
     beforeEach(() => {
       vendorsRepository.vendors.set(vendorA, {
         id: vendorA,
@@ -622,106 +661,81 @@ describe("RfqService", () => {
       });
     });
 
-    describe("previewQuickSend", () => {
-      it("generates preview text addressed to the vendor's primary contact", async () => {
-        const item = boqItem(randomUUID(), "OPC Cement", 500, "bag");
-        boqRepository.items.set(item.id, item);
+    describe("previewInviteVendor", () => {
+      it("generates preview text for the vendor's primary contact", async () => {
+        const rfq = await createBasicRfq();
 
-        const preview = await service.previewQuickSend(
-          { boqItemIds: [item.id], vendorId: vendorA },
-          actorId,
-          businessId,
-        );
+        const preview = await service.previewInviteVendor(rfq.id, { vendorId: vendorA }, businessId);
 
         expect(preview.vendorContactEmail).toBe("raj@vendora.example");
-        expect(preview.text).toContain("Dear Raj Kumar,");
-        expect(preview.text).toContain("1. OPC Cement — Qty: 500 bag");
-        expect(preview.text).toContain("Priya PurchaseManager");
-        expect(emailService.queueRfqEmail).not.toHaveBeenCalled();
+        expect(preview.text).toContain(`RFQ "${rfq.title}"`);
+        expect(preview.text).not.toContain("(tender-linked)");
       });
 
-      it("includes the tender number when a tenderId is given", async () => {
-        const item = boqItem(randomUUID(), "TMT Steel", 1200, "kg");
-        boqRepository.items.set(item.id, item);
+      it("flags the preview as tender-linked when the RFQ has a tenderId", async () => {
         const tenderId = randomUUID();
         tendersRepository.tenderIds.add(tenderId);
-        tendersRepository.tenderNumbers.set(tenderId, "TND-0001");
-
-        const preview = await service.previewQuickSend(
-          { tenderId, boqItemIds: [item.id], vendorId: vendorA },
+        const rfq = await service.create(
+          { title: "Steel RFQ", tenderId, items: [{ description: "TMT Steel", quantity: 1200 }] },
           actorId,
-          businessId,
+          { businessId },
         );
 
-        expect(preview.text).toContain("against tender TND-0001");
+        const preview = await service.previewInviteVendor(rfq.id, { vendorId: vendorA }, businessId);
+
+        expect(preview.text).toContain("(tender-linked)");
       });
 
       it("rejects when the vendor has no contact email on file", async () => {
-        const item = boqItem(randomUUID(), "Item", 1, null);
-        boqRepository.items.set(item.id, item);
+        const rfq = await createBasicRfq();
         vendorsRepository.vendors.set(vendorB, { id: vendorB, name: "Vendor B", contacts: [] });
 
         await expect(
-          service.previewQuickSend({ boqItemIds: [item.id], vendorId: vendorB }, actorId, businessId),
-        ).rejects.toThrow(BadRequestError);
-      });
-
-      it("rejects when no items are selected", async () => {
-        await expect(
-          service.previewQuickSend({ boqItemIds: [], vendorId: vendorA }, actorId, businessId),
+          service.previewInviteVendor(rfq.id, { vendorId: vendorB }, businessId),
         ).rejects.toThrow(BadRequestError);
       });
     });
 
-    describe("quickSend", () => {
-      it("creates the RFQ, invites the vendor, and queues the email with the given text", async () => {
-        const item = boqItem(randomUUID(), "OPC Cement", 500, "bag");
-        boqRepository.items.set(item.id, item);
+    describe("inviteVendor", () => {
+      it("invites the vendor to the existing RFQ and emails them", async () => {
+        const rfq = await createBasicRfq();
+        const invited = await service.inviteVendor(
+          rfq.id,
+          { vendorId: vendorA, text: "Please quote" },
+          actorId,
+          { businessId },
+        );
+        expect(invited.vendorInvites).toHaveLength(1);
+        expect(invited.vendorInvites[0]!.vendor.id).toBe(vendorA);
+        expect(invited.status).toBe("SENT");
+        expect(emailService.queueRfqEmail).toHaveBeenCalledWith(
+          expect.objectContaining({ bodyText: "Please quote" }),
+        );
+      });
 
-        const rfq = await service.quickSend(
-          { boqItemIds: [item.id], vendorId: vendorA, text: "Custom edited body" },
+      it("does not duplicate the invite or reset status when the vendor is already invited", async () => {
+        const rfq = await createBasicRfq();
+        await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
+
+        const invited = await service.inviteVendor(
+          rfq.id,
+          { vendorId: vendorA, text: "Second message" },
           actorId,
           { businessId },
         );
 
-        expect(rfq.status).toBe("SENT");
-        expect(rfq.items).toHaveLength(1);
-        expect(rfq.vendorInvites).toHaveLength(1);
-        expect(rfq.vendorInvites[0]!.vendor.id).toBe(vendorA);
-        expect(emailService.queueRfqEmail).toHaveBeenCalledWith({
-          to: "raj@vendora.example",
-          rfqTitle: rfq.title,
-          bodyText: "Custom edited body",
-        });
-      });
-
-      it("titles the RFQ using the tender number when a tenderId is given", async () => {
-        const item = boqItem(randomUUID(), "Item", 1, null);
-        boqRepository.items.set(item.id, item);
-        const tenderId = randomUUID();
-        tendersRepository.tenderIds.add(tenderId);
-        tendersRepository.tenderNumbers.set(tenderId, "TND-0002");
-
-        const rfq = await service.quickSend(
-          { tenderId, boqItemIds: [item.id], vendorId: vendorA, text: "Body" },
-          actorId,
-          { businessId },
+        expect(invited.vendorInvites).toHaveLength(1);
+        expect(emailService.queueRfqEmail).toHaveBeenCalledWith(
+          expect.objectContaining({ bodyText: "Second message" }),
         );
-
-        expect(rfq.title).toBe("TND-0002 — RFQ for Vendor A");
       });
 
-      it("rejects when the vendor has no contact email on file", async () => {
-        const item = boqItem(randomUUID(), "Item", 1, null);
-        boqRepository.items.set(item.id, item);
-        vendorsRepository.vendors.set(vendorB, { id: vendorB, name: "Vendor B", contacts: [] });
-
+      it("rejects a vendor with no contact email on file", async () => {
+        const rfq = await createBasicRfq();
+        vendorsRepository.vendors.set(vendorA, { id: vendorA, name: "No Email Co", contacts: [] });
         await expect(
-          service.quickSend({ boqItemIds: [item.id], vendorId: vendorB, text: "Body" }, actorId, {
-            businessId,
-          }),
+          service.inviteVendor(rfq.id, { vendorId: vendorA, text: "Body" }, actorId, { businessId }),
         ).rejects.toThrow(BadRequestError);
-        expect(emailService.queueRfqEmail).not.toHaveBeenCalled();
       });
     });
   });

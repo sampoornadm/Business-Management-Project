@@ -134,6 +134,7 @@ export interface RfqFilters {
 export interface IRfqRepository {
   create(data: CreateRfqData): Promise<string>;
   findById(id: string, businessId: string): Promise<RfqDetail | null>;
+  findRfqByItemId(itemId: string, businessId: string): Promise<RfqDetail | null>;
   findMany(
     pagination: PaginationParams,
     filters: RfqFilters,
@@ -195,6 +196,16 @@ export class RfqRepository implements IRfqRepository {
     return this.prisma.rfq.findFirst({ where: { id, businessId }, ...rfqDetailArgs });
   }
 
+  // Used by upsertQuote's auto-select-lowest side effect, which only has the
+  // rfqItemId on hand (not the parent rfqId) and needs the fresh, post-upsert
+  // quotes array to compute the cheapest one.
+  findRfqByItemId(itemId: string, businessId: string): Promise<RfqDetail | null> {
+    return this.prisma.rfq.findFirst({
+      where: { businessId, items: { some: { id: itemId } } },
+      ...rfqDetailArgs,
+    });
+  }
+
   async findMany(
     pagination: PaginationParams,
     filters: RfqFilters,
@@ -240,7 +251,7 @@ export class RfqRepository implements IRfqRepository {
   }
 
   async reopen(id: string, status: RfqStatus): Promise<void> {
-    await this.prisma.rfq.update({ where: { id }, data: { status, awardedVendorId: null } });
+    await this.prisma.rfq.update({ where: { id }, data: { status } });
   }
 
   findVendorInvite(rfqId: string, vendorId: string): Promise<{ id: string } | null> {

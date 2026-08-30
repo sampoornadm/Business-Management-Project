@@ -1,4 +1,5 @@
 import type {
+  InviteVendorPreviewDto,
   ItemPriceHistoryDto,
   PaginatedResult,
   RecommendedVendorDto,
@@ -25,7 +26,7 @@ import type { IUsersRepository } from "../users/users.repository.js";
 import type { IVendorsRepository, VendorWithContacts } from "../vendors/vendors.repository.js";
 
 import { buildQuoteSheet, parseQuoteSheet } from "./quote-sheet.js";
-import { buildRfrDocx, buildRfrPdf, buildRfqText, toRfrDocumentData } from "./rfq-document.js";
+import { buildRfrDocx, buildRfrPdf, toRfrDocumentData } from "./rfq-document.js";
 import { toItemPriceHistoryDto, toRfqDto, toRfqListItemDto } from "./rfq.mapper.js";
 import type {
   CreateRfqData,
@@ -36,7 +37,7 @@ import type {
   UpdateRfqData,
 } from "./rfq.repository.js";
 
-const FINALIZED_STATUSES = new Set(["AWARDED", "CLOSED", "CANCELLED"]);
+const FINALIZED_STATUSES = new Set(["CLOSED", "CANCELLED"]);
 
 export class RfqService {
   constructor(
@@ -235,6 +236,20 @@ export class RfqService {
       await this.rfqRepository.updateVendorInviteStatus(item.rfqId, vendorId, "RESPONDED");
     }
 
+    // Auto-select the lowest non-regretted quote, but only while nothing has
+    // been explicitly selected yet for this item — an explicit human choice
+    // (via selectQuote) always wins over a later, cheaper quote. Re-fetched
+    // fresh (not the `rfq`/item above) because those were read before the
+    // upsert just above and don't reflect the quote we just wrote.
+    const freshRfq = await this.rfqRepository.findRfqByItemId(rfqItemId, businessId);
+    const freshItem = freshRfq?.items.find((i) => i.id === rfqItemId);
+    if (freshItem && !freshItem.quotes.some((q) => q.isSelected)) {
+      const cheapest = freshItem.quotes
+        .filter((q) => !q.regretted && q.rate !== null)
+        .sort((a, b) => a.rate! - b.rate!)[0];
+      if (cheapest) await this.rfqRepository.selectQuote(rfqItemId, cheapest.id);
+    }
+
     await this.auditService.log({
       actorId,
       action: "RFQ_QUOTE_RECORDED",
@@ -392,20 +407,26 @@ export class RfqService {
     return { rfqId, items, vendorTotals: totals };
   }
 
-  async award(rfqId: string, vendorId: string, actorId: string, businessId: string): Promise<RfqDto> {
+  async selectQuote(
+    rfqId: string,
+    rfqItemId: string,
+    quoteId: string,
+    actorId: string,
+    businessId: string,
+  ): Promise<RfqDto> {
     const rfq = await this.getDetailOrThrow(rfqId, businessId);
-    if (FINALIZED_STATUSES.has(rfq.status)) throw new ConflictError("RFQ is already finalized");
-    if (!rfq.vendorInvites.some((v) => v.vendor.id === vendorId)) {
-      throw new BadRequestError("Vendor was not invited to this RFQ");
-    }
+    const item = rfq.items.find((i) => i.id === rfqItemId);
+    if (!item) throw new BadRequestError("Item does not belong to this RFQ");
+    const quote = item.quotes.find((q) => q.id === quoteId);
+    if (!quote) throw new BadRequestError("Quote does not belong to this item");
 
-    await this.rfqRepository.setAwardedVendor(rfqId, vendorId);
+    await this.rfqRepository.selectQuote(rfqItemId, quoteId);
     await this.auditService.log({
       actorId,
-      action: "RFQ_AWARDED",
-      entityType: "Rfq",
-      entityId: rfqId,
-      metadata: { vendorId },
+      action: "RFQ_QUOTE_SELECTED",
+      entityType: "RfqItem",
+      entityId: rfqItemId,
+      metadata: { quoteId },
     });
     return this.getById(rfqId, businessId);
   }
@@ -497,28 +518,15 @@ export class RfqService {
     return { perItem, recommended };
   }
 
-  private async loadQuickSendContext(
-    input: { tenderId?: string; boqItemIds: string[]; vendorId: string },
-    businessId: string,
-  ) {
-    if (input.boqItemIds.length === 0) throw new BadRequestError("At least one item is required");
-    const items = await this.boqRepository.findItemsByIds(input.boqItemIds, businessId);
-    if (items.length === 0) throw new BadRequestError("No valid items selected");
-
-    const vendor = await this.vendorsRepository.findById(input.vendorId);
+  private async loadInviteVendorContext(rfqId: string, vendorId: string, businessId: string) {
+    const rfq = await this.getDetailOrThrow(rfqId, businessId);
+    const vendor = await this.vendorsRepository.findById(vendorId);
     if (!vendor) throw new BadRequestError("Vendor not found");
     const contact = this.pickPrimaryContact(vendor);
     if (!contact?.email) {
       throw new BadRequestError("This vendor has no contact email on file — add one first");
     }
-
-    let tenderNumber: string | undefined;
-    if (input.tenderId) {
-      const tender = await this.tendersRepository.findById(input.tenderId, businessId);
-      tenderNumber = tender?.tenderNumber;
-    }
-
-    return { items, vendor, contact, tenderNumber };
+    return { rfq, vendor, contact };
   }
 
   private pickPrimaryContact(vendor: VendorWithContacts): VendorWithContacts["contacts"][number] | undefined {
@@ -526,56 +534,46 @@ export class RfqService {
   }
 
   // Preview only — nothing is persisted. The returned text is what the user
-  // reviews/edits before quickSend() actually sends it.
-  async previewQuickSend(
-    input: { tenderId?: string; boqItemIds: string[]; vendorId: string },
-    actorId: string,
+  // reviews/edits before inviteVendor() actually sends it.
+  async previewInviteVendor(
+    rfqId: string,
+    input: { vendorId: string },
     businessId: string,
-  ): Promise<{ text: string; vendorContactEmail: string }> {
-    const { items, contact, tenderNumber } = await this.loadQuickSendContext(input, businessId);
-    const actor = await this.usersRepository.findById(actorId, businessId);
-    if (!actor) throw new NotFoundError("Actor not found");
-
-    const text = buildRfqText({
-      items: items.map((item) => ({ description: item.description, unit: item.unit, quantity: item.quantity ?? 0 })),
-      vendorContactName: contact!.name,
-      tenderNumber,
-      senderName: `${actor.firstName} ${actor.lastName}`,
-      senderEmail: actor.email,
-    });
-
-    return { text, vendorContactEmail: contact!.email! };
+  ): Promise<InviteVendorPreviewDto> {
+    const { rfq, contact } = await this.loadInviteVendorContext(rfqId, input.vendorId, businessId);
+    const text = `You are invited to quote for RFQ "${rfq.title}"${
+      rfq.tenderId ? " (tender-linked)" : ""
+    }. Please review the attached item list and respond with your best rates.`;
+    return { text, vendorContactEmail: contact.email! };
   }
 
-  // Creates the RFQ (reusing create(), which already invites the vendor and
-  // sets status SENT) and emails the exact text the user ended up with after
-  // editing the preview — the server never regenerates it here.
-  async quickSend(
-    input: { tenderId?: string; boqItemIds: string[]; vendorId: string; text: string },
+  // Invites a vendor to an EXISTING RFQ (unlike the old quickSend, which
+  // always created a brand-new one) and emails the exact text the user ended
+  // up with after editing the preview — the server never regenerates it here.
+  async inviteVendor(
+    rfqId: string,
+    input: { vendorId: string; text: string },
     actorId: string,
     context: ScopedRequestContext,
   ): Promise<RfqDto> {
-    const { items, vendor, contact, tenderNumber } = await this.loadQuickSendContext(input, context.businessId);
+    const { rfq, contact } = await this.loadInviteVendorContext(rfqId, input.vendorId, context.businessId);
 
-    const title = tenderNumber ? `${tenderNumber} — RFQ for ${vendor.name}` : `RFQ for ${vendor.name}`;
-    const rfq = await this.create(
-      {
-        title,
-        tenderId: input.tenderId,
-        items: items.map((item) => ({
-          boqItemId: item.id,
-          description: item.description,
-          unit: item.unit ?? undefined,
-          quantity: item.quantity ?? 0,
-        })),
-        vendorIds: [input.vendorId],
-      },
+    const alreadyInvited = await this.rfqRepository.findVendorInvite(rfqId, input.vendorId);
+    if (!alreadyInvited) {
+      await this.rfqRepository.addVendorInvite(rfqId, input.vendorId);
+      await this.rfqRepository.updateStatus(rfqId, "SENT");
+    }
+
+    await this.emailService.queueRfqEmail({ to: contact.email!, rfqTitle: rfq.title, bodyText: input.text });
+    await this.auditService.log({
       actorId,
-      context,
-    );
-
-    await this.emailService.queueRfqEmail({ to: contact!.email!, rfqTitle: title, bodyText: input.text });
-
-    return rfq;
+      action: "RFQ_VENDOR_INVITED",
+      entityType: "Rfq",
+      entityId: rfqId,
+      metadata: { vendorId: input.vendorId },
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+    });
+    return this.getById(rfqId, context.businessId);
   }
 }
