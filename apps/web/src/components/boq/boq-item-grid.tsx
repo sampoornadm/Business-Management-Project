@@ -3,6 +3,7 @@
 import { DEFAULT_GST_RATE, type BoqDto, type BoqItemDto, type RfqVendorSuggestionsDto } from "@bmp/types";
 import { Badge, Button, EditableTreeTable, Input, useToast, type EditableTreeColumn } from "@bmp/ui";
 import { Send, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useBulkUpdateBoqItems, useDeleteBoqItem, useUpdateBoqItem } from "@/hooks/use-boq";
@@ -11,7 +12,6 @@ import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
 
 import { RateAnalysisDialog } from "./rate-analysis-dialog";
-import { SendRfqDialog } from "./send-rfq-dialog";
 
 function isLeaf(item: BoqItemDto): boolean {
   return item.children.length === 0;
@@ -28,6 +28,7 @@ function collectLeafIds(items: BoqItemDto[]): string[] {
 
 export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }) {
   const { toast } = useToast();
+  const router = useRouter();
   const roleName = useAuthStore((state) => state.user?.role.name);
   const canEdit = hasPermission(roleName, "boq:update") && boq.isCurrent;
   const canSendRfq = hasPermission(roleName, "rfq:create");
@@ -248,17 +249,13 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
             </>
           )}
           {canSendRfq && (
-            <SendRfqDialog
-              trigger={
-                <Button size="sm" variant="outline">
-                  <Send className="mr-2 h-4 w-4" /> Send RFQ
-                </Button>
-              }
-              tenderId={tenderId}
-              boqItemIds={[...selectedIds]}
-              suggestedVendorId={suggestions?.recommended[0]?.vendorId}
-              onSent={() => setSelectedIds(new Set())}
-            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => router.push(`/rfqs/new?tenderId=${tenderId}`)}
+            >
+              <Send className="mr-2 h-4 w-4" /> Create RFQ
+            </Button>
           )}
           {canSendRfq && suggestions && suggestions.recommended.length > 0 && (
             <div className="flex flex-wrap items-center gap-1">
