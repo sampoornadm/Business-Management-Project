@@ -679,6 +679,12 @@ model HistoricalRate {
   sourceTenderId String?
   notes          String?
 
+  vendorId   String?
+  vendor     Vendor?   @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  rfqQuoteId String?   @unique
+  rfqQuote   RfqQuote? @relation(fields: [rfqQuoteId], references: [id], onDelete: SetNull)
+  isDefault  Boolean   @default(false)
+
   // Embedding of `itemName`, populated lazily by the ai-enrichment worker. Real rate matching
   // now queries embeddingVector below via pgvector ANN (see boq-enrichment.service.ts) — this
   // Float[] is kept only per the design doc's Non-goals (smaller diff; nothing reads it as a
@@ -730,14 +736,14 @@ model Vendor {
   createdById String
   createdBy   User   @relation("VendorCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  contacts       VendorContact[]
-  itemTags       VendorItemTag[]
-  rfqInvites     RfqVendor[]
-  quotes         RfqQuote[]
-  awardedRfqs    Rfq[]           @relation("RfqAwardedVendor")
-  purchaseOrders PurchaseOrder[]
-  ratings        VendorRating[]
-  expenses       Expense[]
+  contacts        VendorContact[]
+  itemTags        VendorItemTag[]
+  rfqInvites      RfqVendor[]
+  quotes          RfqQuote[]
+  historicalRates HistoricalRate[]
+  purchaseOrders  PurchaseOrder[]
+  ratings         VendorRating[]
+  expenses        Expense[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -785,7 +791,6 @@ enum RfqStatus {
   DRAFT
   SENT
   CLOSED
-  AWARDED
   CANCELLED
 }
 
@@ -803,9 +808,6 @@ model Rfq {
   // e.g. delivery or payment terms. Distinct from RfqItem.instructions (per line) and from
   // RfqQuote.remarks (the vendor's reply, the opposite direction).
   instructions String?
-
-  awardedVendorId String?
-  awardedVendor   Vendor? @relation("RfqAwardedVendor", fields: [awardedVendorId], references: [id], onDelete: SetNull)
 
   createdById String
   createdBy   User   @relation("RfqCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
@@ -962,6 +964,10 @@ model RfqQuote {
 
   remarks   String?
   updatedAt DateTime @updatedAt
+
+  isSelected Boolean @default(false)
+
+  historicalRate HistoricalRate?
 
   @@unique([rfqItemId, vendorId])
   @@index([vendorId])
