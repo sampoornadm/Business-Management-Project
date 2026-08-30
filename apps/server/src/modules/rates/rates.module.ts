@@ -5,7 +5,9 @@ import { HistoricalRatesRepository } from "./rates.repository.js";
 import { createRatesRouter } from "./rates.routes.js";
 import { RatesService } from "./rates.service.js";
 
-const ratesRepository = new HistoricalRatesRepository(prisma);
+// Exported for cross-module reuse (e.g. rfq.module.ts's pushRatesToTender) —
+// avoid re-instantiating a second HistoricalRatesRepository against the same prisma client.
+export const ratesRepository = new HistoricalRatesRepository(prisma);
 export const ratesService = new RatesService(ratesRepository);
 const ratesController = new RatesController(ratesService);
 
