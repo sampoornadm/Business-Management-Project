@@ -140,7 +140,7 @@ export interface IRfqRepository {
   ): Promise<{ items: RfqListItem[]; totalItems: number }>;
   update(id: string, data: UpdateRfqData): Promise<void>;
   updateStatus(id: string, status: RfqStatus): Promise<void>;
-  setAwardedVendor(id: string, vendorId: string): Promise<void>;
+  selectQuote(rfqItemId: string, quoteId: string): Promise<void>;
   reopen(id: string, status: RfqStatus): Promise<void>;
   findVendorInvite(rfqId: string, vendorId: string): Promise<{ id: string } | null>;
   addVendorInvite(rfqId: string, vendorId: string): Promise<void>;
@@ -226,11 +226,17 @@ export class RfqRepository implements IRfqRepository {
     await this.prisma.rfq.update({ where: { id }, data: { status } });
   }
 
-  async setAwardedVendor(id: string, vendorId: string): Promise<void> {
-    await this.prisma.rfq.update({
-      where: { id },
-      data: { awardedVendorId: vendorId, status: "AWARDED" },
-    });
+  async selectQuote(rfqItemId: string, quoteId: string): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.rfqQuote.updateMany({
+        where: { rfqItemId, isSelected: true },
+        data: { isSelected: false },
+      }),
+      this.prisma.rfqQuote.update({
+        where: { id: quoteId },
+        data: { isSelected: true },
+      }),
+    ]);
   }
 
   async reopen(id: string, status: RfqStatus): Promise<void> {

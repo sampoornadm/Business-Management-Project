@@ -80,11 +80,14 @@ class FakeRfqRepository implements IRfqRepository {
     rfq.status = status;
   }
 
-  async setAwardedVendor(id: string, vendorId: string) {
-    const rfq = this.rfqs.get(id);
-    if (!rfq) throw new Error("not found");
-    rfq.awardedVendorId = vendorId;
-    rfq.status = "AWARDED";
+  async selectQuote(rfqItemId: string, quoteId: string) {
+    for (const rfq of this.rfqs.values()) {
+      const item = rfq.items.find((i) => i.id === rfqItemId);
+      if (!item) continue;
+      for (const quote of item.quotes as { id: string; isSelected: boolean }[]) {
+        quote.isSelected = quote.id === quoteId;
+      }
+    }
   }
 
   async reopen(id: string, status: RfqDetail["status"]) {
@@ -160,6 +163,7 @@ class FakeRfqRepository implements IRfqRepository {
           quotedAt: data.quotedAt ?? new Date(),
           remarks: data.remarks ?? null,
           updatedAt: new Date(),
+          isSelected: false,
         });
       }
     }
