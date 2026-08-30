@@ -29,6 +29,7 @@ import { useParams } from "next/navigation";
 import { useCategoryLeaves } from "@/hooks/use-categories";
 import { useClassifyItem, useItem, useSetItemCategory } from "@/hooks/use-items";
 import { useAuthStore } from "@/lib/auth-store";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { hasPermission } from "@/lib/permissions";
 
 const UNCLASSIFIED = "none";
@@ -40,6 +41,7 @@ export default function ItemDetailPage() {
   const canUpdate = hasPermission(roleName, "rfq:update");
 
   const itemQuery = useItem(params.id);
+  useBreadcrumbLabel(params.id, itemQuery.data?.canonicalName);
   const leavesQuery = useCategoryLeaves();
   const setCategory = useSetItemCategory(params.id);
   const classify = useClassifyItem(params.id);

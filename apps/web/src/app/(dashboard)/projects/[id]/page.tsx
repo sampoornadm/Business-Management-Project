@@ -21,6 +21,7 @@ import { LaborEntriesTab } from "@/components/projects/labor-entries-tab";
 import { MaterialUsageTab } from "@/components/projects/material-usage-tab";
 import { MilestonesTab } from "@/components/projects/milestones-tab";
 import { useProject, useProjectCosting, useProjectProgress } from "@/hooks/use-projects";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 
 const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
   ACTIVE: "success",
@@ -32,6 +33,7 @@ const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "dest
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
   const projectQuery = useProject(params.id);
+  useBreadcrumbLabel(params.id, projectQuery.data?.name);
   const costingQuery = useProjectCosting(params.id);
   const progressQuery = useProjectProgress(params.id);
 

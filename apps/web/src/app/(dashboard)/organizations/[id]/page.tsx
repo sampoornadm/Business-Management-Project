@@ -32,6 +32,7 @@ import {
   useUpdateOrganizationContact,
 } from "@/hooks/use-organizations";
 import { useAuthStore } from "@/lib/auth-store";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { hasPermission } from "@/lib/permissions";
 
 export default function OrganizationDetailPage() {
@@ -41,6 +42,7 @@ export default function OrganizationDetailPage() {
   const roleName = useAuthStore((state) => state.user?.role.name);
 
   const organizationQuery = useOrganization(params.id);
+  useBreadcrumbLabel(params.id, organizationQuery.data?.name);
   const addContact = useAddOrganizationContact(params.id);
   const updateContact = useUpdateOrganizationContact(params.id);
   const deleteContact = useDeleteOrganizationContact(params.id);
