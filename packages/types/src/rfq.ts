@@ -1,10 +1,11 @@
-export const RFQ_STATUSES = ["DRAFT", "SENT", "CLOSED", "AWARDED", "CANCELLED"] as const;
+export const RFQ_STATUSES = ["DRAFT", "SENT", "CLOSED", "CANCELLED"] as const;
 export type RfqStatus = (typeof RFQ_STATUSES)[number];
 
 export const RFQ_VENDOR_STATUSES = ["INVITED", "RESPONDED", "DECLINED"] as const;
 export type RfqVendorStatus = (typeof RFQ_VENDOR_STATUSES)[number];
 
 export interface RfqQuoteDto {
+  id: string;
   vendorId: string;
   // Null means the vendor gave no price for this line (including a regret) —
   // never coerce to 0, see RfqComparisonQuoteDto below for why.
@@ -15,6 +16,7 @@ export interface RfqQuoteDto {
   quotedAt: string;
   remarks: string | null;
   updatedAt: string;
+  isSelected: boolean;
 }
 
 export interface RfqItemDto {
@@ -46,7 +48,6 @@ export interface RfqListItemDto {
   tenderId: string | null;
   status: RfqStatus;
   dueDate: string | null;
-  awardedVendorId: string | null;
   itemCount: number;
   vendorCount: number;
   createdAt: string;
@@ -128,8 +129,8 @@ export interface RfqComparisonDto {
   vendorTotals: RfqComparisonVendorTotalDto[];
 }
 
-export interface AwardRfqInput {
-  vendorId: string;
+export interface SelectQuoteInput {
+  quoteId: string;
 }
 
 // One historical price observation: a single vendor's quote for one item, across every RFQ.
@@ -211,17 +212,15 @@ export interface RfqVendorSuggestionsDto {
   recommended: RecommendedVendorDto[];
 }
 
-export interface QuickSendRfqPreviewInput {
-  tenderId?: string;
-  boqItemIds: string[];
+export interface InviteVendorPreviewInput {
   vendorId: string;
 }
 
-export interface QuickSendRfqPreviewDto {
+export interface InviteVendorPreviewDto {
   text: string;
   vendorContactEmail: string;
 }
 
-export interface QuickSendRfqInput extends QuickSendRfqPreviewInput {
+export interface InviteVendorInput extends InviteVendorPreviewInput {
   text: string;
 }
