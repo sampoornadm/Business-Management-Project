@@ -25,7 +25,7 @@ import {
   useToast,
 } from "@bmp/ui";
 import { Plus, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useCurrentBoq } from "@/hooks/use-boq";
@@ -50,6 +50,8 @@ function flattenBoqItems(items: BoqItemDto[]): BoqItemDto[] {
 
 export default function NewRfqPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialTenderId = searchParams.get("tenderId") ?? "";
   const { toast } = useToast();
   const createRfq = useCreateRfq();
   const suggestVendors = useSuggestRfqVendors();
@@ -57,7 +59,7 @@ export default function NewRfqPage() {
   const vendorsQuery = useVendors({ page: 1, pageSize: 100, isActive: true });
 
   const [title, setTitle] = useState("");
-  const [tenderId, setTenderId] = useState<string>("");
+  const [tenderId, setTenderId] = useState<string>(initialTenderId);
   const [dueDate, setDueDate] = useState("");
   const [instructions, setInstructions] = useState("");
   const [items, setItems] = useState<DraftItem[]>([emptyItem()]);
