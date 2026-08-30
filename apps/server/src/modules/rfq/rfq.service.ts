@@ -594,13 +594,22 @@ export class RfqService {
       throw new ConflictError("RFQ must be closed before pushing rates to the tender");
     }
 
+    // amount is a stored column (quantity × rate), not derived on read — every other
+    // rate-writing path (BoqService.updateItem/addItem/bulkUpdateItems) recomputes and
+    // persists it alongside rate. Batch-fetch quantities once, not once per item.
+    const boqItemIds = rfq.items.map((item) => item.boqItemId).filter((id): id is string => Boolean(id));
+    const boqItems = await this.boqRepository.findItemsByIds(boqItemIds, businessId);
+    const quantityByBoqItemId = new Map(boqItems.map((boqItem) => [boqItem.id, boqItem.quantity]));
+
     let updatedItems = 0;
     for (const item of rfq.items) {
       if (!item.boqItemId) continue;
       const selected = item.quotes.find((q) => q.isSelected);
       if (!selected || selected.rate === null) continue;
 
-      await this.boqRepository.updateItem(item.boqItemId, { rate: selected.rate });
+      const quantity = quantityByBoqItemId.get(item.boqItemId) ?? null;
+      const amount = quantity !== null ? round2(quantity * selected.rate) : null;
+      await this.boqRepository.updateItem(item.boqItemId, { rate: selected.rate, amount });
       await this.ratesRepository.recordFromRfqQuote({
         businessId,
         itemName: item.description,

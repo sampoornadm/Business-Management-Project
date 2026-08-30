@@ -231,13 +231,15 @@ class FakeUsersRepository implements Partial<IUsersRepository> {
 class FakeBoqRepository implements Partial<IBoqRepository> {
   items = new Map<string, BoqItemWithBreakdown>();
   updatedRates = new Map<string, number>();
+  updatedAmounts = new Map<string, number | null>();
 
   async findItemsByIds(ids: string[], _businessId: string) {
     return ids.map((id) => this.items.get(id)).filter((item): item is BoqItemWithBreakdown => Boolean(item));
   }
 
-  async updateItem(id: string, data: { rate?: number | null }) {
+  async updateItem(id: string, data: { rate?: number | null; amount?: number | null }) {
     if (data.rate !== undefined && data.rate !== null) this.updatedRates.set(id, data.rate);
+    if (data.amount !== undefined) this.updatedAmounts.set(id, data.amount);
   }
 }
 
@@ -758,8 +760,9 @@ describe("RfqService", () => {
   });
 
   describe("pushRatesToTender", () => {
-    it("pushes selected rates onto the tender's BOQ items and records historical rates", async () => {
+    it("pushes selected rates onto the tender's BOQ items, recomputes amount, and records historical rates", async () => {
       const boqItemId = randomUUID();
+      boqRepository.items.set(boqItemId, { id: boqItemId, quantity: 10 } as unknown as BoqItemWithBreakdown);
       const rfq = await service.create(
         {
           title: "Push Test RFQ",
@@ -776,6 +779,8 @@ describe("RfqService", () => {
 
       expect(result.updatedItems).toBe(1);
       expect(boqRepository.updatedRates.get(boqItemId)).toBe(375);
+      // amount is the BOQ item's own quantity (10) × the pushed rate, not the RFQ item's quantity (100).
+      expect(boqRepository.updatedAmounts.get(boqItemId)).toBe(3750);
       expect(ratesRepository.recorded).toHaveLength(1);
       expect(ratesRepository.recorded[0]).toMatchObject({
         businessId,
@@ -801,6 +806,28 @@ describe("RfqService", () => {
 
       expect(result.updatedItems).toBe(0);
       expect(boqRepository.updatedRates.size).toBe(0);
+      expect(ratesRepository.recorded).toHaveLength(0);
+    });
+
+    it("skips a linked BOQ item whose only quote is regretted (no selected, priced quote)", async () => {
+      const boqItemId = randomUUID();
+      boqRepository.items.set(boqItemId, { id: boqItemId, quantity: 10 } as unknown as BoqItemWithBreakdown);
+      const rfq = await service.create(
+        { title: "Regretted Quote RFQ", items: [{ boqItemId, description: "Rebar", unit: "kg", quantity: 50 }] },
+        actorId,
+        { businessId },
+      );
+      await repository.addVendorInvite(rfq.id, vendorA);
+      // Regretted: no rate, and auto-select never picks a regretted quote — so this item ends up
+      // with a quote but no *selected, priced* quote, exercising the `!selected || rate === null` skip.
+      await service.upsertQuote(rfq.items[0]!.id, vendorA, { regretted: true }, actorId, businessId);
+      await service.close(rfq.id, actorId, businessId);
+
+      const result = await service.pushRatesToTender(rfq.id, actorId, businessId);
+
+      expect(result.updatedItems).toBe(0);
+      expect(boqRepository.updatedRates.has(boqItemId)).toBe(false);
+      expect(boqRepository.updatedAmounts.has(boqItemId)).toBe(false);
       expect(ratesRepository.recorded).toHaveLength(0);
     });
 
