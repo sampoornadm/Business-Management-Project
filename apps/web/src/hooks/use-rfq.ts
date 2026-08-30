@@ -2,17 +2,17 @@
 
 import type {
   ApiResponse,
-  AwardRfqInput,
   CreateRfqInput,
+  InviteVendorInput,
+  InviteVendorPreviewDto,
+  InviteVendorPreviewInput,
   ListRfqsQuery,
   PaginatedResult,
-  QuickSendRfqInput,
-  QuickSendRfqPreviewDto,
-  QuickSendRfqPreviewInput,
   RfqComparisonDto,
   RfqDto,
   RfqListItemDto,
   RfqVendorSuggestionsDto,
+  SelectQuoteInput,
   SuggestRfqVendorsInput,
   UpdateRfqInput,
   UpsertRfqQuoteInput,
@@ -61,11 +61,11 @@ export function useSuggestRfqVendors() {
   });
 }
 
-export function usePreviewQuickSendRfq() {
+export function usePreviewInviteVendor(rfqId: string) {
   return useMutation({
-    mutationFn: async (input: QuickSendRfqPreviewInput) => {
-      const response = await apiClient.post<ApiResponse<QuickSendRfqPreviewDto>>(
-        "/rfqs/quick-send/preview",
+    mutationFn: async (input: InviteVendorPreviewInput) => {
+      const response = await apiClient.post<ApiResponse<InviteVendorPreviewDto>>(
+        `/rfqs/${rfqId}/invite-vendor/preview`,
         input,
       );
       return unwrap(response.data);
@@ -73,16 +73,14 @@ export function usePreviewQuickSendRfq() {
   });
 }
 
-export function useQuickSendRfq() {
+export function useInviteVendor(rfqId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: QuickSendRfqInput) => {
-      const response = await apiClient.post<ApiResponse<RfqDto>>("/rfqs/quick-send", input);
+    mutationFn: async (input: InviteVendorInput) => {
+      const response = await apiClient.post<ApiResponse<RfqDto>>(`/rfqs/${rfqId}/invite-vendor`, input);
       return unwrap(response.data);
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["rfqs"] });
-    },
+    onSuccess: () => invalidateRfq(queryClient, rfqId),
   });
 }
 
@@ -188,14 +186,30 @@ export function useRfqComparison(id: string | undefined) {
   });
 }
 
-export function useAwardRfq(id: string) {
+export function useSelectQuote(rfqId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: AwardRfqInput) => {
-      const response = await apiClient.post<ApiResponse<RfqDto>>(`/rfqs/${id}/award`, input);
+    mutationFn: async ({ itemId, quoteId }: { itemId: string } & SelectQuoteInput) => {
+      const response = await apiClient.post<ApiResponse<RfqDto>>(
+        `/rfqs/${rfqId}/items/${itemId}/select-quote`,
+        { quoteId },
+      );
       return unwrap(response.data);
     },
-    onSuccess: () => invalidateRfq(queryClient, id),
+    onSuccess: () => invalidateRfq(queryClient, rfqId),
+  });
+}
+
+export function usePushRatesToTender(rfqId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await apiClient.post<ApiResponse<{ updatedItems: number }>>(
+        `/rfqs/${rfqId}/push-rates-to-tender`,
+      );
+      return unwrap(response.data);
+    },
+    onSuccess: () => invalidateRfq(queryClient, rfqId),
   });
 }
 
