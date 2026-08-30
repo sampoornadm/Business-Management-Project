@@ -21,6 +21,7 @@ import { round2 } from "../../shared/utils/math.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { IBoqRepository } from "../boq/boq.repository.js";
 import type { IBusinessesRepository } from "../businesses/businesses.repository.js";
+import type { IHistoricalRatesRepository } from "../rates/rates.repository.js";
 import type { ITendersRepository } from "../tenders/tenders.repository.js";
 import type { IUsersRepository } from "../users/users.repository.js";
 import type { IVendorsRepository, VendorWithContacts } from "../vendors/vendors.repository.js";
@@ -49,6 +50,7 @@ export class RfqService {
     private readonly businessesRepository: IBusinessesRepository,
     private readonly emailService: EmailService,
     private readonly auditService: AuditService,
+    private readonly ratesRepository: IHistoricalRatesRepository,
   ) {}
 
   private async getDetailOrThrow(id: string, businessId: string): Promise<RfqDetail> {
@@ -575,5 +577,50 @@ export class RfqService {
       userAgent: context.userAgent,
     });
     return this.getById(rfqId, context.businessId);
+  }
+
+  // Only closed RFQs are final enough to trust: an item's selected quote is
+  // pushed onto its linked BOQ item's rate and recorded as a historical rate
+  // (via rates.repository#recordFromRfqQuote, Task 7's transactional isDefault
+  // flip). Items with no boqItemId (standalone RFQ lines) or no selected/priced
+  // quote are silently skipped, not errors — a partial RFQ still pushes what it can.
+  async pushRatesToTender(
+    rfqId: string,
+    actorId: string,
+    businessId: string,
+  ): Promise<{ updatedItems: number }> {
+    const rfq = await this.getDetailOrThrow(rfqId, businessId);
+    if (rfq.status !== "CLOSED") {
+      throw new ConflictError("RFQ must be closed before pushing rates to the tender");
+    }
+
+    let updatedItems = 0;
+    for (const item of rfq.items) {
+      if (!item.boqItemId) continue;
+      const selected = item.quotes.find((q) => q.isSelected);
+      if (!selected || selected.rate === null) continue;
+
+      await this.boqRepository.updateItem(item.boqItemId, { rate: selected.rate });
+      await this.ratesRepository.recordFromRfqQuote({
+        businessId,
+        itemName: item.description,
+        unit: item.unit ?? "unit",
+        rate: selected.rate,
+        vendorId: selected.vendor.id,
+        rfqQuoteId: selected.id,
+        sourceTenderId: rfq.tenderId,
+        createdById: actorId,
+      });
+      updatedItems += 1;
+    }
+
+    await this.auditService.log({
+      actorId,
+      action: "RFQ_RATES_PUSHED_TO_TENDER",
+      entityType: "Rfq",
+      entityId: rfqId,
+      metadata: { updatedItems },
+    });
+    return { updatedItems };
   }
 }
