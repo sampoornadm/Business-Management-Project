@@ -7,6 +7,12 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
   formatDate,
   Select,
   SelectContent,
@@ -20,24 +26,27 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Textarea,
   useToast,
 } from "@bmp/ui";
-import { ShoppingCart, Trash2 } from "lucide-react";
+import { Send, ShoppingCart, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { QuoteCell } from "@/components/rfq/quote-cell";
 import { QuoteSheetActions } from "@/components/rfq/quote-sheet-actions";
 import { useCreatePurchaseOrderFromRfq } from "@/hooks/use-purchase-orders";
 import {
-  useAddRfqVendor,
-  useAwardRfq,
   useCloseRfq,
+  useInviteVendor,
+  usePreviewInviteVendor,
+  usePushRatesToTender,
   useReopenRfq,
   useRemoveRfqVendor,
   useRfq,
   useRfqComparison,
+  useSelectQuote,
   useUpsertRfqQuote,
 } from "@/hooks/use-rfq";
 import { useVendors } from "@/hooks/use-vendors";
@@ -48,8 +57,7 @@ import { hasPermission } from "@/lib/permissions";
 const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
   DRAFT: "outline",
   SENT: "secondary",
-  CLOSED: "secondary",
-  AWARDED: "success",
+  CLOSED: "success",
   CANCELLED: "destructive",
 };
 
@@ -60,50 +68,77 @@ export default function RfqDetailPage() {
   const roleName = useAuthStore((state) => state.user?.role.name);
   const canUpdate = hasPermission(roleName, "rfq:update");
   const canCreatePo = hasPermission(roleName, "purchase_orders:create");
+  const canSendRfq = hasPermission(roleName, "rfq:create");
 
   const rfqQuery = useRfq(params.id);
   useBreadcrumbLabel(params.id, rfqQuery.data?.title);
   const comparisonQuery = useRfqComparison(params.id);
   const vendorsQuery = useVendors({ page: 1, pageSize: 100, isActive: true });
-  const addVendor = useAddRfqVendor(params.id);
   const removeVendor = useRemoveRfqVendor(params.id);
   const upsertQuote = useUpsertRfqQuote(params.id);
-  const awardRfq = useAwardRfq(params.id);
+  const selectQuote = useSelectQuote(params.id);
+  const pushRatesToTender = usePushRatesToTender(params.id);
+  const previewInvite = usePreviewInviteVendor(params.id);
+  const inviteVendorMutation = useInviteVendor(params.id);
   const closeRfq = useCloseRfq(params.id);
   const reopenRfq = useReopenRfq(params.id);
   const createPoFromRfq = useCreatePurchaseOrderFromRfq();
 
-  const [inviteVendorId, setInviteVendorId] = useState("");
-  const [awardVendorId, setAwardVendorId] = useState("");
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
+  const [sendVendorId, setSendVendorId] = useState("");
+  const [sendText, setSendText] = useState("");
 
-  async function handleInvite() {
-    if (!inviteVendorId) return;
+  async function handleSelectQuote(itemId: string, quoteId: string) {
     try {
-      await addVendor.mutateAsync(inviteVendorId);
-      setInviteVendorId("");
-      toast({ title: "Vendor invited" });
+      await selectQuote.mutateAsync({ itemId, quoteId });
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Could not invite vendor",
+        title: "Could not select quote",
         description: error instanceof Error ? error.message : "Please try again.",
       });
     }
   }
 
-  async function handleAward() {
-    if (!awardVendorId) return;
+  async function handlePushRates() {
     try {
-      await awardRfq.mutateAsync({ vendorId: awardVendorId });
-      toast({ title: "RFQ awarded" });
+      const result = await pushRatesToTender.mutateAsync();
+      toast({ title: `Pushed rates for ${result.updatedItems} item(s) to the tender` });
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Could not award RFQ",
+        title: "Could not push rates",
         description: error instanceof Error ? error.message : "Please try again.",
       });
     }
   }
+
+  async function handleSendRfq() {
+    if (!sendVendorId) return;
+    try {
+      await inviteVendorMutation.mutateAsync({ vendorId: sendVendorId, text: sendText });
+      toast({ title: "RFQ sent" });
+      setSendDialogOpen(false);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not send RFQ",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  useEffect(() => {
+    if (!sendDialogOpen || !sendVendorId) return;
+    let cancelled = false;
+    previewInvite.mutateAsync({ vendorId: sendVendorId }).then((result) => {
+      if (!cancelled) setSendText(result.text);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sendDialogOpen, sendVendorId]);
 
   async function handleClose() {
     try {
@@ -119,11 +154,7 @@ export default function RfqDetailPage() {
   }
 
   async function handleReopen() {
-    const message =
-      rfq.status === "AWARDED"
-        ? "This will clear the current award and reopen the RFQ. Continue?"
-        : "This will reopen the RFQ for further quotes. Continue?";
-    if (!window.confirm(message)) return;
+    if (!window.confirm("This will reopen the RFQ for further quotes. Continue?")) return;
     try {
       await reopenRfq.mutateAsync();
       toast({ title: "RFQ reopened" });
@@ -138,13 +169,17 @@ export default function RfqDetailPage() {
 
   async function handleCreatePo() {
     try {
-      const po = await createPoFromRfq.mutateAsync({ rfqId: params.id });
-      toast({ title: "Purchase order created" });
-      router.push(`/purchase-orders/${po.id}`);
+      const pos = await createPoFromRfq.mutateAsync({ rfqId: params.id });
+      toast({ title: `${pos.length} purchase order(s) created` });
+      if (pos.length === 1) {
+        router.push(`/purchase-orders/${pos[0]!.id}`);
+      } else {
+        router.push("/purchase-orders");
+      }
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Could not create purchase order",
+        title: "Could not create purchase order(s)",
         description: error instanceof Error ? error.message : "Please try again.",
       });
     }
@@ -160,9 +195,7 @@ export default function RfqDetailPage() {
   }
 
   const rfq = rfqQuery.data;
-  const isFinalized = rfq.status === "AWARDED" || rfq.status === "CLOSED" || rfq.status === "CANCELLED";
-  const invitedIds = new Set(rfq.vendorInvites.map((v) => v.vendor.id));
-  const availableVendors = (vendorsQuery.data?.items ?? []).filter((v) => !invitedIds.has(v.id));
+  const isFinalized = rfq.status === "CLOSED" || rfq.status === "CANCELLED";
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -187,9 +220,62 @@ export default function RfqDetailPage() {
             Reopen RFQ
           </Button>
         )}
-        {rfq.status === "AWARDED" && canCreatePo && (
+        {canSendRfq && !isFinalized && (
+          <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Send className="mr-2 h-4 w-4" /> Send RFQ
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Send RFQ</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Vendor</label>
+                  <Select value={sendVendorId} onValueChange={setSendVendorId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a vendor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(vendorsQuery.data?.items ?? []).map((v) => (
+                        <SelectItem key={v.id} value={v.id}>
+                          {v.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Message</label>
+                  <Textarea
+                    rows={10}
+                    value={sendText}
+                    onChange={(e) => setSendText(e.target.value)}
+                    disabled={previewInvite.isPending}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  onClick={handleSendRfq}
+                  disabled={inviteVendorMutation.isPending || previewInvite.isPending || !sendVendorId}
+                >
+                  {inviteVendorMutation.isPending ? "Sending…" : "Send"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+        {rfq.status === "CLOSED" && canUpdate && (
+          <Button variant="outline" onClick={handlePushRates} disabled={pushRatesToTender.isPending}>
+            Push rates to tender
+          </Button>
+        )}
+        {rfq.status === "CLOSED" && canCreatePo && (
           <Button onClick={handleCreatePo}>
-            <ShoppingCart className="mr-2 h-4 w-4" /> Create Purchase Order
+            <ShoppingCart className="mr-2 h-4 w-4" /> Create Purchase Order(s)
           </Button>
         )}
       </div>
@@ -221,25 +307,6 @@ export default function RfqDetailPage() {
               ))
             )}
           </div>
-          {canUpdate && !isFinalized && (
-            <div className="flex gap-2">
-              <Select value={inviteVendorId} onValueChange={setInviteVendorId}>
-                <SelectTrigger className="max-w-xs">
-                  <SelectValue placeholder="Select a vendor to invite" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableVendors.map((vendor) => (
-                    <SelectItem key={vendor.id} value={vendor.id}>
-                      {vendor.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button size="sm" onClick={handleInvite} disabled={!inviteVendorId || addVendor.isPending}>
-                Invite
-              </Button>
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -285,6 +352,9 @@ export default function RfqDetailPage() {
                             <QuoteCell
                               initialRate={quote?.rate ?? null}
                               disabled={!canUpdate || isFinalized}
+                              isSelected={quote?.isSelected ?? false}
+                              selectable={Boolean(quote) && !quote?.regretted}
+                              onSelect={() => quote && handleSelectQuote(item.id, quote.id)}
                               onCommit={(rate) =>
                                 upsertQuote.mutate({ itemId: item.id, vendorId: invite.vendor.id, input: { rate } })
                               }
@@ -333,26 +403,6 @@ export default function RfqDetailPage() {
                 </div>
               ))}
             </div>
-
-            {canUpdate && !isFinalized && (
-              <div className="flex gap-2">
-                <Select value={awardVendorId} onValueChange={setAwardVendorId}>
-                  <SelectTrigger className="max-w-xs">
-                    <SelectValue placeholder="Select a vendor to award" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {rfq.vendorInvites.map((invite) => (
-                      <SelectItem key={invite.vendor.id} value={invite.vendor.id}>
-                        {invite.vendor.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button onClick={handleAward} disabled={!awardVendorId || awardRfq.isPending}>
-                  Award RFQ
-                </Button>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}
