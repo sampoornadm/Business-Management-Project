@@ -14,7 +14,7 @@ import { hasPermission } from "@/lib/permissions";
 const STATUS_VARIANT: Record<RfqListItemDto["status"], "success" | "secondary" | "outline" | "destructive"> = {
   DRAFT: "outline",
   SENT: "secondary",
-  CLOSED: "secondary",
+  CLOSED: "success",
   CANCELLED: "destructive",
 };
 
