@@ -50,7 +50,7 @@ export class PurchaseOrdersController {
 
   createFromRfq = asyncHandler(async (req, res) => {
     const body = req.body as CreatePurchaseOrderFromRfqBody;
-    const po = await this.purchaseOrdersService.createFromRfq(
+    const pos = await this.purchaseOrdersService.createFromRfq(
       body.rfqId,
       {
         expectedDeliveryDate: body.expectedDeliveryDate ? new Date(body.expectedDeliveryDate) : undefined,
@@ -59,7 +59,7 @@ export class PurchaseOrdersController {
       req.user!.id,
       { ipAddress: req.ip, userAgent: req.headers["user-agent"], businessId: req.user!.businessId },
     );
-    sendSuccess(res, po, "Purchase order created from RFQ", 201);
+    sendSuccess(res, pos, "Purchase order(s) created from RFQ", 201);
   });
 
   updateStatus = asyncHandler(async (req, res) => {

@@ -53,10 +53,10 @@ export function createPurchaseOrdersRouter(controller: PurchaseOrdersController)
    * /purchase-orders/from-rfq:
    *   post:
    *     tags: [Purchase Orders]
-   *     summary: Create a purchase order from an awarded RFQ (copies the awarded vendor's quoted rates)
+   *     summary: Create purchase order(s) from an awarded RFQ (one PO per vendor with selected quotes, copies their quoted rates)
    *     security: [{ bearerAuth: [] }]
    *     responses:
-   *       201: { description: Purchase order created }
+   *       201: { description: Purchase order(s) created from RFQ as array }
    */
   router.post(
     "/from-rfq",
