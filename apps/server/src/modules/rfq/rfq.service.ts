@@ -424,9 +424,9 @@ export class RfqService {
     await this.auditService.log({
       actorId,
       action: "RFQ_QUOTE_SELECTED",
-      entityType: "RfqItem",
-      entityId: rfqItemId,
-      metadata: { quoteId },
+      entityType: "Rfq",
+      entityId: rfqId,
+      metadata: { rfqItemId, quoteId },
     });
     return this.getById(rfqId, businessId);
   }
