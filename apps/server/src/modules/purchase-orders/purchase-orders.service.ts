@@ -110,55 +110,60 @@ export class PurchaseOrdersService {
     options: { expectedDeliveryDate?: Date; notes?: string },
     actorId: string,
     context: ScopedRequestContext,
-  ): Promise<PurchaseOrderDto> {
+  ): Promise<PurchaseOrderDto[]> {
     const rfq = await this.rfqRepository.findById(rfqId, context.businessId);
     if (!rfq) throw new NotFoundError("RFQ not found");
-    if (rfq.status !== "AWARDED" || !rfq.awardedVendorId) {
-      throw new ConflictError("RFQ must be awarded to a vendor before creating a purchase order");
+    if (rfq.status !== "CLOSED") {
+      throw new ConflictError("RFQ must be closed before creating a purchase order");
     }
 
-    const awardedVendorId = rfq.awardedVendorId;
-    const items: CreatePurchaseOrderItemData[] = rfq.items.map((item, index) => {
-      const quote = item.quotes.find((q) => q.vendorId === awardedVendorId);
-      // A regretted quote is a row that exists with rate = null. `!quote` alone no longer means
-      // "no price": without the regretted/null check this builds a PO line at amount 0.
-      if (!quote || quote.regretted || quote.rate === null) {
-        throw new BadRequestError(
-          `The awarded vendor has not quoted a rate for item: ${item.description}`,
-        );
-      }
-      const rate = quote.rate;
-      return {
+    // Group items by their selected quote's vendor. An item with no selected quote, or whose
+    // selected quote was later regretted / has a null rate, is simply left out of every PO —
+    // see the brief's "excludes items with no selected quote" test — rather than failing the
+    // whole call the way a single-vendor award used to.
+    const itemsByVendor = new Map<string, CreatePurchaseOrderItemData[]>();
+    for (const item of rfq.items) {
+      const selected = item.quotes.find((q) => q.isSelected);
+      if (!selected || selected.regretted || selected.rate === null) continue;
+
+      const rate = selected.rate;
+      const list = itemsByVendor.get(selected.vendorId) ?? [];
+      list.push({
         description: item.description,
         unit: item.unit,
         quantity: item.quantity,
         rate,
         amount: round2(item.quantity * rate),
-        sortOrder: index,
-      };
-    });
+        sortOrder: list.length,
+      });
+      itemsByVendor.set(selected.vendorId, list);
+    }
 
-    const poId = await this.purchaseOrdersRepository.create({
-      vendorId: awardedVendorId,
-      tenderId: rfq.tenderId,
-      businessId: context.businessId,
-      sourceRfqId: rfq.id,
-      expectedDeliveryDate: options.expectedDeliveryDate ?? null,
-      notes: options.notes ?? null,
-      createdById: actorId,
-      items,
-    });
+    const created: PurchaseOrderDto[] = [];
+    for (const [vendorId, items] of itemsByVendor) {
+      const poId = await this.purchaseOrdersRepository.create({
+        vendorId,
+        tenderId: rfq.tenderId,
+        businessId: context.businessId,
+        sourceRfqId: rfq.id,
+        expectedDeliveryDate: options.expectedDeliveryDate ?? null,
+        notes: options.notes ?? null,
+        createdById: actorId,
+        items,
+      });
+      created.push(await this.getById(poId, context.businessId));
+    }
 
     await this.auditService.log({
       actorId,
       action: "PURCHASE_ORDER_CREATED_FROM_RFQ",
       entityType: "PurchaseOrder",
-      entityId: poId,
-      metadata: { rfqId },
+      entityId: rfqId,
+      metadata: { rfqId, count: created.length },
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
     });
-    return this.getById(poId, context.businessId);
+    return created;
   }
 
   async updateStatus(

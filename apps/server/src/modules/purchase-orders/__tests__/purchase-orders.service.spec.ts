@@ -288,62 +288,81 @@ describe("PurchaseOrdersService", () => {
     expect(rated.vendorRating?.rating).toBe(4);
   });
 
-  it("creates a purchase order from an awarded RFQ, copying quoted rates", async () => {
+  it("creates one PO per vendor when items are split across selected quotes", async () => {
     const rfqId = randomUUID();
-    const itemId = randomUUID();
+    const itemA = randomUUID();
+    const itemB = randomUUID();
     rfqRepository.rfqs.set(rfqId, {
       id: rfqId,
       tenderId: null,
-      status: "AWARDED",
-      awardedVendorId: vendorId,
+      status: "CLOSED",
       items: [
         {
-          id: itemId,
+          id: itemA,
           description: "OPC Cement",
           unit: "bag",
           quantity: 200,
-          quotes: [{ vendorId, rate: 375 }],
+          quotes: [{ vendorId: "vendor-a", rate: 375, isSelected: true, regretted: false }],
+        },
+        {
+          id: itemB,
+          description: "TMT Steel",
+          unit: "ton",
+          quantity: 10,
+          quotes: [{ vendorId: "vendor-b", rate: 61000, isSelected: true, regretted: false }],
         },
       ],
     } as unknown as RfqDetail);
+    vendorsRepository.vendorIds.add("vendor-a");
+    vendorsRepository.vendorIds.add("vendor-b");
 
-    const po = await service.createFromRfq(rfqId, {}, actorId, { businessId });
-    expect(po.items[0]!.rate).toBe(375);
-    expect(po.items[0]!.amount).toBe(75000);
-    expect(po.sourceRfqId).toBe(rfqId);
+    const pos = await service.createFromRfq(rfqId, {}, actorId, { businessId });
+    expect(pos).toHaveLength(2);
+    const vendorAPo = pos.find((po) => po.items.some((i) => i.description === "OPC Cement"))!;
+    const vendorBPo = pos.find((po) => po.items.some((i) => i.description === "TMT Steel"))!;
+    expect(vendorAPo.items).toHaveLength(1);
+    expect(vendorBPo.items).toHaveLength(1);
+    expect(vendorAPo.sourceRfqId).toBe(rfqId);
   });
 
-  it("refuses to build a purchase order line from a regretted quote", async () => {
-    // The awarded vendor regretted this line. Before the regret column existed this could not
-    // happen; now the quote row exists with rate null and must not become an amount of 0.
+  it("excludes items with no selected quote rather than failing the whole call", async () => {
     const rfqId = randomUUID();
+    const itemA = randomUUID();
+    const itemB = randomUUID();
     rfqRepository.rfqs.set(rfqId, {
       id: rfqId,
       tenderId: null,
-      status: "AWARDED",
-      awardedVendorId: vendorId,
+      status: "CLOSED",
       items: [
         {
-          id: randomUUID(),
+          id: itemA,
           description: "OPC Cement",
           unit: "bag",
           quantity: 200,
-          quotes: [{ vendorId, rate: null, regretted: true }],
+          quotes: [{ vendorId: "vendor-a", rate: 375, isSelected: true, regretted: false }],
+        },
+        {
+          id: itemB,
+          description: "Unresolved Item",
+          unit: "nos",
+          quantity: 5,
+          quotes: [{ vendorId: "vendor-a", rate: 100, isSelected: false, regretted: false }],
         },
       ],
     } as unknown as RfqDetail);
+    vendorsRepository.vendorIds.add("vendor-a");
 
-    await expect(service.createFromRfq(rfqId, {}, actorId, { businessId })).rejects.toThrow(
-      BadRequestError,
-    );
+    const pos = await service.createFromRfq(rfqId, {}, actorId, { businessId });
+    expect(pos).toHaveLength(1);
+    expect(pos[0]!.items).toHaveLength(1);
+    expect(pos[0]!.items[0]!.description).toBe("OPC Cement");
   });
 
-  it("rejects creating a PO from an RFQ that hasn't been awarded", async () => {
+  it("rejects creating a PO from an RFQ that isn't closed", async () => {
     const rfqId = randomUUID();
     rfqRepository.rfqs.set(rfqId, {
       id: rfqId,
       status: "SENT",
-      awardedVendorId: null,
       items: [],
     } as unknown as RfqDetail);
 
