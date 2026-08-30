@@ -13,6 +13,8 @@ export function toHistoricalRateDto(entity: HistoricalRateWithCreator): Historic
     effectiveDate: entity.effectiveDate.toISOString(),
     sourceTenderId: entity.sourceTenderId,
     notes: entity.notes,
+    vendorId: entity.vendorId,
+    isDefault: entity.isDefault,
     createdBy: {
       id: entity.createdBy.id,
       firstName: entity.createdBy.firstName,
