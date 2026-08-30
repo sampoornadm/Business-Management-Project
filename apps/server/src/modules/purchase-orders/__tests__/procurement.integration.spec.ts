@@ -82,21 +82,24 @@ describe("Procurement workflow (integration)", () => {
     expect(comparisonResponse.body.data.items[0].quotes[0].isLowest).toBe(true);
   });
 
-  it("awards the RFQ and creates a purchase order from it", async () => {
-    const awardResponse = await request(app)
-      .post(`/api/v1/rfqs/${rfqId}/award`)
-      .set("Authorization", `Bearer ${testUser.accessToken}`)
-      .send({ vendorId });
-    expect(awardResponse.status).toBe(200);
-    expect(awardResponse.body.data.status).toBe("AWARDED");
+  it("closes the RFQ and creates a purchase order from it", async () => {
+    // Only one vendor quoted the RFQ's only item, so Task 4's auto-select-lowest logic already
+    // marked that quote isSelected the moment it was recorded — no explicit select-quote call
+    // needed here before closing.
+    const closeResponse = await request(app)
+      .post(`/api/v1/rfqs/${rfqId}/close`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`);
+    expect(closeResponse.status).toBe(200);
+    expect(closeResponse.body.data.status).toBe("CLOSED");
 
     const poResponse = await request(app)
       .post("/api/v1/purchase-orders/from-rfq")
       .set("Authorization", `Bearer ${testUser.accessToken}`)
       .send({ rfqId });
     expect(poResponse.status).toBe(201);
-    expect(poResponse.body.data.items[0].rate).toBe(375);
-    poId = poResponse.body.data.id;
+    expect(poResponse.body.data).toHaveLength(1);
+    expect(poResponse.body.data[0].items[0].rate).toBe(375);
+    poId = poResponse.body.data[0].id;
   });
 
   it("issues the PO and receives goods across two partial deliveries", async () => {
