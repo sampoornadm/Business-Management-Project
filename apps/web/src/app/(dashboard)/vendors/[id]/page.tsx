@@ -37,6 +37,7 @@ import {
   useVendorPerformance,
 } from "@/hooks/use-vendors";
 import { useAuthStore } from "@/lib/auth-store";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { hasPermission } from "@/lib/permissions";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -53,6 +54,7 @@ export default function VendorDetailPage() {
   const roleName = useAuthStore((state) => state.user?.role.name);
 
   const vendorQuery = useVendor(params.id);
+  useBreadcrumbLabel(params.id, vendorQuery.data?.name);
   const performanceQuery = useVendorPerformance(params.id);
   const addContact = useAddVendorContact(params.id);
   const updateContact = useUpdateVendorContact(params.id);

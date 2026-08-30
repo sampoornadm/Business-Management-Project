@@ -42,6 +42,7 @@ import {
 } from "@/hooks/use-rfq";
 import { useVendors } from "@/hooks/use-vendors";
 import { useAuthStore } from "@/lib/auth-store";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { hasPermission } from "@/lib/permissions";
 
 const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
@@ -61,6 +62,7 @@ export default function RfqDetailPage() {
   const canCreatePo = hasPermission(roleName, "purchase_orders:create");
 
   const rfqQuery = useRfq(params.id);
+  useBreadcrumbLabel(params.id, rfqQuery.data?.title);
   const comparisonQuery = useRfqComparison(params.id);
   const vendorsQuery = useVendors({ page: 1, pageSize: 100, isActive: true });
   const addVendor = useAddRfqVendor(params.id);

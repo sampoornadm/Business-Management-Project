@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 
 import { RecordPaymentDialog } from "@/components/finance/record-payment-dialog";
 import { useInvoice, useRecordInvoicePayment } from "@/hooks/use-finance";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 
 const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
   DRAFT: "outline",
@@ -18,6 +19,7 @@ export default function InvoiceDetailPage() {
   const params = useParams<{ id: string }>();
   const { toast } = useToast();
   const invoiceQuery = useInvoice(params.id);
+  useBreadcrumbLabel(params.id, invoiceQuery.data?.invoiceNumber);
   const recordPayment = useRecordInvoicePayment(params.id);
 
   if (invoiceQuery.isLoading || !invoiceQuery.data) {

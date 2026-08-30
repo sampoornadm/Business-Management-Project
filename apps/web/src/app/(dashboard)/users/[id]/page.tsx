@@ -43,6 +43,7 @@ import { z } from "zod";
 import { useRoles } from "@/hooks/use-roles";
 import { useAssignRole, useDeactivateUser, useUpdateUser, useUser } from "@/hooks/use-users";
 import { useAuthStore } from "@/lib/auth-store";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { hasPermission } from "@/lib/permissions";
 
 const schema = z.object({
@@ -59,6 +60,10 @@ export default function UserDetailPage() {
   const roleName = useAuthStore((state) => state.user?.role.name);
 
   const userQuery = useUser(params.id);
+  useBreadcrumbLabel(
+    params.id,
+    userQuery.data && `${userQuery.data.firstName} ${userQuery.data.lastName}`,
+  );
   const rolesQuery = useRoles();
   const updateUser = useUpdateUser(params.id);
   const assignRole = useAssignRole(params.id);

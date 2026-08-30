@@ -32,6 +32,7 @@ import {
   useUpdateBusinessContact,
 } from "@/hooks/use-businesses";
 import { useAuthStore } from "@/lib/auth-store";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { hasPermission } from "@/lib/permissions";
 
 const MSME_LABELS: Record<string, string> = { MICRO: "Micro", SMALL: "Small", MEDIUM: "Medium" };
@@ -43,6 +44,7 @@ export default function BusinessDetailPage() {
   const roleName = useAuthStore((state) => state.user?.role.name);
 
   const businessQuery = useBusiness(params.id);
+  useBreadcrumbLabel(params.id, businessQuery.data?.name);
   const addContact = useAddBusinessContact(params.id);
   const updateContact = useUpdateBusinessContact(params.id);
   const deleteContact = useDeleteBusinessContact(params.id);

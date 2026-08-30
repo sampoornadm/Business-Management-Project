@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 
 import { RecordPaymentDialog } from "@/components/finance/record-payment-dialog";
 import { useExpense, useRecordExpensePayment } from "@/hooks/use-finance";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 
 const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
   UNPAID: "outline",
@@ -16,6 +17,7 @@ export default function ExpenseDetailPage() {
   const params = useParams<{ id: string }>();
   const { toast } = useToast();
   const expenseQuery = useExpense(params.id);
+  useBreadcrumbLabel(params.id, expenseQuery.data?.description);
   const recordPayment = useRecordExpensePayment(params.id);
 
   if (expenseQuery.isLoading || !expenseQuery.data) {

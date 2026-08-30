@@ -6,12 +6,14 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import { useBill } from "@/hooks/use-bills";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { downloadFile } from "@/lib/download";
 
 export default function BillDetailPage() {
   const params = useParams<{ id: string }>();
   const { toast } = useToast();
   const billQuery = useBill(params.id);
+  useBreadcrumbLabel(params.id, billQuery.data?.billNumber);
 
   if (billQuery.isLoading || !billQuery.data) {
     return (

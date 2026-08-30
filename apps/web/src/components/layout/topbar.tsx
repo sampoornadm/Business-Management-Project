@@ -11,6 +11,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Skeleton,
   useToast,
 } from "@bmp/ui";
 import { LogOut, Menu, Settings, UserRound } from "lucide-react";
@@ -34,6 +35,13 @@ function toTitleCase(segment: string): string {
     .join(" ");
 }
 
+// A route segment that's a bare database id (a UUID) rather than a real path name.
+// toTitleCase() on one of these produces exactly the kind of hashcode-looking
+// breadcrumb this exists to prevent (e.g. "8c864a3b Dd92 49f8 B01d ..."), so it's
+// never an acceptable fallback — show a loading placeholder instead until the
+// owning page registers the entity's real name via useBreadcrumbLabel.
+const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function Breadcrumbs() {
   const pathname = usePathname();
   const labels = useBreadcrumbStore((state) => state.labels);
@@ -46,13 +54,17 @@ function Breadcrumbs() {
       </Link>
       {segments.map((segment, index, arr) => {
         const href = `/${segments.slice(0, index + 1).join("/")}`;
-        const label = labels[segment] ?? toTitleCase(segment);
+        const registeredLabel = labels[segment];
+        const isBareId = !registeredLabel && UUID_SEGMENT.test(segment);
+        const label = registeredLabel ?? toTitleCase(segment);
         const isLast = index === arr.length - 1;
 
         return (
           <Fragment key={segment}>
             <span>/</span>
-            {isLast ? (
+            {isBareId ? (
+              <Skeleton className="inline-block h-4 w-20 align-middle" />
+            ) : isLast ? (
               <span className="font-medium text-foreground">{label}</span>
             ) : (
               <Link href={href} className="hover:text-foreground">

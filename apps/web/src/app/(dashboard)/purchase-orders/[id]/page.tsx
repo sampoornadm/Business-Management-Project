@@ -30,6 +30,7 @@ import {
   useUpdatePurchaseOrderStatus,
 } from "@/hooks/use-purchase-orders";
 import { useAuthStore } from "@/lib/auth-store";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { hasPermission } from "@/lib/permissions";
 
 const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
@@ -49,6 +50,7 @@ export default function PurchaseOrderDetailPage() {
   const canRecordPayment = hasPermission(roleName, "finance:create");
 
   const poQuery = usePurchaseOrder(params.id);
+  useBreadcrumbLabel(params.id, poQuery.data?.poNumber);
   const updateStatus = useUpdatePurchaseOrderStatus(params.id);
   const paymentsQuery = usePurchaseOrderPayments(params.id);
   const recordPayment = useRecordPurchaseOrderPayment(params.id);
