@@ -6,13 +6,13 @@ import { resolvePagination } from "../../shared/utils/pagination.js";
 import type { RfqService } from "./rfq.service.js";
 import type {
   AddRfqVendorBody,
-  AwardRfqBody,
   CreateRfqBody,
   ImportQuotesBody,
+  InviteVendorBody,
+  InviteVendorPreviewBody,
   ListItemPricesQueryParsed,
   ListRfqsQueryParsed,
-  QuickSendBody,
-  QuickSendPreviewBody,
+  SelectQuoteBody,
   SuggestVendorsBody,
   UpdateRfqBody,
   UpsertRfqQuoteBody,
@@ -164,10 +164,16 @@ export class RfqController {
     sendSuccess(res, comparison, "Comparison retrieved");
   });
 
-  award = asyncHandler(async (req, res) => {
-    const body = req.body as AwardRfqBody;
-    const rfq = await this.rfqService.award(req.params.id!, body.vendorId, req.user!.id, req.user!.businessId);
-    sendSuccess(res, rfq, "RFQ awarded");
+  selectQuote = asyncHandler(async (req, res) => {
+    const body = req.body as SelectQuoteBody;
+    const rfq = await this.rfqService.selectQuote(
+      req.params.id!,
+      req.params.itemId!,
+      body.quoteId,
+      req.user!.id,
+      req.user!.businessId,
+    );
+    sendSuccess(res, rfq, "Quote selected");
   });
 
   close = asyncHandler(async (req, res) => {
@@ -190,19 +196,19 @@ export class RfqController {
     sendSuccess(res, suggestions, "Vendor suggestions retrieved");
   });
 
-  quickSendPreview = asyncHandler(async (req, res) => {
-    const body = req.body as QuickSendPreviewBody;
-    const preview = await this.rfqService.previewQuickSend(body, req.user!.id, req.user!.businessId);
-    sendSuccess(res, preview, "RFQ preview generated");
+  previewInviteVendor = asyncHandler(async (req, res) => {
+    const body = req.body as InviteVendorPreviewBody;
+    const preview = await this.rfqService.previewInviteVendor(req.params.id!, body, req.user!.businessId);
+    sendSuccess(res, preview, "Invite preview generated");
   });
 
-  quickSend = asyncHandler(async (req, res) => {
-    const body = req.body as QuickSendBody;
-    const rfq = await this.rfqService.quickSend(body, req.user!.id, {
+  inviteVendor = asyncHandler(async (req, res) => {
+    const body = req.body as InviteVendorBody;
+    const rfq = await this.rfqService.inviteVendor(req.params.id!, body, req.user!.id, {
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"],
       businessId: req.user!.businessId,
     });
-    sendSuccess(res, rfq, "RFQ sent", 201);
+    sendSuccess(res, rfq, "Vendor invited", 201);
   });
 }

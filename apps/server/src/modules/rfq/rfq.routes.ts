@@ -8,13 +8,13 @@ import { createUploadMiddleware } from "../attachments/upload.middleware.js";
 import type { RfqController } from "./rfq.controller.js";
 import {
   addRfqVendorSchema,
-  awardRfqSchema,
   createRfqSchema,
   importQuotesSchema,
+  inviteVendorPreviewSchema,
+  inviteVendorSchema,
   listItemPricesQuerySchema,
   listRfqsQuerySchema,
-  quickSendPreviewSchema,
-  quickSendSchema,
+  selectQuoteSchema,
   suggestVendorsSchema,
   updateRfqSchema,
   upsertRfqQuoteSchema,
@@ -74,42 +74,6 @@ export function createRfqRouter(controller: RfqController): Router {
     requirePermission("rfq:read"),
     validate(suggestVendorsSchema),
     controller.suggestVendors,
-  );
-
-  /**
-   * @openapi
-   * /rfqs/quick-send/preview:
-   *   post:
-   *     tags: [RFQ]
-   *     summary: Generate (without sending) the plain-text RFQ body for a set of BOQ items and a vendor
-   *     security: [{ bearerAuth: [] }]
-   *     responses:
-   *       200: { description: Generated text + the vendor contact email it would be sent to }
-   */
-  router.post(
-    "/quick-send/preview",
-    authenticateMiddleware,
-    requirePermission("rfq:create"),
-    validate(quickSendPreviewSchema),
-    controller.quickSendPreview,
-  );
-
-  /**
-   * @openapi
-   * /rfqs/quick-send:
-   *   post:
-   *     tags: [RFQ]
-   *     summary: Create an RFQ from selected BOQ items and immediately email the given text to the vendor
-   *     security: [{ bearerAuth: [] }]
-   *     responses:
-   *       201: { description: RFQ created and email queued }
-   */
-  router.post(
-    "/quick-send",
-    authenticateMiddleware,
-    requirePermission("rfq:create"),
-    validate(quickSendSchema),
-    controller.quickSend,
   );
 
   /**
@@ -328,10 +292,37 @@ export function createRfqRouter(controller: RfqController): Router {
 
   /**
    * @openapi
-   * /rfqs/{id}/award:
+   * /rfqs/{id}/items/{itemId}/select-quote:
    *   post:
    *     tags: [RFQ]
-   *     summary: Award the RFQ to an invited vendor
+   *     summary: Select a vendor's quote as the awarded quote for one RFQ item
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: path
+   *         name: itemId
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Quote selected }
+   */
+  router.post(
+    "/:id/items/:itemId/select-quote",
+    authenticateMiddleware,
+    requirePermission("rfq:update"),
+    validate(selectQuoteSchema),
+    controller.selectQuote,
+  );
+
+  /**
+   * @openapi
+   * /rfqs/{id}/invite-vendor/preview:
+   *   post:
+   *     tags: [RFQ]
+   *     summary: Generate (without sending) the plain-text invite body for a vendor on this RFQ
    *     security: [{ bearerAuth: [] }]
    *     parameters:
    *       - in: path
@@ -339,14 +330,37 @@ export function createRfqRouter(controller: RfqController): Router {
    *         required: true
    *         schema: { type: string }
    *     responses:
-   *       200: { description: RFQ awarded }
+   *       200: { description: Generated text + the vendor contact email it would be sent to }
    */
   router.post(
-    "/:id/award",
+    "/:id/invite-vendor/preview",
     authenticateMiddleware,
-    requirePermission("rfq:update"),
-    validate(awardRfqSchema),
-    controller.award,
+    requirePermission("rfq:create"),
+    validate(inviteVendorPreviewSchema),
+    controller.previewInviteVendor,
+  );
+
+  /**
+   * @openapi
+   * /rfqs/{id}/invite-vendor:
+   *   post:
+   *     tags: [RFQ]
+   *     summary: Invite a vendor to this RFQ and immediately email the given text to them
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       201: { description: Vendor invited and email queued }
+   */
+  router.post(
+    "/:id/invite-vendor",
+    authenticateMiddleware,
+    requirePermission("rfq:create"),
+    validate(inviteVendorSchema),
+    controller.inviteVendor,
   );
 
   /**
