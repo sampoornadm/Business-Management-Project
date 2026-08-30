@@ -66,10 +66,10 @@ export const upsertRfqQuoteSchema = z
   });
 export type UpsertRfqQuoteBody = z.infer<typeof upsertRfqQuoteSchema>;
 
-export const awardRfqSchema = z.object({
-  vendorId: z.string().uuid(),
+export const selectQuoteSchema = z.object({
+  quoteId: z.string().uuid(),
 });
-export type AwardRfqBody = z.infer<typeof awardRfqSchema>;
+export type SelectQuoteBody = z.infer<typeof selectQuoteSchema>;
 
 export const importQuotesSchema = z.object({
   vendorId: z.string().uuid(),
@@ -81,14 +81,12 @@ export const suggestVendorsSchema = z.object({
 });
 export type SuggestVendorsBody = z.infer<typeof suggestVendorsSchema>;
 
-export const quickSendPreviewSchema = z.object({
-  tenderId: z.string().uuid().optional(),
-  boqItemIds: z.array(z.string().uuid()).min(1, "At least one item is required"),
+export const inviteVendorPreviewSchema = z.object({
   vendorId: z.string().uuid(),
 });
-export type QuickSendPreviewBody = z.infer<typeof quickSendPreviewSchema>;
+export type InviteVendorPreviewBody = z.infer<typeof inviteVendorPreviewSchema>;
 
-export const quickSendSchema = quickSendPreviewSchema.extend({
+export const inviteVendorSchema = inviteVendorPreviewSchema.extend({
   text: z.string().min(1, "Text is required"),
 });
-export type QuickSendBody = z.infer<typeof quickSendSchema>;
+export type InviteVendorBody = z.infer<typeof inviteVendorSchema>;
