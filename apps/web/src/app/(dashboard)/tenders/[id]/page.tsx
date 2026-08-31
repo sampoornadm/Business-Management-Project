@@ -259,9 +259,18 @@ export default function TenderDetailPage() {
                 <div>
                   <p className="text-muted-foreground">Dealing officer</p>
                   <p>
-                    {[tender.dealingOfficerName, tender.dealingOfficerEmail, tender.dealingOfficerPhone]
-                      .filter(Boolean)
-                      .join(" · ")}
+                    {[tender.dealingOfficerName, tender.dealingOfficerPhone].filter(Boolean).join(" · ")}
+                    {tender.dealingOfficerEmail && (
+                      <>
+                        {(tender.dealingOfficerName || tender.dealingOfficerPhone) && " · "}
+                        <a
+                          href={`mailto:${tender.dealingOfficerEmail}`}
+                          className="text-primary hover:underline"
+                        >
+                          {tender.dealingOfficerEmail}
+                        </a>
+                      </>
+                    )}
                   </p>
                 </div>
               )}
