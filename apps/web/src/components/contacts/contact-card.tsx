@@ -21,11 +21,46 @@ export function ContactCard({ contact, canUpdate, editTrigger, onDelete }: Conta
   return (
     <Card className="w-full">
       <CardContent className="space-y-3 p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <p className="text-lg font-medium">{contact.name}</p>
-            {contact.isPrimary && <Badge variant="secondary">Primary</Badge>}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <div className="flex items-center gap-2">
+              <p className="text-lg font-medium">{contact.name}</p>
+              {contact.isPrimary && <Badge variant="secondary">Primary</Badge>}
+            </div>
+
+            {(contact.designation ?? contact.department) && (
+              <p className="text-sm text-muted-foreground">
+                {[contact.designation, contact.department].filter(Boolean).join(" · ")}
+              </p>
+            )}
+
+            {primaryPhone && (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <Phone className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">{primaryPhone.phone}</span>
+                {otherPhones.map((phone) => (
+                  <span key={phone.id} className="text-muted-foreground">
+                    · {phone.phone}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {primaryEmail && (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                <a href={`mailto:${primaryEmail.email}`} className="font-medium text-primary hover:underline">
+                  {primaryEmail.email}
+                </a>
+                {otherEmails.map((email) => (
+                  <a key={email.id} href={`mailto:${email.email}`} className="text-muted-foreground hover:underline">
+                    · {email.email}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
+
           {canUpdate && (
             <div className="flex shrink-0 gap-2">
               {editTrigger}
@@ -36,40 +71,8 @@ export function ContactCard({ contact, canUpdate, editTrigger, onDelete }: Conta
           )}
         </div>
 
-        {(contact.designation ?? contact.department) && (
-          <p className="text-sm text-muted-foreground">
-            {[contact.designation, contact.department].filter(Boolean).join(" · ")}
-          </p>
-        )}
-
-        {primaryPhone && (
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Phone className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">{primaryPhone.phone}</span>
-            {otherPhones.map((phone) => (
-              <span key={phone.id} className="text-muted-foreground">
-                · {phone.phone}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {primaryEmail && (
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Mail className="h-4 w-4 text-muted-foreground" />
-            <a href={`mailto:${primaryEmail.email}`} className="font-medium text-primary hover:underline">
-              {primaryEmail.email}
-            </a>
-            {otherEmails.map((email) => (
-              <a key={email.id} href={`mailto:${email.email}`} className="text-muted-foreground hover:underline">
-                · {email.email}
-              </a>
-            ))}
-          </div>
-        )}
-
         {contact.notes && (
-          <div className="border-t pt-3">
+          <div className="max-w-3xl border-t pt-3">
             <p className="text-xs font-medium uppercase text-muted-foreground">Notes</p>
             <p className="whitespace-pre-wrap text-sm">{contact.notes}</p>
           </div>

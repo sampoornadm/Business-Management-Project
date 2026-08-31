@@ -200,7 +200,7 @@ export default function OrganizationDetailPage() {
               {filteredContacts.length === 0 && (
                 <p className="text-sm text-muted-foreground">No contacts match your search.</p>
               )}
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="space-y-3">
                 {filteredContacts.map((contact) => (
                   <ContactCard
                     key={contact.id}
