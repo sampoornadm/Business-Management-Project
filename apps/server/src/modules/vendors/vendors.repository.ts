@@ -6,16 +6,15 @@ import type { PaginationParams } from "../../core/interfaces/pagination.js";
 import { listAllBusinessIds } from "../../infra/prisma/business-ids.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
 
-const vendorWithContacts = {
+const vendorArgs = {
   include: {
-    contacts: { orderBy: { isPrimary: "desc" } },
     itemTags: { orderBy: { createdAt: "desc" } },
     ratings: { select: { rating: true } },
     _count: { select: { ratings: true } },
   },
 } satisfies Prisma.VendorDefaultArgs;
 
-export type VendorWithContacts = Prisma.VendorGetPayload<typeof vendorWithContacts>;
+export type VendorEntity = Prisma.VendorGetPayload<typeof vendorArgs>;
 
 const vendorRatingWithRater = {
   include: { ratedBy: { select: { id: true, firstName: true, lastName: true } } },
@@ -46,17 +45,6 @@ export interface VendorFilters {
   isActive?: boolean;
 }
 
-export interface CreateContactData {
-  vendorId: string;
-  name: string;
-  designation?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  isPrimary?: boolean;
-}
-
-export type UpdateContactData = Partial<Omit<CreateContactData, "vendorId">>;
-
 export interface CreateItemTagData {
   vendorId: string;
   itemType: string;
@@ -71,19 +59,16 @@ export interface VendorItemTypeMatch {
 }
 
 export interface IVendorsRepository {
-  findById(id: string): Promise<VendorWithContacts | null>;
+  findById(id: string): Promise<VendorEntity | null>;
   findByNameExact(name: string): Promise<{ id: string; name: string } | null>;
   findMany(
     pagination: PaginationParams,
     filters: VendorFilters,
-  ): Promise<{ items: VendorWithContacts[]; totalItems: number }>;
-  create(data: CreateVendorData): Promise<VendorWithContacts>;
-  update(id: string, data: UpdateVendorData): Promise<VendorWithContacts>;
+  ): Promise<{ items: VendorEntity[]; totalItems: number }>;
+  create(data: CreateVendorData): Promise<VendorEntity>;
+  update(id: string, data: UpdateVendorData): Promise<VendorEntity>;
   delete(id: string): Promise<void>;
   countPurchaseOrders(vendorId: string): Promise<number>;
-  createContact(data: CreateContactData): Promise<void>;
-  updateContact(id: string, data: UpdateContactData): Promise<void>;
-  deleteContact(id: string): Promise<void>;
   findRatings(vendorId: string): Promise<VendorRatingWithRater[]>;
   createItemTag(data: CreateItemTagData): Promise<void>;
   deleteItemTag(id: string): Promise<void>;
@@ -94,8 +79,8 @@ export interface IVendorsRepository {
 export class VendorsRepository implements IVendorsRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  findById(id: string): Promise<VendorWithContacts | null> {
-    return this.prisma.vendor.findUnique({ where: { id }, ...vendorWithContacts });
+  findById(id: string): Promise<VendorEntity | null> {
+    return this.prisma.vendor.findUnique({ where: { id }, ...vendorArgs });
   }
 
   findByNameExact(name: string): Promise<{ id: string; name: string } | null> {
@@ -108,7 +93,7 @@ export class VendorsRepository implements IVendorsRepository {
   async findMany(
     pagination: PaginationParams,
     filters: VendorFilters,
-  ): Promise<{ items: VendorWithContacts[]; totalItems: number }> {
+  ): Promise<{ items: VendorEntity[]; totalItems: number }> {
     const where: Prisma.VendorWhereInput = {
       category: filters.category,
       isActive: filters.isActive,
@@ -118,7 +103,7 @@ export class VendorsRepository implements IVendorsRepository {
     const [items, totalItems] = await Promise.all([
       this.prisma.vendor.findMany({
         where,
-        ...vendorWithContacts,
+        ...vendorArgs,
         orderBy: { name: "asc" },
         ...toSkipTake(pagination),
       }),
@@ -128,12 +113,12 @@ export class VendorsRepository implements IVendorsRepository {
     return { items, totalItems };
   }
 
-  create(data: CreateVendorData): Promise<VendorWithContacts> {
-    return this.prisma.vendor.create({ data: { id: randomUUID(), ...data }, ...vendorWithContacts });
+  create(data: CreateVendorData): Promise<VendorEntity> {
+    return this.prisma.vendor.create({ data: { id: randomUUID(), ...data }, ...vendorArgs });
   }
 
-  update(id: string, data: UpdateVendorData): Promise<VendorWithContacts> {
-    return this.prisma.vendor.update({ where: { id }, data, ...vendorWithContacts });
+  update(id: string, data: UpdateVendorData): Promise<VendorEntity> {
+    return this.prisma.vendor.update({ where: { id }, data, ...vendorArgs });
   }
 
   async delete(id: string): Promise<void> {
@@ -155,18 +140,6 @@ export class VendorsRepository implements IVendorsRepository {
       ),
     );
     return counts.reduce((sum, count) => sum + count, 0);
-  }
-
-  async createContact(data: CreateContactData): Promise<void> {
-    await this.prisma.vendorContact.create({ data: { id: randomUUID(), ...data } });
-  }
-
-  async updateContact(id: string, data: UpdateContactData): Promise<void> {
-    await this.prisma.vendorContact.update({ where: { id }, data });
-  }
-
-  async deleteContact(id: string): Promise<void> {
-    await this.prisma.vendorContact.delete({ where: { id } });
   }
 
   findRatings(vendorId: string): Promise<VendorRatingWithRater[]> {

@@ -32,20 +32,15 @@ export const listVendorsQuerySchema = z.object({
 });
 export type ListVendorsQuery = z.infer<typeof listVendorsQuerySchema>;
 
-export const createContactSchema = z.object({
-  name: z.string().min(1).max(150),
-  designation: z.string().max(150).optional(),
-  email: z.string().email().optional(),
-  phone: z.string().max(30).optional(),
-  isPrimary: z.boolean().optional(),
-});
-export type CreateContactBody = z.infer<typeof createContactSchema>;
-
-export const updateContactSchema = createContactSchema.partial();
-export type UpdateContactBody = z.infer<typeof updateContactSchema>;
-
 export const createVendorItemTagSchema = z.object({
   itemType: z.string().min(1).max(100),
   make: z.string().max(100).optional(),
 });
 export type CreateVendorItemTagBody = z.infer<typeof createVendorItemTagSchema>;
+
+export {
+  createContactSchema,
+  updateContactSchema,
+  type CreateContactBody,
+  type UpdateContactBody,
+} from "../contacts/contacts.validation.js";

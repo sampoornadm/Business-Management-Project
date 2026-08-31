@@ -60,7 +60,12 @@ export class VendorsController {
 
   addContact = asyncHandler(async (req, res) => {
     const body = req.body as CreateContactBody;
-    const vendor = await this.vendorsService.addContact(req.params.id!, body, req.user!.id);
+    const vendor = await this.vendorsService.addContact(
+      req.params.id!,
+      body,
+      req.user!.id,
+      req.user!.businessId,
+    );
     sendSuccess(res, vendor, "Contact added", 201);
   });
 
@@ -71,6 +76,7 @@ export class VendorsController {
       req.params.contactId!,
       body,
       req.user!.id,
+      req.user!.businessId,
     );
     sendSuccess(res, vendor, "Contact updated");
   });

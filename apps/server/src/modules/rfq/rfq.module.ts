@@ -3,6 +3,7 @@ import { prisma } from "../../infra/prisma/client.js";
 import { auditService } from "../audit/audit.module.js";
 import { boqRepository } from "../boq/boq.module.js";
 import { businessesRepository } from "../businesses/businesses.module.js";
+import { contactsService } from "../contacts/contacts.module.js";
 import { ratesRepository } from "../rates/rates.module.js";
 import { TendersRepository } from "../tenders/tenders.repository.js";
 import { usersRepository } from "../users/users.module.js";
@@ -27,6 +28,7 @@ export const rfqService = new RfqService(
   emailService,
   auditService,
   ratesRepository,
+  contactsService,
 );
 const rfqController = new RfqController(rfqService);
 

@@ -1,6 +1,8 @@
 import type {
+  CreateContactInput,
   ImportVendorItemTagsResult,
   PaginatedResult,
+  UpdateContactInput,
   VendorDto,
   VendorListItemDto,
   VendorPerformanceDto,
@@ -9,14 +11,13 @@ import type {
 import { ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
 import type { AuditService } from "../audit/audit.service.js";
+import type { ContactsService } from "../contacts/contacts.service.js";
 
 import { parseVendorItemTagsFile } from "./vendor-item-tags.parser.js";
 import { toVendorDto, toVendorListItemDto, toVendorPerformanceDto } from "./vendors.mapper.js";
 import type {
-  CreateContactData,
   CreateVendorData,
   IVendorsRepository,
-  UpdateContactData,
   UpdateVendorData,
   VendorFilters,
 } from "./vendors.repository.js";
@@ -30,6 +31,7 @@ export class VendorsService {
   constructor(
     private readonly vendorsRepository: IVendorsRepository,
     private readonly auditService: AuditService,
+    private readonly contactsService: ContactsService,
   ) {}
 
   async listVendors(
@@ -43,7 +45,8 @@ export class VendorsService {
   async getById(id: string): Promise<VendorDto> {
     const vendor = await this.vendorsRepository.findById(id);
     if (!vendor) throw new NotFoundError("Vendor not found");
-    return toVendorDto(vendor);
+    const contacts = await this.contactsService.listContacts("VENDOR", id);
+    return toVendorDto(vendor, contacts);
   }
 
   async create(data: CreateVendorData, context: RequestContext = {}): Promise<VendorDto> {
@@ -56,7 +59,7 @@ export class VendorsService {
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
     });
-    return toVendorDto(vendor);
+    return toVendorDto(vendor, []);
   }
 
   async update(
@@ -77,7 +80,8 @@ export class VendorsService {
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
     });
-    return toVendorDto(vendor);
+    const contacts = await this.contactsService.listContacts("VENDOR", id);
+    return toVendorDto(vendor, contacts);
   }
 
   async delete(id: string, actorId: string, context: RequestContext = {}): Promise<void> {
@@ -103,20 +107,20 @@ export class VendorsService {
   private async assertContactBelongsToVendor(vendorId: string, contactId: string): Promise<void> {
     const vendor = await this.vendorsRepository.findById(vendorId);
     if (!vendor) throw new NotFoundError("Vendor not found");
-    if (!vendor.contacts.some((c) => c.id === contactId)) {
-      throw new NotFoundError("Contact not found for this vendor");
-    }
+    const belongs = await this.contactsService.belongsToEntity(contactId, "VENDOR", vendorId);
+    if (!belongs) throw new NotFoundError("Contact not found for this vendor");
   }
 
   async addContact(
     vendorId: string,
-    data: Omit<CreateContactData, "vendorId">,
+    data: CreateContactInput,
     actorId: string,
+    businessId: string,
   ): Promise<VendorDto> {
     const vendor = await this.vendorsRepository.findById(vendorId);
     if (!vendor) throw new NotFoundError("Vendor not found");
 
-    await this.vendorsRepository.createContact({ vendorId, ...data });
+    await this.contactsService.createContact("VENDOR", vendorId, data, businessId);
     await this.auditService.log({
       actorId,
       action: "VENDOR_CONTACT_ADDED",
@@ -129,11 +133,12 @@ export class VendorsService {
   async updateContact(
     vendorId: string,
     contactId: string,
-    data: UpdateContactData,
+    data: UpdateContactInput,
     actorId: string,
+    businessId: string,
   ): Promise<VendorDto> {
     await this.assertContactBelongsToVendor(vendorId, contactId);
-    await this.vendorsRepository.updateContact(contactId, data);
+    await this.contactsService.updateContact(contactId, data, businessId);
     await this.auditService.log({
       actorId,
       action: "VENDOR_CONTACT_UPDATED",
@@ -145,7 +150,7 @@ export class VendorsService {
 
   async deleteContact(vendorId: string, contactId: string, actorId: string): Promise<VendorDto> {
     await this.assertContactBelongsToVendor(vendorId, contactId);
-    await this.vendorsRepository.deleteContact(contactId);
+    await this.contactsService.deleteContact(contactId);
     await this.auditService.log({
       actorId,
       action: "VENDOR_CONTACT_DELETED",

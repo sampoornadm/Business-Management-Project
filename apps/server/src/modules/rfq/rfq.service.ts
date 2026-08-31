@@ -1,4 +1,5 @@
 import type {
+  ContactDto,
   InviteVendorPreviewDto,
   ItemPriceHistoryDto,
   PaginatedResult,
@@ -21,10 +22,11 @@ import { round2 } from "../../shared/utils/math.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { IBoqRepository } from "../boq/boq.repository.js";
 import type { IBusinessesRepository } from "../businesses/businesses.repository.js";
+import type { ContactsService } from "../contacts/contacts.service.js";
 import type { IHistoricalRatesRepository } from "../rates/rates.repository.js";
 import type { ITendersRepository } from "../tenders/tenders.repository.js";
 import type { IUsersRepository } from "../users/users.repository.js";
-import type { IVendorsRepository, VendorWithContacts } from "../vendors/vendors.repository.js";
+import type { IVendorsRepository } from "../vendors/vendors.repository.js";
 
 import { buildQuoteSheet, parseQuoteSheet } from "./quote-sheet.js";
 import { buildRfrDocx, buildRfrPdf, toRfrDocumentData } from "./rfq-document.js";
@@ -51,6 +53,7 @@ export class RfqService {
     private readonly emailService: EmailService,
     private readonly auditService: AuditService,
     private readonly ratesRepository: IHistoricalRatesRepository,
+    private readonly contactsService: ContactsService,
   ) {}
 
   private async getDetailOrThrow(id: string, businessId: string): Promise<RfqDetail> {
@@ -524,15 +527,18 @@ export class RfqService {
     const rfq = await this.getDetailOrThrow(rfqId, businessId);
     const vendor = await this.vendorsRepository.findById(vendorId);
     if (!vendor) throw new BadRequestError("Vendor not found");
-    const contact = this.pickPrimaryContact(vendor);
-    if (!contact?.email) {
+    const contacts = await this.contactsService.listContacts("VENDOR", vendorId);
+    const contactEmail = this.pickPrimaryContactEmail(contacts);
+    if (!contactEmail) {
       throw new BadRequestError("This vendor has no contact email on file — add one first");
     }
-    return { rfq, vendor, contact };
+    return { rfq, vendor, contactEmail };
   }
 
-  private pickPrimaryContact(vendor: VendorWithContacts): VendorWithContacts["contacts"][number] | undefined {
-    return vendor.contacts.find((c) => c.isPrimary) ?? vendor.contacts[0];
+  private pickPrimaryContactEmail(contacts: ContactDto[]): string | undefined {
+    const primaryContact = contacts.find((c) => c.isPrimary) ?? contacts[0];
+    const primaryEmail = primaryContact?.emails.find((e) => e.isPrimary) ?? primaryContact?.emails[0];
+    return primaryEmail?.email;
   }
 
   // Preview only — nothing is persisted. The returned text is what the user
@@ -542,11 +548,11 @@ export class RfqService {
     input: { vendorId: string },
     businessId: string,
   ): Promise<InviteVendorPreviewDto> {
-    const { rfq, contact } = await this.loadInviteVendorContext(rfqId, input.vendorId, businessId);
+    const { rfq, contactEmail } = await this.loadInviteVendorContext(rfqId, input.vendorId, businessId);
     const text = `You are invited to quote for RFQ "${rfq.title}"${
       rfq.tenderId ? " (tender-linked)" : ""
     }. Please review the attached item list and respond with your best rates.`;
-    return { text, vendorContactEmail: contact.email! };
+    return { text, vendorContactEmail: contactEmail };
   }
 
   // Invites a vendor to an EXISTING RFQ (unlike the old quickSend, which
@@ -558,7 +564,7 @@ export class RfqService {
     actorId: string,
     context: ScopedRequestContext,
   ): Promise<RfqDto> {
-    const { rfq, contact } = await this.loadInviteVendorContext(rfqId, input.vendorId, context.businessId);
+    const { rfq, contactEmail } = await this.loadInviteVendorContext(rfqId, input.vendorId, context.businessId);
 
     const alreadyInvited = await this.rfqRepository.findVendorInvite(rfqId, input.vendorId);
     if (!alreadyInvited) {
@@ -566,7 +572,7 @@ export class RfqService {
       await this.rfqRepository.updateStatus(rfqId, "SENT");
     }
 
-    await this.emailService.queueRfqEmail({ to: contact.email!, rfqTitle: rfq.title, bodyText: input.text });
+    await this.emailService.queueRfqEmail({ to: contactEmail, rfqTitle: rfq.title, bodyText: input.text });
     await this.auditService.log({
       actorId,
       action: "RFQ_VENDOR_INVITED",
