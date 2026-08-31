@@ -131,9 +131,10 @@ model Business {
   notes                   String?
   isActive                Boolean @default(true)
 
-  contacts       BusinessContact[]
-  userBusinesses UserBusiness[]
-  refreshTokens  RefreshToken[]
+  contacts             BusinessContact[]
+  contactLookupOptions ContactLookupOption[]
+  userBusinesses       UserBusiness[]
+  refreshTokens        RefreshToken[]
 
   tenders         Tender[]
   projects        Project[]
@@ -331,6 +332,76 @@ model Attachment {
 }
 
 // ---------------------------------------------------------------------------
+// Contacts (unified, polymorphic across Organization/Vendor)
+// ---------------------------------------------------------------------------
+
+enum ContactEntityType {
+  ORGANIZATION
+  VENDOR
+}
+
+enum ContactLookupKind {
+  DEPARTMENT
+  DESIGNATION
+}
+
+model Contact {
+  id          String            @id @default(uuid())
+  entityType  ContactEntityType
+  entityId    String
+  name        String
+  department  String?
+  designation String?
+  notes       String?
+  isPrimary   Boolean           @default(false)
+
+  phones ContactPhone[]
+  emails ContactEmail[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityType, entityId])
+  @@map("contacts")
+}
+
+model ContactPhone {
+  id        String  @id @default(uuid())
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  phone     String
+  isPrimary Boolean @default(false)
+
+  @@index([contactId])
+  @@map("contact_phones")
+}
+
+model ContactEmail {
+  id        String  @id @default(uuid())
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  email     String
+  isPrimary Boolean @default(false)
+
+  @@index([contactId])
+  @@map("contact_emails")
+}
+
+model ContactLookupOption {
+  id         String            @id @default(uuid())
+  businessId String
+  business   Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  kind       ContactLookupKind
+  value      String
+
+  createdAt DateTime @default(now())
+
+  @@unique([businessId, kind, value])
+  @@index([businessId, kind])
+  @@map("contact_lookup_options")
+}
+
+// ---------------------------------------------------------------------------
 // Organizations (tender clients)
 // ---------------------------------------------------------------------------
 
@@ -354,31 +425,13 @@ model Organization {
   createdById String
   createdBy   User   @relation("OrganizationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  contacts OrganizationContact[]
-  tenders  Tender[]
+  tenders Tender[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([name])
   @@map("organizations")
-}
-
-model OrganizationContact {
-  id             String       @id @default(uuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name           String
-  designation    String?
-  email          String?
-  phone          String?
-  isPrimary      Boolean      @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([organizationId])
-  @@map("organization_contacts")
 }
 
 // ---------------------------------------------------------------------------
@@ -736,7 +789,6 @@ model Vendor {
   createdById String
   createdBy   User   @relation("VendorCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  contacts        VendorContact[]
   itemTags        VendorItemTag[]
   rfqInvites      RfqVendor[]
   quotes          RfqQuote[]
@@ -768,23 +820,6 @@ model VendorItemTag {
   @@index([vendorId])
   @@index([itemType])
   @@map("vendor_item_tags")
-}
-
-model VendorContact {
-  id          String  @id @default(uuid())
-  vendorId    String
-  vendor      Vendor  @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  name        String
-  designation String?
-  email       String?
-  phone       String?
-  isPrimary   Boolean @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([vendorId])
-  @@map("vendor_contacts")
 }
 
 enum RfqStatus {
