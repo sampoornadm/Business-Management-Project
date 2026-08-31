@@ -23,7 +23,7 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
-import { ContactDialog } from "@/components/organizations/contact-dialog";
+import { ContactDialog } from "@/components/businesses/contact-dialog";
 import {
   useAddBusinessContact,
   useBusiness,
