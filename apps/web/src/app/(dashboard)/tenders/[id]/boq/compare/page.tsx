@@ -46,7 +46,7 @@ export default function BoqComparePage() {
   const candidateTenders = (otherTendersQuery.data?.items ?? []).filter((t) => t.id !== params.id);
 
   return (
-    <div className="max-w-6xl space-y-6">
+    <div className="space-y-6">
       <div>
         <Link
           href={`/tenders/${params.id}`}

@@ -79,7 +79,7 @@ export default function BusinessDetailPage() {
   const business = businessQuery.data;
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -129,7 +129,7 @@ export default function BusinessDetailPage() {
         <CardHeader>
           <CardTitle className="text-base">Details</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 text-sm">
+        <CardContent className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3 lg:grid-cols-4">
           <div>
             <p className="text-muted-foreground">GST Number</p>
             <p>{business.gstNumber || "-"}</p>
@@ -170,7 +170,7 @@ export default function BusinessDetailPage() {
           <CardHeader>
             <CardTitle className="text-base">Notes</CardTitle>
           </CardHeader>
-          <CardContent className="whitespace-pre-wrap text-sm">{business.notes}</CardContent>
+          <CardContent className="max-w-3xl whitespace-pre-wrap text-sm">{business.notes}</CardContent>
         </Card>
       )}
 
@@ -195,48 +195,50 @@ export default function BusinessDetailPage() {
           {business.contacts.length === 0 ? (
             <p className="text-sm text-muted-foreground">No contacts added yet.</p>
           ) : (
-            business.contacts.map((contact) => (
-              <div
-                key={contact.id}
-                className="flex items-center justify-between gap-4 rounded-md border p-3"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium">{contact.name}</p>
-                    {contact.isPrimary && <Badge variant="secondary">Primary</Badge>}
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {business.contacts.map((contact) => (
+                <div
+                  key={contact.id}
+                  className="flex items-center justify-between gap-4 rounded-md border p-3"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{contact.name}</p>
+                      {contact.isPrimary && <Badge variant="secondary">Primary</Badge>}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {[contact.designation, contact.email, contact.phone].filter(Boolean).join(" · ")}
+                    </p>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {[contact.designation, contact.email, contact.phone].filter(Boolean).join(" · ")}
-                  </p>
+                  {canUpdate && (
+                    <div className="flex gap-2">
+                      <ContactDialog
+                        contact={contact}
+                        trigger={
+                          <Button size="sm" variant="ghost">
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        }
+                        onSubmit={async (values) => {
+                          await updateContact.mutateAsync({ contactId: contact.id, input: values });
+                          toast({ title: "Contact updated" });
+                        }}
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={async () => {
+                          await deleteContact.mutateAsync(contact.id);
+                          toast({ title: "Contact removed" });
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
-                {canUpdate && (
-                  <div className="flex gap-2">
-                    <ContactDialog
-                      contact={contact}
-                      trigger={
-                        <Button size="sm" variant="ghost">
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      }
-                      onSubmit={async (values) => {
-                        await updateContact.mutateAsync({ contactId: contact.id, input: values });
-                        toast({ title: "Contact updated" });
-                      }}
-                    />
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={async () => {
-                        await deleteContact.mutateAsync(contact.id);
-                        toast({ title: "Contact removed" });
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

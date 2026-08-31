@@ -31,13 +31,13 @@ export default function EditOrganizationPage() {
   }
 
   if (organizationQuery.isLoading || !organizationQuery.data) {
-    return <Skeleton className="h-96 w-full max-w-2xl" />;
+    return <Skeleton className="h-96 w-full max-w-3xl" />;
   }
 
   const organization = organizationQuery.data;
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-3xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Edit Organization</h1>
       </div>

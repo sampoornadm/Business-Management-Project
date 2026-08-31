@@ -28,13 +28,13 @@ export default function EditVendorPage() {
   }
 
   if (vendorQuery.isLoading || !vendorQuery.data) {
-    return <Skeleton className="h-96 w-full max-w-2xl" />;
+    return <Skeleton className="h-96 w-full max-w-3xl" />;
   }
 
   const vendor = vendorQuery.data;
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-3xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Edit Vendor</h1>
       </div>

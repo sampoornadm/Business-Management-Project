@@ -23,14 +23,14 @@ export default function InvoiceDetailPage() {
   const recordPayment = useRecordInvoicePayment(params.id);
 
   if (invoiceQuery.isLoading || !invoiceQuery.data) {
-    return <Skeleton className="h-64 w-full max-w-3xl" />;
+    return <Skeleton className="h-64 w-full" />;
   }
 
   const invoice = invoiceQuery.data;
   const remaining = invoice.totalAmount - invoice.amountPaid;
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -55,7 +55,7 @@ export default function InvoiceDetailPage() {
         <CardHeader>
           <CardTitle className="text-base">Amounts</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 text-sm">
+        <CardContent className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
           <div>
             <p className="text-muted-foreground">Subtotal</p>
             <p>{invoice.subtotal.toLocaleString()}</p>
@@ -83,20 +83,22 @@ export default function InvoiceDetailPage() {
           {invoice.payments.length === 0 ? (
             <p className="text-sm text-muted-foreground">No payments recorded yet.</p>
           ) : (
-            invoice.payments.map((payment) => (
-              <div key={payment.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
-                <div>
-                  <p className="font-medium">{payment.amount.toLocaleString()}</p>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {invoice.payments.map((payment) => (
+                <div key={payment.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
+                  <div>
+                    <p className="font-medium">{payment.amount.toLocaleString()}</p>
+                    <p className="text-muted-foreground">
+                      {payment.method} · {formatDate(payment.paymentDate)}
+                      {payment.referenceNumber ? ` · ${payment.referenceNumber}` : ""}
+                    </p>
+                  </div>
                   <p className="text-muted-foreground">
-                    {payment.method} · {formatDate(payment.paymentDate)}
-                    {payment.referenceNumber ? ` · ${payment.referenceNumber}` : ""}
+                    {payment.recordedBy.firstName} {payment.recordedBy.lastName}
                   </p>
                 </div>
-                <p className="text-muted-foreground">
-                  {payment.recordedBy.firstName} {payment.recordedBy.lastName}
-                </p>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

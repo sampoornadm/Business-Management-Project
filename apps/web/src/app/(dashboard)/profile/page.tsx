@@ -105,7 +105,7 @@ export default function ProfilePage() {
   if (!user) return null;
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-3xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Your profile</h1>
         <p className="text-sm text-muted-foreground">Manage your personal information and security.</p>

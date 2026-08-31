@@ -90,7 +90,7 @@ export default function ItemDetailPage() {
   const item = itemQuery.data;
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="space-y-6">
       <div>
         <Link href="/items" className="text-sm text-muted-foreground hover:underline">
           ← Back to items

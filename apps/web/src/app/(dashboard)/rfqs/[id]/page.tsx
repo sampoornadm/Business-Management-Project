@@ -198,7 +198,7 @@ export default function RfqDetailPage() {
   const isFinalized = rfq.status === "CLOSED" || rfq.status === "CANCELLED";
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">

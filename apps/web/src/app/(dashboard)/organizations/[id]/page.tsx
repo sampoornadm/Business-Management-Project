@@ -89,7 +89,7 @@ export default function OrganizationDetailPage() {
   const organization = organizationQuery.data;
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -139,7 +139,7 @@ export default function OrganizationDetailPage() {
         <CardHeader>
           <CardTitle className="text-base">Details</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 text-sm">
+        <CardContent className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3 lg:grid-cols-4">
           <div>
             <p className="text-muted-foreground">GST Number</p>
             <p>{organization.gstNumber || "-"}</p>
@@ -168,7 +168,7 @@ export default function OrganizationDetailPage() {
           <CardHeader>
             <CardTitle className="text-base">Notes</CardTitle>
           </CardHeader>
-          <CardContent className="whitespace-pre-wrap text-sm">{organization.notes}</CardContent>
+          <CardContent className="max-w-3xl whitespace-pre-wrap text-sm">{organization.notes}</CardContent>
         </Card>
       )}
 
@@ -200,33 +200,35 @@ export default function OrganizationDetailPage() {
               {filteredContacts.length === 0 && (
                 <p className="text-sm text-muted-foreground">No contacts match your search.</p>
               )}
-              {filteredContacts.map((contact) => (
-                <ContactCard
-                  key={contact.id}
-                  contact={contact}
-                  canUpdate={canUpdate}
-                  editTrigger={
-                    <ContactDialog
-                      contact={contact}
-                      departmentOptions={departmentOptions.data?.values ?? []}
-                      designationOptions={designationOptions.data?.values ?? []}
-                      trigger={
-                        <Button size="sm" variant="ghost">
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      }
-                      onSubmit={async (values) => {
-                        await updateContact.mutateAsync({ contactId: contact.id, input: values });
-                        toast({ title: "Contact updated" });
-                      }}
-                    />
-                  }
-                  onDelete={async () => {
-                    await deleteContact.mutateAsync(contact.id);
-                    toast({ title: "Contact removed" });
-                  }}
-                />
-              ))}
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {filteredContacts.map((contact) => (
+                  <ContactCard
+                    key={contact.id}
+                    contact={contact}
+                    canUpdate={canUpdate}
+                    editTrigger={
+                      <ContactDialog
+                        contact={contact}
+                        departmentOptions={departmentOptions.data?.values ?? []}
+                        designationOptions={designationOptions.data?.values ?? []}
+                        trigger={
+                          <Button size="sm" variant="ghost">
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        }
+                        onSubmit={async (values) => {
+                          await updateContact.mutateAsync({ contactId: contact.id, input: values });
+                          toast({ title: "Contact updated" });
+                        }}
+                      />
+                    }
+                    onDelete={async () => {
+                      await deleteContact.mutateAsync(contact.id);
+                      toast({ title: "Contact removed" });
+                    }}
+                  />
+                ))}
+              </div>
             </>
           )}
         </CardContent>
