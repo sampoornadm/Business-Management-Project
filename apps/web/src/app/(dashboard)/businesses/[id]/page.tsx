@@ -197,43 +197,53 @@ export default function BusinessDetailPage() {
           ) : (
             <div className="space-y-3">
               {business.contacts.map((contact) => (
-                <div
-                  key={contact.id}
-                  className="flex flex-wrap items-center justify-between gap-4 rounded-md border p-3"
-                >
-                  <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium">{contact.name}</p>
-                      {contact.isPrimary && <Badge variant="secondary">Primary</Badge>}
+                <div key={contact.id} className="space-y-3 rounded-md border p-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{contact.name}</p>
+                        {contact.isPrimary && <Badge variant="secondary">Primary</Badge>}
+                      </div>
+                      {contact.designation && (
+                        <p className="text-sm text-muted-foreground">{contact.designation}</p>
+                      )}
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {[contact.designation, contact.email, contact.phone].filter(Boolean).join(" · ")}
-                    </p>
+                    {canUpdate && (
+                      <div className="flex shrink-0 gap-2">
+                        <ContactDialog
+                          contact={contact}
+                          trigger={
+                            <Button size="sm" variant="ghost">
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          }
+                          onSubmit={async (values) => {
+                            await updateContact.mutateAsync({ contactId: contact.id, input: values });
+                            toast({ title: "Contact updated" });
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={async () => {
+                            await deleteContact.mutateAsync(contact.id);
+                            toast({ title: "Contact removed" });
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                  {canUpdate && (
-                    <div className="flex gap-2">
-                      <ContactDialog
-                        contact={contact}
-                        trigger={
-                          <Button size="sm" variant="ghost">
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        }
-                        onSubmit={async (values) => {
-                          await updateContact.mutateAsync({ contactId: contact.id, input: values });
-                          toast({ title: "Contact updated" });
-                        }}
-                      />
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={async () => {
-                          await deleteContact.mutateAsync(contact.id);
-                          toast({ title: "Contact removed" });
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+
+                  {(contact.phone || contact.email) && (
+                    <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                      {contact.phone && <p>{contact.phone}</p>}
+                      {contact.email && (
+                        <a href={`mailto:${contact.email}`} className="text-primary hover:underline">
+                          {contact.email}
+                        </a>
+                      )}
                     </div>
                   )}
                 </div>
