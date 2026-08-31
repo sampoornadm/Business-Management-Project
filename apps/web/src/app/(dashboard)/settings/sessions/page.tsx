@@ -35,7 +35,7 @@ export default function SessionsPage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="max-w-3xl space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Active Sessions</h1>

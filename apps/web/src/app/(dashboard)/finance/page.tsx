@@ -29,7 +29,7 @@ export default function FinancePage() {
   const bankAccountsQuery = useBankAccounts();
 
   return (
-    <div className="max-w-6xl space-y-6">
+    <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Finance</h1>
         <p className="text-sm text-muted-foreground">
@@ -89,23 +89,25 @@ export default function FinancePage() {
               {(invoicesQuery.data?.items ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground">No invoices yet.</p>
               ) : (
-                (invoicesQuery.data?.items ?? []).map((invoice) => (
-                  <Link
-                    key={invoice.id}
-                    href={`/finance/invoices/${invoice.id}`}
-                    className="flex items-center justify-between rounded-md border p-3 text-sm hover:bg-muted/50"
-                  >
-                    <div>
-                      <p className="font-medium">
-                        {invoice.invoiceNumber} — {invoice.clientName}
-                      </p>
-                      <p className="text-muted-foreground">
-                        {invoice.amountPaid.toLocaleString()} / {invoice.totalAmount.toLocaleString()} paid
-                      </p>
-                    </div>
-                    <Badge variant={INVOICE_STATUS_VARIANT[invoice.status]}>{invoice.status}</Badge>
-                  </Link>
-                ))
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {(invoicesQuery.data?.items ?? []).map((invoice) => (
+                    <Link
+                      key={invoice.id}
+                      href={`/finance/invoices/${invoice.id}`}
+                      className="flex items-center justify-between rounded-md border p-3 text-sm hover:bg-muted/50"
+                    >
+                      <div>
+                        <p className="font-medium">
+                          {invoice.invoiceNumber} — {invoice.clientName}
+                        </p>
+                        <p className="text-muted-foreground">
+                          {invoice.amountPaid.toLocaleString()} / {invoice.totalAmount.toLocaleString()} paid
+                        </p>
+                      </div>
+                      <Badge variant={INVOICE_STATUS_VARIANT[invoice.status]}>{invoice.status}</Badge>
+                    </Link>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -121,23 +123,25 @@ export default function FinancePage() {
               {(expensesQuery.data?.items ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground">No expenses yet.</p>
               ) : (
-                (expensesQuery.data?.items ?? []).map((expense) => (
-                  <Link
-                    key={expense.id}
-                    href={`/finance/expenses/${expense.id}`}
-                    className="flex items-center justify-between rounded-md border p-3 text-sm hover:bg-muted/50"
-                  >
-                    <div>
-                      <p className="font-medium">
-                        {expense.category} — {expense.description}
-                      </p>
-                      <p className="text-muted-foreground">
-                        {expense.amountPaid.toLocaleString()} / {expense.amount.toLocaleString()} paid
-                      </p>
-                    </div>
-                    <Badge variant={EXPENSE_STATUS_VARIANT[expense.status]}>{expense.status}</Badge>
-                  </Link>
-                ))
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {(expensesQuery.data?.items ?? []).map((expense) => (
+                    <Link
+                      key={expense.id}
+                      href={`/finance/expenses/${expense.id}`}
+                      className="flex items-center justify-between rounded-md border p-3 text-sm hover:bg-muted/50"
+                    >
+                      <div>
+                        <p className="font-medium">
+                          {expense.category} — {expense.description}
+                        </p>
+                        <p className="text-muted-foreground">
+                          {expense.amountPaid.toLocaleString()} / {expense.amount.toLocaleString()} paid
+                        </p>
+                      </div>
+                      <Badge variant={EXPENSE_STATUS_VARIANT[expense.status]}>{expense.status}</Badge>
+                    </Link>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -153,17 +157,19 @@ export default function FinancePage() {
               {(bankAccountsQuery.data ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground">No bank accounts yet.</p>
               ) : (
-                (bankAccountsQuery.data ?? []).map((account) => (
-                  <div key={account.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
-                    <div>
-                      <p className="font-medium">{account.name}</p>
-                      <p className="text-muted-foreground">
-                        {account.bankName ?? "-"} {account.accountNumber ? `· ${account.accountNumber}` : ""}
-                      </p>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {(bankAccountsQuery.data ?? []).map((account) => (
+                    <div key={account.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
+                      <div>
+                        <p className="font-medium">{account.name}</p>
+                        <p className="text-muted-foreground">
+                          {account.bankName ?? "-"} {account.accountNumber ? `· ${account.accountNumber}` : ""}
+                        </p>
+                      </div>
+                      <p className="font-semibold">{account.currentBalance.toLocaleString()}</p>
                     </div>
-                    <p className="font-semibold">{account.currentBalance.toLocaleString()}</p>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>

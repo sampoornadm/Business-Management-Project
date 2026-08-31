@@ -134,7 +134,7 @@ export default function UserDetailPage() {
   const initials = `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase();
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-3xl space-y-6">
       <div className="flex items-center gap-4">
         <Avatar className="h-14 w-14">
           <AvatarImage src={user.avatar?.thumbnailUrl ?? undefined} alt={user.firstName} />

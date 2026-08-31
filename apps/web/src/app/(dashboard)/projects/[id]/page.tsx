@@ -49,7 +49,7 @@ export default function ProjectDetailPage() {
   const project = projectQuery.data;
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="space-y-6">
       <div>
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
@@ -140,7 +140,7 @@ export default function ProjectDetailPage() {
           <CardHeader>
             <CardTitle className="text-base">Notes</CardTitle>
           </CardHeader>
-          <CardContent className="whitespace-pre-wrap text-sm">{project.notes}</CardContent>
+          <CardContent className="max-w-3xl whitespace-pre-wrap text-sm">{project.notes}</CardContent>
         </Card>
       )}
     </div>

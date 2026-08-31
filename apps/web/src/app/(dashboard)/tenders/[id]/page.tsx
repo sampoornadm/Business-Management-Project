@@ -124,7 +124,7 @@ export default function TenderDetailPage() {
   const tender = tenderQuery.data;
 
   return (
-    <div className="max-w-6xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -213,7 +213,7 @@ export default function TenderDetailPage() {
 
         <TabsContent value="overview" className="space-y-4">
           <Card>
-            <CardContent className="grid grid-cols-1 gap-4 pt-6 text-sm sm:grid-cols-2">
+            <CardContent className="grid grid-cols-1 gap-4 pt-6 text-sm sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               <div>
                 <p className="text-muted-foreground">Department</p>
                 <p>{tender.department}</p>
@@ -288,7 +288,7 @@ export default function TenderDetailPage() {
               <CardHeader>
                 <CardTitle className="text-base">Terms &amp; Notes</CardTitle>
               </CardHeader>
-              <CardContent className="pt-0">
+              <CardContent className="max-w-3xl pt-0">
                 <TenderNotesView notes={tender.notes} />
               </CardContent>
             </Card>

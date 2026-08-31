@@ -93,7 +93,7 @@ export default function PurchaseOrderDetailPage() {
   const po = poQuery.data;
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -169,7 +169,7 @@ export default function PurchaseOrderDetailPage() {
           <CardHeader>
             <CardTitle className="text-base">Notes</CardTitle>
           </CardHeader>
-          <CardContent className="whitespace-pre-wrap text-sm">{po.notes}</CardContent>
+          <CardContent className="max-w-3xl whitespace-pre-wrap text-sm">{po.notes}</CardContent>
         </Card>
       )}
 
@@ -181,27 +181,29 @@ export default function PurchaseOrderDetailPage() {
           {po.goodsReceipts.length === 0 ? (
             <p className="text-sm text-muted-foreground">No goods received yet.</p>
           ) : (
-            po.goodsReceipts.map((receipt) => (
-              <div key={receipt.id} className="rounded-md border p-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{formatDate(receipt.receivedDate)}</span>
-                  <span className="text-muted-foreground">
-                    by {receipt.receivedBy.firstName} {receipt.receivedBy.lastName}
-                  </span>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {po.goodsReceipts.map((receipt) => (
+                <div key={receipt.id} className="rounded-md border p-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{formatDate(receipt.receivedDate)}</span>
+                    <span className="text-muted-foreground">
+                      by {receipt.receivedBy.firstName} {receipt.receivedBy.lastName}
+                    </span>
+                  </div>
+                  <ul className="mt-2 space-y-1 text-muted-foreground">
+                    {receipt.items.map((item) => {
+                      const poItem = po.items.find((i) => i.id === item.purchaseOrderItemId);
+                      return (
+                        <li key={item.id}>
+                          {poItem?.description ?? "Item"}: {item.quantityReceived} {poItem?.unit ?? ""}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {receipt.remarks && <p className="mt-1 italic">{receipt.remarks}</p>}
                 </div>
-                <ul className="mt-2 space-y-1 text-muted-foreground">
-                  {receipt.items.map((item) => {
-                    const poItem = po.items.find((i) => i.id === item.purchaseOrderItemId);
-                    return (
-                      <li key={item.id}>
-                        {poItem?.description ?? "Item"}: {item.quantityReceived} {poItem?.unit ?? ""}
-                      </li>
-                    );
-                  })}
-                </ul>
-                {receipt.remarks && <p className="mt-1 italic">{receipt.remarks}</p>}
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -231,14 +233,16 @@ export default function PurchaseOrderDetailPage() {
             {(paymentsQuery.data ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">No payments recorded yet.</p>
             ) : (
-              paymentsQuery.data!.map((payment) => (
-                <div key={payment.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
-                  <p className="font-medium">{payment.amount.toLocaleString()}</p>
-                  <p className="text-muted-foreground">
-                    {payment.method} · {formatDate(payment.paymentDate)}
-                  </p>
-                </div>
-              ))
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {paymentsQuery.data!.map((payment) => (
+                  <div key={payment.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
+                    <p className="font-medium">{payment.amount.toLocaleString()}</p>
+                    <p className="text-muted-foreground">
+                      {payment.method} · {formatDate(payment.paymentDate)}
+                    </p>
+                  </div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
