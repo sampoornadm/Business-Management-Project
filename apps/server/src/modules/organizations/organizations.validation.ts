@@ -27,14 +27,9 @@ export const listOrganizationsQuerySchema = z.object({
 });
 export type ListOrganizationsQuery = z.infer<typeof listOrganizationsQuerySchema>;
 
-export const createContactSchema = z.object({
-  name: z.string().min(1).max(150),
-  designation: z.string().max(150).optional(),
-  email: z.string().email().optional().or(z.literal("")),
-  phone: z.string().max(30).optional(),
-  isPrimary: z.boolean().optional(),
-});
-export type CreateContactBody = z.infer<typeof createContactSchema>;
-
-export const updateContactSchema = createContactSchema.partial();
-export type UpdateContactBody = z.infer<typeof updateContactSchema>;
+export {
+  createContactSchema,
+  updateContactSchema,
+  type CreateContactBody,
+  type UpdateContactBody,
+} from "../contacts/contacts.validation.js";

@@ -1,20 +1,19 @@
-import type { OrganizationDto, OrganizationListItemDto, PaginatedResult } from "@bmp/types";
+import type { CreateContactInput, OrganizationDto, OrganizationListItemDto, PaginatedResult, UpdateContactInput } from "@bmp/types";
 
 import { ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
 import type { RequestContext } from "../../core/interfaces/request-context.js";
 import type { AuditService } from "../audit/audit.service.js";
+import type { ContactsService } from "../contacts/contacts.service.js";
 
 import {
   toOrganizationDto,
   toOrganizationListItemDto,
 } from "./organizations.mapper.js";
 import type {
-  CreateContactData,
   CreateOrganizationData,
   IOrganizationsRepository,
   OrganizationFilters,
-  UpdateContactData,
   UpdateOrganizationData,
 } from "./organizations.repository.js";
 
@@ -22,6 +21,7 @@ export class OrganizationsService {
   constructor(
     private readonly organizationsRepository: IOrganizationsRepository,
     private readonly auditService: AuditService,
+    private readonly contactsService: ContactsService,
   ) {}
 
   async listOrganizations(
@@ -35,7 +35,8 @@ export class OrganizationsService {
   async getById(id: string): Promise<OrganizationDto> {
     const organization = await this.organizationsRepository.findById(id);
     if (!organization) throw new NotFoundError("Organization not found");
-    return toOrganizationDto(organization);
+    const contacts = await this.contactsService.listContacts("ORGANIZATION", id);
+    return toOrganizationDto(organization, contacts);
   }
 
   async create(
@@ -51,7 +52,7 @@ export class OrganizationsService {
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
     });
-    return toOrganizationDto(organization);
+    return toOrganizationDto(organization, []);
   }
 
   async update(
@@ -72,7 +73,8 @@ export class OrganizationsService {
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
     });
-    return toOrganizationDto(organization);
+    const contacts = await this.contactsService.listContacts("ORGANIZATION", id);
+    return toOrganizationDto(organization, contacts);
   }
 
   async delete(id: string, actorId: string, context: RequestContext = {}): Promise<void> {
@@ -100,20 +102,20 @@ export class OrganizationsService {
   private async assertContactBelongsToOrg(organizationId: string, contactId: string): Promise<void> {
     const organization = await this.organizationsRepository.findById(organizationId);
     if (!organization) throw new NotFoundError("Organization not found");
-    if (!organization.contacts.some((c) => c.id === contactId)) {
-      throw new NotFoundError("Contact not found for this organization");
-    }
+    const belongs = await this.contactsService.belongsToEntity(contactId, "ORGANIZATION", organizationId);
+    if (!belongs) throw new NotFoundError("Contact not found for this organization");
   }
 
   async addContact(
     organizationId: string,
-    data: Omit<CreateContactData, "organizationId">,
+    data: CreateContactInput,
     actorId: string,
+    businessId: string,
   ): Promise<OrganizationDto> {
     const organization = await this.organizationsRepository.findById(organizationId);
     if (!organization) throw new NotFoundError("Organization not found");
 
-    await this.organizationsRepository.createContact({ organizationId, ...data });
+    await this.contactsService.createContact("ORGANIZATION", organizationId, data, businessId);
     await this.auditService.log({
       actorId,
       action: "ORGANIZATION_CONTACT_ADDED",
@@ -126,11 +128,12 @@ export class OrganizationsService {
   async updateContact(
     organizationId: string,
     contactId: string,
-    data: UpdateContactData,
+    data: UpdateContactInput,
     actorId: string,
+    businessId: string,
   ): Promise<OrganizationDto> {
     await this.assertContactBelongsToOrg(organizationId, contactId);
-    await this.organizationsRepository.updateContact(contactId, data);
+    await this.contactsService.updateContact(contactId, data, businessId);
     await this.auditService.log({
       actorId,
       action: "ORGANIZATION_CONTACT_UPDATED",
@@ -142,7 +145,7 @@ export class OrganizationsService {
 
   async deleteContact(organizationId: string, contactId: string, actorId: string): Promise<OrganizationDto> {
     await this.assertContactBelongsToOrg(organizationId, contactId);
-    await this.organizationsRepository.deleteContact(contactId);
+    await this.contactsService.deleteContact(contactId);
     await this.auditService.log({
       actorId,
       action: "ORGANIZATION_CONTACT_DELETED",
