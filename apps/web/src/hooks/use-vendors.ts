@@ -2,13 +2,13 @@
 
 import type {
   ApiResponse,
-  CreateVendorContactInput,
+  CreateContactInput,
   CreateVendorInput,
   CreateVendorItemTagInput,
   ImportVendorItemTagsResult,
   ListVendorsQuery,
   PaginatedResult,
-  UpdateVendorContactInput,
+  UpdateContactInput,
   UpdateVendorInput,
   VendorDto,
   VendorListItemDto,
@@ -97,7 +97,7 @@ export function useDeleteVendor() {
 export function useAddVendorContact(vendorId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: CreateVendorContactInput) => {
+    mutationFn: async (input: CreateContactInput) => {
       const response = await apiClient.post<ApiResponse<VendorDto>>(
         `/vendors/${vendorId}/contacts`,
         input,
@@ -113,7 +113,7 @@ export function useAddVendorContact(vendorId: string) {
 export function useUpdateVendorContact(vendorId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ contactId, input }: { contactId: string; input: UpdateVendorContactInput }) => {
+    mutationFn: async ({ contactId, input }: { contactId: string; input: UpdateContactInput }) => {
       const response = await apiClient.patch<ApiResponse<VendorDto>>(
         `/vendors/${vendorId}/contacts/${contactId}`,
         input,
