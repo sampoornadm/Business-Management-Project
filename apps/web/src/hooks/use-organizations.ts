@@ -2,13 +2,13 @@
 
 import type {
   ApiResponse,
-  CreateOrganizationContactInput,
+  CreateContactInput,
   CreateOrganizationInput,
   ListOrganizationsQuery,
   OrganizationDto,
   OrganizationListItemDto,
   PaginatedResult,
-  UpdateOrganizationContactInput,
+  UpdateContactInput,
   UpdateOrganizationInput,
 } from "@bmp/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -84,7 +84,7 @@ export function useDeleteOrganization() {
 export function useAddOrganizationContact(organizationId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: CreateOrganizationContactInput) => {
+    mutationFn: async (input: CreateContactInput) => {
       const response = await apiClient.post<ApiResponse<OrganizationDto>>(
         `/organizations/${organizationId}/contacts`,
         input,
@@ -105,7 +105,7 @@ export function useUpdateOrganizationContact(organizationId: string) {
       input,
     }: {
       contactId: string;
-      input: UpdateOrganizationContactInput;
+      input: UpdateContactInput;
     }) => {
       const response = await apiClient.patch<ApiResponse<OrganizationDto>>(
         `/organizations/${organizationId}/contacts/${contactId}`,
