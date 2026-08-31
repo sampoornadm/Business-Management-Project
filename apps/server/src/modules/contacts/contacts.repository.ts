@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import type { ContactEntityType, ContactLookupKind, Prisma, PrismaClient } from "@bmp/database";
 
+export type { ContactEntityType, ContactLookupKind };
+
 const contactWithChildren = {
   include: {
     phones: { orderBy: { isPrimary: "desc" } },
