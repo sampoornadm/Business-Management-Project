@@ -195,13 +195,13 @@ export default function BusinessDetailPage() {
           {business.contacts.length === 0 ? (
             <p className="text-sm text-muted-foreground">No contacts added yet.</p>
           ) : (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="space-y-3">
               {business.contacts.map((contact) => (
                 <div
                   key={contact.id}
-                  className="flex items-center justify-between gap-4 rounded-md border p-3"
+                  className="flex flex-wrap items-center justify-between gap-4 rounded-md border p-3"
                 >
-                  <div>
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                     <div className="flex items-center gap-2">
                       <p className="font-medium">{contact.name}</p>
                       {contact.isPrimary && <Badge variant="secondary">Primary</Badge>}
