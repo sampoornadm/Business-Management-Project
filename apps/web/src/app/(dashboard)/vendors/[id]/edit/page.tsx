@@ -5,12 +5,14 @@ import { useParams, useRouter } from "next/navigation";
 
 import { VendorForm, type VendorFormValues } from "@/components/vendors/vendor-form";
 import { useUpdateVendor, useVendor } from "@/hooks/use-vendors";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 
 export default function EditVendorPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { toast } = useToast();
   const vendorQuery = useVendor(params.id);
+  useBreadcrumbLabel(params.id, vendorQuery.data?.name);
   const updateVendor = useUpdateVendor(params.id);
 
   async function handleSubmit(values: VendorFormValues) {

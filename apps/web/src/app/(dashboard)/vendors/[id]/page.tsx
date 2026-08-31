@@ -184,9 +184,20 @@ export default function VendorDetailPage() {
             <p className="text-muted-foreground">PAN Number</p>
             <p>{vendor.panNumber || "-"}</p>
           </div>
-          <div>
+          <div className="sm:col-span-2">
             <p className="text-muted-foreground">Address</p>
-            <p>{vendor.address || "-"}</p>
+            {vendor.address || vendor.city || vendor.state ? (
+              <>
+                {vendor.address && <p>{vendor.address}</p>}
+                {(vendor.city || vendor.state) && (
+                  <p className={vendor.address ? "text-muted-foreground" : undefined}>
+                    {[vendor.city, vendor.state].filter(Boolean).join(", ")}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p>-</p>
+            )}
           </div>
           <div>
             <p className="text-muted-foreground">Bank Account</p>

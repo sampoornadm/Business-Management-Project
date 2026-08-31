@@ -48,8 +48,8 @@ export function ContactCard({ contact, canUpdate, editTrigger, onDelete }: Conta
         {(primaryPhone || primaryEmail) && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {primaryPhone && (
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <Phone className="h-4 w-4 text-muted-foreground" />
+              <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
+                <Phone className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="font-medium">{primaryPhone.phone}</span>
                 {otherPhones.map((phone) => (
                   <span key={phone.id} className="text-muted-foreground">
@@ -60,8 +60,8 @@ export function ContactCard({ contact, canUpdate, editTrigger, onDelete }: Conta
             )}
 
             {primaryEmail && (
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <Mail className="h-4 w-4 text-muted-foreground" />
+              <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
+                <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <a href={`mailto:${primaryEmail.email}`} className="font-medium text-primary hover:underline">
                   {primaryEmail.email}
                 </a>
