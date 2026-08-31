@@ -48,8 +48,8 @@ function Breadcrumbs() {
   const segments = pathname.split("/").filter((segment) => segment && segment !== "dashboard");
 
   return (
-    <nav className="flex items-center gap-1 text-sm text-muted-foreground">
-      <Link href="/dashboard" className="hover:text-foreground">
+    <nav className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+      <Link href="/dashboard" className="shrink-0 hover:text-foreground">
         Home
       </Link>
       {segments.map((segment, index, arr) => {
@@ -61,13 +61,21 @@ function Breadcrumbs() {
 
         return (
           <Fragment key={segment}>
-            <span>/</span>
+            <span className="shrink-0">/</span>
             {isBareId ? (
-              <Skeleton className="inline-block h-4 w-20 align-middle" />
+              <Skeleton className="inline-block h-4 w-20 shrink-0 align-middle" />
             ) : isLast ? (
-              <span className="font-medium text-foreground">{label}</span>
+              // The current page's label is the one most likely to be a long
+              // entity name/title/description — let it take the remaining
+              // space and ellipsize instead of pushing the header wider.
+              <span className="min-w-0 flex-1 truncate font-medium text-foreground" title={label}>
+                {label}
+              </span>
             ) : (
-              <Link href={href} className="hover:text-foreground">
+              // Ancestor segments are usually short, but cap them too (a
+              // registered label can be just as long) so one long link
+              // can't push the current page's label out of view.
+              <Link href={href} className="max-w-[10rem] shrink-0 truncate hover:text-foreground" title={label}>
                 {label}
               </Link>
             )}
