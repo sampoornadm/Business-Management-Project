@@ -146,7 +146,18 @@ export default function OrganizationDetailPage() {
           </div>
           <div>
             <p className="text-muted-foreground">Website</p>
-            <p>{organization.website || "-"}</p>
+            {organization.website ? (
+              <a
+                href={/^https?:\/\//.test(organization.website) ? organization.website : `https://${organization.website}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                {organization.website}
+              </a>
+            ) : (
+              <p>-</p>
+            )}
           </div>
           <div>
             <p className="text-muted-foreground">Address</p>

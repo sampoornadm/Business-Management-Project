@@ -148,7 +148,18 @@ export default function BusinessDetailPage() {
           </div>
           <div>
             <p className="text-muted-foreground">Website</p>
-            <p>{business.website || "-"}</p>
+            {business.website ? (
+              <a
+                href={/^https?:\/\//.test(business.website) ? business.website : `https://${business.website}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                {business.website}
+              </a>
+            ) : (
+              <p>-</p>
+            )}
           </div>
           <div>
             <p className="text-muted-foreground">Address</p>
