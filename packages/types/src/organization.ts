@@ -1,15 +1,7 @@
+import type { ContactDto } from "./contact.js";
+
 export const ORGANIZATION_TYPES = ["GOVERNMENT", "PRIVATE"] as const;
 export type OrganizationType = (typeof ORGANIZATION_TYPES)[number];
-
-export interface OrganizationContactDto {
-  id: string;
-  name: string;
-  designation: string | null;
-  email: string | null;
-  phone: string | null;
-  isPrimary: boolean;
-  createdAt: string;
-}
 
 export interface OrganizationListItemDto {
   id: string;
@@ -27,7 +19,7 @@ export interface OrganizationDto extends OrganizationListItemDto {
   gstNumber: string | null;
   website: string | null;
   notes: string | null;
-  contacts: OrganizationContactDto[];
+  contacts: ContactDto[];
   updatedAt: string;
 }
 
@@ -44,16 +36,6 @@ export interface CreateOrganizationInput {
 }
 
 export type UpdateOrganizationInput = Partial<CreateOrganizationInput>;
-
-export interface CreateOrganizationContactInput {
-  name: string;
-  designation?: string;
-  email?: string;
-  phone?: string;
-  isPrimary?: boolean;
-}
-
-export type UpdateOrganizationContactInput = Partial<CreateOrganizationContactInput>;
 
 export interface ListOrganizationsQuery {
   page?: number;
