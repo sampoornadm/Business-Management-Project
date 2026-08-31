@@ -8,12 +8,14 @@ import {
   type OrganizationFormValues,
 } from "@/components/organizations/organization-form";
 import { useOrganization, useUpdateOrganization } from "@/hooks/use-organizations";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 
 export default function EditOrganizationPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { toast } = useToast();
   const organizationQuery = useOrganization(params.id);
+  useBreadcrumbLabel(params.id, organizationQuery.data?.name);
   const updateOrganization = useUpdateOrganization(params.id);
 
   async function handleSubmit(values: OrganizationFormValues) {

@@ -159,13 +159,21 @@ export default function OrganizationDetailPage() {
               <p>-</p>
             )}
           </div>
-          <div>
+          <div className="sm:col-span-2">
             <p className="text-muted-foreground">Address</p>
-            <p>{organization.address || "-"}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Pincode</p>
-            <p>{organization.pincode || "-"}</p>
+            {organization.address || organization.city || organization.state || organization.pincode ? (
+              <>
+                {organization.address && <p>{organization.address}</p>}
+                {(organization.city || organization.state || organization.pincode) && (
+                  <p className={organization.address ? "text-muted-foreground" : undefined}>
+                    {[organization.city, organization.state].filter(Boolean).join(", ")}
+                    {organization.pincode ? ` - ${organization.pincode}` : ""}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p>-</p>
+            )}
           </div>
           <div>
             <p className="text-muted-foreground">Tenders</p>
