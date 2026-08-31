@@ -36,9 +36,12 @@ export function ContactSearchBar({ contacts, onFilteredChange }: ContactSearchBa
 
     // threshold: 0 = any match (fuzzysort v4 scores 0-1; the default .5 only
     // returns "good" matches, too strict for an as-you-type contact filter).
+    // limit: 0 = unlimited (v4 defaults to only the top 10 results, which
+    // would silently truncate a longer contact list instead of filtering it).
     const results = fuzzysort.go(query, searchable, {
       keys: ["name", "department", "designation"],
       threshold: 0,
+      limit: 0,
     });
 
     onFilteredChange(results.map((result) => result.obj.contact));
