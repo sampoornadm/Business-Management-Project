@@ -1,3 +1,5 @@
+import type { ContactDto } from "./contact.js";
+
 export const VENDOR_CATEGORIES = [
   "MATERIAL_SUPPLIER",
   "SERVICE_PROVIDER",
@@ -5,16 +7,6 @@ export const VENDOR_CATEGORIES = [
   "EQUIPMENT_RENTAL",
 ] as const;
 export type VendorCategory = (typeof VENDOR_CATEGORIES)[number];
-
-export interface VendorContactDto {
-  id: string;
-  name: string;
-  designation: string | null;
-  email: string | null;
-  phone: string | null;
-  isPrimary: boolean;
-  createdAt: string;
-}
 
 export interface VendorListItemDto {
   id: string;
@@ -42,7 +34,7 @@ export interface VendorDto extends VendorListItemDto {
   bankAccountNumber: string | null;
   bankIfscCode: string | null;
   notes: string | null;
-  contacts: VendorContactDto[];
+  contacts: ContactDto[];
   itemTags: VendorItemTagDto[];
   updatedAt: string;
 }
@@ -62,16 +54,6 @@ export interface CreateVendorInput {
 }
 
 export type UpdateVendorInput = Partial<CreateVendorInput> & { isActive?: boolean };
-
-export interface CreateVendorContactInput {
-  name: string;
-  designation?: string;
-  email?: string;
-  phone?: string;
-  isPrimary?: boolean;
-}
-
-export type UpdateVendorContactInput = Partial<CreateVendorContactInput>;
 
 export interface CreateVendorItemTagInput {
   itemType: string;

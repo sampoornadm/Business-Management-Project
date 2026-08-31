@@ -7,6 +7,7 @@ export * from "./bills.js";
 export * from "./boq.js";
 export * from "./business.js";
 export * from "./category.js";
+export * from "./contact.js";
 export * from "./finance.js";
 export * from "./item.js";
 export * from "./notification.js";
