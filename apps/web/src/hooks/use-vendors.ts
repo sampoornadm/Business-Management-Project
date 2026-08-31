@@ -106,6 +106,7 @@ export function useAddVendorContact(vendorId: string) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["vendors", vendorId] });
+      void queryClient.invalidateQueries({ queryKey: ["contacts", "lookup-options"] });
     },
   });
 }
@@ -122,6 +123,7 @@ export function useUpdateVendorContact(vendorId: string) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["vendors", vendorId] });
+      void queryClient.invalidateQueries({ queryKey: ["contacts", "lookup-options"] });
     },
   });
 }
