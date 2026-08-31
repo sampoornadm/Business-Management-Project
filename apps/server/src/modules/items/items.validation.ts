@@ -17,6 +17,13 @@ export const updateItemCategorySchema = z.object({
 });
 export type UpdateItemCategoryBody = z.infer<typeof updateItemCategorySchema>;
 
+// 300-char cap matches deriveCanonicalName — the (businessId, canonicalName) unique btree
+// index needs to stay within Postgres' row-size limit.
+export const renameItemSchema = z.object({
+  canonicalName: z.string().trim().min(1).max(300),
+});
+export type RenameItemBody = z.infer<typeof renameItemSchema>;
+
 export const classifyBatchSchema = z.object({
   limit: z.coerce.number().int().positive().max(50).optional(),
 });

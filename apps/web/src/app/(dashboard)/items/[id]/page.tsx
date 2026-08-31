@@ -7,7 +7,13 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   formatDate,
+  Input,
   Select,
   SelectContent,
   SelectItem,
@@ -22,12 +28,13 @@ import {
   TableRow,
   useToast,
 } from "@bmp/ui";
-import { Check, Sparkles } from "lucide-react";
+import { Check, Pencil, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useState } from "react";
 
 import { useCategoryLeaves } from "@/hooks/use-categories";
-import { useClassifyItem, useItem, useSetItemCategory } from "@/hooks/use-items";
+import { useClassifyItem, useItem, useRenameItem, useSetItemCategory } from "@/hooks/use-items";
 import { useAuthStore } from "@/lib/auth-store";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { hasPermission } from "@/lib/permissions";
@@ -45,6 +52,31 @@ export default function ItemDetailPage() {
   const leavesQuery = useCategoryLeaves();
   const setCategory = useSetItemCategory(params.id);
   const classify = useClassifyItem(params.id);
+  const renameItem = useRenameItem(params.id);
+
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+
+  function openRename(canonicalName: string) {
+    setNameDraft(canonicalName);
+    setIsRenaming(true);
+  }
+
+  async function handleRename() {
+    const trimmed = nameDraft.trim();
+    if (!trimmed) return;
+    try {
+      await renameItem.mutateAsync({ canonicalName: trimmed });
+      toast({ title: "Item renamed" });
+      setIsRenaming(false);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not rename item",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
 
   async function handleSelect(value: string) {
     try {
@@ -95,11 +127,52 @@ export default function ItemDetailPage() {
         <Link href="/items" className="text-sm text-muted-foreground hover:underline">
           ← Back to items
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">{item.canonicalName}</h1>
+        <div className="mt-1 flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight">{item.canonicalName}</h1>
+          {canUpdate && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => openRename(item.canonicalName)}
+              aria-label="Rename item"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
         <p className="text-sm text-muted-foreground">
           {item.entries.length} price record(s){item.unit ? ` · unit: ${item.unit}` : ""}
         </p>
       </div>
+
+      <Dialog open={isRenaming} onOpenChange={setIsRenaming}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename item</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              This is the item&apos;s refined, concise name — the single source of truth used for
+              vendor-facing text, rate matching, and price history grouping going forward. It
+              doesn&apos;t change any tender&apos;s own BOQ description.
+            </p>
+            <Input
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void handleRename()}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsRenaming(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRename} disabled={renameItem.isPending || !nameDraft.trim()}>
+              {renameItem.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>

@@ -7,7 +7,12 @@ import type {
 } from "@bmp/types";
 
 import { env } from "../../config/env.js";
-import { BadRequestError, NotFoundError, ServiceUnavailableError } from "../../core/errors/HttpErrors.js";
+import {
+  BadRequestError,
+  ConflictError,
+  NotFoundError,
+  ServiceUnavailableError,
+} from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
 import { embed, generateJson } from "../../infra/llm/ollama.client.js";
 import { logger } from "../../shared/logger/logger.js";
@@ -17,6 +22,7 @@ import type { RfqService } from "../rfq/rfq.service.js";
 import {
   buildClassifyPrompt,
   type ClassificationResult,
+  collapseWhitespace,
   deriveCanonicalName,
   parseClassification,
   pickConfirmedMatch,
@@ -137,6 +143,24 @@ export class ItemsService {
       }
     }
     await this.itemsRepository.updateCategory(id, input.categoryId, input.confirmed ?? true, null);
+    return this.getItemDetail(id, businessId);
+  }
+
+  /**
+   * Rename an item's canonical name — the single place that controls the concise/refined name
+   * used everywhere downstream this item is referenced by name (RFQ vendor-facing text going
+   * forward, rate-matching, price history grouping). Identity is exact-match, so a collision
+   * with another item's name is rejected rather than merged — merging price histories is a
+   * separate, not-yet-built feature (see Item.canonicalName's schema comment).
+   */
+  async renameItem(id: string, businessId: string, canonicalName: string): Promise<ItemDetailDto> {
+    await this.getItemOrThrow(id, businessId);
+    const trimmed = collapseWhitespace(canonicalName);
+    const existing = await this.itemsRepository.findByCanonicalName(businessId, trimmed);
+    if (existing && existing.id !== id) {
+      throw new ConflictError("An item with this name already exists");
+    }
+    await this.itemsRepository.renameItem(id, trimmed);
     return this.getItemDetail(id, businessId);
   }
 

@@ -75,7 +75,12 @@ function buildPrompt(description: string, unit: string | null, candidates: Histo
     "",
     "Return JSON only, with exactly these keys:",
     '  "normalizedName": the description rewritten as a short canonical name, preserving every',
-    '                    size, grade and material exactly (e.g. "XLPE Cable 4C x16")',
+    '                    size, grade and material exactly (e.g. "XLPE Cable 4C x16"). Drop any',
+    '                    trailing clause about what the item is used for, installed in, or applied',
+    '                    to (e.g. "...for steel teeming ladle auto coupling system") - that is',
+    "                    context for this tender, not part of the item's own identity, and a",
+    "                    vendor being quoted this name doesn't need it. Never drop a real spec",
+    "                    (size, grade, material, standard) even if it appears late in the sentence.",
     '  "category": a broad trade category (e.g. "Electrical", "Civil", "Plumbing")',
     '  "subcategory": a narrower type within that category (e.g. "Cable"), or null',
     '  "confidence": your confidence in this classification, 0 to 1',
@@ -166,7 +171,11 @@ export class BoqEnrichmentService {
     if (leaves.length === 0) return;
 
     await this.embedPendingRates(businessId);
-    const itemVectors = await embed(leaves.map((item) => item.description));
+    // Prefer normalizedName when this item was already enriched once (a re-run) — it's the
+    // use-case-stripped, spec-only form, which is what should drive the historical-rate ANN
+    // search. A first-time pass has no normalizedName yet (it's this call's own output, via
+    // classify() below), so it necessarily still searches on the raw description.
+    const itemVectors = await embed(leaves.map((item) => item.normalizedName || item.description));
 
     let enriched = 0;
     for (const [index, item] of leaves.entries()) {
