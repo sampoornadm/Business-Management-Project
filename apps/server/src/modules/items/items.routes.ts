@@ -8,6 +8,7 @@ import type { ItemsController } from "./items.controller.js";
 import {
   classifyBatchSchema,
   listItemsQuerySchema,
+  renameItemSchema,
   updateItemCategorySchema,
 } from "./items.validation.js";
 
@@ -84,6 +85,30 @@ export function createItemsRouter(controller: ItemsController): Router {
     requirePermission("rfq:update"),
     validate(updateItemCategorySchema),
     controller.setCategory,
+  );
+
+  /**
+   * @openapi
+   * /items/{id}/name:
+   *   patch:
+   *     tags: [Items]
+   *     summary: Rename an item's canonical name (single source of truth for its refined/concise name)
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Updated item detail }
+   *       409: { description: Another item already has this name }
+   */
+  router.patch(
+    "/:id/name",
+    authenticateMiddleware,
+    requirePermission("rfq:update"),
+    validate(renameItemSchema),
+    controller.rename,
   );
 
   /**

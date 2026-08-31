@@ -56,3 +56,9 @@ export interface UpdateItemCategoryInput {
   categoryId: string | null;
   confirmed?: boolean;
 }
+
+// Rename the item's canonical name — the one place that controls the concise/refined name
+// used everywhere downstream (RFQ vendor-facing text, rate matching, price history grouping).
+export interface RenameItemInput {
+  canonicalName: string;
+}

@@ -85,6 +85,8 @@ export interface IItemsRepository {
   findItems(businessId: string, search: string | undefined, status: ItemStatus | undefined): Promise<ItemRow[]>;
   findQuoteRowsForItems(itemIds: string[]): Promise<ItemQuoteRow[]>;
   findById(id: string, businessId: string): Promise<ItemRow | null>;
+  findByCanonicalName(businessId: string, canonicalName: string): Promise<{ id: string } | null>;
+  renameItem(id: string, canonicalName: string): Promise<void>;
   updateCategory(id: string, categoryId: string | null, confirmed: boolean, aiConfidence: number | null): Promise<void>;
   findUnclassified(businessId: string, limit: number): Promise<ItemForClassify[]>;
   countUnclassified(businessId: string): Promise<number>;
@@ -158,6 +160,26 @@ export class ItemsRepository implements IItemsRepository {
 
   findById(id: string, businessId: string): Promise<ItemRow | null> {
     return this.prisma.item.findFirst({ where: { id, businessId }, ...itemArgs });
+  }
+
+  findByCanonicalName(businessId: string, canonicalName: string): Promise<{ id: string } | null> {
+    return this.prisma.item.findUnique({
+      where: { businessId_canonicalName: { businessId, canonicalName } },
+      select: { id: true },
+    });
+  }
+
+  async renameItem(id: string, canonicalName: string): Promise<void> {
+    // Clears the embedding (rather than trying to recompute it inline) so the next classify
+    // pass re-embeds under the new name lazily — same converge-on-use pattern as setEmbedding,
+    // and doesn't make a rename hard-depend on Ollama being up.
+    await this.prisma.$transaction([
+      this.prisma.item.update({
+        where: { id },
+        data: { canonicalName, embedding: [], embeddedAt: null },
+      }),
+      this.prisma.$executeRaw`UPDATE items SET "embeddingVector" = NULL WHERE id = ${id}`,
+    ]);
   }
 
   async updateCategory(

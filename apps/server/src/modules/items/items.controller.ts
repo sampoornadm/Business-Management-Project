@@ -6,6 +6,7 @@ import type { ItemsService } from "./items.service.js";
 import type {
   ClassifyBatchQuery,
   ListItemsQueryParsed,
+  RenameItemBody,
   UpdateItemCategoryBody,
 } from "./items.validation.js";
 
@@ -34,6 +35,12 @@ export class ItemsController {
     const body = req.body as UpdateItemCategoryBody;
     const item = await this.itemsService.setCategory(req.params.id!, req.user!.businessId, body);
     sendSuccess(res, item, "Item category updated");
+  });
+
+  rename = asyncHandler(async (req, res) => {
+    const body = req.body as RenameItemBody;
+    const item = await this.itemsService.renameItem(req.params.id!, req.user!.businessId, body.canonicalName);
+    sendSuccess(res, item, "Item renamed");
   });
 
   classify = asyncHandler(async (req, res) => {

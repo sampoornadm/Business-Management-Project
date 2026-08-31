@@ -48,6 +48,13 @@ function flattenBoqItems(items: BoqItemDto[]): BoqItemDto[] {
   return items.flatMap((item) => [item, ...flattenBoqItems(item.children)]);
 }
 
+/** normalizedName is the AI's concise, use-case-stripped rewrite — the right default for text a
+ * vendor will actually read. Falls back to the raw tender description when it hasn't been
+ * enriched yet (Ollama not run / not available). Always overridable below before sending. */
+function defaultVendorDescription(item: BoqItemDto): string {
+  return item.normalizedName || item.description;
+}
+
 export default function NewRfqPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -65,6 +72,7 @@ export default function NewRfqPage() {
   const [items, setItems] = useState<DraftItem[]>([emptyItem()]);
   const [selectedBoqItemIds, setSelectedBoqItemIds] = useState<string[]>([]);
   const [boqItemInstructions, setBoqItemInstructions] = useState<Record<string, string>>({});
+  const [boqItemDescriptions, setBoqItemDescriptions] = useState<Record<string, string>>({});
   const [vendorIds, setVendorIds] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<RfqVendorSuggestionsDto>();
 
@@ -114,7 +122,7 @@ export default function NewRfqPage() {
           .filter((item) => selectedBoqItemIds.includes(item.id))
           .map((item) => ({
             boqItemId: item.id,
-            description: item.description,
+            description: (boqItemDescriptions[item.id] ?? defaultVendorDescription(item)).trim(),
             unit: item.unit ?? undefined,
             quantity: item.quantity ?? 0,
             instructions: boqItemInstructions[item.id]?.trim() || undefined,
@@ -268,7 +276,19 @@ export default function NewRfqPage() {
                             onCheckedChange={(checked) => toggleBoqItem(item.id, Boolean(checked))}
                           />
                         </TableCell>
-                        <TableCell className="max-w-md text-sm">{item.description}</TableCell>
+                        <TableCell className="min-w-[16rem]">
+                          <Input
+                            value={boqItemDescriptions[item.id] ?? defaultVendorDescription(item)}
+                            onChange={(e) =>
+                              setBoqItemDescriptions((prev) => ({ ...prev, [item.id]: e.target.value }))
+                            }
+                            title={
+                              item.normalizedName && item.normalizedName !== item.description
+                                ? `Full tender description: ${item.description}`
+                                : undefined
+                            }
+                          />
+                        </TableCell>
                         <TableCell>{item.unit ?? "-"}</TableCell>
                         <TableCell>{item.quantity ?? "-"}</TableCell>
                         <TableCell>

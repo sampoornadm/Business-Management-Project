@@ -6,6 +6,7 @@ import type {
   ItemListEntryDto,
   ListItemsQuery,
   PaginatedResult,
+  RenameItemInput,
   UpdateItemCategoryInput,
 } from "@bmp/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -45,6 +46,17 @@ export function useSetItemCategory(id: string) {
   return useMutation({
     mutationFn: async (input: UpdateItemCategoryInput) => {
       const response = await apiClient.patch<ApiResponse<ItemDetailDto>>(`/items/${id}`, input);
+      return unwrap(response.data);
+    },
+    onSuccess: () => invalidateItems(queryClient),
+  });
+}
+
+export function useRenameItem(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: RenameItemInput) => {
+      const response = await apiClient.patch<ApiResponse<ItemDetailDto>>(`/items/${id}/name`, input);
       return unwrap(response.data);
     },
     onSuccess: () => invalidateItems(queryClient),
