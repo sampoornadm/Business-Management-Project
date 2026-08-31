@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 
 import { TenderForm, toCreateTenderInput, type TenderFormValues } from "@/components/tenders/tender-form";
 import { useTender, useUpdateTender } from "@/hooks/use-tenders";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 
 function toDateInputValue(iso: string | null): string {
   if (!iso) return "";
@@ -16,6 +17,7 @@ export default function EditTenderPage() {
   const router = useRouter();
   const { toast } = useToast();
   const tenderQuery = useTender(params.id);
+  useBreadcrumbLabel(params.id, tenderQuery.data?.title);
   const updateTender = useUpdateTender(params.id);
 
   async function handleSubmit(values: TenderFormValues) {

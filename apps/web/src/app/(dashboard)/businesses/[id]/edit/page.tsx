@@ -5,12 +5,14 @@ import { useParams, useRouter } from "next/navigation";
 
 import { BusinessForm, type BusinessFormValues } from "@/components/businesses/business-form";
 import { useBusiness, useUpdateBusiness } from "@/hooks/use-businesses";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 
 export default function EditBusinessPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { toast } = useToast();
   const businessQuery = useBusiness(params.id);
+  useBreadcrumbLabel(params.id, businessQuery.data?.name);
   const updateBusiness = useUpdateBusiness(params.id);
 
   async function handleSubmit(values: BusinessFormValues) {

@@ -24,6 +24,7 @@ import { useState } from "react";
 
 import { useCompareBoq } from "@/hooks/use-boq";
 import { useTender, useTenders } from "@/hooks/use-tenders";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 
 function formatDelta(value: number | null): string {
   if (value === null) return "-";
@@ -36,6 +37,7 @@ export default function BoqComparePage() {
   const [compareTenderId, setCompareTenderId] = useState<string>("");
 
   const tenderQuery = useTender(params.id);
+  useBreadcrumbLabel(params.id, tenderQuery.data?.title);
   const otherTendersQuery = useTenders({ page: 1, pageSize: 50 });
   const comparison = useCompareBoq(params.id, compareTenderId || undefined);
 
