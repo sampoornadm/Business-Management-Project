@@ -7,6 +7,15 @@ import type { EmailService } from "../../../infra/mailer/email.service.js";
 import type { AuditService } from "../../audit/audit.service.js";
 import type { BoqItemWithBreakdown, IBoqRepository } from "../../boq/boq.repository.js";
 import type { IBusinessesRepository } from "../../businesses/businesses.repository.js";
+import type {
+  ContactEntityType,
+  ContactLookupKind,
+  ContactWithChildren,
+  CreateContactData,
+  IContactsRepository,
+  UpdateContactData,
+} from "../../contacts/contacts.repository.js";
+import { ContactsService } from "../../contacts/contacts.service.js";
 import type { IHistoricalRatesRepository, RecordFromRfqQuoteData } from "../../rates/rates.repository.js";
 import type { ITendersRepository } from "../../tenders/tenders.repository.js";
 import type { IUsersRepository } from "../../users/users.repository.js";
@@ -198,7 +207,6 @@ class FakeTendersRepository implements Partial<ITendersRepository> {
 interface FakeVendorRecord {
   id: string;
   name: string;
-  contacts: { name: string; email: string | null; isPrimary: boolean }[];
 }
 
 class FakeVendorsRepository implements Partial<IVendorsRepository> {
@@ -208,7 +216,7 @@ class FakeVendorsRepository implements Partial<IVendorsRepository> {
 
   async findById(id: string) {
     if (this.vendors.has(id)) return this.vendors.get(id) as never;
-    return this.vendorIds.has(id) ? ({ id, name: `Vendor ${id.slice(0, 4)}`, contacts: [] } as never) : null;
+    return this.vendorIds.has(id) ? ({ id, name: `Vendor ${id.slice(0, 4)}` } as never) : null;
   }
 
   async findDistinctItemTypes() {
@@ -217,6 +225,68 @@ class FakeVendorsRepository implements Partial<IVendorsRepository> {
 
   async findActiveVendorsByItemTypes(itemTypes: string[]) {
     return this.itemTags.filter((tag) => itemTypes.includes(tag.itemType));
+  }
+}
+
+class FakeContactsRepository implements IContactsRepository {
+  contacts = new Map<string, ContactWithChildren>();
+  lookupOptions = new Map<string, Set<string>>();
+
+  async findByEntity(entityType: ContactEntityType, entityId: string) {
+    return [...this.contacts.values()].filter(
+      (c) => c.entityType === entityType && c.entityId === entityId,
+    );
+  }
+
+  async create(data: CreateContactData) {
+    if (data.isPrimary) {
+      for (const c of this.contacts.values()) {
+        if (c.entityType === data.entityType && c.entityId === data.entityId) c.isPrimary = false;
+      }
+    }
+    const contact = {
+      id: randomUUID(),
+      entityType: data.entityType,
+      entityId: data.entityId,
+      name: data.name,
+      department: data.department ?? null,
+      designation: data.designation ?? null,
+      notes: data.notes ?? null,
+      isPrimary: data.isPrimary ?? false,
+      phones: (data.phones ?? []).map((p) => ({ id: randomUUID(), contactId: "", ...p })),
+      emails: (data.emails ?? []).map((e) => ({ id: randomUUID(), contactId: "", ...e })),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as unknown as ContactWithChildren;
+    this.contacts.set(contact.id, contact);
+    return contact;
+  }
+
+  async update(id: string, data: UpdateContactData) {
+    const contact = this.contacts.get(id);
+    if (!contact) throw new Error("not found");
+    Object.assign(contact, data);
+    return contact;
+  }
+
+  async delete(id: string) {
+    this.contacts.delete(id);
+  }
+
+  async belongsToEntity(contactId: string, entityType: ContactEntityType, entityId: string) {
+    const contact = this.contacts.get(contactId);
+    return Boolean(contact && contact.entityType === entityType && contact.entityId === entityId);
+  }
+
+  async listLookupOptions(businessId: string, kind: ContactLookupKind) {
+    return [...(this.lookupOptions.get(`${businessId}:${kind}`) ?? new Set<string>())];
+  }
+
+  async upsertLookupOptionIfMissing(businessId: string, kind: ContactLookupKind, value: string) {
+    const key = `${businessId}:${kind}`;
+    const set = this.lookupOptions.get(key) ?? new Set<string>();
+    set.add(value);
+    this.lookupOptions.set(key, set);
   }
 }
 
@@ -267,6 +337,8 @@ describe("RfqService", () => {
   let usersRepository: FakeUsersRepository;
   let businessesRepository: FakeBusinessesRepository;
   let ratesRepository: FakeHistoricalRatesRepository;
+  let contactsRepository: FakeContactsRepository;
+  let contactsService: ContactsService;
   let emailService: { queueRfqEmail: ReturnType<typeof vi.fn> };
   let auditService: AuditService;
   let service: RfqService;
@@ -283,6 +355,8 @@ describe("RfqService", () => {
     usersRepository = new FakeUsersRepository();
     businessesRepository = new FakeBusinessesRepository();
     ratesRepository = new FakeHistoricalRatesRepository();
+    contactsRepository = new FakeContactsRepository();
+    contactsService = new ContactsService(contactsRepository);
     vendorsRepository.vendorIds.add(vendorA);
     vendorsRepository.vendorIds.add(vendorB);
     usersRepository.users.set(actorId, {
@@ -303,6 +377,7 @@ describe("RfqService", () => {
       emailService as unknown as EmailService,
       auditService,
       ratesRepository as unknown as IHistoricalRatesRepository,
+      contactsService,
     );
   });
 
@@ -669,15 +744,23 @@ describe("RfqService", () => {
   });
 
   describe("invite vendor", () => {
-    beforeEach(() => {
-      vendorsRepository.vendors.set(vendorA, {
-        id: vendorA,
-        name: "Vendor A",
-        contacts: [
-          { name: "Raj Kumar", email: "raj@vendora.example", isPrimary: true },
-          { name: "Backup Contact", email: "backup@vendora.example", isPrimary: false },
-        ],
-      });
+    beforeEach(async () => {
+      await contactsService.createContact(
+        "VENDOR",
+        vendorA,
+        { name: "Raj Kumar", isPrimary: true, emails: [{ email: "raj@vendora.example", isPrimary: true }] },
+        businessId,
+      );
+      await contactsService.createContact(
+        "VENDOR",
+        vendorA,
+        {
+          name: "Backup Contact",
+          isPrimary: false,
+          emails: [{ email: "backup@vendora.example", isPrimary: false }],
+        },
+        businessId,
+      );
     });
 
     describe("previewInviteVendor", () => {
@@ -707,7 +790,6 @@ describe("RfqService", () => {
 
       it("rejects when the vendor has no contact email on file", async () => {
         const rfq = await createBasicRfq();
-        vendorsRepository.vendors.set(vendorB, { id: vendorB, name: "Vendor B", contacts: [] });
 
         await expect(
           service.previewInviteVendor(rfq.id, { vendorId: vendorB }, businessId),
@@ -751,9 +833,8 @@ describe("RfqService", () => {
 
       it("rejects a vendor with no contact email on file", async () => {
         const rfq = await createBasicRfq();
-        vendorsRepository.vendors.set(vendorA, { id: vendorA, name: "No Email Co", contacts: [] });
         await expect(
-          service.inviteVendor(rfq.id, { vendorId: vendorA, text: "Body" }, actorId, { businessId }),
+          service.inviteVendor(rfq.id, { vendorId: vendorB, text: "Body" }, actorId, { businessId }),
         ).rejects.toThrow(BadRequestError);
       });
     });

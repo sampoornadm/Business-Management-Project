@@ -5,20 +5,27 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConflictError, NotFoundError } from "../../../core/errors/HttpErrors.js";
 import type { AuditService } from "../../audit/audit.service.js";
 import type {
+  ContactEntityType,
+  ContactLookupKind,
+  ContactWithChildren,
   CreateContactData,
+  IContactsRepository,
+  UpdateContactData,
+} from "../../contacts/contacts.repository.js";
+import { ContactsService } from "../../contacts/contacts.service.js";
+import type {
   CreateItemTagData,
   CreateVendorData,
   IVendorsRepository,
-  UpdateContactData,
   UpdateVendorData,
+  VendorEntity,
   VendorFilters,
   VendorItemTypeMatch,
   VendorRatingWithRater,
-  VendorWithContacts,
 } from "../vendors.repository.js";
 import { VendorsService } from "../vendors.service.js";
 
-function buildVendor(overrides: Partial<VendorWithContacts> = {}): VendorWithContacts {
+function buildVendor(overrides: Partial<VendorEntity> = {}): VendorEntity {
   const now = new Date();
   return {
     id: randomUUID(),
@@ -35,18 +42,17 @@ function buildVendor(overrides: Partial<VendorWithContacts> = {}): VendorWithCon
     notes: null,
     isActive: true,
     createdById: randomUUID(),
-    contacts: [],
     itemTags: [],
     ratings: [],
     _count: { ratings: 0 },
     createdAt: now,
     updatedAt: now,
     ...overrides,
-  } as unknown as VendorWithContacts;
+  } as unknown as VendorEntity;
 }
 
 class FakeVendorsRepository implements IVendorsRepository {
-  vendors = new Map<string, VendorWithContacts>();
+  vendors = new Map<string, VendorEntity>();
   poCounts = new Map<string, number>();
 
   async findById(id: string) {
@@ -78,34 +84,6 @@ class FakeVendorsRepository implements IVendorsRepository {
 
   async countPurchaseOrders(vendorId: string) {
     return this.poCounts.get(vendorId) ?? 0;
-  }
-
-  async createContact(data: CreateContactData) {
-    const vendor = this.vendors.get(data.vendorId);
-    if (!vendor) throw new Error("not found");
-    (vendor.contacts as unknown[]).push({
-      id: randomUUID(),
-      name: data.name,
-      designation: data.designation ?? null,
-      email: data.email ?? null,
-      phone: data.phone ?? null,
-      isPrimary: data.isPrimary ?? false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-  }
-
-  async updateContact(id: string, data: UpdateContactData) {
-    for (const vendor of this.vendors.values()) {
-      const contact = vendor.contacts.find((c) => c.id === id);
-      if (contact) Object.assign(contact, data);
-    }
-  }
-
-  async deleteContact(id: string) {
-    for (const vendor of this.vendors.values()) {
-      vendor.contacts = vendor.contacts.filter((c) => c.id !== id) as never;
-    }
   }
 
   async findRatings(_vendorId: string): Promise<VendorRatingWithRater[]> {
@@ -156,16 +134,87 @@ class FakeVendorsRepository implements IVendorsRepository {
   }
 }
 
+class FakeContactsRepository implements IContactsRepository {
+  contacts = new Map<string, ContactWithChildren>();
+  lookupOptions = new Map<string, Set<string>>();
+
+  async findByEntity(entityType: ContactEntityType, entityId: string) {
+    return [...this.contacts.values()].filter(
+      (c) => c.entityType === entityType && c.entityId === entityId,
+    );
+  }
+
+  async create(data: CreateContactData) {
+    if (data.isPrimary) {
+      for (const c of this.contacts.values()) {
+        if (c.entityType === data.entityType && c.entityId === data.entityId) c.isPrimary = false;
+      }
+    }
+    const contact = {
+      id: randomUUID(),
+      entityType: data.entityType,
+      entityId: data.entityId,
+      name: data.name,
+      department: data.department ?? null,
+      designation: data.designation ?? null,
+      notes: data.notes ?? null,
+      isPrimary: data.isPrimary ?? false,
+      phones: (data.phones ?? []).map((p) => ({ id: randomUUID(), contactId: "", ...p })),
+      emails: (data.emails ?? []).map((e) => ({ id: randomUUID(), contactId: "", ...e })),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as unknown as ContactWithChildren;
+    this.contacts.set(contact.id, contact);
+    return contact;
+  }
+
+  async update(id: string, data: UpdateContactData) {
+    const contact = this.contacts.get(id);
+    if (!contact) throw new Error("not found");
+    if (data.isPrimary) {
+      for (const c of this.contacts.values()) {
+        if (c.id !== id && c.entityType === contact.entityType && c.entityId === contact.entityId) {
+          c.isPrimary = false;
+        }
+      }
+    }
+    Object.assign(contact, data);
+    return contact;
+  }
+
+  async delete(id: string) {
+    this.contacts.delete(id);
+  }
+
+  async belongsToEntity(contactId: string, entityType: ContactEntityType, entityId: string) {
+    const contact = this.contacts.get(contactId);
+    return Boolean(contact && contact.entityType === entityType && contact.entityId === entityId);
+  }
+
+  async listLookupOptions(businessId: string, kind: ContactLookupKind) {
+    return [...(this.lookupOptions.get(`${businessId}:${kind}`) ?? new Set<string>())];
+  }
+
+  async upsertLookupOptionIfMissing(businessId: string, kind: ContactLookupKind, value: string) {
+    const key = `${businessId}:${kind}`;
+    const set = this.lookupOptions.get(key) ?? new Set<string>();
+    set.add(value);
+    this.lookupOptions.set(key, set);
+  }
+}
+
 describe("VendorsService", () => {
   let repository: FakeVendorsRepository;
   let auditService: AuditService;
+  let contactsRepository: FakeContactsRepository;
   let service: VendorsService;
   const actorId = randomUUID();
 
   beforeEach(() => {
     repository = new FakeVendorsRepository();
     auditService = { log: vi.fn().mockResolvedValue(undefined) } as unknown as AuditService;
-    service = new VendorsService(repository, auditService);
+    contactsRepository = new FakeContactsRepository();
+    service = new VendorsService(repository, auditService, new ContactsService(contactsRepository));
   });
 
   it("creates a vendor", async () => {
@@ -208,11 +257,32 @@ describe("VendorsService", () => {
       category: "MATERIAL_SUPPLIER",
       createdById: actorId,
     });
-    const updated = await service.addContact(vendor.id, { name: "Raj Kumar" }, actorId);
+    const updated = await service.addContact(vendor.id, { name: "Raj Kumar" }, actorId, randomUUID());
     expect(updated.contacts).toHaveLength(1);
 
     const afterDelete = await service.deleteContact(vendor.id, updated.contacts[0]!.id, actorId);
     expect(afterDelete.contacts).toHaveLength(0);
+  });
+
+  it("rejects updating a contact that belongs to a different vendor", async () => {
+    const vendorA = await service.create({
+      name: "Ace Steel Suppliers",
+      category: "MATERIAL_SUPPLIER",
+      createdById: actorId,
+    });
+    const vendorB = await service.create({
+      name: "Beta Traders",
+      category: "MATERIAL_SUPPLIER",
+      createdById: actorId,
+    });
+    const businessId = randomUUID();
+    await service.addContact(vendorA.id, { name: "Contact A" }, actorId, businessId);
+    const withContact = await service.getById(vendorA.id);
+    const contactId = withContact.contacts[0]!.id;
+
+    await expect(
+      service.updateContact(vendorB.id, contactId, { name: "Hacked" }, actorId, businessId),
+    ).rejects.toThrow(NotFoundError);
   });
 
   it("adds and removes an item tag", async () => {

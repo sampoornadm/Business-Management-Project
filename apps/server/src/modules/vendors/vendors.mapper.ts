@@ -1,5 +1,5 @@
 import type {
-  VendorContactDto,
+  ContactDto,
   VendorDto,
   VendorItemTagDto,
   VendorListItemDto,
@@ -7,21 +7,9 @@ import type {
   VendorRatingDto,
 } from "@bmp/types";
 
-import type { VendorRatingWithRater, VendorWithContacts } from "./vendors.repository.js";
+import type { VendorEntity, VendorRatingWithRater } from "./vendors.repository.js";
 
-function toContactDto(contact: VendorWithContacts["contacts"][number]): VendorContactDto {
-  return {
-    id: contact.id,
-    name: contact.name,
-    designation: contact.designation,
-    email: contact.email,
-    phone: contact.phone,
-    isPrimary: contact.isPrimary,
-    createdAt: contact.createdAt.toISOString(),
-  };
-}
-
-function toItemTagDto(tag: VendorWithContacts["itemTags"][number]): VendorItemTagDto {
+function toItemTagDto(tag: VendorEntity["itemTags"][number]): VendorItemTagDto {
   return {
     id: tag.id,
     itemType: tag.itemType,
@@ -36,7 +24,7 @@ function averageOf(ratings: { rating: number }[]): number | null {
   return Math.round((sum / ratings.length) * 10) / 10;
 }
 
-export function toVendorListItemDto(entity: VendorWithContacts): VendorListItemDto {
+export function toVendorListItemDto(entity: VendorEntity): VendorListItemDto {
   return {
     id: entity.id,
     name: entity.name,
@@ -49,7 +37,7 @@ export function toVendorListItemDto(entity: VendorWithContacts): VendorListItemD
   };
 }
 
-export function toVendorDto(entity: VendorWithContacts): VendorDto {
+export function toVendorDto(entity: VendorEntity, contacts: ContactDto[]): VendorDto {
   return {
     ...toVendorListItemDto(entity),
     gstNumber: entity.gstNumber,
@@ -59,7 +47,7 @@ export function toVendorDto(entity: VendorWithContacts): VendorDto {
     bankAccountNumber: entity.bankAccountNumber,
     bankIfscCode: entity.bankIfscCode,
     notes: entity.notes,
-    contacts: entity.contacts.map(toContactDto),
+    contacts,
     itemTags: entity.itemTags.map(toItemTagDto),
     updatedAt: entity.updatedAt.toISOString(),
   };
