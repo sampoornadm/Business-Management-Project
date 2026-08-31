@@ -8,7 +8,7 @@ import type { AttachmentsService } from "../../attachments/attachments.service.j
 import type { AuditService } from "../../audit/audit.service.js";
 import type { IBusinessesRepository } from "../../businesses/businesses.repository.js";
 import type { NotificationsService } from "../../notifications/notifications.service.js";
-import type { IOrganizationsRepository, OrganizationWithContacts } from "../../organizations/organizations.repository.js";
+import type { IOrganizationsRepository, OrganizationEntity } from "../../organizations/organizations.repository.js";
 import type { ITagsRepository } from "../../tags/tags.repository.js";
 import type { IUsersRepository } from "../../users/users.repository.js";
 import type {
@@ -203,7 +203,7 @@ class FakeTendersRepository implements Partial<ITendersRepository> {
 }
 
 class FakeOrganizationsRepository implements Partial<IOrganizationsRepository> {
-  async findById(id: string): Promise<OrganizationWithContacts | null> {
+  async findById(id: string): Promise<OrganizationEntity | null> {
     if (id !== CLIENT_ID) return null;
     const now = new Date();
     return {
@@ -218,11 +218,10 @@ class FakeOrganizationsRepository implements Partial<IOrganizationsRepository> {
       website: null,
       notes: null,
       createdById: randomUUID(),
-      contacts: [],
       _count: { tenders: 0 },
       createdAt: now,
       updatedAt: now,
-    } as OrganizationWithContacts;
+    } as OrganizationEntity;
   }
 }
 

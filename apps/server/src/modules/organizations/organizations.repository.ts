@@ -6,11 +6,11 @@ import type { PaginationParams } from "../../core/interfaces/pagination.js";
 import { listAllBusinessIds } from "../../infra/prisma/business-ids.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
 
-const organizationWithContacts = {
-  include: { contacts: { orderBy: { isPrimary: "desc" } }, _count: { select: { tenders: true } } },
+const organizationArgs = {
+  include: { _count: { select: { tenders: true } } },
 } satisfies Prisma.OrganizationDefaultArgs;
 
-export type OrganizationWithContacts = Prisma.OrganizationGetPayload<typeof organizationWithContacts>;
+export type OrganizationEntity = Prisma.OrganizationGetPayload<typeof organizationArgs>;
 
 export interface CreateOrganizationData {
   name: string;
@@ -32,43 +32,29 @@ export interface OrganizationFilters {
   type?: "GOVERNMENT" | "PRIVATE";
 }
 
-export interface CreateContactData {
-  organizationId: string;
-  name: string;
-  designation?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  isPrimary?: boolean;
-}
-
-export type UpdateContactData = Partial<Omit<CreateContactData, "organizationId">>;
-
 export interface IOrganizationsRepository {
-  findById(id: string): Promise<OrganizationWithContacts | null>;
+  findById(id: string): Promise<OrganizationEntity | null>;
   findMany(
     pagination: PaginationParams,
     filters: OrganizationFilters,
-  ): Promise<{ items: OrganizationWithContacts[]; totalItems: number }>;
-  create(data: CreateOrganizationData): Promise<OrganizationWithContacts>;
-  update(id: string, data: UpdateOrganizationData): Promise<OrganizationWithContacts>;
+  ): Promise<{ items: OrganizationEntity[]; totalItems: number }>;
+  create(data: CreateOrganizationData): Promise<OrganizationEntity>;
+  update(id: string, data: UpdateOrganizationData): Promise<OrganizationEntity>;
   delete(id: string): Promise<void>;
   countTenders(organizationId: string): Promise<number>;
-  createContact(data: CreateContactData): Promise<void>;
-  updateContact(id: string, data: UpdateContactData): Promise<void>;
-  deleteContact(id: string): Promise<void>;
 }
 
 export class OrganizationsRepository implements IOrganizationsRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  findById(id: string): Promise<OrganizationWithContacts | null> {
-    return this.prisma.organization.findUnique({ where: { id }, ...organizationWithContacts });
+  findById(id: string): Promise<OrganizationEntity | null> {
+    return this.prisma.organization.findUnique({ where: { id }, ...organizationArgs });
   }
 
   async findMany(
     pagination: PaginationParams,
     filters: OrganizationFilters,
-  ): Promise<{ items: OrganizationWithContacts[]; totalItems: number }> {
+  ): Promise<{ items: OrganizationEntity[]; totalItems: number }> {
     const where: Prisma.OrganizationWhereInput = {
       type: filters.type,
       ...(filters.search ? { name: { contains: filters.search, mode: "insensitive" } } : {}),
@@ -77,7 +63,7 @@ export class OrganizationsRepository implements IOrganizationsRepository {
     const [items, totalItems] = await Promise.all([
       this.prisma.organization.findMany({
         where,
-        ...organizationWithContacts,
+        ...organizationArgs,
         orderBy: { name: "asc" },
         ...toSkipTake(pagination),
       }),
@@ -87,15 +73,15 @@ export class OrganizationsRepository implements IOrganizationsRepository {
     return { items, totalItems };
   }
 
-  create(data: CreateOrganizationData): Promise<OrganizationWithContacts> {
+  create(data: CreateOrganizationData): Promise<OrganizationEntity> {
     return this.prisma.organization.create({
       data: { id: randomUUID(), ...data },
-      ...organizationWithContacts,
+      ...organizationArgs,
     });
   }
 
-  update(id: string, data: UpdateOrganizationData): Promise<OrganizationWithContacts> {
-    return this.prisma.organization.update({ where: { id }, data, ...organizationWithContacts });
+  update(id: string, data: UpdateOrganizationData): Promise<OrganizationEntity> {
+    return this.prisma.organization.update({ where: { id }, data, ...organizationArgs });
   }
 
   async delete(id: string): Promise<void> {
@@ -117,17 +103,5 @@ export class OrganizationsRepository implements IOrganizationsRepository {
       ),
     );
     return counts.reduce((sum, count) => sum + count, 0);
-  }
-
-  async createContact(data: CreateContactData): Promise<void> {
-    await this.prisma.organizationContact.create({ data: { id: randomUUID(), ...data } });
-  }
-
-  async updateContact(id: string, data: UpdateContactData): Promise<void> {
-    await this.prisma.organizationContact.update({ where: { id }, data });
-  }
-
-  async deleteContact(id: string): Promise<void> {
-    await this.prisma.organizationContact.delete({ where: { id } });
   }
 }

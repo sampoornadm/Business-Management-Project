@@ -7,7 +7,7 @@ import type { PaginationParams } from "../../../core/interfaces/pagination.js";
 import type {
   IOrganizationsRepository,
   OrganizationFilters,
-  OrganizationWithContacts,
+  OrganizationEntity,
 } from "../../organizations/organizations.repository.js";
 import type { ExtractTextFn, GenerateJsonFn, GenerateTextFn } from "../tender-extraction.service.js";
 import { cleanupNotes, TenderExtractionService } from "../tender-extraction.service.js";
@@ -39,7 +39,7 @@ Material Long Description O-RING MATERIAL : FKM
 Item Additional
 Description:`;
 
-function buildOrganization(overrides: Partial<OrganizationWithContacts> = {}): OrganizationWithContacts {
+function buildOrganization(overrides: Partial<OrganizationEntity> = {}): OrganizationEntity {
   const now = new Date();
   return {
     id: randomUUID(),
@@ -53,16 +53,15 @@ function buildOrganization(overrides: Partial<OrganizationWithContacts> = {}): O
     website: null,
     notes: null,
     createdById: randomUUID(),
-    contacts: [],
     _count: { tenders: 0 },
     createdAt: now,
     updatedAt: now,
     ...overrides,
-  } as unknown as OrganizationWithContacts;
+  } as unknown as OrganizationEntity;
 }
 
 class FakeOrganizationsRepository implements IOrganizationsRepository {
-  organizations = new Map<string, OrganizationWithContacts>();
+  organizations = new Map<string, OrganizationEntity>();
 
   async findById(id: string) {
     return this.organizations.get(id) ?? null;

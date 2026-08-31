@@ -1,20 +1,8 @@
-import type { OrganizationContactDto, OrganizationDto, OrganizationListItemDto } from "@bmp/types";
+import type { ContactDto, OrganizationDto, OrganizationListItemDto } from "@bmp/types";
 
-import type { OrganizationWithContacts } from "./organizations.repository.js";
+import type { OrganizationEntity } from "./organizations.repository.js";
 
-function toContactDto(contact: OrganizationWithContacts["contacts"][number]): OrganizationContactDto {
-  return {
-    id: contact.id,
-    name: contact.name,
-    designation: contact.designation,
-    email: contact.email,
-    phone: contact.phone,
-    isPrimary: contact.isPrimary,
-    createdAt: contact.createdAt.toISOString(),
-  };
-}
-
-export function toOrganizationListItemDto(entity: OrganizationWithContacts): OrganizationListItemDto {
+export function toOrganizationListItemDto(entity: OrganizationEntity): OrganizationListItemDto {
   return {
     id: entity.id,
     name: entity.name,
@@ -26,7 +14,7 @@ export function toOrganizationListItemDto(entity: OrganizationWithContacts): Org
   };
 }
 
-export function toOrganizationDto(entity: OrganizationWithContacts): OrganizationDto {
+export function toOrganizationDto(entity: OrganizationEntity, contacts: ContactDto[]): OrganizationDto {
   return {
     ...toOrganizationListItemDto(entity),
     address: entity.address,
@@ -34,7 +22,7 @@ export function toOrganizationDto(entity: OrganizationWithContacts): Organizatio
     gstNumber: entity.gstNumber,
     website: entity.website,
     notes: entity.notes,
-    contacts: entity.contacts.map(toContactDto),
+    contacts,
     updatedAt: entity.updatedAt.toISOString(),
   };
 }

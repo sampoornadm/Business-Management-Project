@@ -57,7 +57,12 @@ export class OrganizationsController {
 
   addContact = asyncHandler(async (req, res) => {
     const body = req.body as CreateContactBody;
-    const organization = await this.organizationsService.addContact(req.params.id!, body, req.user!.id);
+    const organization = await this.organizationsService.addContact(
+      req.params.id!,
+      body,
+      req.user!.id,
+      req.user!.businessId,
+    );
     sendSuccess(res, organization, "Contact added", 201);
   });
 
@@ -68,6 +73,7 @@ export class OrganizationsController {
       req.params.contactId!,
       body,
       req.user!.id,
+      req.user!.businessId,
     );
     sendSuccess(res, organization, "Contact updated");
   });
