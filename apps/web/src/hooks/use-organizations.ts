@@ -93,6 +93,7 @@ export function useAddOrganizationContact(organizationId: string) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["organizations", organizationId] });
+      void queryClient.invalidateQueries({ queryKey: ["contacts", "lookup-options"] });
     },
   });
 }
@@ -115,6 +116,7 @@ export function useUpdateOrganizationContact(organizationId: string) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["organizations", organizationId] });
+      void queryClient.invalidateQueries({ queryKey: ["contacts", "lookup-options"] });
     },
   });
 }
