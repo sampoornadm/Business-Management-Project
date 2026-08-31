@@ -14,9 +14,9 @@ export interface ContactCardProps {
 
 export function ContactCard({ contact, canUpdate, editTrigger, onDelete }: ContactCardProps) {
   const primaryPhone = contact.phones.find((p) => p.isPrimary) ?? contact.phones[0];
-  const otherPhones = contact.phones.filter((p) => p.phone !== primaryPhone?.phone);
+  const otherPhones = contact.phones.filter((p) => p.id !== primaryPhone?.id);
   const primaryEmail = contact.emails.find((e) => e.isPrimary) ?? contact.emails[0];
-  const otherEmails = contact.emails.filter((e) => e.email !== primaryEmail?.email);
+  const otherEmails = contact.emails.filter((e) => e.id !== primaryEmail?.id);
 
   return (
     <Card className="w-full">
