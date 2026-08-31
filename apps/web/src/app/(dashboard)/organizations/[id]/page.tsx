@@ -22,8 +22,12 @@ import {
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
-import { ContactDialog } from "@/components/organizations/contact-dialog";
+import { ContactCard } from "@/components/contacts/contact-card";
+import { ContactDialog } from "@/components/contacts/contact-dialog";
+import { ContactSearchBar } from "@/components/contacts/contact-search-bar";
+import { useContactLookupOptions } from "@/hooks/use-contacts";
 import {
   useAddOrganizationContact,
   useDeleteOrganization,
@@ -47,6 +51,14 @@ export default function OrganizationDetailPage() {
   const updateContact = useUpdateOrganizationContact(params.id);
   const deleteContact = useDeleteOrganizationContact(params.id);
   const deleteOrganization = useDeleteOrganization();
+
+  const [filteredContacts, setFilteredContacts] = useState(organizationQuery.data?.contacts ?? []);
+  const departmentOptions = useContactLookupOptions("DEPARTMENT");
+  const designationOptions = useContactLookupOptions("DESIGNATION");
+
+  useEffect(() => {
+    setFilteredContacts(organizationQuery.data?.contacts ?? []);
+  }, [organizationQuery.data?.contacts]);
 
   const canUpdate = hasPermission(roleName, "organizations:update");
   const canDelete = hasPermission(roleName, "organizations:delete");
@@ -170,6 +182,8 @@ export default function OrganizationDetailPage() {
                   <Plus className="mr-2 h-4 w-4" /> Add contact
                 </Button>
               }
+              departmentOptions={departmentOptions.data?.values ?? []}
+              designationOptions={designationOptions.data?.values ?? []}
               onSubmit={async (values) => {
                 await addContact.mutateAsync(values);
                 toast({ title: "Contact added" });
@@ -181,24 +195,21 @@ export default function OrganizationDetailPage() {
           {organization.contacts.length === 0 ? (
             <p className="text-sm text-muted-foreground">No contacts added yet.</p>
           ) : (
-            organization.contacts.map((contact) => (
-              <div
-                key={contact.id}
-                className="flex items-center justify-between gap-4 rounded-md border p-3"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium">{contact.name}</p>
-                    {contact.isPrimary && <Badge variant="secondary">Primary</Badge>}
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {[contact.designation, contact.email, contact.phone].filter(Boolean).join(" · ")}
-                  </p>
-                </div>
-                {canUpdate && (
-                  <div className="flex gap-2">
+            <>
+              <ContactSearchBar contacts={organization.contacts} onFilteredChange={setFilteredContacts} />
+              {filteredContacts.length === 0 && (
+                <p className="text-sm text-muted-foreground">No contacts match your search.</p>
+              )}
+              {filteredContacts.map((contact) => (
+                <ContactCard
+                  key={contact.id}
+                  contact={contact}
+                  canUpdate={canUpdate}
+                  editTrigger={
                     <ContactDialog
                       contact={contact}
+                      departmentOptions={departmentOptions.data?.values ?? []}
+                      designationOptions={designationOptions.data?.values ?? []}
                       trigger={
                         <Button size="sm" variant="ghost">
                           <Pencil className="h-4 w-4" />
@@ -209,20 +220,14 @@ export default function OrganizationDetailPage() {
                         toast({ title: "Contact updated" });
                       }}
                     />
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={async () => {
-                        await deleteContact.mutateAsync(contact.id);
-                        toast({ title: "Contact removed" });
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))
+                  }
+                  onDelete={async () => {
+                    await deleteContact.mutateAsync(contact.id);
+                    toast({ title: "Contact removed" });
+                  }}
+                />
+              ))}
+            </>
           )}
         </CardContent>
       </Card>
