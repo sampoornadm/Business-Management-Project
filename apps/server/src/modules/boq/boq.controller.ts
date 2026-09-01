@@ -7,6 +7,7 @@ import type {
   BulkUpdateBoqItemsBody,
   CommitBoqBody,
   CompareBoqQueryParsed,
+  ConfirmRateSourceBody,
   CreateBoqItemBody,
   UpdateBoqItemBody,
   UpsertRateAnalysisBody,
@@ -87,6 +88,27 @@ export class BoqController {
     const body = req.body as BulkUpdateBoqItemsBody;
     const boq = await this.boqService.bulkUpdateItems(body, req.user!.id, req.user!.businessId);
     sendSuccess(res, boq, "BOQ items updated");
+  });
+
+  confirmRateSource = asyncHandler(async (req, res) => {
+    const body = req.body as ConfirmRateSourceBody;
+    const boq = await this.boqService.confirmRateSource(
+      req.params.itemId!,
+      body,
+      req.user!.id,
+      req.user!.businessId,
+    );
+    sendSuccess(res, boq, "Rate suggestion confirmed");
+  });
+
+  rejectRateSource = asyncHandler(async (req, res) => {
+    const boq = await this.boqService.rejectRateSource(req.params.itemId!, req.user!.id, req.user!.businessId);
+    sendSuccess(res, boq, "Rate suggestion rejected");
+  });
+
+  getRateCandidates = asyncHandler(async (req, res) => {
+    const candidates = await this.boqService.getRateCandidates(req.params.itemId!, req.user!.businessId);
+    sendSuccess(res, candidates, "Rate candidates retrieved");
   });
 
   upsertRateAnalysis = asyncHandler(async (req, res) => {

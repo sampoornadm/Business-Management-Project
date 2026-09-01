@@ -68,6 +68,20 @@ export const upsertRateAnalysisSchema = z.object({
 });
 export type UpsertRateAnalysisBody = z.infer<typeof upsertRateAnalysisSchema>;
 
+export const confirmRateSourceSchema = z.object({
+  // Omitted: accept the item's own current AI suggestion. Present: the estimator picked a
+  // different candidate from the possible-matches list instead.
+  override: z
+    .object({
+      rateSourceId: z.string().uuid(),
+      itemName: z.string().min(1),
+      rate: z.number().nonnegative(),
+      confidence: z.number().min(0).max(1),
+    })
+    .optional(),
+});
+export type ConfirmRateSourceBody = z.infer<typeof confirmRateSourceSchema>;
+
 export const compareBoqQuerySchema = z.object({
   withTenderId: z.string().uuid(),
 });

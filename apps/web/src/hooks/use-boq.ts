@@ -6,8 +6,10 @@ import type {
   BoqDto,
   BoqListItemDto,
   BoqParsePreviewDto,
+  BoqRateCandidateDto,
   BulkUpdateBoqItemsInput,
   CommitBoqInput,
+  ConfirmBoqRateSourceInput,
   CreateBoqItemInput,
   UpdateBoqItemInput,
   UpsertBoqItemRateAnalysisInput,
@@ -144,6 +146,46 @@ export function useUpsertRateAnalysis(tenderId: string) {
       return unwrap(response.data);
     },
     onSuccess: () => invalidateBoq(queryClient, tenderId),
+  });
+}
+
+export function useConfirmRateSource(tenderId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ itemId, input }: { itemId: string; input?: ConfirmBoqRateSourceInput }) => {
+      const response = await apiClient.post<ApiResponse<BoqDto>>(
+        `/boq-items/${itemId}/confirm-rate-source`,
+        input ?? {},
+      );
+      return unwrap(response.data);
+    },
+    onSuccess: () => invalidateBoq(queryClient, tenderId),
+  });
+}
+
+export function useRejectRateSource(tenderId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (itemId: string) => {
+      const response = await apiClient.post<ApiResponse<BoqDto>>(`/boq-items/${itemId}/reject-rate-source`);
+      return unwrap(response.data);
+    },
+    onSuccess: () => invalidateBoq(queryClient, tenderId),
+  });
+}
+
+/** Lazy on purpose (enabled flag) — this hits Ollama, so it should only run when the estimator
+ * actually opens the possible-matches dialog, not on every grid render. */
+export function useRateCandidates(itemId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["boq-items", itemId, "rate-candidates"],
+    queryFn: async () => {
+      const response = await apiClient.get<ApiResponse<BoqRateCandidateDto[]>>(
+        `/boq-items/${itemId}/rate-candidates`,
+      );
+      return unwrap(response.data);
+    },
+    enabled,
   });
 }
 

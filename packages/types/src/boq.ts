@@ -57,7 +57,32 @@ export interface BoqItemDto {
   suggestedRate: number | null;
   aiSource: string | null;
   aiEnrichedAt: string | null;
+  // True once a human has explicitly confirmed the rate-source match (not just applied it once).
+  rateSourceConfirmed: boolean;
   children: BoqItemDto[];
+}
+
+/** A ranked historical-rate candidate for a BOQ item, computed live (not persisted) so the
+ * estimator can see near-misses too, not just the one match that cleared the auto-apply bar. */
+export interface BoqRateCandidateDto {
+  id: string;
+  itemName: string;
+  unit: string;
+  rate: number;
+  similarity: number;
+  // Would this be the one auto-applied by enrichment (cosine + spec + unit all agree)?
+  isAutoMatch: boolean;
+}
+
+/** Confirming can either accept the item's own current AI suggestion (omit override) or pick a
+ * different candidate from the possible-matches list (pass its details as override). */
+export interface ConfirmBoqRateSourceInput {
+  override?: {
+    rateSourceId: string;
+    itemName: string;
+    rate: number;
+    confidence: number;
+  };
 }
 
 export interface BoqDto {

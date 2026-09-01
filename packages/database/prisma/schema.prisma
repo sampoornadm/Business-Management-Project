@@ -683,6 +683,12 @@ model BoqItem {
   aiRateSourceId String? // HistoricalRate.id — unenforced ref, same convention as Attachment.entityId
   aiEnrichedAt   DateTime?
 
+  // Set when a human explicitly confirms the AI's rate-source match is the same item (as
+  // opposed to just clicking Apply once — this is a distinct "yes, verified" signal, logged to
+  // AuditLog alongside its rejected counterpart, same "suggest, never silently clobber" pattern
+  // as categoryConfirmed on Item. Cleared by an explicit rejection.
+  rateSourceConfirmed Boolean @default(false)
+
   rateBreakdown BoqItemRateBreakdown?
 
   createdAt DateTime @default(now())

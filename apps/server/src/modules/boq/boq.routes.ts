@@ -11,6 +11,7 @@ import {
   bulkUpdateBoqItemsSchema,
   commitBoqSchema,
   compareBoqQuerySchema,
+  confirmRateSourceSchema,
   createBoqItemSchema,
   updateBoqItemSchema,
   upsertRateAnalysisSchema,
@@ -302,6 +303,73 @@ export function createBoqItemsRouter(controller: BoqController): Router {
     requirePermission("boq:update"),
     validate(upsertRateAnalysisSchema),
     controller.upsertRateAnalysis,
+  );
+
+  /**
+   * @openapi
+   * /boq-items/{itemId}/rate-candidates:
+   *   get:
+   *     tags: [BOQ]
+   *     summary: Ranked historical-rate candidates for this item, recomputed live (not persisted)
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: itemId
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Ranked candidates, most similar first }
+   */
+  router.get(
+    "/:itemId/rate-candidates",
+    authenticateMiddleware,
+    requirePermission("boq:read"),
+    controller.getRateCandidates,
+  );
+
+  /**
+   * @openapi
+   * /boq-items/{itemId}/confirm-rate-source:
+   *   post:
+   *     tags: [BOQ]
+   *     summary: Confirm the AI's rate-source match is the same item (or a chosen alternate candidate) and apply its rate
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: itemId
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Updated BOQ }
+   */
+  router.post(
+    "/:itemId/confirm-rate-source",
+    authenticateMiddleware,
+    requirePermission("boq:update"),
+    validate(confirmRateSourceSchema),
+    controller.confirmRateSource,
+  );
+
+  /**
+   * @openapi
+   * /boq-items/{itemId}/reject-rate-source:
+   *   post:
+   *     tags: [BOQ]
+   *     summary: Reject the AI's rate-source match as not the same item, clearing the suggestion
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: itemId
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Updated BOQ }
+   */
+  router.post(
+    "/:itemId/reject-rate-source",
+    authenticateMiddleware,
+    requirePermission("boq:update"),
+    controller.rejectRateSource,
   );
 
   return router;

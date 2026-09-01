@@ -87,6 +87,13 @@ export interface UpdateBoqItemEnrichmentData {
   aiEnrichedAt: Date;
 }
 
+export interface ConfirmRateSourceData {
+  rate: number;
+  amount: number | null;
+  rateSourceId: string | null;
+  confidence: number | null;
+}
+
 export interface UpsertRateBreakdownData {
   materialCost: number;
   laborCost: number;
@@ -111,6 +118,8 @@ export interface IBoqRepository {
   deleteItem(id: string): Promise<void>;
   bulkUpdateRates(updates: BulkRateUpdate[]): Promise<void>;
   updateItemEnrichment(id: string, data: UpdateBoqItemEnrichmentData): Promise<void>;
+  confirmRateSource(id: string, data: ConfirmRateSourceData): Promise<void>;
+  rejectRateSource(id: string): Promise<void>;
   upsertRateBreakdown(itemId: string, data: UpsertRateBreakdownData): Promise<void>;
   sumAmountByBoqId(boqId: string): Promise<number>;
   finalize(boqId: string): Promise<void>;
@@ -224,6 +233,34 @@ export class BoqRepository implements IBoqRepository {
 
   async updateItemEnrichment(id: string, data: UpdateBoqItemEnrichmentData): Promise<void> {
     await this.prisma.boqItem.update({ where: { id }, data });
+  }
+
+  async confirmRateSource(id: string, data: ConfirmRateSourceData): Promise<void> {
+    await this.prisma.boqItem.update({
+      where: { id },
+      data: {
+        rate: data.rate,
+        amount: data.amount,
+        suggestedRate: data.rate,
+        aiSource: "historical",
+        aiRateSourceId: data.rateSourceId,
+        aiConfidence: data.confidence,
+        rateSourceConfirmed: true,
+      },
+    });
+  }
+
+  async rejectRateSource(id: string): Promise<void> {
+    await this.prisma.boqItem.update({
+      where: { id },
+      data: {
+        suggestedRate: null,
+        aiSource: null,
+        aiRateSourceId: null,
+        aiConfidence: null,
+        rateSourceConfirmed: false,
+      },
+    });
   }
 
   async upsertRateBreakdown(itemId: string, data: UpsertRateBreakdownData): Promise<void> {
