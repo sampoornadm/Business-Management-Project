@@ -11,6 +11,7 @@ const itemArgs = {
     categoryId: true,
     categoryConfirmed: true,
     aiConfidence: true,
+    needsReview: true,
   },
 } satisfies Prisma.ItemDefaultArgs;
 
@@ -72,6 +73,8 @@ function statusWhere(status: ItemStatus | undefined): Prisma.ItemWhereInput {
       return { categoryId: { not: null }, categoryConfirmed: false };
     case "classified":
       return { categoryConfirmed: true };
+    case "needs_review":
+      return { needsReview: true };
     default:
       return {};
   }
@@ -87,7 +90,13 @@ export interface IItemsRepository {
   findById(id: string, businessId: string): Promise<ItemRow | null>;
   findByCanonicalName(businessId: string, canonicalName: string): Promise<{ id: string } | null>;
   renameItem(id: string, canonicalName: string): Promise<void>;
-  updateCategory(id: string, categoryId: string | null, confirmed: boolean, aiConfidence: number | null): Promise<void>;
+  updateCategory(
+    id: string,
+    categoryId: string | null,
+    confirmed: boolean,
+    aiConfidence: number | null,
+    needsReview: boolean,
+  ): Promise<void>;
   findUnclassified(businessId: string, limit: number): Promise<ItemForClassify[]>;
   countUnclassified(businessId: string): Promise<number>;
   getForClassify(id: string, businessId: string): Promise<ItemForClassify | null>;
@@ -187,10 +196,11 @@ export class ItemsRepository implements IItemsRepository {
     categoryId: string | null,
     confirmed: boolean,
     aiConfidence: number | null,
+    needsReview: boolean,
   ): Promise<void> {
     await this.prisma.item.update({
       where: { id },
-      data: { categoryId, categoryConfirmed: confirmed, aiConfidence },
+      data: { categoryId, categoryConfirmed: confirmed, aiConfidence, needsReview },
     });
   }
 

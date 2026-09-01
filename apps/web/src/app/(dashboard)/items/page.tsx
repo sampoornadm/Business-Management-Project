@@ -16,7 +16,16 @@ import {
   useToast,
 } from "@bmp/ui";
 import type { Column, ColumnDef, OnChangeFn, PaginationState, SortingState } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ChevronsUpDown, ListTree, Package, SearchX, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ChevronsUpDown,
+  ListTree,
+  Package,
+  SearchX,
+  Sparkles,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -29,6 +38,7 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: ALL, label: "All items" },
   { value: "unclassified", label: "Unclassified" },
   { value: "unconfirmed", label: "AI, unconfirmed" },
+  { value: "needs_review", label: "Needs review" },
   { value: "classified", label: "Confirmed" },
 ];
 
@@ -55,6 +65,17 @@ function SortHeader({ column, label }: { column: Column<ItemListEntryDto, unknow
 function CategoryCell({ entry }: { entry: ItemListEntryDto }) {
   if (!entry.categoryPath) return <span className="text-muted-foreground">Unclassified</span>;
   if (entry.confirmed) return <span>{entry.categoryPath}</span>;
+  if (entry.needsReview) {
+    return (
+      <Badge
+        variant="destructive"
+        className="gap-1"
+        title="AI classified this with low similarity to any known item — please double-check."
+      >
+        <AlertTriangle className="h-3 w-3" /> AI: {entry.categoryPath}
+      </Badge>
+    );
+  }
   return (
     <Badge
       variant="secondary"

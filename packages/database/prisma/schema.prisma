@@ -908,6 +908,13 @@ model Item {
   categoryConfirmed Boolean   @default(false)
   aiConfidence      Float?
 
+  // Set when the LLM classify path reports high confidence but the nearest known item (by
+  // embedding) is a weak semantic match — the combination that produced a real misclassification
+  // in testing (a self-reported 0.9 confidence force-fit into the nearest wrong category instead
+  // of returning null; see items.service.ts's LLM_CONFIDENCE_CEILING comment on why self-reported
+  // confidence isn't trusted alone). Cleared by any human touch, same as aiConfidence.
+  needsReview Boolean @default(false)
+
   // Embedding of canonicalName, populated lazily at classify time (same pattern as
   // HistoricalRate.embedding). Used to find a human-confirmed sibling item to copy the
   // category from before ever calling the LLM — see items.service classify path.

@@ -74,7 +74,20 @@ class FakeItemsRepository implements IItemsRepository {
     return Promise.resolve();
   }
 
-  updateCategory(): Promise<void> {
+  updateCategory(
+    id: string,
+    categoryId: string | null,
+    confirmed: boolean,
+    aiConfidence: number | null,
+    needsReview: boolean,
+  ): Promise<void> {
+    const item = this.items.get(id);
+    if (item) {
+      item.categoryId = categoryId;
+      item.categoryConfirmed = confirmed;
+      item.aiConfidence = aiConfidence;
+      item.needsReview = needsReview;
+    }
     return Promise.resolve();
   }
 
@@ -114,6 +127,7 @@ function makeItem(overrides: {
     categoryId: null,
     categoryConfirmed: false,
     aiConfidence: null,
+    needsReview: false,
     ...overrides,
   };
 }
@@ -275,5 +289,46 @@ describe("ItemsService classification audit logging", () => {
         }),
       }),
     );
+  });
+
+  it("flags needsReview when the LLM is confident but the nearest known item is a weak match", async () => {
+    repository.items.set("item-new", makeItem({ id: "item-new", canonicalName: "PVC Insulation Tape" }));
+    repository.itemForClassify = {
+      id: "item-new",
+      canonicalName: "PVC Insulation Tape",
+      unit: "roll",
+      embedding: [0.1, 0.2],
+      embeddedAt: new Date(),
+    };
+    repository.nearestMatches = [
+      { id: "item-far", categoryId: "cat-1", canonicalName: "PVC Pipe 50mm", unit: "meter", similarity: 0.54 },
+    ];
+    generateJsonMock.mockResolvedValue({ categoryId: "cat-1", confidence: 0.9 });
+
+    const result = await service.classifyItem("item-new", BUSINESS_ID, ACTOR_ID);
+
+    expect(result.needsReview).toBe(true);
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ needsReview: true }) }),
+    );
+  });
+
+  it("does not flag needsReview when the nearest known item is a reasonably close match", async () => {
+    repository.items.set("item-new", makeItem({ id: "item-new", canonicalName: "Widget Type Z" }));
+    repository.itemForClassify = {
+      id: "item-new",
+      canonicalName: "Widget Type Z",
+      unit: "nos",
+      embedding: [0.1, 0.2],
+      embeddedAt: new Date(),
+    };
+    repository.nearestMatches = [
+      { id: "item-close", categoryId: "cat-1", canonicalName: "Widget Type Y", unit: "nos", similarity: 0.75 },
+    ];
+    generateJsonMock.mockResolvedValue({ categoryId: "cat-1", confidence: 0.9 });
+
+    const result = await service.classifyItem("item-new", BUSINESS_ID, ACTOR_ID);
+
+    expect(result.needsReview).toBe(false);
   });
 });

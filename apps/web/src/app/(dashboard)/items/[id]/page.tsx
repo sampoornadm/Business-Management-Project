@@ -28,7 +28,7 @@ import {
   TableRow,
   useToast,
 } from "@bmp/ui";
-import { Check, Pencil, Sparkles } from "lucide-react";
+import { AlertTriangle, Check, Pencil, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
@@ -179,6 +179,16 @@ export default function ItemDetailPage() {
           <CardTitle className="text-base">Classification</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          {item.needsReview && (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                The AI reported high confidence here, but this item didn&apos;t closely resemble
+                anything already classified — the kind of gap where it force-fits a category
+                instead of admitting it doesn&apos;t know. Worth a closer look before confirming.
+              </p>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             {item.categoryPath ? (
               <Badge variant={item.confirmed ? "success" : "secondary"}>
