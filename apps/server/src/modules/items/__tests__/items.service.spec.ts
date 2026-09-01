@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { generateJsonMock } = vi.hoisted(() => ({ generateJsonMock: vi.fn() }));
+vi.mock("../../../infra/llm/ollama.client.js", () => ({
+  embed: vi.fn(),
+  generateJson: generateJsonMock,
+}));
+
 import { ConflictError, NotFoundError } from "../../../core/errors/HttpErrors.js";
+import type { AuditService } from "../../audit/audit.service.js";
 import type { CategoriesService } from "../../categories/categories.service.js";
 import type { RfqService } from "../../rfq/rfq.service.js";
 import type {
@@ -21,6 +28,9 @@ type StoredItem = ItemRow & { businessId: string };
 
 class FakeItemsRepository implements IItemsRepository {
   items = new Map<string, StoredItem>();
+  itemForClassify: ItemForClassify | null = null;
+  confirmedForMatch: ConfirmedMatchRow[] = [];
+  nearestMatches: NearestConfirmedMatch[] = [];
 
   findUnlinkedRfqItems(): Promise<UnlinkedRfqItem[]> {
     return Promise.resolve([]);
@@ -77,7 +87,7 @@ class FakeItemsRepository implements IItemsRepository {
   }
 
   getForClassify(): Promise<ItemForClassify | null> {
-    return Promise.resolve(null);
+    return Promise.resolve(this.itemForClassify);
   }
 
   setEmbedding(): Promise<void> {
@@ -85,11 +95,11 @@ class FakeItemsRepository implements IItemsRepository {
   }
 
   findConfirmedForMatch(): Promise<ConfirmedMatchRow[]> {
-    return Promise.resolve([]);
+    return Promise.resolve(this.confirmedForMatch);
   }
 
   findNearestConfirmedMatch(): Promise<NearestConfirmedMatch[]> {
-    return Promise.resolve([]);
+    return Promise.resolve(this.nearestMatches);
   }
 }
 
@@ -120,7 +130,8 @@ describe("ItemsService.renameItem", () => {
     const categoriesService = {
       getPathMap: vi.fn().mockResolvedValue(new Map<string, string>()),
     } as unknown as CategoriesService;
-    service = new ItemsService(repository, rfqService, categoriesService);
+    const auditService = { log: vi.fn().mockResolvedValue(undefined) } as unknown as AuditService;
+    service = new ItemsService(repository, rfqService, categoriesService, auditService);
   });
 
   it("renames the item when the new name is free", async () => {
@@ -167,5 +178,102 @@ describe("ItemsService.renameItem", () => {
     repository.items.set(item.id, item);
 
     await expect(service.renameItem("item-1", BUSINESS_ID, "New Name")).rejects.toThrow(NotFoundError);
+  });
+});
+
+const ACTOR_ID = "user-1";
+
+describe("ItemsService classification audit logging", () => {
+  let repository: FakeItemsRepository;
+  let auditLog: ReturnType<typeof vi.fn>;
+  let service: ItemsService;
+
+  beforeEach(() => {
+    generateJsonMock.mockReset();
+    repository = new FakeItemsRepository();
+    const rfqService = {
+      listItemPrices: vi.fn().mockResolvedValue({ items: [], totalItems: 0 }),
+    } as unknown as RfqService;
+    const categoriesService = {
+      getLeaves: vi.fn().mockResolvedValue([{ id: "cat-1", name: "Piping", path: "Plumbing > Piping" }]),
+      getPathMap: vi.fn().mockResolvedValue(new Map([["cat-1", "Plumbing > Piping"]])),
+    } as unknown as CategoriesService;
+    auditLog = vi.fn().mockResolvedValue(undefined);
+    const auditService = { log: auditLog } as unknown as AuditService;
+    service = new ItemsService(repository, rfqService, categoriesService, auditService);
+  });
+
+  it("logs a sibling-reuse decision without calling the LLM", async () => {
+    repository.items.set("item-new", makeItem({ id: "item-new", canonicalName: "FKM O-Ring 42x58x8" }));
+    repository.itemForClassify = {
+      id: "item-new",
+      canonicalName: "FKM O-Ring 42x58x8",
+      unit: "nos",
+      embedding: [0.1, 0.2],
+      embeddedAt: new Date(),
+    };
+    repository.nearestMatches = [
+      {
+        id: "item-sibling",
+        categoryId: "cat-1",
+        canonicalName: "FKM O-Ring 42x58x8",
+        unit: "nos",
+        similarity: 0.999,
+      },
+    ];
+
+    await service.classifyItem("item-new", BUSINESS_ID, ACTOR_ID);
+
+    expect(generateJsonMock).not.toHaveBeenCalled();
+    expect(auditLog).toHaveBeenCalledTimes(1);
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: ACTOR_ID,
+        action: "ITEM_CLASSIFIED",
+        entityType: "Item",
+        entityId: "item-new",
+        metadata: expect.objectContaining({
+          path: "sibling_reuse",
+          categoryId: "cat-1",
+          matchedItemId: "item-sibling",
+          matchedCanonicalName: "FKM O-Ring 42x58x8",
+        }),
+      }),
+    );
+  });
+
+  it("logs an LLM decision, including which model and how many examples grounded it", async () => {
+    repository.items.set("item-new", makeItem({ id: "item-new", canonicalName: "Widget Type Z" }));
+    repository.itemForClassify = {
+      id: "item-new",
+      canonicalName: "Widget Type Z",
+      unit: "nos",
+      embedding: [0.1, 0.2],
+      embeddedAt: new Date(),
+    };
+    // No close-enough sibling — forces the LLM path.
+    repository.nearestMatches = [
+      { id: "item-far", categoryId: "cat-1", canonicalName: "Something Else", unit: "nos", similarity: 0.2 },
+    ];
+    generateJsonMock.mockResolvedValue({ categoryId: "cat-1", confidence: 0.7 });
+
+    await service.classifyItem("item-new", BUSINESS_ID, ACTOR_ID);
+
+    expect(generateJsonMock).toHaveBeenCalledTimes(1);
+    expect(auditLog).toHaveBeenCalledTimes(1);
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: ACTOR_ID,
+        action: "ITEM_CLASSIFIED",
+        entityType: "Item",
+        entityId: "item-new",
+        metadata: expect.objectContaining({
+          path: "llm",
+          categoryId: "cat-1",
+          exampleCount: 1,
+          candidateCount: 1,
+        }),
+      }),
+    );
   });
 });

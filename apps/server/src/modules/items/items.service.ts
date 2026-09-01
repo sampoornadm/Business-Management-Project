@@ -16,6 +16,7 @@ import {
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
 import { embed, generateJson } from "../../infra/llm/ollama.client.js";
 import { logger } from "../../shared/logger/logger.js";
+import type { AuditService } from "../audit/audit.service.js";
 import type { CategoriesService } from "../categories/categories.service.js";
 import type { RfqService } from "../rfq/rfq.service.js";
 
@@ -52,6 +53,7 @@ export class ItemsService {
     private readonly itemsRepository: IItemsRepository,
     private readonly rfqService: RfqService,
     private readonly categoriesService: CategoriesService,
+    private readonly auditService: AuditService,
   ) {}
 
   /**
@@ -165,11 +167,11 @@ export class ItemsService {
   }
 
   /** AI-classify a single item into the taxonomy, leaving it unconfirmed for review. */
-  async classifyItem(id: string, businessId: string): Promise<ItemDetailDto> {
+  async classifyItem(id: string, businessId: string, actorId: string): Promise<ItemDetailDto> {
     const item = await this.itemsRepository.getForClassify(id, businessId);
     if (!item) throw new NotFoundError("Item not found");
     const context = await this.loadClassifyContext(businessId);
-    const result = await this.suggestForItem(item, context, businessId);
+    const result = await this.suggestForItem(item, context, businessId, actorId);
     await this.itemsRepository.updateCategory(id, result.categoryId, false, result.confidence || null);
     return this.getItemDetail(id, businessId);
   }
@@ -178,6 +180,7 @@ export class ItemsService {
   async classifyUnclassified(
     businessId: string,
     limit: number,
+    actorId: string,
   ): Promise<{ classified: number; unmatched: number; failed: number; remaining: number }> {
     const context = await this.loadClassifyContext(businessId);
     const items = await this.itemsRepository.findUnclassified(businessId, limit);
@@ -187,7 +190,7 @@ export class ItemsService {
     let failed = 0;
     for (const item of items) {
       try {
-        const result = await this.suggestForItem(item, context, businessId);
+        const result = await this.suggestForItem(item, context, businessId, actorId);
         await this.itemsRepository.updateCategory(item.id, result.categoryId, false, result.confidence || null);
         // The model legitimately returns null ("none fit"); that is not a category, and the
         // item stays unclassified (and retryable) rather than being counted as done.
@@ -240,11 +243,17 @@ export class ItemsService {
    *            (by embedding) rather than arbitrary recent ones, so past confirmations steer it
    *            (e.g. a confirmed "PU Tube 4x6 -> Piping" pulls a new "PU Tube 7x10" the same way).
    * Either way the result lands unconfirmed for review.
+   *
+   * Every call is logged to AuditLog (action ITEM_CLASSIFIED) with which path decided it and
+   * enough of the input/context to replay later — the point is a growing record of how much of
+   * the catalog resolves deterministically (sibling reuse) vs. still needs the LLM, per category,
+   * so that question can be answered from data instead of impression once there's enough of it.
    */
   private async suggestForItem(
     item: ItemForClassify,
     context: { leaves: CategoryLeafDto[]; pathMap: Map<string, string> },
     businessId: string,
+    actorId: string,
   ): Promise<ClassificationResult> {
     let embedding = item.embedding;
     if (!item.embeddedAt || embedding.length === 0) {
@@ -264,7 +273,18 @@ export class ItemsService {
       nearest[0] ?? null,
       env.AI_MATCH_THRESHOLD,
     );
-    if (sibling) return sibling;
+    if (sibling) {
+      const match = nearest[0]!;
+      await this.logClassification(actorId, item, {
+        path: "sibling_reuse",
+        categoryId: sibling.categoryId,
+        confidence: sibling.confidence,
+        matchedItemId: match.id,
+        matchedCanonicalName: match.canonicalName,
+        candidateCount: nearest.length,
+      });
+      return sibling;
+    }
 
     // Nearest confirmed examples ground the LLM — the practical "learn from feedback" lever.
     const examples = nearest
@@ -273,7 +293,52 @@ export class ItemsService {
 
     const prompt = buildClassifyPrompt(item.canonicalName, item.unit, context.leaves, examples);
     const raw = await generateJson(prompt, env.OLLAMA_ENRICHMENT_MODEL);
-    return parseClassification(raw, new Set(context.leaves.map((l) => l.id)));
+    const result = parseClassification(raw, new Set(context.leaves.map((l) => l.id)));
+    await this.logClassification(actorId, item, {
+      path: "llm",
+      categoryId: result.categoryId,
+      confidence: result.confidence,
+      model: env.OLLAMA_ENRICHMENT_MODEL,
+      exampleCount: examples.length,
+      candidateCount: nearest.length,
+      nearestSimilarity: nearest[0]?.similarity ?? null,
+    });
+    return result;
+  }
+
+  private async logClassification(
+    actorId: string,
+    item: ItemForClassify,
+    details:
+      | {
+          path: "sibling_reuse";
+          categoryId: string | null;
+          confidence: number;
+          matchedItemId: string;
+          matchedCanonicalName: string;
+          candidateCount: number;
+        }
+      | {
+          path: "llm";
+          categoryId: string | null;
+          confidence: number;
+          model: string;
+          exampleCount: number;
+          candidateCount: number;
+          nearestSimilarity: number | null;
+        },
+  ): Promise<void> {
+    await this.auditService.log({
+      actorId,
+      action: "ITEM_CLASSIFIED",
+      entityType: "Item",
+      entityId: item.id,
+      metadata: {
+        canonicalName: item.canonicalName,
+        unit: item.unit,
+        ...details,
+      },
+    });
   }
 
   /**
