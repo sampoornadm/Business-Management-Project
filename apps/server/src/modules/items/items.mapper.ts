@@ -60,6 +60,7 @@ export function toItemListEntryDto(
     categoryPath,
     confirmed: item.categoryConfirmed,
     aiConfidence: item.aiConfidence,
+    needsReview: item.needsReview,
     quoteCount: agg?.quoteCount ?? 0,
     vendorCount: agg?.vendorCount ?? 0,
     minRate: agg?.minRate ?? null,
@@ -82,6 +83,7 @@ export function toItemDetailDto(
     categoryPath,
     confirmed: item.categoryConfirmed,
     aiConfidence: item.aiConfidence,
+    needsReview: item.needsReview,
     entries,
   };
 }

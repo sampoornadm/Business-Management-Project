@@ -39,11 +39,20 @@ import type {
 const DETAIL_ENTRY_LIMIT = 200;
 /** How many already-classified items ground the classifier prompt. */
 const CLASSIFY_EXAMPLE_LIMIT = 20;
+/**
+ * needsReview fires when the LLM path reports confidence at or above this ceiling while the
+ * nearest known item (by embedding) is below this floor — a self-reported-confident guess with
+ * nothing to actually ground it. Measured against a real failure: qwen3:4b force-fit an
+ * out-of-taxonomy item at 0.9 confidence with a 0.54 nearest similarity, instead of returning
+ * null. Both numbers are deliberately loose (catch the failure mode, not tune to one example).
+ */
+const NEEDS_REVIEW_CONFIDENCE_FLOOR = 0.85;
+const NEEDS_REVIEW_SIMILARITY_CEILING = 0.6;
 
 export interface ItemListFilters {
   businessId: string;
   search?: string;
-  status?: "classified" | "unclassified" | "unconfirmed";
+  status?: "classified" | "unclassified" | "unconfirmed" | "needs_review";
   sortBy?: ItemSortField;
   sortDir?: "asc" | "desc";
 }
@@ -144,7 +153,7 @@ export class ItemsService {
         throw new BadRequestError("Category must be a leaf (subcategory) of the taxonomy");
       }
     }
-    await this.itemsRepository.updateCategory(id, input.categoryId, input.confirmed ?? true, null);
+    await this.itemsRepository.updateCategory(id, input.categoryId, input.confirmed ?? true, null, false);
     return this.getItemDetail(id, businessId);
   }
 
@@ -172,7 +181,13 @@ export class ItemsService {
     if (!item) throw new NotFoundError("Item not found");
     const context = await this.loadClassifyContext(businessId);
     const result = await this.suggestForItem(item, context, businessId, actorId);
-    await this.itemsRepository.updateCategory(id, result.categoryId, false, result.confidence || null);
+    await this.itemsRepository.updateCategory(
+      id,
+      result.categoryId,
+      false,
+      result.confidence || null,
+      result.needsReview,
+    );
     return this.getItemDetail(id, businessId);
   }
 
@@ -191,7 +206,13 @@ export class ItemsService {
     for (const item of items) {
       try {
         const result = await this.suggestForItem(item, context, businessId, actorId);
-        await this.itemsRepository.updateCategory(item.id, result.categoryId, false, result.confidence || null);
+        await this.itemsRepository.updateCategory(
+          item.id,
+          result.categoryId,
+          false,
+          result.confidence || null,
+          result.needsReview,
+        );
         // The model legitimately returns null ("none fit"); that is not a category, and the
         // item stays unclassified (and retryable) rather than being counted as done.
         if (result.categoryId) classified += 1;
@@ -254,7 +275,7 @@ export class ItemsService {
     context: { leaves: CategoryLeafDto[]; pathMap: Map<string, string> },
     businessId: string,
     actorId: string,
-  ): Promise<ClassificationResult> {
+  ): Promise<ClassificationResult & { needsReview: boolean }> {
     let embedding = item.embedding;
     if (!item.embeddedAt || embedding.length === 0) {
       embedding = (await this.safeEmbed([item.canonicalName]))[0] ?? [];
@@ -283,7 +304,8 @@ export class ItemsService {
         matchedCanonicalName: match.canonicalName,
         candidateCount: nearest.length,
       });
-      return sibling;
+      // Deterministic match on cosine + spec + unit — never ambiguous, never needs review.
+      return { ...sibling, needsReview: false };
     }
 
     // Nearest confirmed examples ground the LLM — the practical "learn from feedback" lever.
@@ -294,6 +316,11 @@ export class ItemsService {
     const prompt = buildClassifyPrompt(item.canonicalName, item.unit, context.leaves, examples);
     const raw = await generateJson(prompt, env.OLLAMA_ENRICHMENT_MODEL);
     const result = parseClassification(raw, new Set(context.leaves.map((l) => l.id)));
+    const nearestSimilarity = nearest[0]?.similarity ?? 0;
+    const needsReview =
+      result.categoryId !== null &&
+      result.confidence >= NEEDS_REVIEW_CONFIDENCE_FLOOR &&
+      nearestSimilarity < NEEDS_REVIEW_SIMILARITY_CEILING;
     await this.logClassification(actorId, item, {
       path: "llm",
       categoryId: result.categoryId,
@@ -302,8 +329,9 @@ export class ItemsService {
       exampleCount: examples.length,
       candidateCount: nearest.length,
       nearestSimilarity: nearest[0]?.similarity ?? null,
+      needsReview,
     });
-    return result;
+    return { ...result, needsReview };
   }
 
   private async logClassification(
@@ -326,6 +354,7 @@ export class ItemsService {
           exampleCount: number;
           candidateCount: number;
           nearestSimilarity: number | null;
+          needsReview: boolean;
         },
   ): Promise<void> {
     await this.auditService.log({

@@ -7,6 +7,10 @@ export interface ItemClassificationDto {
   categoryPath: string | null; // "Electrical > Cable"
   confirmed: boolean;
   aiConfidence: number | null;
+  // True when the LLM classify path reported high confidence but the nearest known item was a
+  // weak semantic match — flags this suggestion as worth a closer look, distinct from an
+  // ordinary unconfirmed AI guess with decent grounding.
+  needsReview: boolean;
 }
 
 export interface ItemListEntryDto extends ItemClassificationDto {
@@ -44,8 +48,8 @@ export interface ListItemsQuery {
   page?: number;
   pageSize?: number;
   search?: string;
-  // "classified" | "unclassified" | "unconfirmed" — filter by classification state.
-  status?: "classified" | "unclassified" | "unconfirmed";
+  // "classified" | "unclassified" | "unconfirmed" | "needs_review" — filter by classification state.
+  status?: "classified" | "unclassified" | "unconfirmed" | "needs_review";
   sortBy?: ItemSortField;
   sortDir?: "asc" | "desc";
 }
