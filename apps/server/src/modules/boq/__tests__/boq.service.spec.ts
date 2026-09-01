@@ -3,14 +3,22 @@ import { randomUUID } from "node:crypto";
 import ExcelJS from "exceljs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { embedMock } = vi.hoisted(() => ({ embedMock: vi.fn() }));
+vi.mock("../../../infra/llm/ollama.client.js", () => ({
+  embed: embedMock,
+  generateJson: vi.fn(),
+}));
+
 import { BadRequestError, NotFoundError } from "../../../core/errors/HttpErrors.js";
 import type { AttachmentsService } from "../../attachments/attachments.service.js";
 import type { AuditService } from "../../audit/audit.service.js";
+import type { HistoricalRateMatch, IHistoricalRatesRepository } from "../../rates/rates.repository.js";
 import type { ITendersRepository } from "../../tenders/tenders.repository.js";
 import type {
   BoqItemWithBreakdown,
   BoqWithCreator,
   BulkRateUpdate,
+  ConfirmRateSourceData,
   CreateBoqData,
   CreateBoqItemData,
   IBoqRepository,
@@ -47,6 +55,17 @@ class FakeBoqRepository implements IBoqRepository {
 
     for (const item of data.items) {
       this.items.set(item.id, {
+        // Prisma writes real NULL/false for unset nullable columns, not undefined — match that
+        // so `existing.suggestedRate === null` checks behave the same as against the real DB.
+        normalizedName: null,
+        aiCategory: null,
+        aiSubcategory: null,
+        aiConfidence: null,
+        suggestedRate: null,
+        aiSource: null,
+        aiRateSourceId: null,
+        aiEnrichedAt: null,
+        rateSourceConfirmed: false,
         ...item,
         boqId: data.id,
         rateBreakdown: null,
@@ -144,6 +163,40 @@ class FakeBoqRepository implements IBoqRepository {
     const boq = this.boqs.get(boqId);
     if (boq) boq.status = "FINALIZED";
   }
+
+  async confirmRateSource(id: string, data: ConfirmRateSourceData) {
+    const item = this.items.get(id);
+    if (!item) throw new Error("not found");
+    Object.assign(item, {
+      rate: data.rate,
+      amount: data.amount,
+      suggestedRate: data.rate,
+      aiSource: "historical",
+      aiRateSourceId: data.rateSourceId,
+      aiConfidence: data.confidence,
+      rateSourceConfirmed: true,
+    });
+  }
+
+  async rejectRateSource(id: string) {
+    const item = this.items.get(id);
+    if (!item) throw new Error("not found");
+    Object.assign(item, {
+      suggestedRate: null,
+      aiSource: null,
+      aiRateSourceId: null,
+      aiConfidence: null,
+      rateSourceConfirmed: false,
+    });
+  }
+}
+
+class FakeHistoricalRatesRepository implements Partial<IHistoricalRatesRepository> {
+  nearest: HistoricalRateMatch[] = [];
+
+  findNearest(): Promise<HistoricalRateMatch[]> {
+    return Promise.resolve(this.nearest);
+  }
 }
 
 class FakeTendersRepository implements Partial<ITendersRepository> {
@@ -159,22 +212,28 @@ describe("BoqService", () => {
   let tendersRepository: FakeTendersRepository;
   let attachmentsService: AttachmentsService;
   let auditService: AuditService;
+  let auditLog: ReturnType<typeof vi.fn>;
+  let historicalRatesRepository: FakeHistoricalRatesRepository;
   let service: BoqService;
   const tenderId = randomUUID();
   const actorId = randomUUID();
   const businessId = randomUUID();
 
   beforeEach(() => {
+    embedMock.mockReset();
     boqRepository = new FakeBoqRepository();
     tendersRepository = new FakeTendersRepository();
     tendersRepository.tenderIds.add(tenderId);
     attachmentsService = { upload: vi.fn() } as unknown as AttachmentsService;
-    auditService = { log: vi.fn().mockResolvedValue(undefined) } as unknown as AuditService;
+    auditLog = vi.fn().mockResolvedValue(undefined);
+    auditService = { log: auditLog } as unknown as AuditService;
+    historicalRatesRepository = new FakeHistoricalRatesRepository();
     service = new BoqService(
       boqRepository as unknown as IBoqRepository,
       tendersRepository as unknown as ITendersRepository,
       attachmentsService,
       auditService,
+      historicalRatesRepository as unknown as IHistoricalRatesRepository,
     );
   });
 
@@ -384,5 +443,126 @@ describe("BoqService", () => {
     expect(preview.suggestedMapping.rate).toBe("Rate");
     expect(preview.rows).toHaveLength(1);
     expect(preview.rows[0]!.cells["Quantity"]).toBe(100);
+  });
+
+  describe("rate-source confirm/reject/candidates", () => {
+    async function seedEnrichedItem(): Promise<string> {
+      const boq = await service.commitBoq(
+        tenderId,
+        businessId,
+        { items: [{ tempId: "1", description: "FKM O-Ring 42x58x8mm 80SH", unit: "nos", quantity: 10 }] },
+        actorId,
+        {},
+      );
+      const itemId = boq.items[0]!.id;
+      await boqRepository.updateItemEnrichment(itemId, {
+        normalizedName: "FKM O-Ring 42x58x8mm 80SH",
+        aiCategory: "Mechanical",
+        aiSubcategory: "Bearings & Seals",
+        aiConfidence: 0.99,
+        suggestedRate: 45,
+        aiSource: "historical",
+        aiRateSourceId: "rate-1",
+        aiEnrichedAt: new Date(),
+      });
+      return itemId;
+    }
+
+    it("confirms the item's own AI suggestion and applies it", async () => {
+      const itemId = await seedEnrichedItem();
+
+      const updated = await service.confirmRateSource(itemId, {}, actorId, businessId);
+
+      const item = updated.items.find((i) => i.id === itemId)!;
+      expect(item.rate).toBe(45);
+      expect(item.amount).toBe(450);
+      expect(item.rateSourceConfirmed).toBe(true);
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "BOQ_RATE_SUGGESTION_CONFIRMED",
+          entityType: "BoqItem",
+          entityId: itemId,
+          metadata: expect.objectContaining({ rate: 45, matchedRateId: "rate-1", manualPick: false }),
+        }),
+      );
+    });
+
+    it("confirms a manually-picked candidate instead of the item's own suggestion", async () => {
+      const itemId = await seedEnrichedItem();
+
+      const updated = await service.confirmRateSource(
+        itemId,
+        { override: { rateSourceId: "rate-2", itemName: "FKM O-Ring 42x58x8", rate: 48, confidence: 0.9 } },
+        actorId,
+        businessId,
+      );
+
+      const item = updated.items.find((i) => i.id === itemId)!;
+      expect(item.rate).toBe(48);
+      expect(item.amount).toBe(480);
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ rate: 48, matchedRateId: "rate-2", manualPick: true }),
+        }),
+      );
+    });
+
+    it("rejects an unenriched item's confirm attempt", async () => {
+      const boq = await service.commitBoq(
+        tenderId,
+        businessId,
+        { items: [{ tempId: "1", description: "Plain item", unit: "nos", quantity: 1 }] },
+        actorId,
+        {},
+      );
+      const itemId = boq.items[0]!.id;
+
+      await expect(service.confirmRateSource(itemId, {}, actorId, businessId)).rejects.toThrow(
+        BadRequestError,
+      );
+    });
+
+    it("rejects a rate suggestion, clearing it without touching the item's own rate", async () => {
+      const itemId = await seedEnrichedItem();
+      await service.updateItem(itemId, { rate: 40 }, actorId, businessId);
+
+      const updated = await service.rejectRateSource(itemId, actorId, businessId);
+
+      const item = updated.items.find((i) => i.id === itemId)!;
+      expect(item.suggestedRate).toBeNull();
+      expect(item.aiSource).toBeNull();
+      expect(item.rateSourceConfirmed).toBe(false);
+      expect(item.rate).toBe(40); // untouched — this is the estimator's own entered rate
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "BOQ_RATE_SUGGESTION_REJECTED",
+          metadata: expect.objectContaining({ matchedRateId: "rate-1" }),
+        }),
+      );
+    });
+
+    it("ranks candidates and flags which one would auto-match", async () => {
+      const itemId = await seedEnrichedItem();
+      embedMock.mockResolvedValue([[0.1, 0.2, 0.3]]);
+      historicalRatesRepository.nearest = [
+        { id: "rate-1", itemName: "FKM O-Ring 42x58x8mm 80SH", unit: "nos", rate: 45, category: "MATERIAL", similarity: 0.99 },
+        { id: "rate-2", itemName: "NBR O-Ring 20x28x4mm 70SH", unit: "nos", rate: 30, category: "MATERIAL", similarity: 0.7 },
+      ];
+
+      const candidates = await service.getRateCandidates(itemId, businessId);
+
+      expect(candidates).toHaveLength(2);
+      expect(candidates[0]!.isAutoMatch).toBe(true); // identical spec numbers + unit + similarity >= threshold
+      expect(candidates[1]!.isAutoMatch).toBe(false); // different spec numbers
+    });
+
+    it("returns no candidates when embedding is unavailable, instead of failing the request", async () => {
+      const itemId = await seedEnrichedItem();
+      embedMock.mockRejectedValue(new Error("Ollama down"));
+
+      const candidates = await service.getRateCandidates(itemId, businessId);
+
+      expect(candidates).toEqual([]);
+    });
   });
 });

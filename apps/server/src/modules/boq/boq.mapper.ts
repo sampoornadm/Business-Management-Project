@@ -46,6 +46,7 @@ export function buildBoqItemTree(items: BoqItemWithBreakdown[]): BoqItemDto[] {
       suggestedRate: item.suggestedRate,
       aiSource: item.aiSource,
       aiEnrichedAt: item.aiEnrichedAt?.toISOString() ?? null,
+      rateSourceConfirmed: item.rateSourceConfirmed,
       children: [],
     });
   }

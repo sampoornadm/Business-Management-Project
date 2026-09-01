@@ -17,7 +17,13 @@ const historicalRatesRepository = new HistoricalRatesRepository(prisma);
 // Exported for the ai-enrichment worker, which runs in the worker process (no router).
 export const boqEnrichmentService = new BoqEnrichmentService(boqRepository, historicalRatesRepository);
 
-export const boqService = new BoqService(boqRepository, tendersRepository, attachmentsService, auditService);
+export const boqService = new BoqService(
+  boqRepository,
+  tendersRepository,
+  attachmentsService,
+  auditService,
+  historicalRatesRepository,
+);
 const boqController = new BoqController(boqService);
 
 export const boqRouter = createBoqRouter(boqController);

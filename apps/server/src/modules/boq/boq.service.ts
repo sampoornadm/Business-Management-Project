@@ -1,16 +1,26 @@
 import { randomUUID } from "node:crypto";
 
-import type { BoqCompareDto, BoqCompareLineDto, BoqDto, BoqListItemDto, BoqParsePreviewDto } from "@bmp/types";
+import type {
+  BoqCompareDto,
+  BoqCompareLineDto,
+  BoqDto,
+  BoqListItemDto,
+  BoqParsePreviewDto,
+  BoqRateCandidateDto,
+} from "@bmp/types";
 
 import { BOQ_UPLOAD_LIMITS } from "../../config/constants.js";
 import { env } from "../../config/env.js";
 import { BadRequestError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import type { RequestContext } from "../../core/interfaces/request-context.js";
+import { embed } from "../../infra/llm/ollama.client.js";
 import { aiEnrichmentQueue } from "../../infra/queue/queues.js";
 import { logger } from "../../shared/logger/logger.js";
 import { round2 } from "../../shared/utils/math.js";
+import { sameSpec } from "../../shared/utils/spec-match.js";
 import type { AttachmentsService } from "../attachments/attachments.service.js";
 import type { AuditService } from "../audit/audit.service.js";
+import type { IHistoricalRatesRepository } from "../rates/rates.repository.js";
 import type { ITendersRepository } from "../tenders/tenders.repository.js";
 
 import { sumItemAmounts, toBoqDto, toBoqListItemDto } from "./boq.mapper.js";
@@ -23,10 +33,15 @@ import type {
 import type {
   BulkUpdateBoqItemsBody,
   CommitBoqBody,
+  ConfirmRateSourceBody,
   CreateBoqItemBody,
   UpdateBoqItemBody,
   UpsertRateAnalysisBody,
 } from "./boq.validation.js";
+
+/** Kept short deliberately — this is a human-facing "did we mean one of these?" list, not the
+ * wider pool (RATE_MATCH_CANDIDATES in boq-enrichment.service.ts) used to ground the LLM. */
+const RATE_CANDIDATE_LIMIT = 5;
 
 function normalizeDescription(description: string): string {
   return description.trim().toLowerCase().replace(/\s+/g, " ");
@@ -38,6 +53,7 @@ export class BoqService {
     private readonly tendersRepository: ITendersRepository,
     private readonly attachmentsService: AttachmentsService,
     private readonly auditService: AuditService,
+    private readonly historicalRatesRepository: IHistoricalRatesRepository,
   ) {}
 
   private async assertTenderExists(tenderId: string, businessId: string): Promise<void> {
@@ -389,6 +405,107 @@ export class BoqService {
       metadata: { boqId: existing.boqId, computedRate },
     });
     return this.buildBoqDto(existing.boqId, businessId);
+  }
+
+  /**
+   * A human explicitly agrees the AI's rate-source match is the same item — a step up from just
+   * clicking Apply, and logged as its own event so a later analysis can tell "estimator verified
+   * this" from "estimator never looked." `override` lets the estimator pick a different candidate
+   * than the one enrichment auto-suggested (see getRateCandidates) instead of the item's own.
+   */
+  async confirmRateSource(
+    itemId: string,
+    body: ConfirmRateSourceBody,
+    actorId: string,
+    businessId: string,
+  ): Promise<BoqDto> {
+    const existing = await this.boqRepository.findItemById(itemId, businessId);
+    if (!existing) throw new NotFoundError("BOQ item not found");
+
+    const rate = body.override?.rate ?? existing.suggestedRate;
+    if (rate === null) throw new BadRequestError("This item has no AI-suggested rate to confirm");
+    const rateSourceId = body.override?.rateSourceId ?? existing.aiRateSourceId;
+    const confidence = body.override?.confidence ?? existing.aiConfidence;
+    const matchedItemName = body.override?.itemName ?? existing.normalizedName;
+
+    const amount = existing.quantity !== null ? round2(existing.quantity * rate) : null;
+    await this.boqRepository.confirmRateSource(itemId, { rate, amount, rateSourceId, confidence });
+
+    await this.auditService.log({
+      actorId,
+      action: "BOQ_RATE_SUGGESTION_CONFIRMED",
+      entityType: "BoqItem",
+      entityId: itemId,
+      metadata: {
+        boqId: existing.boqId,
+        rate,
+        matchedRateId: rateSourceId,
+        matchedItemName,
+        confidence,
+        manualPick: Boolean(body.override),
+      },
+    });
+    return this.buildBoqDto(existing.boqId, businessId);
+  }
+
+  /**
+   * A human explicitly says the AI's rate-source match is NOT the same item — clears the
+   * suggestion (so it stops looking like an unreviewed guess) without touching the estimator's
+   * own rate/category. The point of logging what got rejected, same as the confirm path, is a
+   * labeled "this ISN'T the same item" data point for later analysis — not available today.
+   */
+  async rejectRateSource(itemId: string, actorId: string, businessId: string): Promise<BoqDto> {
+    const existing = await this.boqRepository.findItemById(itemId, businessId);
+    if (!existing) throw new NotFoundError("BOQ item not found");
+
+    await this.auditService.log({
+      actorId,
+      action: "BOQ_RATE_SUGGESTION_REJECTED",
+      entityType: "BoqItem",
+      entityId: itemId,
+      metadata: {
+        boqId: existing.boqId,
+        rejectedRate: existing.suggestedRate,
+        matchedRateId: existing.aiRateSourceId,
+        matchedItemName: existing.normalizedName,
+        confidence: existing.aiConfidence,
+      },
+    });
+    await this.boqRepository.rejectRateSource(itemId);
+    return this.buildBoqDto(existing.boqId, businessId);
+  }
+
+  /**
+   * The ranked candidates behind a rate suggestion, recomputed live (nothing persisted) — lets
+   * the estimator see near-misses that didn't clear the auto-apply bar instead of nothing at all.
+   * Degrades to an empty list rather than failing the request if the embed model is unavailable.
+   */
+  async getRateCandidates(itemId: string, businessId: string): Promise<BoqRateCandidateDto[]> {
+    const existing = await this.boqRepository.findItemById(itemId, businessId);
+    if (!existing) throw new NotFoundError("BOQ item not found");
+
+    const queryText = existing.normalizedName || existing.description;
+    let vector: number[] | undefined;
+    try {
+      [vector] = await embed([queryText]);
+    } catch (err) {
+      logger.warn({ itemId, err }, "Could not embed BOQ item for rate-candidate search");
+      return [];
+    }
+    if (!vector) return [];
+
+    const matches = await this.historicalRatesRepository.findNearest(businessId, vector, RATE_CANDIDATE_LIMIT);
+    return matches.map((match) => ({
+      id: match.id,
+      itemName: match.itemName,
+      unit: match.unit,
+      rate: match.rate,
+      similarity: round2(match.similarity),
+      isAutoMatch:
+        match.similarity >= env.AI_MATCH_THRESHOLD &&
+        sameSpec(queryText, match.itemName) &&
+        (existing.unit === null || match.unit === existing.unit),
+    }));
   }
 
   async compare(baseTenderId: string, compareTenderId: string, businessId: string): Promise<BoqCompareDto> {

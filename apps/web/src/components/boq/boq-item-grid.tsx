@@ -2,16 +2,23 @@
 
 import { DEFAULT_GST_RATE, type BoqDto, type BoqItemDto, type RfqVendorSuggestionsDto } from "@bmp/types";
 import { Badge, Button, EditableTreeTable, Input, useToast, type EditableTreeColumn } from "@bmp/ui";
-import { Send, Trash2 } from "lucide-react";
+import { Check, Send, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { useBulkUpdateBoqItems, useDeleteBoqItem, useUpdateBoqItem } from "@/hooks/use-boq";
+import {
+  useBulkUpdateBoqItems,
+  useConfirmRateSource,
+  useDeleteBoqItem,
+  useRejectRateSource,
+  useUpdateBoqItem,
+} from "@/hooks/use-boq";
 import { useSuggestRfqVendors } from "@/hooks/use-rfq";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
 
 import { RateAnalysisDialog } from "./rate-analysis-dialog";
+import { RateMatchCandidatesDialog } from "./rate-match-candidates-dialog";
 
 function isLeaf(item: BoqItemDto): boolean {
   return item.children.length === 0;
@@ -37,6 +44,8 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
   const deleteItem = useDeleteBoqItem(tenderId);
   const bulkUpdate = useBulkUpdateBoqItems(tenderId);
   const suggestVendors = useSuggestRfqVendors();
+  const confirmRateSource = useConfirmRateSource(tenderId);
+  const rejectRateSource = useRejectRateSource(tenderId);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [percentAdjustment, setPercentAdjustment] = useState("");
@@ -91,6 +100,32 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
   async function commitUpdate(item: BoqItemDto, input: Parameters<typeof updateItem.mutateAsync>[0]["input"]) {
     try {
       await updateItem.mutateAsync({ itemId: item.id, input });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not update item",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  async function handleConfirmRateSource(item: BoqItemDto) {
+    try {
+      await confirmRateSource.mutateAsync({ itemId: item.id });
+      toast({ title: "Rate confirmed and applied" });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not confirm rate",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  async function handleRejectRateSource(item: BoqItemDto) {
+    try {
+      await rejectRateSource.mutateAsync(item.id);
+      toast({ title: "Marked as not a match" });
     } catch (error) {
       toast({
         variant: "destructive",
@@ -203,24 +238,53 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
                 {classification}
               </Badge>
             )}
-            {item.suggestedRate !== null && (
+            {item.suggestedRate !== null ? (
               <>
                 <span className="tabular-nums">{item.suggestedRate.toLocaleString()}</span>
                 <Badge variant={confidence >= 0.95 ? "success" : "outline"} className="text-xs">
                   {Math.round(confidence * 100)}%
                 </Badge>
-                {canEdit && item.rate !== item.suggestedRate && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 px-2 text-xs"
-                    onClick={() => void commitUpdate(item, { rate: item.suggestedRate ?? undefined })}
-                    disabled={updateItem.isPending}
-                  >
-                    Apply
-                  </Button>
+                {item.rateSourceConfirmed && (
+                  <Check className="h-3.5 w-3.5 shrink-0 text-success" aria-label="Confirmed match" />
+                )}
+                {canEdit && (
+                  <>
+                    {!item.rateSourceConfirmed && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => void handleConfirmRateSource(item)}
+                        disabled={confirmRateSource.isPending}
+                      >
+                        Apply
+                      </Button>
+                    )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 text-muted-foreground"
+                      title="Not a match — this is a different item"
+                      onClick={() => void handleRejectRateSource(item)}
+                      disabled={rejectRateSource.isPending}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </>
                 )}
               </>
+            ) : (
+              canEdit && (
+                <RateMatchCandidatesDialog
+                  tenderId={tenderId}
+                  itemId={item.id}
+                  trigger={
+                    <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground">
+                      Check possible matches
+                    </Button>
+                  }
+                />
+              )
             )}
           </div>
         );
