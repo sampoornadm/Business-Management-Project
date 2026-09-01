@@ -44,13 +44,17 @@ export class ItemsController {
   });
 
   classify = asyncHandler(async (req, res) => {
-    const item = await this.itemsService.classifyItem(req.params.id!, req.user!.businessId);
+    const item = await this.itemsService.classifyItem(req.params.id!, req.user!.businessId, req.user!.id);
     sendSuccess(res, item, "Item classified");
   });
 
   classifyBatch = asyncHandler(async (req, res) => {
     const query = req.query as unknown as ClassifyBatchQuery;
-    const result = await this.itemsService.classifyUnclassified(req.user!.businessId, query.limit ?? 10);
+    const result = await this.itemsService.classifyUnclassified(
+      req.user!.businessId,
+      query.limit ?? 10,
+      req.user!.id,
+    );
     sendSuccess(res, result, `Classified ${result.classified} item(s)`);
   });
 }
