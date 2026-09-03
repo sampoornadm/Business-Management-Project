@@ -47,6 +47,9 @@ function buildTender(overrides: Partial<TenderDetail> = {}): TenderDetail {
     status: "DRAFT",
     statusChangedAt: now,
     priority: "MEDIUM",
+    kind: "TENDER",
+    convertedFromId: null,
+    convertedFrom: null,
     description: null,
     remarks: null,
     winnerName: null,
@@ -94,6 +97,12 @@ class FakeTendersRepository implements Partial<ITendersRepository> {
     const tender = this.tenders.get(id);
     if (!tender) throw new Error("not found");
     Object.assign(tender, data);
+    // Mirrors the real repository's behavior: `update()` re-includes `convertedFrom` via
+    // `tenderDetailArgs` on every call, so the fake must re-resolve it from `convertedFromId`
+    // rather than leaving the stale nested object Object.assign() just skipped over.
+    if ("convertedFromId" in data) {
+      tender.convertedFrom = data.convertedFromId ? (this.tenders.get(data.convertedFromId) ?? null) : null;
+    }
     return tender;
   }
 
@@ -415,5 +424,57 @@ describe("TendersService", () => {
     expect(stats.upcomingDeadlines.map((t) => t.id)).not.toContain(otherTender.id);
     expect(otherStats.totalActive).toBe(1);
     expect(otherStats.upcomingDeadlines.map((t) => t.id)).toContain(otherTender.id);
+  });
+
+  describe("budgetary quotations", () => {
+    it("creates a budgetary quotation without requiring a tenderNumber, and doesn't dup-check it", async () => {
+      const dto = await service.create(
+        { ...baseInput, tenderNumber: undefined, kind: "BUDGETARY" },
+        ctx,
+      );
+      expect(dto.kind).toBe("BUDGETARY");
+    });
+
+    it("still requires a tenderNumber and dup-checks it for a real tender", async () => {
+      await service.create(baseInput, ctx);
+      await expect(service.create(baseInput, ctx)).rejects.toThrow(ConflictError);
+    });
+
+    it("links a real tender to a same-client budgetary quotation", async () => {
+      const budgetary = await service.create(
+        { ...baseInput, tenderNumber: undefined, kind: "BUDGETARY" },
+        ctx,
+      );
+      const real = await service.create(baseInput, ctx);
+
+      const updated = await service.update(real.id, { convertedFromId: budgetary.id }, actorId, ctx);
+      expect(updated.convertedFrom?.id).toBe(budgetary.id);
+    });
+
+    it("rejects linking to a tender that isn't a budgetary quotation", async () => {
+      const otherReal = await service.create({ ...baseInput, tenderNumber: "TND-0002" }, ctx);
+      const real = await service.create(baseInput, ctx);
+
+      await expect(
+        service.update(real.id, { convertedFromId: otherReal.id }, actorId, ctx),
+      ).rejects.toThrow(BadRequestError);
+    });
+
+    it("rejects linking a budgetary quotation belonging to a different client", async () => {
+      // Seeded directly into the fake's map rather than via service.create() — create() validates
+      // clientId against FakeOrganizationsRepository, which only recognizes CLIENT_ID, so routing
+      // a second client through create() would throw before this test ever reached update().
+      const budgetary = buildTender({
+        kind: "BUDGETARY",
+        tenderNumber: "BQ-OTHER",
+        client: { id: randomUUID(), name: "Different Client", type: "GOVERNMENT" },
+      });
+      tendersRepository.tenders.set(budgetary.id, budgetary);
+      const real = await service.create(baseInput, ctx);
+
+      await expect(
+        service.update(real.id, { convertedFromId: budgetary.id }, actorId, ctx),
+      ).rejects.toThrow(BadRequestError);
+    });
   });
 });
