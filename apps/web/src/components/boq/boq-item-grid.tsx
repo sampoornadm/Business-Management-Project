@@ -278,6 +278,7 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
                 <RateMatchCandidatesDialog
                   tenderId={tenderId}
                   itemId={item.id}
+                  itemDescription={item.description}
                   trigger={
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground">
                       Check possible matches

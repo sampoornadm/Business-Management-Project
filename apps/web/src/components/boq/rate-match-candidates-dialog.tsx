@@ -21,10 +21,12 @@ import { useConfirmRateSource, useRateCandidates } from "@/hooks/use-boq";
 export function RateMatchCandidatesDialog({
   tenderId,
   itemId,
+  itemDescription,
   trigger,
 }: {
   tenderId: string;
   itemId: string;
+  itemDescription: string;
   trigger: ReactNode;
 }) {
   const { toast } = useToast();
@@ -59,11 +61,15 @@ export function RateMatchCandidatesDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>Possible rate matches</DialogTitle>
         </DialogHeader>
-        <div className="space-y-2">
+        <div className="min-w-0 rounded-md bg-muted/50 p-3 text-sm">
+          <p className="text-xs font-medium uppercase text-muted-foreground">Matching against</p>
+          <p className="mt-1 whitespace-pre-wrap break-words">{itemDescription}</p>
+        </div>
+        <div className="min-w-0 space-y-2">
           {candidates.isLoading && <Skeleton className="h-16 w-full" />}
           {!candidates.isLoading && (candidates.data?.length ?? 0) === 0 && (
             <p className="text-sm text-muted-foreground">
@@ -73,11 +79,11 @@ export function RateMatchCandidatesDialog({
           {candidates.data?.map((candidate) => (
             <div
               key={candidate.id}
-              className="flex items-center justify-between gap-3 rounded-md border p-2 text-sm"
+              className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm"
             >
-              <div className="min-w-0">
-                <p className="truncate font-medium">{candidate.itemName}</p>
-                <p className="text-xs text-muted-foreground">
+              <div className="min-w-0 flex-1">
+                <p className="break-words font-medium">{candidate.itemName}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
                   {candidate.rate.toLocaleString()}/{candidate.unit} ·{" "}
                   {Math.round(candidate.similarity * 100)}% similar
                 </p>
@@ -85,7 +91,7 @@ export function RateMatchCandidatesDialog({
               <Button
                 size="sm"
                 variant="outline"
-                className="shrink-0"
+                className="mt-0.5 shrink-0"
                 onClick={() => void handleUse(candidate)}
                 disabled={confirm.isPending}
               >
