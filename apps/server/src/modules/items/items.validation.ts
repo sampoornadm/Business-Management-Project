@@ -5,7 +5,7 @@ export const listItemsQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().optional(),
   search: z.string().max(200).optional(),
-  status: z.enum(["classified", "unclassified", "unconfirmed"]).optional(),
+  status: z.enum(["classified", "unclassified", "unconfirmed", "needs_review"]).optional(),
   sortBy: z.enum(ITEM_SORT_FIELDS).optional(),
   sortDir: z.enum(["asc", "desc"]).optional(),
 });
