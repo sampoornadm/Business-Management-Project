@@ -476,6 +476,11 @@ enum TenderStatus {
   CANCELLED
 }
 
+enum TenderKind {
+  TENDER
+  BUDGETARY
+}
+
 enum TenderPriority {
   LOW
   MEDIUM
@@ -517,6 +522,11 @@ model Tender {
   status              TenderStatus   @default(DRAFT)
   statusChangedAt     DateTime       @default(now())
   priority            TenderPriority @default(MEDIUM)
+  // TENDER is a real tender (tenderNumber is hand-typed, copied off the government notice).
+  // BUDGETARY is a rough, no-timeline price quote sent to a client before a real tender exists —
+  // it runs through the exact same BOQ/estimation pipeline, just tagged differently, and gets a
+  // server-generated tenderNumber instead (see TendersRepository.create).
+  kind                TenderKind     @default(TENDER)
   description         String?
   remarks             String?
   // Terms & Notes: the Note/NIT/ITT sections captured from the source document, formatted
@@ -530,6 +540,12 @@ model Tender {
   winnerName          String?
   winningBidAmount    Float?
   lossReason          String?
+  // Set on a TENDER-kind row once the estimator tags it back to the BUDGETARY-kind row it grew
+  // from. One tender links to at most one budgetary quotation; a budgetary quotation can still be
+  // revised any number of times via ordinary BOQ versioning, linked or not.
+  convertedFromId String?
+  convertedFrom   Tender?  @relation("BudgetaryConversion", fields: [convertedFromId], references: [id], onDelete: SetNull)
+  convertedTo     Tender[] @relation("BudgetaryConversion")
 
   createdById String
   createdBy   User   @relation("TenderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
@@ -550,6 +566,8 @@ model Tender {
   @@index([clientId])
   @@index([status])
   @@index([submissionDate])
+  @@index([kind])
+  @@index([convertedFromId])
   @@map("tenders")
 }
 
