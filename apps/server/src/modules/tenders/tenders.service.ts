@@ -138,7 +138,10 @@ export class TendersService {
       if (budgetary.kind !== "BUDGETARY") {
         throw new BadRequestError("The linked tender must be a budgetary quotation");
       }
-      if (budgetary.client.id !== existing.client.id) {
+      // Compare against the client this request is setting (data.clientId), not the tender's
+      // stale pre-update client — a single PATCH can carry both clientId and convertedFromId at
+      // once, and `existing` was captured before this update() call applies `data`.
+      if (budgetary.client.id !== (data.clientId ?? existing.client.id)) {
         throw new BadRequestError("The budgetary quotation must belong to the same client");
       }
     }
