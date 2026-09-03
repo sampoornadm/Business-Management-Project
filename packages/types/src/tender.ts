@@ -24,6 +24,14 @@ export const TENDER_STATUS_TRANSITIONS: Record<TenderStatus, TenderStatus[]> = {
 
 export const TENDER_TERMINAL_STATUSES: TenderStatus[] = ["WON", "LOST", "CANCELLED"];
 
+export const TENDER_KINDS = ["TENDER", "BUDGETARY"] as const;
+export type TenderKind = (typeof TENDER_KINDS)[number];
+
+export const TENDER_KIND_LABELS: Record<TenderKind, string> = {
+  TENDER: "Tender",
+  BUDGETARY: "Budgetary Quotation",
+};
+
 export const TENDER_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
 export type TenderPriority = (typeof TENDER_PRIORITIES)[number];
 
@@ -55,6 +63,7 @@ export const TENDER_DOCUMENT_TYPES = [
   "ADDENDUM",
   "BILL",
   "UNDERTAKING",
+  "QUOTATION",
   "GENERAL",
 ] as const;
 export type TenderDocumentType = (typeof TENDER_DOCUMENT_TYPES)[number];
@@ -75,6 +84,7 @@ export const TENDER_DOCUMENT_TYPE_FOLDER_NAMES: Record<TenderDocumentType, strin
   ADDENDUM: "Addendum",
   BILL: "Bills",
   UNDERTAKING: "Undertakings",
+  QUOTATION: "Quotations",
   GENERAL: "General",
 };
 
@@ -120,10 +130,18 @@ export interface TenderListItemDto {
   category: string | null;
   status: TenderStatus;
   priority: TenderPriority;
+  kind: TenderKind;
   estimatedCost: number | null;
   submissionDate: string | null;
   assigneeCount: number;
   createdAt: string;
+}
+
+export interface TenderLinkedBudgetaryDto {
+  id: string;
+  tenderNumber: string;
+  title: string;
+  updatedAt: string;
 }
 
 export interface TenderDto extends TenderListItemDto {
@@ -144,6 +162,7 @@ export interface TenderDto extends TenderListItemDto {
   winnerName: string | null;
   winningBidAmount: number | null;
   lossReason: string | null;
+  convertedFrom: TenderLinkedBudgetaryDto | null;
   createdBy: { id: string; firstName: string; lastName: string };
   assignees: TenderAssigneeDto[];
   competitors: TenderCompetitorDto[];
@@ -168,6 +187,7 @@ export interface CreateTenderInput {
   openingDate?: string;
   validityPeriodDays?: number;
   priority?: TenderPriority;
+  kind?: TenderKind;
   description?: string;
   remarks?: string;
   notes?: string;
@@ -176,7 +196,7 @@ export interface CreateTenderInput {
   dealingOfficerPhone?: string;
 }
 
-export type UpdateTenderInput = Partial<CreateTenderInput>;
+export type UpdateTenderInput = Partial<CreateTenderInput> & { convertedFromId?: string | null };
 
 export interface TenderExtractionFields {
   tenderNumber?: string;
@@ -243,6 +263,7 @@ export interface ListTendersQuery {
   pageSize?: number;
   search?: string;
   status?: TenderStatus;
+  kind?: TenderKind;
   clientId?: string;
   department?: string;
   priority?: TenderPriority;
