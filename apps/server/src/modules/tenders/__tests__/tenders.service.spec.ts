@@ -23,6 +23,7 @@ import type {
 import { TendersService } from "../tenders.service.js";
 
 const CLIENT_ID = randomUUID();
+const OTHER_CLIENT_ID = randomUUID();
 
 function buildTender(overrides: Partial<TenderDetail> = {}): TenderDetail {
   const now = new Date();
@@ -213,11 +214,11 @@ class FakeTendersRepository implements Partial<ITendersRepository> {
 
 class FakeOrganizationsRepository implements Partial<IOrganizationsRepository> {
   async findById(id: string): Promise<OrganizationEntity | null> {
-    if (id !== CLIENT_ID) return null;
+    if (id !== CLIENT_ID && id !== OTHER_CLIENT_ID) return null;
     const now = new Date();
     return {
-      id: CLIENT_ID,
-      name: "Public Works Department",
+      id,
+      name: id === CLIENT_ID ? "Public Works Department" : "Other Department",
       type: "GOVERNMENT",
       address: null,
       city: null,
@@ -462,8 +463,9 @@ describe("TendersService", () => {
 
     it("rejects linking a budgetary quotation belonging to a different client", async () => {
       // Seeded directly into the fake's map rather than via service.create() — create() validates
-      // clientId against FakeOrganizationsRepository, which only recognizes CLIENT_ID, so routing
-      // a second client through create() would throw before this test ever reached update().
+      // clientId against FakeOrganizationsRepository, which only recognizes CLIENT_ID/
+      // OTHER_CLIENT_ID, so routing an arbitrary third client through create() would throw
+      // before this test ever reached update().
       const budgetary = buildTender({
         kind: "BUDGETARY",
         tenderNumber: "BQ-OTHER",
@@ -474,6 +476,42 @@ describe("TendersService", () => {
 
       await expect(
         service.update(real.id, { convertedFromId: budgetary.id }, actorId, ctx),
+      ).rejects.toThrow(BadRequestError);
+    });
+
+    // Regression coverage: update()'s same-client check must compare against the client the
+    // request is *setting* (data.clientId), not the tender's stale pre-update client — a single
+    // PATCH can carry both clientId and convertedFromId at once.
+    it("links to a budgetary quotation belonging to the new client, when clientId changes in the same request", async () => {
+      const budgetary = await service.create(
+        { ...baseInput, tenderNumber: undefined, kind: "BUDGETARY", clientId: OTHER_CLIENT_ID },
+        ctx,
+      );
+      const real = await service.create(baseInput, ctx); // starts out on CLIENT_ID
+
+      const updated = await service.update(
+        real.id,
+        { clientId: OTHER_CLIENT_ID, convertedFromId: budgetary.id },
+        actorId,
+        ctx,
+      );
+      expect(updated.convertedFrom?.id).toBe(budgetary.id);
+    });
+
+    it("rejects linking to a budgetary quotation belonging to the tender's old client, when clientId changes in the same request", async () => {
+      const budgetary = await service.create(
+        { ...baseInput, tenderNumber: undefined, kind: "BUDGETARY" }, // stays on CLIENT_ID
+        ctx,
+      );
+      const real = await service.create(baseInput, ctx); // also starts out on CLIENT_ID
+
+      await expect(
+        service.update(
+          real.id,
+          { clientId: OTHER_CLIENT_ID, convertedFromId: budgetary.id },
+          actorId,
+          ctx,
+        ),
       ).rejects.toThrow(BadRequestError);
     });
   });
