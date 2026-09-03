@@ -178,3 +178,11 @@ model Tender {
 - Online tender-submission form-filling from tender data — explicitly deferred by the user to a
   later piece of work.
 - A `convertedTo` reverse-navigation UI on the budgetary quotation itself — not requested.
+
+## Deferred
+
+- **Client/business-scoped numbering scheme.** The random-suffix `BQ-A1B2C3D4` numbering above is
+  intentionally the simplest thing that works for this pass. The user wants a real numbering
+  system later — budgetary (and possibly tender) numbers derived from the client and the business
+  currently in use (e.g. a per-client/per-business running sequence) — but that's out of scope
+  here and needs its own design pass when picked up.
