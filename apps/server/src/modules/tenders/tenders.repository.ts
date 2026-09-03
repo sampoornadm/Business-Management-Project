@@ -4,6 +4,7 @@ import type {
   Prisma,
   PrismaClient,
   TenderAssigneeRole,
+  TenderKind,
   TenderPriority,
   TenderStatus,
 } from "@bmp/database";
@@ -33,6 +34,7 @@ const tenderDetailArgs = {
     },
     competitors: { orderBy: { createdAt: "asc" } },
     tags: { include: { tag: true } },
+    convertedFrom: { select: { id: true, tenderNumber: true, title: true, updatedAt: true } },
   },
 } satisfies Prisma.TenderDefaultArgs;
 
@@ -49,7 +51,7 @@ const tenderDocGenArgs = {
 export type TenderForDocumentGeneration = Prisma.TenderGetPayload<typeof tenderDocGenArgs>;
 
 export interface CreateTenderData {
-  tenderNumber: string;
+  tenderNumber?: string;
   title: string;
   department?: string | null;
   clientId: string;
@@ -65,6 +67,8 @@ export interface CreateTenderData {
   openingDate?: Date | null;
   validityPeriodDays?: number | null;
   priority?: TenderPriority;
+  kind?: TenderKind;
+  convertedFromId?: string | null;
   description?: string | null;
   remarks?: string | null;
   notes?: string | null;
@@ -75,12 +79,13 @@ export interface CreateTenderData {
   createdById: string;
 }
 
-export type UpdateTenderData = Partial<Omit<CreateTenderData, "createdById">>;
+export type UpdateTenderData = Partial<Omit<CreateTenderData, "createdById" | "kind">>;
 
 export interface TenderFilters {
   businessId: string;
   search?: string;
   status?: TenderStatus;
+  kind?: TenderKind;
   clientId?: string;
   department?: string;
   priority?: TenderPriority;
@@ -165,6 +170,7 @@ export class TendersRepository implements ITendersRepository {
     const where: Prisma.TenderWhereInput = {
       businessId: filters.businessId,
       status: filters.status,
+      kind: filters.kind,
       clientId: filters.clientId,
       priority: filters.priority,
       ...(filters.department ? { department: { contains: filters.department, mode: "insensitive" } } : {}),
@@ -201,7 +207,18 @@ export class TendersRepository implements ITendersRepository {
   }
 
   create(data: CreateTenderData): Promise<TenderDetail> {
-    return this.prisma.tender.create({ data: { id: randomUUID(), ...data }, ...tenderDetailArgs });
+    // BUDGETARY quotations have no external number to copy (unlike a real tender's government-
+    // issued number) — generated the same one-shot way PO/Bill numbers already are
+    // (purchase-orders.repository.ts / bills.repository.ts): no retry on collision, a random
+    // 8-hex-char collision is astronomically unlikely.
+    const tenderNumber =
+      data.kind === "BUDGETARY"
+        ? `BQ-${randomUUID().split("-")[0]!.toUpperCase()}`
+        : data.tenderNumber!;
+    return this.prisma.tender.create({
+      data: { id: randomUUID(), ...data, tenderNumber },
+      ...tenderDetailArgs,
+    });
   }
 
   update(id: string, data: UpdateTenderData): Promise<TenderDetail> {

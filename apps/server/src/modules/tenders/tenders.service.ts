@@ -77,16 +77,19 @@ export class TendersService {
     data: Omit<CreateTenderData, "businessId">,
     context: ScopedRequestContext,
   ): Promise<TenderDto> {
-    const duplicate = await this.tendersRepository.findByTenderNumber(
-      data.tenderNumber,
-      context.businessId,
-    );
-    if (duplicate) throw new ConflictError("A tender with this tender number already exists");
+    const kind = data.kind ?? "TENDER";
+    if (kind === "TENDER") {
+      const duplicate = await this.tendersRepository.findByTenderNumber(
+        data.tenderNumber!,
+        context.businessId,
+      );
+      if (duplicate) throw new ConflictError("A tender with this tender number already exists");
+    }
 
     const client = await this.organizationsRepository.findById(data.clientId);
     if (!client) throw new BadRequestError("Invalid client");
 
-    const tender = await this.tendersRepository.create({ ...data, businessId: context.businessId });
+    const tender = await this.tendersRepository.create({ ...data, kind, businessId: context.businessId });
 
     // Fire-and-forget: a failure to create the local folder tree shouldn't
     // fail tender creation, and the watcher's startup reconciliation
@@ -119,11 +122,25 @@ export class TendersService {
     actorId: string,
     context: ScopedRequestContext,
   ): Promise<TenderDto> {
-    await this.assertTenderExists(id, context.businessId);
+    const existing = await this.assertTenderExists(id, context.businessId);
 
     if (data.clientId) {
       const client = await this.organizationsRepository.findById(data.clientId);
       if (!client) throw new BadRequestError("Invalid client");
+    }
+
+    if (data.convertedFromId !== undefined && data.convertedFromId !== null) {
+      if (existing.kind !== "TENDER") {
+        throw new BadRequestError("Only a real tender can link to a budgetary quotation");
+      }
+      const budgetary = await this.tendersRepository.findById(data.convertedFromId, context.businessId);
+      if (!budgetary) throw new BadRequestError("Invalid budgetary quotation");
+      if (budgetary.kind !== "BUDGETARY") {
+        throw new BadRequestError("The linked tender must be a budgetary quotation");
+      }
+      if (budgetary.client.id !== existing.client.id) {
+        throw new BadRequestError("The budgetary quotation must belong to the same client");
+      }
     }
 
     const tender = await this.tendersRepository.update(id, data);
