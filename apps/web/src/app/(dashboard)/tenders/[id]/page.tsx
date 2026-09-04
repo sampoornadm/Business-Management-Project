@@ -1,6 +1,6 @@
 "use client";
 
-import { TENDER_STATUS_LABELS } from "@bmp/types";
+import { TENDER_KIND_LABELS, TENDER_STATUS_LABELS } from "@bmp/types";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,7 +46,7 @@ import { useChangeTenderStatus, useDeleteTender, useSetTenderTags, useTender } f
 import { useAuthStore } from "@/lib/auth-store";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { hasPermission } from "@/lib/permissions";
-import { tenderPriorityBadgeVariant, tenderStatusBadgeVariant } from "@/lib/tender-status";
+import { tenderKindBadgeVariant, tenderPriorityBadgeVariant, tenderStatusBadgeVariant } from "@/lib/tender-status";
 import { buildTenderSteps, isOnHappyPath } from "@/lib/tender-stepper";
 
 export default function TenderDetailPage() {
@@ -117,6 +117,9 @@ export default function TenderDetailPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">{tender.title}</h1>
+            {tender.kind === "BUDGETARY" && (
+              <Badge variant={tenderKindBadgeVariant(tender.kind)}>{TENDER_KIND_LABELS.BUDGETARY}</Badge>
+            )}
             <Badge variant={tenderStatusBadgeVariant(tender.status)}>
               {TENDER_STATUS_LABELS[tender.status]}
             </Badge>
