@@ -85,12 +85,21 @@ export class ReportsRepository implements IReportsRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   async findTenderStatusCounts(businessId: string): Promise<{ status: TenderStatus; count: number }[]> {
-    const groups = await this.prisma.tender.groupBy({ where: { businessId }, by: ["status"], _count: { _all: true } });
+    // Budgetary quotations aren't part of the real tender pipeline — exclude them from reporting
+    // the same way they're already excluded from the default tenders list view.
+    const groups = await this.prisma.tender.groupBy({
+      where: { businessId, kind: "TENDER" },
+      by: ["status"],
+      _count: { _all: true },
+    });
     return groups.map((g) => ({ status: g.status, count: g._count._all }));
   }
 
   findTenderDates(businessId: string): Promise<{ createdAt: Date; submissionDate: Date | null }[]> {
-    return this.prisma.tender.findMany({ where: { businessId }, select: { createdAt: true, submissionDate: true } });
+    return this.prisma.tender.findMany({
+      where: { businessId, kind: "TENDER" },
+      select: { createdAt: true, submissionDate: true },
+    });
   }
 
   async findPurchaseOrderItemsForSpend(businessId: string, from?: Date, to?: Date): Promise<PurchaseOrderSpendRow[]> {

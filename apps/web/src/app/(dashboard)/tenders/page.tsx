@@ -1,6 +1,15 @@
 "use client";
 
-import { TENDER_PRIORITIES, TENDER_STATUS_LABELS, TENDER_STATUSES, type TenderPriority, type TenderStatus } from "@bmp/types";
+import {
+  TENDER_KIND_LABELS,
+  TENDER_KINDS,
+  TENDER_PRIORITIES,
+  TENDER_STATUS_LABELS,
+  TENDER_STATUSES,
+  type TenderKind,
+  type TenderPriority,
+  type TenderStatus,
+} from "@bmp/types";
 import {
   Button,
   DataTable,
@@ -20,7 +29,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { tenderTableColumns } from "@/components/tenders/tender-table-columns";
+import { buildTenderTableColumns } from "@/components/tenders/tender-table-columns";
 import { useTenders } from "@/hooks/use-tenders";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
@@ -35,6 +44,7 @@ export default function TendersPage() {
     return fromUrl && (TENDER_STATUSES as readonly string[]).includes(fromUrl) ? fromUrl : "";
   });
   const [priority, setPriority] = useState<string>("");
+  const [kind, setKind] = useState<TenderKind>("TENDER");
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 20 });
 
   useEffect(() => {
@@ -48,9 +58,11 @@ export default function TendersPage() {
     search: debouncedSearch || undefined,
     status: (status || undefined) as TenderStatus | undefined,
     priority: (priority || undefined) as TenderPriority | undefined,
+    kind,
   });
 
   const canCreate = hasPermission(roleName, "tenders:create");
+  const canGenerateDocument = hasPermission(roleName, "tenders:generate_document");
   const hasActiveFilters = Boolean(debouncedSearch || status || priority);
 
   const newTenderButton = (
@@ -70,6 +82,22 @@ export default function TendersPage() {
       />
 
       <FilterBar>
+        <div className="flex gap-1">
+          {TENDER_KINDS.map((option) => (
+            <Button
+              key={option}
+              type="button"
+              variant={kind === option ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setKind(option);
+                setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+              }}
+            >
+              {TENDER_KIND_LABELS[option]}
+            </Button>
+          ))}
+        </div>
         <Input
           placeholder="Search by title or tender number..."
           value={search}
@@ -118,7 +146,7 @@ export default function TendersPage() {
       </FilterBar>
 
       <DataTable
-        columns={tenderTableColumns}
+        columns={buildTenderTableColumns({ canGenerateDocument })}
         data={tendersQuery.data?.items ?? []}
         isLoading={tendersQuery.isLoading}
         pageCount={tendersQuery.data?.totalPages ?? 0}

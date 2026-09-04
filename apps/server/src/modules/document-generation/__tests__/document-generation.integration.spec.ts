@@ -189,3 +189,104 @@ describe("POST /tenders/:id/documents/undertaking (integration)", () => {
     }
   });
 });
+
+describe("POST /tenders/:id/documents/quotation (integration)", () => {
+  const app = createApp();
+  let testUser: IntegrationTestUser;
+  let clientOrgId: string;
+  let tenderId: string;
+
+  beforeEach(async () => {
+    testUser = await createIntegrationTestUser(app);
+    const clientOrg = await prisma.organization.create({
+      data: {
+        id: randomUUID(),
+        name: "Quotation Client",
+        type: "GOVERNMENT",
+        createdById: testUser.userId,
+      },
+    });
+    clientOrgId = clientOrg.id;
+    const tender = await prisma.tender.create({
+      data: {
+        id: randomUUID(),
+        businessId: testUser.businessId,
+        tenderNumber: `TEN-${randomUUID().slice(0, 8)}`,
+        title: "Quotation Integration Tender",
+        clientId: clientOrgId,
+        createdById: testUser.userId,
+      },
+    });
+    tenderId = tender.id;
+    const boqId = randomUUID();
+    await prisma.boq.create({
+      data: {
+        id: boqId,
+        tenderId,
+        businessId: testUser.businessId,
+        createdById: testUser.userId,
+        groupId: boqId,
+        version: 1,
+        isCurrent: true,
+        status: "DRAFT",
+        items: {
+          create: [
+            {
+              id: randomUUID(),
+              itemCode: "IT-1",
+              description: "Widget",
+              unit: "Nos",
+              quantity: 10,
+              rate: 100,
+              amount: 1000,
+              sortOrder: 0,
+            },
+          ],
+        },
+      },
+    });
+  });
+
+  afterEach(async () => {
+    await prisma.tender.deleteMany({ where: { id: tenderId } });
+    await prisma.organization.deleteMany({ where: { id: clientOrgId } });
+    await cleanupIntegrationTestUser(testUser);
+  });
+
+  it("generates a CSV of the current BOQ and returns 200", async () => {
+    const response = await request(app)
+      .post(`/api/v1/tenders/${tenderId}/documents/quotation`)
+      .query({ format: "csv" })
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
+      .responseType("blob");
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toBe("text/csv");
+    expect((response.body as Buffer).toString("utf-8")).toContain("Widget");
+  });
+
+  it("returns 404 when the tender has no BOQ", async () => {
+    const noBoqTender = await prisma.tender.create({
+      data: {
+        id: randomUUID(),
+        businessId: testUser.businessId,
+        tenderNumber: `TEN-${randomUUID().slice(0, 8)}`,
+        title: "No BOQ Tender",
+        clientId: clientOrgId,
+        createdById: testUser.userId,
+      },
+    });
+
+    try {
+      const response = await request(app)
+        .post(`/api/v1/tenders/${noBoqTender.id}/documents/quotation`)
+        .query({ format: "csv" })
+        .set("Authorization", `Bearer ${testUser.accessToken}`);
+
+      expect(response.status).toBe(404);
+      expect(response.body.error.message).toMatch(/no boq/i);
+    } finally {
+      await prisma.tender.deleteMany({ where: { id: noBoqTender.id } });
+    }
+  });
+});

@@ -1,4 +1,4 @@
-import type { TenderPriority, TenderStatus } from "@bmp/types";
+import type { TenderKind, TenderPriority, TenderStatus } from "@bmp/types";
 
 export type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success";
 
@@ -28,6 +28,10 @@ export function tenderStatusChartColor(status: TenderStatus): string {
     case "CANCELLED":
       return "hsl(var(--destructive))";
   }
+}
+
+export function tenderKindBadgeVariant(kind: TenderKind): BadgeVariant {
+  return kind === "BUDGETARY" ? "secondary" : "outline";
 }
 
 export function tenderPriorityBadgeVariant(priority: TenderPriority): BadgeVariant {

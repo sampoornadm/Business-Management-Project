@@ -31,5 +31,31 @@ export function createDocumentGenerationRouter(controller: DocumentGenerationCon
     controller.generateUndertaking,
   );
 
+  /**
+   * @openapi
+   * /tenders/{id}/documents/quotation:
+   *   post:
+   *     tags: [Document Generation]
+   *     summary: Generate a Quotation (docx, csv, or pdf) from a tender's current BOQ
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: format
+   *         schema: { type: string, enum: [docx, csv, pdf] }
+   *     responses:
+   *       200: { description: Generated document }
+   *       404: { description: Tender not found, or it has no BOQ (or the docx template is missing) }
+   */
+  router.post(
+    "/:id/documents/quotation",
+    authenticateMiddleware,
+    requirePermission("tenders:generate_document"),
+    controller.generateQuotation,
+  );
+
   return router;
 }

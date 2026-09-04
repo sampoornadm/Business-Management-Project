@@ -24,6 +24,7 @@ const DOCUMENT_TYPE_LABELS: Record<TenderDocumentType, string> = {
   ADDENDUM: "Addendum",
   BILL: "Bills",
   UNDERTAKING: "Undertakings",
+  QUOTATION: "Quotations",
   GENERAL: "General Documents",
 };
 
