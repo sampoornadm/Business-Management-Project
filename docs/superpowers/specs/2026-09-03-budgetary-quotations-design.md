@@ -31,9 +31,16 @@ portal forms from tender data.
 - `document-generation.service.ts` supports exactly two `DocumentType`s: `"undertaking"` (a
   `.docx` template filled via Docxtemplater) and `"signature"` (a static image). Both are looked
   up per-business at `<BUSINESSES_ROOT_DIR>/<businessCode>/templates/<file>`.
-  `generateUndertaking()` fetches the tender, fills the template, and returns a buffer + filename
-  — the controller streams it to the browser. It does **not** currently also save a copy into the
-  tender's folder.
+  `generateUndertaking()` fetches the tender, fills the template, and returns a buffer + filename.
+  The controller (`document-generation.controller.ts`) both streams that buffer to the browser
+  **and** calls `saveGeneratedTenderDocument()` (`tenders/local-docs/generated-documents.ts`),
+  which already does exactly what the user wants for Quotation: makes the buffer a first-class
+  `Attachment` on the tender and, when local-folder-sync is enabled, writes it to
+  `<tender folder>/<TENDER_DOCUMENT_TYPE_FOLDER_NAMES[documentType]>/<filename>` on disk. It's
+  already generic over `documentType: TenderDocumentType` — Quotation generation reuses this
+  helper as-is, just passing `documentType: "QUOTATION"`. (Corrects the original assumption that
+  Undertaking was stream-only — it isn't, so no changes are needed to `generateUndertaking`
+  itself.)
 - Tender documents are organized into fixed subfolders per `TENDER_DOCUMENT_TYPES`
   (`packages/types/src/tender.ts`) via `TENDER_DOCUMENT_TYPE_FOLDER_NAMES`, and
   `ensureTenderFolders()` creates that subfolder tree under
@@ -92,9 +99,12 @@ model Tender {
 - `TENDER`-kind creation keeps today's behavior exactly: `tenderNumber` is required, user-typed,
   validated unique (existing `z.string().min(1).max(100)`).
 - `BUDGETARY`-kind creation: `tenderNumber` is **not** collected from the user. The server
-  generates it the same way PO/Bill numbers already are: `` `BQ-${randomUUID().split("-")[0]
-  .toUpperCase()}` ``, retried on the (rare) unique-constraint collision the same way the
-  PO/Bill repositories already handle it.
+  generates it the same way PO/Bill numbers already are — one-shot, no retry/collision handling:
+  `` `BQ-${randomUUID().split("-")[0].toUpperCase()}` ``. Checked
+  `purchase-orders.repository.ts:97`/`bills.repository.ts:64` — neither retries on collision
+  either (a random 8-hex-char collision is astronomically unlikely), so this matches the existing
+  precedent exactly rather than adding speculative handling nothing else in the codebase bothers
+  with.
 - `createTenderSchema` (`tenders.validation.ts`) changes from `tenderNumber: z.string().min(1)...`
   to optional, with the service layer enforcing "required when kind is TENDER, ignored/generated
   when kind is BUDGETARY" — a `superRefine` or a plain service-level check, matching how
@@ -130,17 +140,24 @@ model Tender {
   just typed higher when pricing a budgetary quotation, nothing automatic).
 - Three renderers off that same row data, one per format, all in a new
   `quotation-document.ts` alongside the existing `document-generation.service.ts`:
-  - **CSV**: plain rows, no library needed.
-  - **PDF**: reuse the `exportTableToPdf` utility already in the codebase (used elsewhere for
-    tabular exports) rather than hand-rolling another `pdfkit` table like RFQ's RFR PDF does.
+  - **CSV**: a small hand-written builder (header row + escaped/quoted data rows joined with
+    `\r\n`) — there's no CSV writer anywhere in this codebase already and the format doesn't
+    warrant a dependency for it.
+  - **PDF**: `pdfkit`, following the *RFR PDF* pattern in `rfq/rfq-document.ts#buildRfrPdf`
+    (per-column fixed widths sized for a description-heavy table, `doc.heightOfString` to compute
+    each row's real height, and page-break handling) — **not** the reports module's
+    `exportTableToPdf` (`reports/reports.export.ts`), which lays out equal-width columns with a
+    flat 18px row height and no wrapping. BOQ item descriptions run long (RFQ's own quote-sheet
+    code notes 140-180 chars is typical), so the equal-width/no-wrap approach would produce a
+    broken-looking PDF; the RFR table already solves exactly this problem for the same kind of
+    data and is the right one to copy.
   - **Word**: same `fillDocxTemplate` helper as Undertaking, against a new `quotation.docx`
     template with a Docxtemplater repeating-row loop, stored at
     `<business>/templates/quotation.docx` next to the existing `undertaking.docx`/`signature.png`.
-- Unlike today's `generateUndertaking` (stream-only), Quotation generation **also** saves a copy
-  into `<tender folder>/Quotations/` at generation time — closing the gap the user flagged
-  ("simultaneously to the tenders folder path in a separate subfolder just like the other
-  files"). Since this is a real behavioral improvement, apply the same "also save a copy" fix to
-  `generateUndertaking` while touching this file, so both document types behave consistently.
+- Each format's controller handler calls `saveGeneratedTenderDocument()` (see above) with
+  `documentType: "QUOTATION"` right before streaming the response — same call the Undertaking
+  controller already makes, closing the gap the user flagged ("simultaneously to the tenders
+  folder path in a separate subfolder just like the other files").
 - One route per format: `POST /tenders/:id/documents/quotation?format=docx|csv|pdf`, gated by the
   existing `tenders:generate_document` permission. Works identically for `TENDER`- and
   `BUDGETARY`-kind tenders — it's the same BOQ shape either way.
