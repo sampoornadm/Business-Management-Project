@@ -32,6 +32,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 import { ConvertToProjectDialog } from "@/components/projects/convert-to-project-dialog";
+import { LinkedBudgetaryQuotationCard } from "@/components/tenders/linked-budgetary-quotation-card";
 import { StatusChangeDialog } from "@/components/tenders/status-change-dialog";
 import { TenderAssigneesTab } from "@/components/tenders/tender-assignees-tab";
 import { TenderCompetitorsTab } from "@/components/tenders/tender-competitors-tab";
@@ -179,6 +180,14 @@ export default function TenderDetailPage() {
           )}
         </div>
       </div>
+
+      {tender.kind === "TENDER" && canUpdate && (
+        <LinkedBudgetaryQuotationCard
+          tenderId={tender.id}
+          clientId={tender.client.id}
+          convertedFrom={tender.convertedFrom}
+        />
+      )}
 
       {isOnHappyPath(tender.status) ? (
         <Card>
