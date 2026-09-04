@@ -9,11 +9,11 @@ import {
   SelectValue,
   useToast,
 } from "@bmp/ui";
-import { Download, Upload } from "lucide-react";
+import { Upload } from "lucide-react";
 import { useRef, useState } from "react";
 
+import { RfqDownloadMenu } from "@/components/rfq/rfq-download-menu";
 import { useImportQuotes } from "@/hooks/use-rfq";
-import { downloadFile } from "@/lib/download";
 
 export function QuoteSheetActions({
   rfqId,
@@ -26,18 +26,6 @@ export function QuoteSheetActions({
   const [vendorId, setVendorId] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const importQuotes = useImportQuotes(rfqId);
-
-  async function download() {
-    await downloadFile(`/rfqs/${rfqId}/quote-sheet`, `quotes-${rfqId}.xlsx`);
-  }
-
-  async function downloadPdf() {
-    await downloadFile(`/rfqs/${rfqId}/documents/pdf`, `RFR-${rfqId}.pdf`);
-  }
-
-  async function downloadWord() {
-    await downloadFile(`/rfqs/${rfqId}/documents/word`, `RFR-${rfqId}.docx`);
-  }
 
   async function onFile(file: File) {
     try {
@@ -60,15 +48,7 @@ export function QuoteSheetActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" variant="outline" onClick={() => void download()}>
-        <Download className="mr-2 h-4 w-4" /> Download quote sheet
-      </Button>
-      <Button size="sm" variant="outline" onClick={() => void downloadWord()}>
-        <Download className="mr-2 h-4 w-4" /> Download Word
-      </Button>
-      <Button size="sm" variant="outline" onClick={() => void downloadPdf()}>
-        <Download className="mr-2 h-4 w-4" /> Download PDF
-      </Button>
+      <RfqDownloadMenu rfqId={rfqId} />
 
       {vendors.length > 0 && (
         <>
