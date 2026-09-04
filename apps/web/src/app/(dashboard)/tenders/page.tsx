@@ -20,7 +20,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { tenderTableColumns } from "@/components/tenders/tender-table-columns";
+import { buildTenderTableColumns } from "@/components/tenders/tender-table-columns";
 import { useTenders } from "@/hooks/use-tenders";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
@@ -51,6 +51,7 @@ export default function TendersPage() {
   });
 
   const canCreate = hasPermission(roleName, "tenders:create");
+  const canGenerateDocument = hasPermission(roleName, "tenders:generate_document");
   const hasActiveFilters = Boolean(debouncedSearch || status || priority);
 
   const newTenderButton = (
@@ -118,7 +119,7 @@ export default function TendersPage() {
       </FilterBar>
 
       <DataTable
-        columns={tenderTableColumns}
+        columns={buildTenderTableColumns({ canGenerateDocument })}
         data={tendersQuery.data?.items ?? []}
         isLoading={tendersQuery.isLoading}
         pageCount={tendersQuery.data?.totalPages ?? 0}

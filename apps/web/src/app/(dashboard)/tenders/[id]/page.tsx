@@ -27,7 +27,7 @@ import {
   TabsTrigger,
   useToast,
 } from "@bmp/ui";
-import { Download, Pencil, Receipt, ScrollText, Trash2 } from "lucide-react";
+import { Pencil, Receipt, ScrollText, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 
@@ -36,11 +36,11 @@ import { StatusChangeDialog } from "@/components/tenders/status-change-dialog";
 import { TenderAssigneesTab } from "@/components/tenders/tender-assignees-tab";
 import { TenderCompetitorsTab } from "@/components/tenders/tender-competitors-tab";
 import { TenderDocumentsTab } from "@/components/tenders/tender-documents-tab";
+import { TenderDownloadMenu } from "@/components/tenders/tender-download-menu";
 import { TenderHistoryTab } from "@/components/tenders/tender-history-tab";
 import { TenderItemsTab } from "@/components/tenders/tender-items-tab";
 import { TenderNotesView } from "@/components/tenders/tender-notes-view";
 import { TenderTagsCard } from "@/components/tenders/tender-tags-card";
-import { downloadUndertaking } from "@/hooks/use-document-generation";
 import { useTags } from "@/hooks/use-tags";
 import { useChangeTenderStatus, useDeleteTender, useSetTenderTags, useTender } from "@/hooks/use-tenders";
 import { useAuthStore } from "@/lib/auth-store";
@@ -100,18 +100,6 @@ export default function TenderDetailPage() {
     }
   }
 
-  async function handleGenerateUndertaking() {
-    try {
-      await downloadUndertaking(tender.id, tender.tenderNumber);
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Could not generate document",
-        description: error instanceof Error ? error.message : "Please try again.",
-      });
-    }
-  }
-
   if (tenderQuery.isLoading || !tenderQuery.data) {
     return (
       <div className="space-y-4">
@@ -159,11 +147,7 @@ export default function TenderDetailPage() {
           {canChangeStatus && (
             <StatusChangeDialog currentStatus={tender.status} onSubmit={handleStatusChange} />
           )}
-          {canGenerateDocument && (
-            <Button variant="outline" onClick={handleGenerateUndertaking}>
-              <Download className="mr-2 h-4 w-4" /> Generate Undertaking
-            </Button>
-          )}
+          {canGenerateDocument && <TenderDownloadMenu tenderId={tender.id} tenderNumber={tender.tenderNumber} />}
           {canUpdate && (
             <Button variant="outline" asChild>
               <Link href={`/tenders/${tender.id}/edit`}>
