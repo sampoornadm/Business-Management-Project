@@ -129,6 +129,8 @@ export class TendersService {
       if (!client) throw new BadRequestError("Invalid client");
     }
 
+    let updateData = data;
+
     if (data.convertedFromId !== undefined && data.convertedFromId !== null) {
       if (existing.kind !== "TENDER") {
         throw new BadRequestError("Only a real tender can link to a budgetary quotation");
@@ -144,9 +146,25 @@ export class TendersService {
       if (budgetary.client.id !== (data.clientId ?? existing.client.id)) {
         throw new BadRequestError("The budgetary quotation must belong to the same client");
       }
+    } else if (
+      data.convertedFromId === undefined &&
+      data.clientId !== undefined &&
+      data.clientId !== existing.clientId &&
+      existing.convertedFromId
+    ) {
+      // The client is changing but this request doesn't mention convertedFromId at all (e.g. the
+      // tender edit page, which submits the full field set but knows nothing about linking — that's
+      // a separate card on the detail page). If we leave the existing link untouched, the "must
+      // belong to the same client" invariant silently becomes false the moment this update lands.
+      // Re-check the currently-linked budgetary quotation against the *new* client and clear the
+      // link if it no longer matches, instead of leaving it stale.
+      const linked = await this.tendersRepository.findById(existing.convertedFromId, context.businessId);
+      if (!linked || linked.client.id !== data.clientId) {
+        updateData = { ...data, convertedFromId: null };
+      }
     }
 
-    const tender = await this.tendersRepository.update(id, data);
+    const tender = await this.tendersRepository.update(id, updateData);
     await this.auditService.log({
       actorId,
       action: "TENDER_UPDATED",

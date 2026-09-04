@@ -36,7 +36,7 @@ export function LinkedBudgetaryQuotationCard({
 
   const budgetaryQuery = useTenders({ kind: "BUDGETARY", clientId, pageSize: 50 });
 
-  async function link(budgetaryTenderId: string) {
+  async function link(budgetaryTenderId: string | null) {
     try {
       await updateTender.mutateAsync({ convertedFromId: budgetaryTenderId || null });
       setPicking(false);
@@ -54,9 +54,14 @@ export function LinkedBudgetaryQuotationCard({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
           <CardTitle className="text-base">Linked budgetary quotation</CardTitle>
-          <Button variant="ghost" size="sm" onClick={() => setPicking(true)}>
-            Change
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setPicking(true)}>
+              Change
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => void link(null)}>
+              Remove link
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="flex items-center justify-between gap-4">
           <div>

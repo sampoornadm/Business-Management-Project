@@ -292,9 +292,11 @@ export class TendersRepository implements ITendersRepository {
   }
 
   async countByStatus(businessId: string): Promise<Array<{ status: TenderStatus; count: number }>> {
+    // Budgetary quotations aren't part of the real tender pipeline — exclude them the same way
+    // the default tenders list view already does, so dashboard stats aren't inflated by them.
     const rows = await this.prisma.tender.groupBy({
       by: ["status"],
-      where: { businessId },
+      where: { businessId, kind: "TENDER" },
       _count: { _all: true },
     });
     return rows.map((row) => ({ status: row.status, count: row._count._all }));
