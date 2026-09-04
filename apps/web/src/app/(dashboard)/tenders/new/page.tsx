@@ -2,14 +2,17 @@
 
 import {
   TENDER_CATEGORIES,
+  TENDER_KIND_LABELS,
   TENDER_TYPES,
   type ApiResponse,
   type BoqDto,
   type CommitBoqItemInput,
   type ExtractedTenderItem,
   type TenderExtractionResultDto,
+  type TenderKind,
 } from "@bmp/types";
 import {
+  Button,
   Card,
   CardContent,
   CITIES_BY_STATE,
@@ -121,6 +124,7 @@ export default function NewTenderPage() {
   const createTender = useCreateTender();
   const extract = useExtractTenderFromDocument();
 
+  const [kind, setKind] = useState<TenderKind>("TENDER");
   const [defaultValues, setDefaultValues] = useState<Partial<TenderFormValues>>();
   const [formKey, setFormKey] = useState(0);
   const [hint, setHint] = useState<string>();
@@ -169,7 +173,7 @@ export default function NewTenderPage() {
 
   async function handleSubmit(values: TenderFormValues) {
     try {
-      const tender = await createTender.mutateAsync(toCreateTenderInput(values));
+      const tender = await createTender.mutateAsync({ ...toCreateTenderInput(values), kind });
 
       // The source document itself is only ever held in browser memory up to
       // this point (see the upload card's own "Nothing is saved until you
@@ -244,6 +248,22 @@ export default function NewTenderPage() {
   return (
     <div className="max-w-3xl space-y-6">
       <PageHeader title="New Tender" description="Create a new tender record." />
+
+      <Card>
+        <CardContent className="flex items-center gap-2 pt-6">
+          {(["TENDER", "BUDGETARY"] as const).map((option) => (
+            <Button
+              key={option}
+              type="button"
+              variant={kind === option ? "default" : "outline"}
+              size="sm"
+              onClick={() => setKind(option)}
+            >
+              {TENDER_KIND_LABELS[option]}
+            </Button>
+          ))}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="space-y-3 pt-6">
@@ -335,7 +355,8 @@ export default function NewTenderPage() {
       )}
 
       <TenderForm
-        key={formKey}
+        key={`${formKey}-${kind}`}
+        kind={kind}
         defaultValues={defaultValues}
         onSubmit={handleSubmit}
         isSubmitting={createTender.isPending || isCommittingItems}

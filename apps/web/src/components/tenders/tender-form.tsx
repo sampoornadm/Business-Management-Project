@@ -1,6 +1,12 @@
 "use client";
 
-import { TENDER_CATEGORIES, TENDER_PRIORITIES, TENDER_TYPES, type CreateTenderInput } from "@bmp/types";
+import {
+  TENDER_CATEGORIES,
+  TENDER_PRIORITIES,
+  TENDER_TYPES,
+  type CreateTenderInput,
+  type TenderKind,
+} from "@bmp/types";
 import {
   Button,
   Card,
@@ -48,30 +54,40 @@ const optionalNumericString = z
 // auto-created from a document keeps whatever the document didn't state as an empty field, and
 // this same form is how the user fills those in later — so it must be able to save with them
 // still blank. See the Tender model and incoming-tender-mapper.
-const tenderFormSchema = z.object({
-  tenderNumber: z.string().min(1, "Required").max(100),
-  title: z.string().min(1, "Required").max(300),
-  clientId: z.string().min(1, "Select a client"),
-  department: z.string().max(150).optional(),
-  type: z.string().optional(),
-  category: z.string().optional(),
-  location: z.string().max(200).optional(),
-  state: z.string().max(100).optional(),
-  estimatedCost: optionalNumericString,
-  emdAmount: optionalNumericString,
-  tenderFee: optionalNumericString,
-  documentFee: optionalNumericString,
-  submissionDate: z.string().optional(),
-  openingDate: z.string().optional(),
-  validityPeriodDays: optionalNumericString,
-  priority: z.enum(TENDER_PRIORITIES),
-  notes: z.string().optional(),
-  dealingOfficerName: z.string().optional(),
-  dealingOfficerEmail: z.string().optional(),
-  dealingOfficerPhone: z.string().optional(),
-});
+//
+// tenderNumber's requiredness is parameterized: a BUDGETARY tender's number is server-generated
+// (see TenderForm's `kind` prop below), so the field is hidden and must not block submission.
+// `requireTenderNumber` is a plain boolean (not a literal type), so TS can't narrow the ternary
+// below to one branch — the inferred TenderFormValues.tenderNumber is `string | undefined` in
+// both cases. toCreateTenderInput() coerces that back to a definite string with `?? ""`.
+function tenderFormSchema(requireTenderNumber: boolean) {
+  return z.object({
+    tenderNumber: requireTenderNumber
+      ? z.string().min(1, "Required").max(100)
+      : z.string().max(100).optional(),
+    title: z.string().min(1, "Required").max(300),
+    clientId: z.string().min(1, "Select a client"),
+    department: z.string().max(150).optional(),
+    type: z.string().optional(),
+    category: z.string().optional(),
+    location: z.string().max(200).optional(),
+    state: z.string().max(100).optional(),
+    estimatedCost: optionalNumericString,
+    emdAmount: optionalNumericString,
+    tenderFee: optionalNumericString,
+    documentFee: optionalNumericString,
+    submissionDate: z.string().optional(),
+    openingDate: z.string().optional(),
+    validityPeriodDays: optionalNumericString,
+    priority: z.enum(TENDER_PRIORITIES),
+    notes: z.string().optional(),
+    dealingOfficerName: z.string().optional(),
+    dealingOfficerEmail: z.string().optional(),
+    dealingOfficerPhone: z.string().optional(),
+  });
+}
 
-export type TenderFormValues = z.infer<typeof tenderFormSchema>;
+export type TenderFormValues = z.infer<ReturnType<typeof tenderFormSchema>>;
 
 function toOptionalNumber(value: string | undefined): number | undefined {
   return value ? Number(value) : undefined;
@@ -80,6 +96,11 @@ function toOptionalNumber(value: string | undefined): number | undefined {
 export function toCreateTenderInput(values: TenderFormValues): CreateTenderInput {
   return {
     ...values,
+    // TenderFormValues.tenderNumber is `string | undefined` regardless of kind (see
+    // tenderFormSchema above — TS can't narrow the ternary on a plain boolean param), but
+    // CreateTenderInput.tenderNumber is a required string. Coerce to "" for a BUDGETARY tender,
+    // where the field is hidden and the server generates the real number anyway.
+    tenderNumber: values.tenderNumber ?? "",
     // `|| undefined` throughout: an untouched input is "" and must be sent as absent, so it
     // stores as NULL. Sending "" would persist an empty string that reads as a real value.
     department: values.department || undefined,
@@ -134,6 +155,10 @@ export interface TenderFormProps {
   submitLabel?: string;
   /** Client name detected from document extraction but not matched to an existing organization. */
   suggestedClientName?: string;
+  /** Purely presentational — hides the Tender Number field for a budgetary quotation (the server
+   *  generates it). Not part of the form's own values; the edit page never passes this, so
+   *  editing an existing tender is unaffected. */
+  kind?: TenderKind;
 }
 
 export function TenderForm({
@@ -142,11 +167,12 @@ export function TenderForm({
   isSubmitting = false,
   submitLabel = "Save",
   suggestedClientName,
+  kind = "TENDER",
 }: TenderFormProps) {
   const organizationsQuery = useOrganizations({ pageSize: 100 });
 
   const form = useForm<TenderFormValues>({
-    resolver: zodResolver(tenderFormSchema),
+    resolver: zodResolver(tenderFormSchema(kind !== "BUDGETARY")),
     defaultValues: { ...DEFAULT_VALUES, ...defaultValues },
   });
   const watchedState = form.watch("state");
@@ -160,19 +186,21 @@ export function TenderForm({
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="tenderNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tender number</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {kind !== "BUDGETARY" && (
+                <FormField
+                  control={form.control}
+                  name="tenderNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tender number</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               <FormField
                 control={form.control}
                 name="department"
