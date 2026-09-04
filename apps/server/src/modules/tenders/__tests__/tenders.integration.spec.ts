@@ -210,4 +210,65 @@ describe("Tender workflow (integration)", () => {
       firstBusinessStats.body.data.upcomingDeadlines.map((t: { id: string }) => t.id),
     ).toContain(tenderId);
   });
+
+  describe("budgetary quotations", () => {
+    it("auto-generates a BQ-prefixed tenderNumber and omits it from the request", async () => {
+      const createResponse = await request(app)
+        .post("/api/v1/tenders")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({
+          title: "Rough estimate for client",
+          clientId: organizationId,
+          kind: "BUDGETARY",
+        });
+
+      expect(createResponse.status).toBe(201);
+      expect(createResponse.body.data.tenderNumber).toMatch(/^BQ-[0-9A-F]{8}$/);
+      expect(createResponse.body.data.kind).toBe("BUDGETARY");
+    });
+
+    it("defaults GET /tenders to real tenders only when kind is specified", async () => {
+      const budgetaryResponse = await request(app)
+        .post("/api/v1/tenders")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ title: "Budgetary for filter test", clientId: organizationId, kind: "BUDGETARY" });
+      const budgetaryId = budgetaryResponse.body.data.id as string;
+
+      const listResponse = await request(app)
+        .get("/api/v1/tenders")
+        .query({ kind: "TENDER" })
+        .set("Authorization", `Bearer ${accessToken}`);
+
+      expect(listResponse.status).toBe(200);
+      expect(
+        listResponse.body.data.items.map((t: { id: string }) => t.id),
+      ).not.toContain(budgetaryId);
+    });
+
+    it("links a real tender to a same-client budgetary quotation via PATCH", async () => {
+      const budgetaryResponse = await request(app)
+        .post("/api/v1/tenders")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ title: "Budgetary to link", clientId: organizationId, kind: "BUDGETARY" });
+      const budgetaryId = budgetaryResponse.body.data.id as string;
+
+      const realResponse = await request(app)
+        .post("/api/v1/tenders")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({
+          tenderNumber: `TND-${randomUUID().slice(0, 8)}`,
+          title: "Real tender to link",
+          clientId: organizationId,
+        });
+      const realTenderId = realResponse.body.data.id as string;
+
+      const patchResponse = await request(app)
+        .patch(`/api/v1/tenders/${realTenderId}`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ convertedFromId: budgetaryId });
+
+      expect(patchResponse.status).toBe(200);
+      expect(patchResponse.body.data.convertedFrom.id).toBe(budgetaryId);
+    });
+  });
 });

@@ -24,6 +24,7 @@ export const GENERIC_UPLOAD_LIMITS = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/zip",
     "text/plain",
+    "text/csv",
   ] as const,
 };
 

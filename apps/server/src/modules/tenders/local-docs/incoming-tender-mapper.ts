@@ -36,7 +36,7 @@ export function buildDraftTenderData(
   fields: TenderExtractionFields,
   businessId: string,
   createdById: string,
-): Omit<CreateTenderData, "clientId"> | null {
+): (Omit<CreateTenderData, "clientId"> & { tenderNumber: string }) | null {
   if (!fields.tenderNumber) return null;
 
   return {

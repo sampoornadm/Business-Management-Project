@@ -23,6 +23,7 @@ export function toTenderListItemDto(entity: TenderListItem): TenderListItemDto {
     category: entity.category,
     status: entity.status,
     priority: entity.priority,
+    kind: entity.kind,
     estimatedCost: entity.estimatedCost,
     submissionDate: entity.submissionDate ? entity.submissionDate.toISOString() : null,
     assigneeCount: entity._count.assignees,
@@ -77,6 +78,7 @@ export function toTenderDto(entity: TenderDetail): TenderDto {
     state: entity.state,
     status: entity.status,
     priority: entity.priority,
+    kind: entity.kind,
     estimatedCost: entity.estimatedCost,
     emdAmount: entity.emdAmount,
     tenderFee: entity.tenderFee,
@@ -94,6 +96,14 @@ export function toTenderDto(entity: TenderDetail): TenderDto {
     winnerName: entity.winnerName,
     winningBidAmount: entity.winningBidAmount,
     lossReason: entity.lossReason,
+    convertedFrom: entity.convertedFrom
+      ? {
+          id: entity.convertedFrom.id,
+          tenderNumber: entity.convertedFrom.tenderNumber,
+          title: entity.convertedFrom.title,
+          updatedAt: entity.convertedFrom.updatedAt.toISOString(),
+        }
+      : null,
     createdBy: {
       id: entity.createdBy.id,
       firstName: entity.createdBy.firstName,

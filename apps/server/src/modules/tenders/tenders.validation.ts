@@ -1,4 +1,4 @@
-import { TENDER_ASSIGNEE_ROLES, TENDER_PRIORITIES, TENDER_STATUSES } from "@bmp/types";
+import { TENDER_ASSIGNEE_ROLES, TENDER_KINDS, TENDER_PRIORITIES, TENDER_STATUSES } from "@bmp/types";
 import { z } from "zod";
 
 const priceField = z.coerce.number().nonnegative().optional();
@@ -25,8 +25,9 @@ const optionalDate = z
   .optional()
   .transform((value) => (value === "" || value === undefined ? null : value));
 
-export const createTenderSchema = z.object({
-  tenderNumber: z.string().min(1).max(100),
+const createTenderBaseSchema = z.object({
+  kind: z.enum(TENDER_KINDS).optional(),
+  tenderNumber: z.string().max(100).optional(),
   title: z.string().min(1).max(300),
   clientId: z.string().uuid(),
   department: optionalText(150),
@@ -50,9 +51,26 @@ export const createTenderSchema = z.object({
   dealingOfficerEmail: z.string().email().max(200).optional(),
   dealingOfficerPhone: z.string().max(30).optional(),
 });
+
+// tenderNumber is required for a real tender (hand-typed, off the government notice) but not for
+// a budgetary quotation (server-generates one — see TendersRepository.create).
+export const createTenderSchema = createTenderBaseSchema.superRefine((data, ctx) => {
+  if ((data.kind ?? "TENDER") === "TENDER" && !data.tenderNumber?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["tenderNumber"],
+      message: "Tender number is required",
+    });
+  }
+});
 export type CreateTenderBody = z.infer<typeof createTenderSchema>;
 
-export const updateTenderSchema = createTenderSchema.partial();
+// kind is set at creation and immutable thereafter (changing it in place would leave the
+// tenderNumber/folder from the old kind stale) — omitted here rather than accepted and ignored.
+export const updateTenderSchema = createTenderBaseSchema
+  .omit({ kind: true })
+  .partial()
+  .extend({ convertedFromId: z.string().uuid().nullable().optional() });
 export type UpdateTenderBody = z.infer<typeof updateTenderSchema>;
 
 export const changeTenderStatusSchema = z.object({
@@ -91,6 +109,7 @@ export const listTendersQuerySchema = z.object({
   pageSize: z.coerce.number().int().positive().optional(),
   search: z.string().optional(),
   status: z.enum(TENDER_STATUSES).optional(),
+  kind: z.enum(TENDER_KINDS).optional(),
   clientId: z.string().uuid().optional(),
   department: z.string().optional(),
   priority: z.enum(TENDER_PRIORITIES).optional(),

@@ -9,7 +9,7 @@ import { NotFoundError } from "../../core/errors/HttpErrors.js";
 import { expandHome } from "../tenders/local-docs/folder-naming.js";
 import type { ITendersRepository } from "../tenders/tenders.repository.js";
 
-export type DocumentType = "undertaking" | "signature";
+export type DocumentType = "undertaking" | "signature" | "quotation";
 
 export interface TemplateStatus {
   documentType: DocumentType;
@@ -22,6 +22,7 @@ export interface TemplateStatus {
 const TEMPLATE_FILENAMES: Record<DocumentType, string> = {
   undertaking: "undertaking.docx",
   signature: "signature.png",
+  quotation: "quotation.docx",
 };
 
 export function getTemplatePath(businessCode: string, documentType: DocumentType): string {
