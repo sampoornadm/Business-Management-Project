@@ -43,7 +43,7 @@ export function TenderDownloadMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size={size}>
+        <Button variant="outline" size={size} title={iconOnly ? "Download" : undefined}>
           <Download className={iconOnly ? "h-4 w-4" : "mr-2 h-4 w-4"} />
           {iconOnly ? null : "Download"}
         </Button>

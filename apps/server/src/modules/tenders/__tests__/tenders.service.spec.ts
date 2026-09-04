@@ -514,5 +514,22 @@ describe("TendersService", () => {
         ),
       ).rejects.toThrow(BadRequestError);
     });
+
+    // Regression coverage for the "open half" of the same-client invariant: a PATCH that changes
+    // clientId but never mentions convertedFromId at all (e.g. the tender edit page, which submits
+    // the full field set and knows nothing about linking) must not silently leave a stale link
+    // pointing at a budgetary quotation that belonged to the *old* client.
+    it("clears an existing link when clientId changes and the request doesn't address convertedFromId", async () => {
+      const budgetary = await service.create(
+        { ...baseInput, tenderNumber: undefined, kind: "BUDGETARY" }, // stays on CLIENT_ID
+        ctx,
+      );
+      const real = await service.create(baseInput, ctx); // starts out on CLIENT_ID
+      await service.update(real.id, { convertedFromId: budgetary.id }, actorId, ctx);
+
+      const updated = await service.update(real.id, { clientId: OTHER_CLIENT_ID }, actorId, ctx);
+
+      expect(updated.convertedFrom).toBeNull();
+    });
   });
 });
