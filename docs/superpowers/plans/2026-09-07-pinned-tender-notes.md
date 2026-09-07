@@ -1512,15 +1512,16 @@ No test file exists for this component. Verify manually per Step 3.
 - [ ] **Step 6: Edit `apps/server/templates/rfr.docx`'s raw XML**
 
   This is a binary `.docx` (a zip of XML parts) — edit it by unzipping, patching
-  `word/document.xml` as text, and re-zipping, rather than through a word processor. Run this
-  script from the repo root:
+  `word/document.xml` as text, and re-zipping, rather than through a word processor. `pizzip` is a
+  dependency of `apps/server`, not hoisted to the repo root — run this script with `apps/server` as
+  the working directory (not the repo root) so plain `node` can resolve the `pizzip` import:
 
   ```bash
-  node --input-type=module -e '
+  cd apps/server && node --input-type=module -e '
   import { readFileSync, writeFileSync } from "node:fs";
   import PizZip from "pizzip";
 
-  const path = "apps/server/templates/rfr.docx";
+  const path = "templates/rfr.docx";
   const zip = new PizZip(readFileSync(path));
   const xml = zip.file("word/document.xml").asText();
 
@@ -1550,6 +1551,16 @@ No test file exists for this component. Verify manually per Step 3.
     Docxtemplater repeats this whole paragraph once per pinned line (one line per paragraph), not
     once per line within a single paragraph.
   - A closing paragraph containing only `{{/hasPinnedNotes}}`.
+
+  **Correction (found by the final whole-branch review, commit `242712d`):** the claim above is
+  wrong. `paragraphLoop` only expands to per-paragraph repetition when `{{#tag}}`/`{{/tag}}` are
+  each the *sole* content of their *own* paragraph — with both tags and `{{.}}` sharing one
+  paragraph as shown here, Docxtemplater does an inline loop instead and concatenates every pinned
+  note into one run with no separator. The shipped template instead puts `{{#pinnedNotes}}` alone
+  in its own paragraph, `• {{.}}` in a middle paragraph (repeated once per note, with a `• `
+  prefix matching the PDF's bullet style), and folds `{{/hasPinnedNotes}}`/`{{/pinnedNotes}}` into
+  the end without a trailing stray blank paragraph. See `rfq-document.spec.ts`'s
+  `"renders an Important Notes section..."` test for the exact expected shape.
 
   Since `hasPinnedNotes` is `[{}]` (length 1) when there are pinned notes and `[]` when there
   aren't, the entire three-paragraph block — heading included — renders exactly once when there's
