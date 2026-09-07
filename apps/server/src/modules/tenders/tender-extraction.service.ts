@@ -2,6 +2,7 @@ import type { TenderExtractionFields, TenderExtractionResultDto } from "@bmp/typ
 import { z } from "zod";
 
 import { env } from "../../config/env.js";
+import type { ExtractPdfTextOptions } from "../../shared/utils/pdf-text.js";
 import type { IOrganizationsRepository } from "../organizations/organizations.repository.js";
 
 import { parseIiscoHeaderFields } from "./tender-header.parser.js";
@@ -10,7 +11,11 @@ import { parseTenderNotes } from "./tender-notes.parser.js";
 
 export type GenerateJsonFn = (prompt: string) => Promise<unknown>;
 export type GenerateTextFn = (prompt: string) => Promise<string>;
-export type ExtractTextFn = (buffer: Buffer, mimeType: string) => Promise<string>;
+export type ExtractTextFn = (
+  buffer: Buffer,
+  mimeType: string,
+  options?: ExtractPdfTextOptions,
+) => Promise<string>;
 
 // Keeps local-LLM inference fast and within context — a tender/NIT's header
 // fields (number, dates, amounts, department) are always on the first pages;
@@ -253,7 +258,16 @@ export class TenderExtractionService {
     // can have dozens of items, and the 14-digit item code (the whole point
     // of tracking items across tenders) has zero tolerance for the kind of
     // transcription error a small local model can make over a long list.
-    const items = parseIiscoRfqItems(text);
+    //
+    // Extracted separately, with `{ layout: true }` — pdftotext's default
+    // (non-layout) mode reorders/splits a table row's cells when it sits near
+    // a page break, which silently dropped 8 of 13 items on a real multi-page
+    // document. `-layout` keeps every row on one physical line and survives
+    // page breaks. Not used for `text` above: parseIiscoHeaderFields's
+    // regexes are written against the default mode's shape and would break
+    // under `-layout` — see pdf-text.ts#ExtractPdfTextOptions.
+    const itemsText = await this.extractText(buffer, mimeType, { layout: true });
+    const items = parseIiscoRfqItems(itemsText);
 
     // Header fields for the recognized IISCO/SAIL template are also parsed
     // deterministically — tenderNumber is the DB's @unique key, so it gets

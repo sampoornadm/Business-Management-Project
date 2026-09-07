@@ -287,6 +287,27 @@ describe("TenderExtractionService", () => {
     ]);
   });
 
+  it("requests the item text separately, with { layout: true }, rather than reusing the header text", async () => {
+    const organizationsRepository = new FakeOrganizationsRepository();
+    const generateJson: GenerateJsonFn = async () => SAMPLE_PDF_TEXT_RESULT;
+    const calls: Array<{ layout?: boolean }> = [];
+    const extractText: ExtractTextFn = async (_buffer, _mimeType, options) => {
+      calls.push({ layout: options?.layout });
+      // Only the `{ layout: true }` call returns text an item can be parsed from —
+      // proves the service actually uses that call's result for items, not the
+      // (layout-less) header-fields call's result.
+      return options?.layout ? TEXT_WITH_ONE_ITEM : "no item table here";
+    };
+    const service = new TenderExtractionService(organizationsRepository, generateJson, extractText, fakeGenerateText);
+
+    const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
+
+    expect(calls).toEqual([{ layout: undefined }, { layout: true }]);
+    expect(result.items).toEqual([
+      { itemCode: "71804001603937", description: "O-RING MATERIAL : FKM", quantity: 1500, unit: "EA" },
+    ]);
+  });
+
   it("returns a suggestion without an id when no confident client match exists", async () => {
     const organizationsRepository = new FakeOrganizationsRepository();
     const generateJson: GenerateJsonFn = async () => SAMPLE_PDF_TEXT_RESULT;

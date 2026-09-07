@@ -2,85 +2,64 @@ import { describe, expect, it } from "vitest";
 
 import { parseIiscoRfqItems } from "../tender-item.parser.js";
 
-// The real raw-text output of the actual `pdftotext` CLI for a real
-// IISCO/SAIL RFQ Item Details table (TE No 1400013427, "FKM O Ring", 1
-// item, qty "1,500.000" exercising the thousands-separator case) — not a
-// hand-typed guess. See tender-header.parser.spec.ts for why this matters:
-// a fixture that only mimics the extractor's assumed output doesn't catch a
-// real extractor swap changing that output's actual shape.
-const SINGLE_ITEM_TEXT = `RFQ Item Details
-RFQ Description :
-AUTO COUPLER O RING 42 MM
-Instructions to Tenderers (ITT) :
-Material Test Certificate (MTC) from Indian Rubber Materials Research Institute OR any NABL accredited OR Govt. authorized Lab to
-accompany the supply.
+// Real `pdftotext -layout` output for the IISCO/SAIL "RFQ Item Details" table
+// (TE No 1400014021, item 1 of a real 13-item, 9-page document) — not a
+// hand-typed guess. `-layout` keeps each visual row on one physical line
+// (slNo/itemCode/qty/unit/date all on the same line), unlike pdftotext's
+// default mode, which puts each cell on its own line and — the reason this
+// parser switched modes — scrambles that cell order near a page break.
+const SINGLE_ITEM_TEXT = ` Sl No                     Item Code                      Qty                              UoM                    Expected Delivery
+                                                                                                                  Date
+   1                       71308000800110                     160.000           EA                                05.12.2026
+ Material Long Description WELD NIPPLE MATERIAL : SEAMLEES STAINLESS STEEL MATERIAL SPEC : AISI 304
+ :                         SCHEDULE : 80 END CONNECTION 1 : BUTT WELD BEVELED END CONNECTION 2 :
+                           3/8 INCH BSPT SIZE : 3/8 INCH LENGTH : 60 MM
+ Item Additional
+ Description:`;
 
-Sl No
-
-Item Code
-
-Qty
-
-UoM
-
-1
-71804001603937
-1,500.000
-EA
-Material Long Description O-RING MATERIAL : FKM , SHORE HARDNESS : 80 AS PER ASTM D2240 DIAMETER,
-:
-INNER : 42 MM SIZE: OD 58 MM, CORD DIAMETER: 8 MM, FOR AUTO COUPLING
-SYSTEM OF STEEL TEEMING LADLE OF BOF CONVERTER
+// Real `pdftotext -layout` output for items 3 and 4 of the same document,
+// spanning a real page break (item 4's row is the last one on page 3; the
+// page-3-to-4 letterhead/TE-No/RFQ-Title boilerplate lands right after it,
+// before item 4's description resumes on page 4). This is the exact shape
+// that broke pdftotext's DEFAULT mode (see git history / tender-item.parser.ts's
+// top comment) — item 4's own column-header anchor got scrambled by the page
+// break there, dropping the item silently. `-layout` keeps item 4's row
+// intact; this test locks in that the boilerplate in between still gets
+// stripped so item 4's description doesn't end up containing "Page 4 / 9
+// IISCO STEEL PLANT BID INVITATION...".
+const ITEMS_ACROSS_PAGE_BREAK_TEXT = `Sl No                     Item Code                      Qty                              UoM                    Expected Delivery
+                                                                                                                 Date
+  3                       71311000800062                      30.000           EA                                05.12.2026
+Material Long Description SOCKET DESIGN SPECIFICATION            : ASME B16.11 MATERIAL
+:                                              : STAINLESS STEEL 316 TYPE,THREAD        :
+                          BSP WORKING PRESSURE              : CLASS 2000 SIZE
+                                                   : 3/8 INCH    THREADED LENGTH: FULL
 Item Additional
 Description:
 
-Expected Delivery
-Date
-28.07.2026
 
-***************This is an electronically generated RFX requires no signature***************`;
 
-// Synthetic — NOT verified against a real multi-item pdftotext dump (every
-// real sample available while fixing this had exactly one item). Documents
-// the assumption carried over from the pdf-parse-era parser: the "Sl
-// No/Item Code/Qty/UoM" anchor repeats once per item, so each item's own
-// data quad can be recovered independently regardless of what else
-// (descriptions, page furniture) sits between rows. Flag this test if a
-// real multi-item document extracts wrong — it means the assumption
-// doesn't hold and this fixture needs replacing with real captured output.
-const TWO_ITEM_TEXT = `RFQ Item Details
-RFQ Description :
-ASSORTED FASTENERS
 
-Sl No
+Sl No                     Item Code                      Qty                              UoM                    Expected Delivery
+                                                                                                                 Date
+  4                       71311000800061                     70.000           EA                                 05.12.2026
+Material Long Description SOCKET DESIGN SPECIFICATION           : ASME B16.11 MATERIAL
+:                                              : STAINLESS STEEL 316 TYPE,THREAD       :
+                          BSP WORKING PRESSURE              : CLASS 2000 SIZE
 
-Item Code
 
-Qty
 
-UoM
 
-1
-71804001603937
-1,500.000
-EA
-Material Long Description first item
-Item Additional
-Description:
+                                                                                                                                    Page 4 / 9
+                                                                                                      IISCO STEEL PLANT
+                                              BID INVITATION                                          ISP GST : 19AAACS7062F6Z6
+                             (Kindly scrutinize the dates carefully for timely response submission)   Corporate Identity No:
+                                                                                                      L27109DL1973GOI006454
+TE No:        1400014021                  TE Date:    29.08.2026            Contracting Agency:        ISP MATERIAL MANAGEMENT DEPARTMENT
+RFQ Title:    MJ/C06/2026/4236-SOCKET     Amendment No:                           Amendment Date:
 
-Sl No
 
-Item Code
-
-Qty
-
-UoM
-
-2
-71804001603944
-250.000
-NOS
-Material Long Description second item
+                                                         : 3/4 INCH      THREADED LENGTH: FULL
 Item Additional
 Description:`;
 
@@ -90,10 +69,10 @@ describe("parseIiscoRfqItems", () => {
 
     expect(items).toHaveLength(1);
     expect(items[0]).toEqual({
-      itemCode: "71804001603937",
+      itemCode: "71308000800110",
       description:
-        "O-RING MATERIAL : FKM , SHORE HARDNESS : 80 AS PER ASTM D2240 DIAMETER, INNER : 42 MM SIZE: OD 58 MM, CORD DIAMETER: 8 MM, FOR AUTO COUPLING SYSTEM OF STEEL TEEMING LADLE OF BOF CONVERTER",
-      quantity: 1500,
+        "WELD NIPPLE MATERIAL : SEAMLEES STAINLESS STEEL MATERIAL SPEC : AISI 304 : SCHEDULE : 80 END CONNECTION 1 : BUTT WELD BEVELED END CONNECTION 2 : 3/8 INCH BSPT SIZE : 3/8 INCH LENGTH : 60 MM",
+      quantity: 160,
       unit: "EA",
     });
   });
@@ -104,14 +83,30 @@ describe("parseIiscoRfqItems", () => {
     expect(items).toEqual([]);
   });
 
-  it("extracts each item independently when the anchor repeats per row (synthetic)", () => {
-    const items = parseIiscoRfqItems(TWO_ITEM_TEXT);
+  it("extracts both items across a real page break, with no boilerplate in the description", () => {
+    const items = parseIiscoRfqItems(ITEMS_ACROSS_PAGE_BREAK_TEXT);
 
     expect(items).toHaveLength(2);
-    expect(items[0]!.itemCode).toBe("71804001603937");
-    expect(items[0]!.quantity).toBe(1500);
-    expect(items[1]!.itemCode).toBe("71804001603944");
-    expect(items[1]!.quantity).toBe(250);
-    expect(items[1]!.unit).toBe("NOS");
+
+    expect(items[0]).toEqual({
+      itemCode: "71311000800062",
+      description:
+        "SOCKET DESIGN SPECIFICATION : ASME B16.11 MATERIAL : : STAINLESS STEEL 316 TYPE,THREAD : BSP WORKING PRESSURE : CLASS 2000 SIZE : 3/8 INCH THREADED LENGTH: FULL",
+      quantity: 30,
+      unit: "EA",
+    });
+
+    // The regression this test guards: item 4's description spans the page
+    // break, and must NOT contain any of the reprinted letterhead/header text.
+    expect(items[1]).toEqual({
+      itemCode: "71311000800061",
+      description:
+        "SOCKET DESIGN SPECIFICATION : ASME B16.11 MATERIAL : : STAINLESS STEEL 316 TYPE,THREAD : BSP WORKING PRESSURE : CLASS 2000 SIZE : 3/4 INCH THREADED LENGTH: FULL",
+      quantity: 70,
+      unit: "EA",
+    });
+    for (const item of items) {
+      expect(item.description).not.toMatch(/Page \d+|IISCO STEEL PLANT|BID INVITATION|TE No|RFQ Title/);
+    }
   });
 });
