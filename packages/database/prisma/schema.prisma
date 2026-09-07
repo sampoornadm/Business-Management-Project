@@ -41,6 +41,7 @@ model User {
   createdTenders         Tender[]               @relation("TenderCreatedBy")
   tenderAssignments      TenderAssignee[]       @relation("TenderAssignee")
   tenderAssignmentsGiven TenderAssignee[]       @relation("TenderAssignedBy")
+  pinnedTenderNotes      TenderPinnedNote[]      @relation("TenderPinnedBy")
   createdOrganizations   Organization[]         @relation("OrganizationCreatedBy")
   notifications          Notification[]         @relation("NotificationRecipient")
   createdBoqs            Boq[]                  @relation("BoqCreatedBy")
@@ -553,6 +554,7 @@ model Tender {
   assignees      TenderAssignee[]
   competitors    TenderCompetitor[]
   tags           TenderTag[]
+  pinnedNotes    TenderPinnedNote[]
   boqs           Boq[]
   rfqs           Rfq[]
   purchaseOrders PurchaseOrder[]
@@ -601,6 +603,26 @@ model TenderCompetitor {
 
   @@index([tenderId])
   @@map("tender_competitors")
+}
+
+// lineText (the full trimmed line, exactly as TenderNotesView renders it — bullet marker
+// already stripped) is the pin's identity, not a separate hash or line index. If a tender's
+// notes are ever re-extracted and change, pins for lines that no longer exist simply stop
+// matching anything on render and quietly disappear — no migration, no dangling reference.
+model TenderPinnedNote {
+  id       String @id @default(uuid())
+  tenderId String
+  tender   Tender @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  lineText String
+
+  pinnedById String
+  pinnedBy   User   @relation("TenderPinnedBy", fields: [pinnedById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@unique([tenderId, lineText])
+  @@index([tenderId])
+  @@map("tender_pinned_notes")
 }
 
 // ---------------------------------------------------------------------------
