@@ -143,6 +143,43 @@ model TenderPinnedNote {
   call site in this codebase (`variant: "destructive"`, message from the error or a generic
   fallback).
 
+## RFQ integration
+
+Pinned notes must reach vendors: when an RFQ is tied to a tender (`Rfq.tenderId`), its outbound
+Request-for-Rates documents need to carry the tender's pinned lines (timelines, technical
+requirements, delivery terms) — the whole point of pinning was to surface exactly this kind of
+instruction so it isn't lost in the full notes block.
+
+**Where this actually lands, given what already exists:**
+
+- RFQ's outbound "send to vendor" channels are: a short, editable invite-email text
+  (`RfqService#previewInviteVendor`/`inviteVendor`, `emailService.queueRfqEmail` — **text-only,
+  no attachment support exists in the email queue at all**) and three downloadable documents (RFR
+  PDF, RFR Word, and an Excel quote sheet) the user generates via the existing `RfqDownloadMenu`
+  and sends themselves through whatever channel they use. Confirmed with the user: pinned notes go
+  in the **PDF and Word documents only** — the invite email stays short (it already just says
+  "please review the attached item list"), and the quote sheet stays a clean data-entry table.
+- All three document builders already funnel through one shared private helper,
+  `RfqService#loadRfrDocumentData` (`rfq.service.ts`), which — when `rfq.tenderId` is set — already
+  calls `tendersRepository.findById(rfq.tenderId, businessId)` to get the tender number. That same
+  call already returns `pinnedNotes` once the model above ships (same `tenderDetailArgs`
+  include) — no new fetch needed, just read one more field off the tender it's already loading.
+- `RfrDocumentData` (`rfq-document.ts`) gains `pinnedNotes: string[]` (plain line-text strings,
+  not full `TenderPinnedNoteDto` objects — the document renderers don't need the id). `
+  toRfrDocumentData(rfq, business, tenderNumber, pinnedNotes)` takes the new array (empty when the
+  RFQ has no tender, or the tender has no pins) and passes it straight through.
+- `buildRfrPdf()`: after the existing instructions line, if `pinnedNotes.length > 0`, render a bold
+  "Important Notes" heading followed by one wrapped `doc.text()` line per pinned note (plain
+  paragraph wrapping, not the row-height-computing table machinery the item table uses — these are
+  prose lines, not tabular data). Renders nothing when the array is empty, matching how
+  `instructionsLine`/`metaLine` already omit themselves when unset.
+- `buildRfrDocx()`: `templates/rfr.docx` is a **checked-in repo file** (`git ls-files` confirms
+  it's tracked, unlike the per-business Undertaking/Quotation templates under
+  `BUSINESSES_ROOT_DIR`) — directly editable. Add a `{#pinnedNotes}Important Notes:{...loop
+  rendering each line...}{/pinnedNotes}` block, with the heading text placed *inside* the loop tags
+  so Docxtemplater skips the whole section (heading included) when the array is empty, rather than
+  printing an empty heading with no content under it.
+
 ## Non-goals
 
 - The AI feedback/auto-suggest loop (explicitly deferred above).
@@ -151,3 +188,7 @@ model TenderPinnedNote {
 - Showing who pinned a line or when, in the UI (the data exists in `AuditLog` and is cheap to add
   later; not requested now).
 - Any change to how notes are extracted or how `TenderNotesView` renders non-pinnable content.
+- Pinned notes in the RFQ invite-email text or the Excel quote sheet (both explicitly scoped to
+  PDF/Word only, per the RFQ integration section above).
+- Email attachments in general — `queueRfqEmail` has no attachment support today; adding that is a
+  separate, unrelated infra change nobody asked for here.
