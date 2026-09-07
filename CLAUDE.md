@@ -211,6 +211,26 @@ receiving status.
   `pnpm db:generate`; `tsx watch` picks up the new generated files and auto-restarts the server on
   its own. Happened after the Bills feature (Phase 6+) shipped — always re-run `pnpm db:generate`
   after pulling/adding new Prisma models, don't assume `prisma migrate dev` alone regenerated it.
+- Docxtemplater's `paragraphLoop: true` (`document-generation.service.ts#fillDocxTemplate`) only
+  expands `{{#tag}}...{{/tag}}` into one-repeated-paragraph-per-item when the opening and closing
+  tags are each the **sole content of their own paragraph**. Put both tags (and the value, e.g.
+  `{{#tag}}{{.}}{{/tag}}`) inside one shared paragraph/run instead, and it silently does an *inline*
+  loop — concatenating every array item into one run with **no separator at all**. Shipped once in
+  the `rfr.docx` template's pinned-notes section this way; two real values rendered as one glued,
+  unreadable string in the generated Word document, and a test asserting `toContain(itemA)` +
+  `toContain(itemB)` still passed on the broken output (both substrings really are present — just
+  joined). If a template edit needs one paragraph per array item, put `{{#tag}}` alone in its own
+  paragraph, the per-item content in the next paragraph, `{{/tag}}` alone in a final paragraph — and
+  test for *separation* (e.g. a literal joined-substring must NOT appear), not just presence.
+- A git worktree (`git worktree add`) does **not** carry gitignored files like `.env`/`.env.test`
+  from the main checkout — a fresh worktree's `apps/server` test run fails almost every file at
+  collection time with `Invalid environment configuration: DATABASE_URL: Required...` (etc.) until
+  you copy `.env`/`.env.test` into the new worktree root yourself. Separately, running
+  `pnpm --filter @bmp/server test` directly (instead of the root `pnpm test`) skips the root
+  `dotenv -e .env.test --` wrapping entirely and hits the same error even with the files present —
+  use `pnpm exec dotenv -e .env.test -- pnpm exec turbo run test --filter=@bmp/server` (or scope
+  further with `pnpm --filter @bmp/server exec vitest run <file>`) to match what the real `pnpm test`
+  script does.
 
 ## graphify
 
