@@ -3,6 +3,7 @@ import type {
   TenderCompetitorDto,
   TenderDto,
   TenderListItemDto,
+  TenderPinnedNoteDto,
   TenderTagDto,
 } from "@bmp/types";
 
@@ -61,6 +62,10 @@ function toCompetitorDto(entity: TenderDetail["competitors"][number]): TenderCom
   };
 }
 
+function toPinnedNoteDto(entity: TenderDetail["pinnedNotes"][number]): TenderPinnedNoteDto {
+  return { id: entity.id, lineText: entity.lineText };
+}
+
 function toTagDto(entity: TenderDetail["tags"][number]): TenderTagDto {
   return { id: entity.tag.id, name: entity.tag.name, color: entity.tag.color };
 }
@@ -112,6 +117,7 @@ export function toTenderDto(entity: TenderDetail): TenderDto {
     assignees: entity.assignees.map(toAssigneeDto),
     assigneeCount: entity.assignees.length,
     competitors: entity.competitors.map(toCompetitorDto),
+    pinnedNotes: entity.pinnedNotes.map(toPinnedNoteDto),
     tags: entity.tags.map(toTagDto),
     createdAt: entity.createdAt.toISOString(),
     updatedAt: entity.updatedAt.toISOString(),

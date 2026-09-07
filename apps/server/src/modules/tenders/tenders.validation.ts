@@ -99,6 +99,11 @@ export type CreateCompetitorBody = z.infer<typeof createCompetitorSchema>;
 export const updateCompetitorSchema = createCompetitorSchema.partial();
 export type UpdateCompetitorBody = z.infer<typeof updateCompetitorSchema>;
 
+export const pinTenderNoteSchema = z.object({
+  lineText: z.string().min(1).max(2000),
+});
+export type PinTenderNoteBody = z.infer<typeof pinTenderNoteSchema>;
+
 export const setTenderTagsSchema = z.object({
   tagIds: z.array(z.string().uuid()),
 });

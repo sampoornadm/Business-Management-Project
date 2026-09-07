@@ -60,6 +60,7 @@ function buildTender(overrides: Partial<TenderDetail> = {}): TenderDetail {
     createdBy: { id: randomUUID(), firstName: "Tanya", lastName: "Manager" },
     assignees: [],
     competitors: [],
+    pinnedNotes: [],
     tags: [],
     createdAt: now,
     updatedAt: now,
@@ -181,6 +182,38 @@ class FakeTendersRepository implements Partial<ITendersRepository> {
   async deleteCompetitor(id: string) {
     for (const tender of this.tenders.values()) {
       tender.competitors = tender.competitors.filter((c) => c.id !== id) as never;
+    }
+  }
+
+  async findPinnedNote(tenderId: string, lineText: string) {
+    const tender = this.tenders.get(tenderId);
+    const pinned = tender?.pinnedNotes.find((p) => p.lineText === lineText);
+    return pinned ? { id: pinned.id } : null;
+  }
+
+  async findPinnedNoteById(id: string) {
+    for (const tender of this.tenders.values()) {
+      const pinned = tender.pinnedNotes.find((p) => p.id === id);
+      if (pinned) return { id: pinned.id, tenderId: tender.id, lineText: pinned.lineText };
+    }
+    return null;
+  }
+
+  async addPinnedNote(tenderId: string, lineText: string, pinnedById: string) {
+    const tender = this.tenders.get(tenderId);
+    if (!tender) throw new Error("not found");
+    tender.pinnedNotes.push({
+      id: randomUUID(),
+      tenderId,
+      lineText,
+      pinnedById,
+      createdAt: new Date(),
+    } as never);
+  }
+
+  async removePinnedNote(id: string) {
+    for (const tender of this.tenders.values()) {
+      tender.pinnedNotes = tender.pinnedNotes.filter((p) => p.id !== id) as never;
     }
   }
 
@@ -530,6 +563,57 @@ describe("TendersService", () => {
       const updated = await service.update(real.id, { clientId: OTHER_CLIENT_ID }, actorId, ctx);
 
       expect(updated.convertedFrom).toBeNull();
+    });
+  });
+
+  describe("pinNote / unpinNote", () => {
+    it("pins a note and returns it in the tender's pinnedNotes", async () => {
+      const created = await service.create(baseInput, ctx);
+      const dto = await service.pinNote(created.id, "Delivery within 30 days", actorId, BUSINESS_ID);
+      expect(dto.pinnedNotes).toHaveLength(1);
+      expect(dto.pinnedNotes[0]!.lineText).toBe("Delivery within 30 days");
+      expect(auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "TENDER_NOTE_PINNED",
+          entityId: created.id,
+          metadata: { lineText: "Delivery within 30 days" },
+        }),
+      );
+    });
+
+    it("rejects pinning the same line twice", async () => {
+      const created = await service.create(baseInput, ctx);
+      await service.pinNote(created.id, "Delivery within 30 days", actorId, BUSINESS_ID);
+      await expect(
+        service.pinNote(created.id, "Delivery within 30 days", actorId, BUSINESS_ID),
+      ).rejects.toThrow(ConflictError);
+    });
+
+    it("unpins a note", async () => {
+      const created = await service.create(baseInput, ctx);
+      const pinned = await service.pinNote(created.id, "Delivery within 30 days", actorId, BUSINESS_ID);
+      const pinnedNoteId = pinned.pinnedNotes[0]!.id;
+
+      const dto = await service.unpinNote(created.id, pinnedNoteId, actorId, BUSINESS_ID);
+      expect(dto.pinnedNotes).toHaveLength(0);
+      expect(auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "TENDER_NOTE_UNPINNED",
+          entityId: created.id,
+          metadata: { lineText: "Delivery within 30 days" },
+        }),
+      );
+    });
+
+    it("rejects unpinning a pinned-note id that belongs to a different tender", async () => {
+      const created = await service.create(baseInput, ctx);
+      const other = await service.create({ ...baseInput, tenderNumber: "TND-0002" }, ctx);
+      const pinned = await service.pinNote(other.id, "Some line", actorId, BUSINESS_ID);
+      const pinnedNoteId = pinned.pinnedNotes[0]!.id;
+
+      await expect(
+        service.unpinNote(created.id, pinnedNoteId, actorId, BUSINESS_ID),
+      ).rejects.toThrow(NotFoundError);
     });
   });
 });

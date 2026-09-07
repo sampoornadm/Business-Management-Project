@@ -11,6 +11,7 @@ import type {
   CreateCompetitorBody,
   CreateTenderBody,
   ListTendersQueryParsed,
+  PinTenderNoteBody,
   SetTenderTagsBody,
   UpdateCompetitorBody,
   UpdateTenderBody,
@@ -157,6 +158,27 @@ export class TendersController {
       req.user!.businessId,
     );
     sendSuccess(res, tender, "Competitor deleted");
+  });
+
+  pinNote = asyncHandler(async (req, res) => {
+    const body = req.body as PinTenderNoteBody;
+    const tender = await this.tendersService.pinNote(
+      req.params.id!,
+      body.lineText,
+      req.user!.id,
+      req.user!.businessId,
+    );
+    sendSuccess(res, tender, "Note pinned", 201);
+  });
+
+  unpinNote = asyncHandler(async (req, res) => {
+    const tender = await this.tendersService.unpinNote(
+      req.params.id!,
+      req.params.pinnedNoteId!,
+      req.user!.id,
+      req.user!.businessId,
+    );
+    sendSuccess(res, tender, "Note unpinned");
   });
 
   setTags = asyncHandler(async (req, res) => {
