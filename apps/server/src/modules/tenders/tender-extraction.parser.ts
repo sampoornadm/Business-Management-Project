@@ -1,7 +1,7 @@
 import mammoth from "mammoth";
 
 import { BadRequestError } from "../../core/errors/HttpErrors.js";
-import { extractPdfText } from "../../shared/utils/pdf-text.js";
+import { extractPdfText, type ExtractPdfTextOptions } from "../../shared/utils/pdf-text.js";
 
 async function extractDocxText(buffer: Buffer): Promise<string> {
   const result = await mammoth.extractRawText({ buffer });
@@ -14,10 +14,19 @@ async function extractDocxText(buffer: Buffer): Promise<string> {
 // point, silently dropping its description). Truncation for the LLM prompt
 // is the caller's concern, applied only to what it sends the model — the
 // deterministic item parser always sees everything.
-export async function extractDocumentText(buffer: Buffer, mimeType: string): Promise<string> {
+//
+// `options.layout` only affects the PDF branch (passed straight through to
+// pdftotext's `-layout` flag) — mammoth's docx extraction has no equivalent
+// concept and ignores it. See pdf-text.ts#ExtractPdfTextOptions for why the
+// caller needs to choose per use (header fields vs. the item table).
+export async function extractDocumentText(
+  buffer: Buffer,
+  mimeType: string,
+  options?: ExtractPdfTextOptions,
+): Promise<string> {
   let text: string;
   if (mimeType === "application/pdf") {
-    text = await extractPdfText(buffer);
+    text = await extractPdfText(buffer, options);
   } else if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
     text = await extractDocxText(buffer);
   } else {

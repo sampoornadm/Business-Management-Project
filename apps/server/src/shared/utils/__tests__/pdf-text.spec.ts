@@ -36,4 +36,10 @@ describe("extractPdfText", () => {
   it("rejects with a clear error on a non-PDF buffer", async () => {
     await expect(extractPdfText(Buffer.from("not a pdf"))).rejects.toThrow();
   });
+
+  it("still extracts text when { layout: true } is passed", async () => {
+    const buffer = buildMinimalPdf("Notice Inviting Tender for XLPE Cable Supply");
+    const result = await extractPdfText(buffer, { layout: true });
+    expect(result).toContain("Notice Inviting Tender for XLPE Cable Supply");
+  });
 });
