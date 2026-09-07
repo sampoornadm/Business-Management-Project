@@ -117,6 +117,11 @@ export interface TenderTagDto {
   color: string | null;
 }
 
+export interface TenderPinnedNoteDto {
+  id: string;
+  lineText: string;
+}
+
 // Everything except tenderNumber/title is nullable: a tender is often created from a source
 // document that doesn't state a field (an RFx routinely has no submission deadline), and a
 // blank the user can fill in beats a fabricated "Not specified". See the Tender model.
@@ -166,6 +171,7 @@ export interface TenderDto extends TenderListItemDto {
   createdBy: { id: string; firstName: string; lastName: string };
   assignees: TenderAssigneeDto[];
   competitors: TenderCompetitorDto[];
+  pinnedNotes: TenderPinnedNoteDto[];
   tags: TenderTagDto[];
   updatedAt: string;
 }
@@ -257,6 +263,10 @@ export interface CreateTenderCompetitorInput {
 }
 
 export type UpdateTenderCompetitorInput = Partial<CreateTenderCompetitorInput>;
+
+export interface PinTenderNoteInput {
+  lineText: string;
+}
 
 export interface ListTendersQuery {
   page?: number;

@@ -33,6 +33,7 @@ const tenderDetailArgs = {
       orderBy: { createdAt: "asc" },
     },
     competitors: { orderBy: { createdAt: "asc" } },
+    pinnedNotes: { orderBy: { createdAt: "asc" } },
     tags: { include: { tag: true } },
     convertedFrom: { select: { id: true, tenderNumber: true, title: true, updatedAt: true } },
   },
@@ -138,6 +139,11 @@ export interface ITendersRepository {
   addCompetitor(tenderId: string, data: CreateCompetitorData): Promise<void>;
   updateCompetitor(id: string, data: UpdateCompetitorData): Promise<void>;
   deleteCompetitor(id: string): Promise<void>;
+
+  findPinnedNote(tenderId: string, lineText: string): Promise<{ id: string } | null>;
+  findPinnedNoteById(id: string): Promise<{ id: string; tenderId: string; lineText: string } | null>;
+  addPinnedNote(tenderId: string, lineText: string, pinnedById: string): Promise<void>;
+  removePinnedNote(id: string): Promise<void>;
 
   setTags(tenderId: string, tagIds: string[]): Promise<void>;
 
@@ -280,6 +286,30 @@ export class TendersRepository implements ITendersRepository {
 
   async deleteCompetitor(id: string): Promise<void> {
     await this.prisma.tenderCompetitor.delete({ where: { id } });
+  }
+
+  findPinnedNote(tenderId: string, lineText: string): Promise<{ id: string } | null> {
+    return this.prisma.tenderPinnedNote.findUnique({
+      where: { tenderId_lineText: { tenderId, lineText } },
+      select: { id: true },
+    });
+  }
+
+  findPinnedNoteById(id: string): Promise<{ id: string; tenderId: string; lineText: string } | null> {
+    return this.prisma.tenderPinnedNote.findUnique({
+      where: { id },
+      select: { id: true, tenderId: true, lineText: true },
+    });
+  }
+
+  async addPinnedNote(tenderId: string, lineText: string, pinnedById: string): Promise<void> {
+    await this.prisma.tenderPinnedNote.create({
+      data: { id: randomUUID(), tenderId, lineText, pinnedById },
+    });
+  }
+
+  async removePinnedNote(id: string): Promise<void> {
+    await this.prisma.tenderPinnedNote.delete({ where: { id } });
   }
 
   async setTags(tenderId: string, tagIds: string[]): Promise<void> {

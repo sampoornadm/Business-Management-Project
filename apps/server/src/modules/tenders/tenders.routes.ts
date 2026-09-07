@@ -13,6 +13,7 @@ import {
   createCompetitorSchema,
   createTenderSchema,
   listTendersQuerySchema,
+  pinTenderNoteSchema,
   setTenderTagsSchema,
   updateCompetitorSchema,
   updateTenderSchema,
@@ -332,6 +333,55 @@ export function createTendersRouter(controller: TendersController): Router {
     authenticateMiddleware,
     requirePermission("tenders:update"),
     controller.deleteCompetitor,
+  );
+
+  /**
+   * @openapi
+   * /tenders/{id}/pinned-notes:
+   *   post:
+   *     tags: [Tenders]
+   *     summary: Pin a line from a tender's Terms & Notes
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       201: { description: Note pinned }
+   */
+  router.post(
+    "/:id/pinned-notes",
+    authenticateMiddleware,
+    requirePermission("tenders:update"),
+    validate(pinTenderNoteSchema),
+    controller.pinNote,
+  );
+
+  /**
+   * @openapi
+   * /tenders/{id}/pinned-notes/{pinnedNoteId}:
+   *   delete:
+   *     tags: [Tenders]
+   *     summary: Unpin a previously pinned line
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: path
+   *         name: pinnedNoteId
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Note unpinned }
+   */
+  router.delete(
+    "/:id/pinned-notes/:pinnedNoteId",
+    authenticateMiddleware,
+    requirePermission("tenders:update"),
+    controller.unpinNote,
   );
 
   /**

@@ -407,6 +407,55 @@ export class TendersService {
     return this.getById(tenderId, businessId);
   }
 
+  async pinNote(
+    tenderId: string,
+    lineText: string,
+    actorId: string,
+    businessId: string,
+  ): Promise<TenderDto> {
+    await this.assertTenderExists(tenderId, businessId);
+    const existing = await this.tendersRepository.findPinnedNote(tenderId, lineText);
+    if (existing) throw new ConflictError("This line is already pinned");
+
+    await this.tendersRepository.addPinnedNote(tenderId, lineText, actorId);
+    await this.auditService.log({
+      actorId,
+      action: "TENDER_NOTE_PINNED",
+      entityType: "Tender",
+      entityId: tenderId,
+      metadata: { lineText },
+    });
+    return this.getById(tenderId, businessId);
+  }
+
+  private async assertPinnedNoteBelongsToTender(tenderId: string, pinnedNoteId: string) {
+    const pinnedNote = await this.tendersRepository.findPinnedNoteById(pinnedNoteId);
+    if (!pinnedNote || pinnedNote.tenderId !== tenderId) {
+      throw new NotFoundError("Pinned note not found for this tender");
+    }
+    return pinnedNote;
+  }
+
+  async unpinNote(
+    tenderId: string,
+    pinnedNoteId: string,
+    actorId: string,
+    businessId: string,
+  ): Promise<TenderDto> {
+    await this.assertTenderExists(tenderId, businessId);
+    const pinnedNote = await this.assertPinnedNoteBelongsToTender(tenderId, pinnedNoteId);
+
+    await this.tendersRepository.removePinnedNote(pinnedNoteId);
+    await this.auditService.log({
+      actorId,
+      action: "TENDER_NOTE_UNPINNED",
+      entityType: "Tender",
+      entityId: tenderId,
+      metadata: { lineText: pinnedNote.lineText },
+    });
+    return this.getById(tenderId, businessId);
+  }
+
   async setTags(
     tenderId: string,
     tagIds: string[],
