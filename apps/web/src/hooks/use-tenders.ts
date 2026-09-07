@@ -9,6 +9,7 @@ import type {
   CreateTenderInput,
   ListTendersQuery,
   PaginatedResult,
+  PinTenderNoteInput,
   TenderDto,
   TenderExtractionResultDto,
   TenderListItemDto,
@@ -195,6 +196,34 @@ export function useDeleteTenderCompetitor(id: string) {
     mutationFn: async (competitorId: string) => {
       const response = await apiClient.delete<ApiResponse<TenderDto>>(
         `/tenders/${id}/competitors/${competitorId}`,
+      );
+      return unwrap(response.data);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["tenders", id] });
+    },
+  });
+}
+
+export function usePinTenderNote(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: PinTenderNoteInput) => {
+      const response = await apiClient.post<ApiResponse<TenderDto>>(`/tenders/${id}/pinned-notes`, input);
+      return unwrap(response.data);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["tenders", id] });
+    },
+  });
+}
+
+export function useUnpinTenderNote(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (pinnedNoteId: string) => {
+      const response = await apiClient.delete<ApiResponse<TenderDto>>(
+        `/tenders/${id}/pinned-notes/${pinnedNoteId}`,
       );
       return unwrap(response.data);
     },
