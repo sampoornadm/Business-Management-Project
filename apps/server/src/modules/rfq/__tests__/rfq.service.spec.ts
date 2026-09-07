@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import PizZip from "pizzip";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BadRequestError, ConflictError, NotFoundError } from "../../../core/errors/HttpErrors.js";
@@ -197,10 +198,16 @@ class FakeRfqRepository implements IRfqRepository {
 class FakeTendersRepository implements Partial<ITendersRepository> {
   tenderIds = new Set<string>();
   tenderNumbers = new Map<string, string>();
+  pinnedNotesByTenderId = new Map<string, string[]>();
 
   async findById(id: string, _businessId: string) {
     if (!this.tenderIds.has(id)) return null;
-    return { id, tenderNumber: this.tenderNumbers.get(id) ?? "TND-0000" } as never;
+    const lines = this.pinnedNotesByTenderId.get(id) ?? [];
+    return {
+      id,
+      tenderNumber: this.tenderNumbers.get(id) ?? "TND-0000",
+      pinnedNotes: lines.map((lineText, index) => ({ id: `pin-${index}`, lineText })),
+    } as never;
   }
 }
 
@@ -634,6 +641,25 @@ describe("RfqService", () => {
 
     expect(filename).toMatch(/\.pdf$/);
     expect(buffer.length).toBeGreaterThan(0);
+  });
+
+  it("includes the linked tender's pinned notes in the generated RFR Word document", async () => {
+    businessesRepository.businesses.set(businessId, { name: "Archie Udyog", address: null, gstNumber: null });
+    const tenderId = randomUUID();
+    tendersRepository.tenderIds.add(tenderId);
+    tendersRepository.pinnedNotesByTenderId.set(tenderId, ["Inspection required before dispatch"]);
+
+    const rfq = await service.create(
+      { title: "Cement Supply RFQ", tenderId, items: [{ description: "OPC Cement", quantity: 500 }] },
+      actorId,
+      { businessId },
+    );
+
+    const { buffer } = await service.buildRfrDocxFor(rfq.id, businessId);
+    const zip = new PizZip(buffer);
+    const documentXml = zip.file("word/document.xml")!.asText();
+
+    expect(documentXml).toContain("Inspection required before dispatch");
   });
 
   it("throws NotFoundError when the business record is missing", async () => {

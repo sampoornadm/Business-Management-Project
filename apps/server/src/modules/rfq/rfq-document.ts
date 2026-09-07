@@ -73,6 +73,7 @@ export interface RfrDocumentData {
   tenderNumber: string | null;
   dueDate: string | null;
   instructions: string | null;
+  pinnedNotes: string[];
   items: RfrDocumentItem[];
 }
 
@@ -114,6 +115,7 @@ export function toRfrDocumentData(
   rfq: RfrSourceRfq,
   business: { name: string; address: string | null; gstNumber: string | null },
   tenderNumber: string | null,
+  pinnedNotes: string[],
 ): RfrDocumentData {
   return {
     businessName: business.name,
@@ -123,6 +125,7 @@ export function toRfrDocumentData(
     tenderNumber,
     dueDate: rfq.dueDate ? formatDate(rfq.dueDate) : null,
     instructions: rfq.instructions,
+    pinnedNotes,
     items: rfq.items.map((item) => ({
       rfqItemId: item.id,
       description: item.description,
@@ -168,6 +171,14 @@ export function buildRfrPdf(data: RfrDocumentData): Promise<Buffer> {
     if (metaLine) doc.fontSize(9).font("Helvetica").text(metaLine);
     const instructionsLine = buildInstructionsLine(data.instructions);
     if (instructionsLine) doc.fontSize(9).font("Helvetica").text(instructionsLine);
+    if (data.pinnedNotes.length > 0) {
+      doc.moveDown(0.3);
+      doc.fontSize(10).font("Helvetica-Bold").text("Important Notes");
+      doc.fontSize(9).font("Helvetica");
+      for (const note of data.pinnedNotes) {
+        doc.text(`• ${note}`);
+      }
+    }
     doc.moveDown();
 
     let y = doc.y;
@@ -216,6 +227,8 @@ export async function buildRfrDocx(data: RfrDocumentData): Promise<Buffer> {
     rfqTitle: data.rfqTitle,
     metaLine: buildMetaLine(data.tenderNumber, data.dueDate),
     instructionsLine: buildInstructionsLine(data.instructions),
+    pinnedNotes: data.pinnedNotes,
+    hasPinnedNotes: data.pinnedNotes.length > 0 ? [{}] : [],
     items: data.items.map((item) => ({
       description: item.description,
       unit: item.unit ?? "",
