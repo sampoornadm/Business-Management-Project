@@ -11,7 +11,8 @@ import {
   DropdownMenuTrigger,
   useToast,
 } from "@bmp/ui";
-import { Download } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
+import { useState } from "react";
 
 import { downloadQuotation, downloadUndertaking } from "@/hooks/use-document-generation";
 
@@ -27,8 +28,10 @@ export function TenderDownloadMenu({
   iconOnly?: boolean;
 }) {
   const { toast } = useToast();
+  const [pending, setPending] = useState(false);
 
   async function handle(action: () => Promise<void>) {
+    setPending(true);
     try {
       await action();
     } catch (error) {
@@ -37,14 +40,20 @@ export function TenderDownloadMenu({
         title: "Could not generate document",
         description: error instanceof Error ? error.message : "Please try again.",
       });
+    } finally {
+      setPending(false);
     }
   }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size={size} title={iconOnly ? "Download" : undefined}>
-          <Download className={iconOnly ? "h-4 w-4" : "mr-2 h-4 w-4"} />
+        <Button variant="outline" size={size} disabled={pending} title={iconOnly ? "Download" : undefined}>
+          {pending ? (
+            <Loader2 className={iconOnly ? "h-4 w-4 animate-spin" : "mr-2 h-4 w-4 animate-spin"} />
+          ) : (
+            <Download className={iconOnly ? "h-4 w-4" : "mr-2 h-4 w-4"} />
+          )}
           {iconOnly ? null : "Download"}
         </Button>
       </DropdownMenuTrigger>
