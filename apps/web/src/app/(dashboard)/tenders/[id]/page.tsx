@@ -30,9 +30,11 @@ import {
 import { Pencil, Receipt, ScrollText, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
 
 import { ConvertToProjectDialog } from "@/components/projects/convert-to-project-dialog";
 import { LinkedBudgetaryQuotationCard } from "@/components/tenders/linked-budgetary-quotation-card";
+import { PinnedTenderNotes } from "@/components/tenders/pinned-tender-notes";
 import { StatusChangeDialog } from "@/components/tenders/status-change-dialog";
 import { TenderAssigneesTab } from "@/components/tenders/tender-assignees-tab";
 import { TenderCompetitorsTab } from "@/components/tenders/tender-competitors-tab";
@@ -43,7 +45,14 @@ import { TenderItemsTab } from "@/components/tenders/tender-items-tab";
 import { TenderNotesView } from "@/components/tenders/tender-notes-view";
 import { TenderTagsCard } from "@/components/tenders/tender-tags-card";
 import { useTags } from "@/hooks/use-tags";
-import { useChangeTenderStatus, useDeleteTender, useSetTenderTags, useTender } from "@/hooks/use-tenders";
+import {
+  useChangeTenderStatus,
+  useDeleteTender,
+  usePinTenderNote,
+  useSetTenderTags,
+  useTender,
+  useUnpinTenderNote,
+} from "@/hooks/use-tenders";
 import { useAuthStore } from "@/lib/auth-store";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { hasPermission } from "@/lib/permissions";
@@ -64,6 +73,9 @@ export default function TenderDetailPage() {
   const changeStatus = useChangeTenderStatus(params.id);
   const deleteTender = useDeleteTender();
   const setTags = useSetTenderTags(params.id);
+  const pinNote = usePinTenderNote(params.id);
+  const unpinNote = useUnpinTenderNote(params.id);
+  const [pendingLineText, setPendingLineText] = useState<string | null>(null);
 
   const canUpdate = hasPermission(roleName, "tenders:update");
   const canDelete = hasPermission(roleName, "tenders:delete");
@@ -98,6 +110,25 @@ export default function TenderDetailPage() {
         title: "Could not delete tender",
         description: error instanceof Error ? error.message : "Please try again.",
       });
+    }
+  }
+
+  async function handleTogglePin(lineText: string, pinnedNoteId?: string) {
+    setPendingLineText(lineText);
+    try {
+      if (pinnedNoteId) {
+        await unpinNote.mutateAsync(pinnedNoteId);
+      } else {
+        await pinNote.mutateAsync({ lineText });
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not update pin",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    } finally {
+      setPendingLineText(null);
     }
   }
 
@@ -294,7 +325,28 @@ export default function TenderDetailPage() {
                 <CardTitle className="text-base">Terms &amp; Notes</CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                <TenderNotesView notes={tender.notes} />
+                <PinnedTenderNotes
+                  pinnedNotes={tender.pinnedNotes}
+                  pendingLineText={pendingLineText}
+                  onUnpin={
+                    canUpdate
+                      ? (note) => handleTogglePin(note.lineText, note.id)
+                      : undefined
+                  }
+                />
+                <TenderNotesView
+                  notes={tender.notes}
+                  pinnedLineTexts={new Set(tender.pinnedNotes.map((note) => note.lineText))}
+                  pendingLineText={pendingLineText}
+                  onTogglePin={
+                    canUpdate
+                      ? (lineText) => {
+                          const existing = tender.pinnedNotes.find((note) => note.lineText === lineText);
+                          void handleTogglePin(lineText, existing?.id);
+                        }
+                      : undefined
+                  }
+                />
               </CardContent>
             </Card>
           )}
