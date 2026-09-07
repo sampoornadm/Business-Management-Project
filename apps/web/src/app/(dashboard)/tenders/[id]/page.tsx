@@ -293,7 +293,7 @@ export default function TenderDetailPage() {
               <CardHeader>
                 <CardTitle className="text-base">Terms &amp; Notes</CardTitle>
               </CardHeader>
-              <CardContent className="max-w-3xl pt-0">
+              <CardContent className="pt-0">
                 <TenderNotesView notes={tender.notes} />
               </CardContent>
             </Card>
