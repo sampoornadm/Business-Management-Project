@@ -277,12 +277,14 @@ export class RfqService {
     if (!business) throw new NotFoundError("Business not found");
 
     let tenderNumber: string | null = null;
+    let pinnedNotes: string[] = [];
     if (rfq.tenderId) {
       const tender = await this.tendersRepository.findById(rfq.tenderId, businessId);
       tenderNumber = tender?.tenderNumber ?? null;
+      pinnedNotes = tender?.pinnedNotes.map((note) => note.lineText) ?? [];
     }
 
-    const data = toRfrDocumentData(rfq, business, tenderNumber);
+    const data = toRfrDocumentData(rfq, business, tenderNumber, pinnedNotes);
     const safeTitle = rfq.title.replace(/[^a-zA-Z0-9-_]+/g, "-").slice(0, 60);
     return { data, safeTitle };
   }
