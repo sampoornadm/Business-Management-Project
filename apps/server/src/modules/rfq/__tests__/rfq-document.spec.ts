@@ -282,8 +282,12 @@ describe("buildRfrDocx", () => {
     const documentXml = zip.file("word/document.xml")!.asText();
 
     expect(documentXml).toContain("Important Notes");
-    expect(documentXml).toContain("Inspection required before dispatch");
-    expect(documentXml).toContain("Delivery within 30 days of PO");
+    // Each note must render as its own bullet-prefixed run, not just appear somewhere in the XML —
+    // this is what actually fails on the old inline-loop template, where the two notes are glued
+    // together into a single run with no separator.
+    expect(documentXml).toContain("• Inspection required before dispatch");
+    expect(documentXml).toContain("• Delivery within 30 days of PO");
+    expect(documentXml).not.toContain("dispatchDelivery");
     expect(documentXml).not.toContain("{{#pinnedNotes}}");
     expect(documentXml).not.toContain("{{/pinnedNotes}}");
     expect(documentXml).not.toContain("{{#hasPinnedNotes}}");
