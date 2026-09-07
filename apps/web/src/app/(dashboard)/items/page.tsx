@@ -22,6 +22,7 @@ import {
   ArrowUp,
   ChevronsUpDown,
   ListTree,
+  Loader2,
   Package,
   SearchX,
   Sparkles,
@@ -211,7 +212,11 @@ export default function ItemsPage() {
           </Button>
           {canUpdate && (
             <Button onClick={handleClassify} disabled={classifyBatch.isPending}>
-              <Sparkles className="mr-2 h-4 w-4" />
+              {classifyBatch.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-2 h-4 w-4" />
+              )}
               {classifyBatch.isPending ? "Classifying…" : "Classify with AI"}
             </Button>
           )}

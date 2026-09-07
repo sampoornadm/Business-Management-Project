@@ -28,6 +28,7 @@ import {
   useToast,
   type IndiaState,
 } from "@bmp/ui";
+import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -292,10 +293,17 @@ export default function NewTenderPage() {
               extract.isPending && "cursor-not-allowed opacity-60",
             )}
           >
-            <p className="text-sm">
-              Drag and drop a PDF or Word file here, or{" "}
-              <span className="font-medium text-primary underline underline-offset-2">choose a file</span>
-            </p>
+            {extract.isPending ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Extracting fields — this can take up to a minute…
+              </div>
+            ) : (
+              <p className="text-sm">
+                Drag and drop a PDF or Word file here, or{" "}
+                <span className="font-medium text-primary underline underline-offset-2">choose a file</span>
+              </p>
+            )}
             <input
               ref={fileInputRef}
               type="file"
@@ -310,9 +318,6 @@ export default function NewTenderPage() {
               className="hidden"
             />
           </div>
-          {extract.isPending && (
-            <p className="text-sm text-muted-foreground">Extracting fields — this can take up to a minute…</p>
-          )}
           {hint && <p className="text-sm text-amber-600 dark:text-amber-500">{hint}</p>}
         </CardContent>
       </Card>
