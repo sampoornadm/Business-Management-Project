@@ -58,7 +58,9 @@ Read the document text below and return ONLY a single JSON object (no markdown, 
 - emdAmount: earnest money deposit amount as a plain number, if stated
 - tenderFee: tender fee amount as a plain number, if stated
 - documentFee: document fee amount as a plain number, if stated
-- submissionDate: the bid/quotation submission deadline, as an ISO 8601 date (YYYY-MM-DD)
+- submissionDate: the bid/quotation submission deadline. If the document states a time as well as a
+  date, return it as an ISO 8601 date-time (YYYY-MM-DDTHH:mm, 24-hour clock, no timezone suffix).
+  If only a date is stated, return just the date (YYYY-MM-DD) — never invent a time.
 - openingDate: the bid opening date, as an ISO 8601 date (YYYY-MM-DD), if stated
 - validityPeriodDays: quotation/offer validity period in days, as a plain integer
 - description: a 1-2 sentence description of what is being procured
@@ -67,7 +69,8 @@ Read the document text below and return ONLY a single JSON object (no markdown, 
 
 Rules:
 - If a field is not present in the text, set it to null. Never guess or invent a value.
-- Dates must be ISO 8601 (YYYY-MM-DD) or null.
+- Dates must be ISO 8601 (YYYY-MM-DD, or YYYY-MM-DDTHH:mm for submissionDate when a time is stated)
+  or null.
 - Numbers must be plain numbers (no currency symbols/commas) or null.
 
 Document text:

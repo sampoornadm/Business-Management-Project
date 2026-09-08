@@ -27,6 +27,14 @@ await tenderReminderQueue.add(
   {},
   { repeat: { pattern: "0 7 * * *" }, jobId: "tender-deadline-check" },
 );
+// Separate, more frequent schedule for the "1 hour before" reminder — day-level thresholds only
+// need checking once a day, but an hour-precision deadline needs checking often enough that no
+// tender's window is missed between runs.
+await tenderReminderQueue.add(
+  "check-hourly-deadlines",
+  {},
+  { repeat: { pattern: "*/15 * * * *" }, jobId: "tender-hourly-deadline-check" },
+);
 
 logger.info(
   `Background worker process started (email queue, tender reminders${localDocsWatcher ? ", local docs sync" : ""}${incomingTendersWatcher ? ", incoming tenders ingestion" : ""}${aiEnrichmentWorker ? ", AI enrichment" : ""}${documentIndexingWorker ? ", document indexing" : ""})`,

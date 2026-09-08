@@ -91,8 +91,11 @@ function toFormDefaults(result: TenderExtractionResultDto): Partial<TenderFormVa
   if (fields.validityPeriodDays !== undefined) {
     defaults.validityPeriodDays = String(fields.validityPeriodDays);
   }
-  if (fields.submissionDate && /^\d{4}-\d{2}-\d{2}/.test(fields.submissionDate)) {
-    defaults.submissionDate = fields.submissionDate.slice(0, 10);
+  // Submission date is now a datetime-local field — only prefill it when extraction found a real
+  // time too (never guess one); a date-only extraction leaves the field blank for the user to pick.
+  const submissionDateTime = fields.submissionDate?.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+  if (submissionDateTime) {
+    defaults.submissionDate = `${submissionDateTime[1]}T${submissionDateTime[2]}`;
   }
   if (fields.openingDate && /^\d{4}-\d{2}-\d{2}/.test(fields.openingDate)) {
     defaults.openingDate = fields.openingDate.slice(0, 10);

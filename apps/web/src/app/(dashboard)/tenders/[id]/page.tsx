@@ -19,6 +19,7 @@ import {
   CardTitle,
   EMPTY_VALUE,
   formatDate,
+  formatDateTime,
   Skeleton,
   Stepper,
   Tabs,
@@ -270,7 +271,7 @@ export default function TenderDetailPage() {
               </div>
               <div>
                 <p className="text-muted-foreground">Submission date</p>
-                <p>{formatDate(tender.submissionDate)}</p>
+                <p>{formatDateTime(tender.submissionDate)}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Opening date</p>

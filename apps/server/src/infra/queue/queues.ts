@@ -20,7 +20,10 @@ export type EmailJobPayload =
       firstName: string;
       tenderNumber: string;
       tenderTitle: string;
-      daysRemaining: number;
+      // Precomputed by the worker ("1 day", "today", "1 hour", ...) — the day-count and
+      // hour-count thresholds need different label shapes, so the label is built once where
+      // the threshold is decided rather than reconstructed here from a number.
+      timeLabel: string;
       tenderUrl: string;
     }
   | { type: "rfq"; to: string; rfqTitle: string; bodyText: string };
@@ -39,7 +42,9 @@ export const emailQueue = new Queue<EmailJobPayload, void, "send-email">(EMAIL_Q
 
 export const TENDER_REMINDER_QUEUE_NAME = "tender-reminders";
 
-export const tenderReminderQueue = new Queue<Record<string, never>, void, "check-deadlines">(
+export type TenderReminderJobName = "check-deadlines" | "check-hourly-deadlines";
+
+export const tenderReminderQueue = new Queue<Record<string, never>, void, TenderReminderJobName>(
   TENDER_REMINDER_QUEUE_NAME,
   { connection: redis },
 );
