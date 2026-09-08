@@ -44,6 +44,7 @@ model User {
   pinnedTenderNotes      TenderPinnedNote[]      @relation("TenderPinnedBy")
   createdOrganizations   Organization[]         @relation("OrganizationCreatedBy")
   notifications          Notification[]         @relation("NotificationRecipient")
+  savedViews             SavedView[]            @relation("SavedViewOwner")
   createdBoqs            Boq[]                  @relation("BoqCreatedBy")
   createdHistoricalRates HistoricalRate[]       @relation("HistoricalRateCreatedBy")
   createdVendors         Vendor[]               @relation("VendorCreatedBy")
@@ -151,6 +152,7 @@ model Business {
   payments        Payment[]
   bills           Bill[]
   notifications   Notification[]
+  savedViews      SavedView[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -649,6 +651,29 @@ model Notification {
   @@index([userId, businessId, isRead, createdAt])
   @@index([entityType, entityId])
   @@map("notifications")
+}
+
+model SavedView {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation("SavedViewOwner", fields: [userId], references: [id], onDelete: Cascade)
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  pageKey        String
+  name           String
+  filters        Json
+  visibleColumns Json
+  columnOrder    Json
+  sortBy         String?
+  sortDir        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, businessId, pageKey, name])
+  @@index([userId, businessId, pageKey])
+  @@map("saved_views")
 }
 
 // ---------------------------------------------------------------------------
