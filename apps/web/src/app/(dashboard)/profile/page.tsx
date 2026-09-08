@@ -1,6 +1,9 @@
 "use client";
 
 import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
   AvatarUpload,
   Button,
   Card,
@@ -18,7 +21,8 @@ import {
   useToast,
 } from "@bmp/ui";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect } from "react";
+import { Pencil } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -57,6 +61,7 @@ export default function ProfilePage() {
   const updateProfile = useUpdateOwnProfile();
   const uploadAvatar = useUploadAvatar();
   const changePassword = useChangePassword();
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
 
   const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -79,6 +84,7 @@ export default function ProfilePage() {
     try {
       await updateProfile.mutateAsync(values);
       toast({ title: "Profile updated" });
+      setIsEditingProfile(false);
     } catch (error) {
       toast({
         variant: "destructive",
@@ -86,6 +92,13 @@ export default function ProfilePage() {
         description: error instanceof Error ? error.message : "Please try again.",
       });
     }
+  }
+
+  function handleCancelEdit() {
+    if (user) {
+      profileForm.reset({ firstName: user.firstName, lastName: user.lastName, phone: user.phone ?? "" });
+    }
+    setIsEditingProfile(false);
   }
 
   async function onPasswordSubmit(values: PasswordFormValues) {
@@ -104,6 +117,8 @@ export default function ProfilePage() {
 
   if (!user) return null;
 
+  const initials = `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase();
+
   return (
     <div className="max-w-3xl space-y-6">
       <div>
@@ -112,82 +127,114 @@ export default function ProfilePage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Photo</CardTitle>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0">
+          <div>
+            <CardTitle className="text-base">Personal information</CardTitle>
+            <CardDescription>Your photo and contact details.</CardDescription>
+          </div>
+          {!isEditingProfile && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Edit personal information"
+              onClick={() => setIsEditingProfile(true)}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
-          <AvatarUpload
-            currentImageUrl={user.avatar?.thumbnailUrl}
-            fallbackText={`${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase()}
-            isUploading={uploadAvatar.isPending}
-            onUpload={async (file) => {
-              try {
-                await uploadAvatar.mutateAsync(file);
-              } catch (error) {
-                toast({
-                  variant: "destructive",
-                  title: "Upload failed",
-                  description: error instanceof Error ? error.message : "Please try again.",
-                });
-              }
-            }}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Personal information</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Form {...profileForm}>
-            <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={profileForm.control}
-                  name="firstName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>First name</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={profileForm.control}
-                  name="lastName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Last name</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormField
-                control={profileForm.control}
-                name="phone"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Phone</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+          {isEditingProfile ? (
+            <div className="space-y-4">
+              <AvatarUpload
+                currentImageUrl={user.avatar?.thumbnailUrl}
+                fallbackText={initials}
+                isUploading={uploadAvatar.isPending}
+                onUpload={async (file) => {
+                  try {
+                    await uploadAvatar.mutateAsync(file);
+                  } catch (error) {
+                    toast({
+                      variant: "destructive",
+                      title: "Upload failed",
+                      description: error instanceof Error ? error.message : "Please try again.",
+                    });
+                  }
+                }}
               />
-              <Button type="submit" disabled={updateProfile.isPending}>
-                {updateProfile.isPending ? "Saving..." : "Save changes"}
-              </Button>
-            </form>
-          </Form>
+              <Form {...profileForm}>
+                <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={profileForm.control}
+                      name="firstName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>First name</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={profileForm.control}
+                      name="lastName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Last name</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <FormField
+                    control={profileForm.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={updateProfile.isPending}>
+                      {updateProfile.isPending ? "Saving..." : "Save changes"}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={handleCancelEdit}>
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <Avatar className="h-20 w-20">
+                <AvatarImage src={user.avatar?.thumbnailUrl ?? undefined} alt={user.firstName} />
+                <AvatarFallback className="text-lg">{initials}</AvatarFallback>
+              </Avatar>
+              <div className="space-y-1 text-sm">
+                <p>
+                  <span className="text-muted-foreground">Name: </span>
+                  {user.firstName} {user.lastName}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Phone: </span>
+                  {user.phone || "-"}
+                </p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

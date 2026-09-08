@@ -43,6 +43,9 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Washed-out tint of the active business's theme color, for the dashboard header
+        // background only — see theme-colors.ts's `washed()`.
+        header: "hsl(var(--header-bg))",
         // Sparing "safety amber" signal color — deadlines, due-soon flags,
         // and other attention states that shouldn't be confused with the
         // destructive/error semantic.

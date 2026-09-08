@@ -41,7 +41,7 @@ export default function RootLayout({ children }: PropsWithChildren) {
           // server-derived value once the auth store hydrates (e.g. if this cache
           // is stale because the color was changed on another device).
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var v=JSON.parse(localStorage.getItem("bmp-theme-color-vars"));if(!v)return;var s=document.documentElement.style;s.setProperty("--primary",v.primary);s.setProperty("--primary-foreground",v.primaryForeground);s.setProperty("--ring",v.ring);}catch(e){}})();`,
+            __html: `(function(){try{var v=JSON.parse(localStorage.getItem("bmp-theme-color-vars"));if(!v)return;var s=document.documentElement.style;s.setProperty("--primary",v.primary);s.setProperty("--primary-foreground",v.primaryForeground);s.setProperty("--ring",v.ring);s.setProperty("--header-bg",v.headerBg);}catch(e){}})();`,
           }}
         />
       </head>
