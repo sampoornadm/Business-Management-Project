@@ -28,7 +28,7 @@ import { z } from "zod";
 
 import { ThemeColorPicker } from "@/components/profile/theme-color-picker";
 import { useChangePassword } from "@/hooks/use-auth";
-import { useUpdateOwnProfile, useUploadAvatar } from "@/hooks/use-users";
+import { useRemoveAvatar, useUpdateOwnProfile, useUploadAvatar } from "@/hooks/use-users";
 import { useAuthStore } from "@/lib/auth-store";
 
 const profileSchema = z.object({
@@ -60,6 +60,7 @@ export default function ProfilePage() {
   const availableBusinesses = useAuthStore((state) => state.availableBusinesses);
   const updateProfile = useUpdateOwnProfile();
   const uploadAvatar = useUploadAvatar();
+  const removeAvatar = useRemoveAvatar();
   const changePassword = useChangePassword();
   const [isEditingProfile, setIsEditingProfile] = useState(false);
 
@@ -151,6 +152,7 @@ export default function ProfilePage() {
                 currentImageUrl={user.avatar?.thumbnailUrl}
                 fallbackText={initials}
                 isUploading={uploadAvatar.isPending}
+                isRemoving={removeAvatar.isPending}
                 onUpload={async (file) => {
                   try {
                     await uploadAvatar.mutateAsync(file);
@@ -158,6 +160,17 @@ export default function ProfilePage() {
                     toast({
                       variant: "destructive",
                       title: "Upload failed",
+                      description: error instanceof Error ? error.message : "Please try again.",
+                    });
+                  }
+                }}
+                onRemove={async () => {
+                  try {
+                    await removeAvatar.mutateAsync();
+                  } catch (error) {
+                    toast({
+                      variant: "destructive",
+                      title: "Could not remove photo",
                       description: error instanceof Error ? error.message : "Please try again.",
                     });
                   }

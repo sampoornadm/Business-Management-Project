@@ -128,6 +128,12 @@ class FakeUsersRepository implements Partial<IUsersRepository> {
     if (membership) membership.themeColor = themeColor;
     return this.scopedTo(user, businessId);
   }
+  async updateAvatarAttachmentId(id: string, avatarAttachmentId: string | null) {
+    const user = this.users.get(id);
+    if (!user) throw new Error("not found");
+    user.avatarAttachmentId = avatarAttachmentId;
+    if (!avatarAttachmentId) user.avatarAttachment = null;
+  }
 }
 
 class FakeRolesRepository implements Partial<IRolesRepository> {
@@ -145,6 +151,7 @@ describe("UsersService", () => {
   let usersRepository: FakeUsersRepository;
   let rolesRepository: FakeRolesRepository;
   let auditService: AuditService;
+  let attachmentsService: AttachmentsService;
   let usersService: UsersService;
   let existing: UserWithRole;
 
@@ -159,7 +166,11 @@ describe("UsersService", () => {
       createPasswordResetToken: vi.fn().mockResolvedValue(undefined),
       revokeAllForUser: vi.fn().mockResolvedValue(undefined),
     } as unknown as IAuthRepository;
-    const fakeAttachmentsService = { getVariants: vi.fn().mockResolvedValue([]) } as unknown as AttachmentsService;
+    attachmentsService = {
+      getVariants: vi.fn().mockResolvedValue([]),
+      deleteById: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AttachmentsService;
+    const fakeAttachmentsService = attachmentsService;
     const fakeEmailService = { queueInviteEmail: vi.fn().mockResolvedValue(undefined) } as never;
 
     usersService = new UsersService(
@@ -284,6 +295,39 @@ describe("UsersService", () => {
       await expect(
         usersService.updateThemeColor(userId, OTHER_BUSINESS_ID, "violet"),
       ).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  describe("removeAvatar", () => {
+    it("clears the avatar, deletes the old attachment, and logs an audit entry", async () => {
+      const attachmentId = randomUUID();
+      existing.avatarAttachmentId = attachmentId;
+
+      const dto = await usersService.removeAvatar(existing.id, BUSINESS_ID);
+
+      expect(dto.avatar).toBeNull();
+      expect(usersRepository.users.get(existing.id)!.avatarAttachmentId).toBeNull();
+      expect(attachmentsService.deleteById).toHaveBeenCalledWith(attachmentId);
+      expect(auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "USER_AVATAR_REMOVED", entityId: existing.id }),
+      );
+    });
+
+    it("rejects when the user has no avatar to remove", async () => {
+      existing.avatarAttachmentId = null;
+
+      await expect(usersService.removeAvatar(existing.id, BUSINESS_ID)).rejects.toThrow(BadRequestError);
+      expect(attachmentsService.deleteById).not.toHaveBeenCalled();
+    });
+
+    it("throws NotFoundError when the caller has no membership in that business", async () => {
+      const userId = randomUUID();
+      usersRepository.users.set(
+        userId,
+        buildUser({ id: userId, businessId: BUSINESS_ID, roleId: "role-viewer", avatarAttachmentId: randomUUID() }),
+      );
+
+      await expect(usersService.removeAvatar(userId, OTHER_BUSINESS_ID)).rejects.toThrow(NotFoundError);
     });
   });
 });

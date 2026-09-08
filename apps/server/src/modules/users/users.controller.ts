@@ -110,4 +110,9 @@ export class UsersController {
     );
     sendSuccess(res, user, "Avatar uploaded");
   });
+
+  removeAvatar = asyncHandler(async (req, res) => {
+    const user = await this.usersService.removeAvatar(req.user!.id, req.user!.businessId);
+    sendSuccess(res, user, "Avatar removed");
+  });
 }
