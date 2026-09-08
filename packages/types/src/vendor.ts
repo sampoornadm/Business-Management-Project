@@ -16,6 +16,7 @@ export interface VendorListItemDto {
   state: string | null;
   isActive: boolean;
   averageRating: number | null;
+  totalRatings: number;
   createdAt: string;
 }
 

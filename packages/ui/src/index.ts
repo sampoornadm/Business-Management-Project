@@ -15,6 +15,7 @@ export * from "./components/toast";
 export * from "./components/use-toast";
 export * from "./components/toaster";
 export * from "./components/table";
+export * from "./components/star-rating";
 export * from "./components/data-table";
 export * from "./components/avatar";
 export * from "./components/avatar-upload";

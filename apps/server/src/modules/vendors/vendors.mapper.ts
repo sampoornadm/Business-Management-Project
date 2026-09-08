@@ -33,6 +33,7 @@ export function toVendorListItemDto(entity: VendorEntity): VendorListItemDto {
     state: entity.state,
     isActive: entity.isActive,
     averageRating: averageOf(entity.ratings),
+    totalRatings: entity.ratings.length,
     createdAt: entity.createdAt.toISOString(),
   };
 }
