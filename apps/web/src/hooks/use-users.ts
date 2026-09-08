@@ -118,6 +118,17 @@ export function useUploadAvatar() {
   });
 }
 
+export function useRemoveAvatar() {
+  const setUser = useAuthStore((state) => state.setUser);
+  return useMutation({
+    mutationFn: async () => {
+      const response = await apiClient.delete<ApiResponse<UserDto>>("/users/me/avatar");
+      return unwrap(response.data);
+    },
+    onSuccess: (user) => setUser(user),
+  });
+}
+
 export function useUpdateThemeColor() {
   const updateBusinessThemeColor = useAuthStore((state) => state.updateBusinessThemeColor);
   return useMutation({

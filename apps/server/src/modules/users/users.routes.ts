@@ -81,6 +81,18 @@ export function createUsersRouter(controller: UsersController): Router {
 
   /**
    * @openapi
+   * /users/me/avatar:
+   *   delete:
+   *     tags: [Users]
+   *     summary: Remove the current user's avatar
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       200: { description: Avatar removed }
+   */
+  router.delete("/me/avatar", authenticateMiddleware, controller.removeAvatar);
+
+  /**
+   * @openapi
    * /users:
    *   get:
    *     tags: [Users]

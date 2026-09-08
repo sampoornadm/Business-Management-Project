@@ -246,4 +246,26 @@ export class UsersService {
     const updated = await this.usersRepository.findById(userId, businessId);
     return this.toDto(updated!);
   }
+
+  async removeAvatar(userId: string, businessId: string): Promise<UserDto> {
+    const existing = this.assertMember(await this.usersRepository.findById(userId, businessId));
+
+    const previousAvatarId = existing.avatarAttachmentId;
+    if (!previousAvatarId) {
+      throw new BadRequestError("No avatar to remove");
+    }
+
+    await this.usersRepository.updateAvatarAttachmentId(userId, null);
+    await this.attachmentsService.deleteById(previousAvatarId);
+
+    await this.auditService.log({
+      actorId: userId,
+      action: "USER_AVATAR_REMOVED",
+      entityType: "User",
+      entityId: userId,
+    });
+
+    const updated = await this.usersRepository.findById(userId, businessId);
+    return this.toDto(updated!);
+  }
 }
