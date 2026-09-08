@@ -43,6 +43,10 @@
     --input: 217.7 16% 90.2%;
     --ring: 216 65% 34%;
 
+    /* Washed-out tint of --primary for the dashboard header background — see theme-colors.ts's
+       `washed()` for the derivation and how this gets overridden per-business. */
+    --header-bg: 216 36% 94%;
+
     --radius: 0.5rem;
   }
 
@@ -80,6 +84,8 @@
     --border: 217 20% 18%;
     --input: 217 20% 18%;
     --ring: 216 65% 58%;
+
+    --header-bg: 216 36% 15%;
   }
 }
 
