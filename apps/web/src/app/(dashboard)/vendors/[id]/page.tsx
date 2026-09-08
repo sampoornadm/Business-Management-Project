@@ -18,6 +18,7 @@ import {
   CardTitle,
   Input,
   Skeleton,
+  StarRating,
   useToast,
 } from "@bmp/ui";
 import { Pencil, Plus, Star, Trash2 } from "lucide-react";
@@ -334,11 +335,13 @@ export default function VendorDetailPage() {
         <CardContent className="space-y-3">
           {performanceQuery.data && performanceQuery.data.totalRatings > 0 ? (
             <>
-              <p className="flex items-center gap-1 text-sm font-medium">
-                <Star className="h-4 w-4 fill-current text-amber-500" />
-                {performanceQuery.data.averageRating} average over {performanceQuery.data.totalRatings}{" "}
-                purchase order(s)
-              </p>
+              <div className="space-y-0.5">
+                <StarRating value={performanceQuery.data.averageRating ?? 0} />
+                <p className="text-sm text-muted-foreground">
+                  {performanceQuery.data.averageRating} average over {performanceQuery.data.totalRatings}{" "}
+                  purchase order(s)
+                </p>
+              </div>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {performanceQuery.data.ratings.map((rating) => (
                   <div key={rating.id} className="rounded-md border p-3 text-sm">

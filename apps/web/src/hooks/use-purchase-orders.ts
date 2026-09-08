@@ -114,7 +114,10 @@ export function useUpsertVendorRating(id: string) {
       );
       return unwrap(response.data);
     },
-    onSuccess: () => invalidatePo(queryClient, id),
+    onSuccess: () => {
+      invalidatePo(queryClient, id);
+      void queryClient.invalidateQueries({ queryKey: ["vendors"] });
+    },
   });
 }
 

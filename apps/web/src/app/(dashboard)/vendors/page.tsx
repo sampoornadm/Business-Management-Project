@@ -1,9 +1,9 @@
 "use client";
 
 import type { VendorListItemDto } from "@bmp/types";
-import { Badge, Button, DataTable, EmptyState, Input } from "@bmp/ui";
+import { Badge, Button, DataTable, EmptyState, Input, StarRating } from "@bmp/ui";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
-import { SearchX, Star, Truck, Upload, UserPlus } from "lucide-react";
+import { SearchX, Truck, Upload, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -44,9 +44,13 @@ const columns: ColumnDef<VendorListItemDto>[] = [
     header: "Rating",
     cell: ({ row }) =>
       row.original.averageRating !== null ? (
-        <span className="flex items-center gap-1">
-          <Star className="h-3.5 w-3.5 fill-current text-amber-500" /> {row.original.averageRating}
-        </span>
+        <div className="space-y-0.5">
+          <StarRating value={row.original.averageRating} size="sm" />
+          <p className="text-xs text-muted-foreground">
+            {row.original.averageRating} average ({row.original.totalRatings} review
+            {row.original.totalRatings === 1 ? "" : "s"})
+          </p>
+        </div>
       ) : (
         "-"
       ),
