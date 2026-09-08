@@ -83,8 +83,9 @@ ExcelJS (already a backend dependency), `@dnd-kit` (new — column drag-reorder)
   `FilterCondition`/`FilterableColumnDef` + operator-set/label helpers (see Global Constraints).
 - `components/add-filter-popover.tsx`, `components/active-filter-chips.tsx`,
   `components/column-picker.tsx`, `components/saved-view-tabs.tsx`.
-- `components/data-table.tsx` — gains `columnVisibility`/`onColumnVisibilityChange`/`columnOrder`/
-  `onColumnOrderChange` props (TanStack already supports both, just never wired here).
+- `components/data-table.tsx` is NOT modified — column visibility/order is handled by the Tenders
+  column registry (Task 16) rebuilding the `ColumnDef[]` array it hands to `DataTable`, not by
+  TanStack's own `columnVisibility`/`columnOrder` state. See Task 13's note.
 
 **New/changed frontend (Tenders):**
 - `apps/web/src/hooks/use-saved-views.ts` (new).
@@ -2589,18 +2590,24 @@ git commit -m "feat(ui): add ActiveFilterChips — the filter chip row with edit
 
 ---
 
-### Task 13: `packages/ui` — `ColumnPicker` + `DataTable` column-state wiring
+### Task 13: `packages/ui` — `ColumnPicker`
 
 **Files:**
 - Modify: `packages/ui/package.json`
 - Create: `packages/ui/src/components/column-picker.tsx`
-- Modify: `packages/ui/src/components/data-table.tsx`
 - Modify: `packages/ui/src/index.ts`
 
 **Interfaces:**
 - Consumes: `Popover`/`PopoverTrigger`/`PopoverContent` (Task 9), existing `Checkbox`, `Button`.
-- Produces: `ColumnPicker`; `DataTable` gains `columnVisibility?`, `onColumnVisibilityChange?`,
-  `columnOrder?`, `onColumnOrderChange?` props. Task 17 consumes both.
+- Produces: `ColumnPicker`. Task 17 consumes it.
+
+Note: `DataTable` (`packages/ui/src/components/data-table.tsx`) is NOT modified by this task.
+TanStack Table's native `columnVisibility`/`columnOrder` state was the spec's original sketch, but
+Task 16/17's actual mechanism is simpler and doesn't need it: `buildTenderColumnDefs({visibleKeys,
+order, ...})` (Task 16) filters and reorders the `ColumnDef[]` array itself before it ever reaches
+`DataTable`, so `DataTable` never needs to know about visibility/order at all — it just renders
+whatever columns array it's handed, exactly as it does today. Wiring TanStack's own visibility/
+order state into `DataTable` in addition would be dead code no page in this plan calls.
 
 - [ ] **Step 1: Add the drag-reorder dependency**
 
@@ -2741,89 +2748,23 @@ export function ColumnPicker({
 }
 ```
 
-- [ ] **Step 3: Wire column-visibility and column-order state into `DataTable`**
-
-In `packages/ui/src/components/data-table.tsx`, extend the imports:
-```ts
-import {
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-  type ColumnDef,
-  type ColumnOrderState,
-  type OnChangeFn,
-  type PaginationState,
-  type SortingState,
-  type VisibilityState,
-} from "@tanstack/react-table";
-```
-
-Extend `DataTableProps` (currently `data-table.tsx:19-30`) by adding four fields before its
-closing brace:
-```ts
-  columnVisibility?: VisibilityState;
-  onColumnVisibilityChange?: OnChangeFn<VisibilityState>;
-  columnOrder?: ColumnOrderState;
-  onColumnOrderChange?: OnChangeFn<ColumnOrderState>;
-```
-
-Update the function signature and body (`data-table.tsx:32-56`):
-```tsx
-export function DataTable<TData, TValue>({
-  columns,
-  data,
-  isLoading = false,
-  pageCount,
-  pagination,
-  onPaginationChange,
-  sorting,
-  onSortingChange,
-  columnVisibility,
-  onColumnVisibilityChange,
-  columnOrder,
-  onColumnOrderChange,
-  emptyState,
-}: DataTableProps<TData, TValue>) {
-  const table = useReactTable({
-    data,
-    columns,
-    pageCount,
-    state: {
-      pagination,
-      ...(sorting ? { sorting } : {}),
-      ...(columnVisibility ? { columnVisibility } : {}),
-      ...(columnOrder ? { columnOrder } : {}),
-    },
-    onPaginationChange,
-    ...(onSortingChange ? { onSortingChange } : {}),
-    ...(onColumnVisibilityChange ? { onColumnVisibilityChange } : {}),
-    ...(onColumnOrderChange ? { onColumnOrderChange } : {}),
-    getCoreRowModel: getCoreRowModel(),
-    manualPagination: true,
-    manualSorting: true,
-  });
-```
-The rest of the file (header/body/pagination rendering) is unchanged — TanStack Table already
-respects `columnVisibility`/`columnOrder` state in `getHeaderGroups()`/`getVisibleCells()` once
-it's part of `state`, with no other code changes needed.
-
-- [ ] **Step 4: Export `ColumnPicker`**
+- [ ] **Step 3: Export `ColumnPicker`**
 
 In `packages/ui/src/index.ts`, add:
 ```ts
 export * from "./components/column-picker";
 ```
 
-- [ ] **Step 5: Typecheck**
+- [ ] **Step 4: Typecheck**
 
 Run: `pnpm --filter @bmp/ui typecheck`
 Expected: no errors.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add packages/ui/package.json pnpm-lock.yaml packages/ui/src/components/column-picker.tsx packages/ui/src/components/data-table.tsx packages/ui/src/index.ts
-git commit -m "feat(ui): add ColumnPicker (drag-reorder via dnd-kit) and wire column state into DataTable"
+git add packages/ui/package.json pnpm-lock.yaml packages/ui/src/components/column-picker.tsx packages/ui/src/index.ts
+git commit -m "feat(ui): add ColumnPicker (drag-reorder via dnd-kit)"
 ```
 
 ---
