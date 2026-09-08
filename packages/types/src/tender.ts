@@ -1,3 +1,5 @@
+import type { FilterCondition } from "./filtering.js";
+
 export const TENDER_STATUSES = ["DRAFT", "SUBMITTED", "WON", "LOST", "CANCELLED"] as const;
 
 export type TenderStatus = (typeof TENDER_STATUSES)[number];
@@ -34,6 +36,29 @@ export const TENDER_KIND_LABELS: Record<TenderKind, string> = {
 
 export const TENDER_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
 export type TenderPriority = (typeof TENDER_PRIORITIES)[number];
+
+export const TENDER_FILTER_FIELDS = [
+  "tenderNumber",
+  "title",
+  "clientName",
+  "status",
+  "priority",
+  "department",
+  "submissionDate",
+] as const;
+export type TenderFilterField = (typeof TENDER_FILTER_FIELDS)[number];
+
+export const TENDER_SORT_FIELDS = [
+  "tenderNumber",
+  "title",
+  "clientName",
+  "status",
+  "priority",
+  "submissionDate",
+  "createdAt",
+  "assigneeCount",
+] as const;
+export type TenderSortField = (typeof TENDER_SORT_FIELDS)[number];
 
 export const TENDER_ASSIGNEE_ROLES = ["OWNER", "ESTIMATOR", "REVIEWER", "OTHER"] as const;
 export type TenderAssigneeRole = (typeof TENDER_ASSIGNEE_ROLES)[number];
@@ -280,6 +305,9 @@ export interface ListTendersQuery {
   assigneeUserId?: string;
   submissionDateFrom?: string;
   submissionDateTo?: string;
+  filters?: FilterCondition[];
+  sortBy?: TenderSortField;
+  sortDir?: "asc" | "desc";
 }
 
 export interface TenderStatusHistoryEntryDto {
