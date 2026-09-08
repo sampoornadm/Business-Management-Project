@@ -104,6 +104,13 @@ receiving status.
   (`.js` → also try `.ts`/`.tsx`) — already configured in `apps/web/next.config.mjs`.
 - `next/core-web-vitals` (via FlatCompat) clobbers the typescript-eslint parser for every file if
   spread before it — our `packages/config/eslint/nextjs.js` deliberately spreads it *first*.
+- Editing `packages/config/tailwind/preset.js` (new color token, etc.) does **not** hot-reload in an
+  already-running `next dev` — added a new class using it (e.g. `bg-header`) stays in the DOM but
+  resolves to no CSS rule at all (transparent/invisible, no error). `apps/web`'s dev server only
+  watches files inside `apps/web` for the Tailwind rebuild trigger; a change in a sibling workspace
+  package isn't detected. Restart `next dev` (or the whole `pnpm dev`) after touching the shared
+  preset — confirmed by checking `getComputedStyle(el).backgroundColor` in the browser console
+  before assuming a Tailwind-driven style change actually landed.
 - MinIO's `minio-init` service only creates the dev bucket by default; `docker-compose.yml` now also
   creates `<S3_BUCKET>-test` for integration tests that upload files (BOQ parse, tender documents).
   If a fresh clone's integration tests 500 on upload, re-run `docker compose up -d minio-init`.
