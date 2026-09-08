@@ -96,16 +96,15 @@ export function buildTenderDeadlineReminderEmail(params: {
   firstName: string;
   tenderNumber: string;
   tenderTitle: string;
-  daysRemaining: number;
+  timeLabel: string;
   tenderUrl: string;
 }): EmailContent {
-  const dayLabel = params.daysRemaining === 1 ? "1 day" : `${params.daysRemaining} days`;
   return {
-    subject: `Submission deadline in ${dayLabel}: ${params.tenderNumber}`,
+    subject: `Submission deadline in ${params.timeLabel}: ${params.tenderNumber}`,
     html: layout(
       `Hi ${params.firstName}, a submission deadline is approaching`,
       `<p><strong>${params.tenderNumber}</strong> &mdash; ${params.tenderTitle}</p>
-       <p>The submission deadline is in <strong>${dayLabel}</strong>.</p>
+       <p>The submission deadline is in <strong>${params.timeLabel}</strong>.</p>
        <p><a href="${params.tenderUrl}">${params.tenderUrl}</a></p>`,
     ),
   };

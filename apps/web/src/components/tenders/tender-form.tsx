@@ -536,9 +536,9 @@ export function TenderForm({
               name="submissionDate"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Submission date</FormLabel>
+                  <FormLabel>Submission date &amp; time</FormLabel>
                   <FormControl>
-                    <Input type="date" {...field} />
+                    <Input type="datetime-local" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

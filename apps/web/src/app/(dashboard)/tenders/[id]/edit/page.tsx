@@ -12,6 +12,17 @@ function toDateInputValue(iso: string | null): string {
   return iso.slice(0, 10);
 }
 
+// Unlike toDateInputValue, this can't just slice the UTC ISO string — a <input type="datetime-local">
+// shows/expects local wall-clock time, and slicing the raw UTC string would show the wrong hour
+// whenever the browser's timezone isn't UTC. Built from the Date object's local getters instead.
+function toDateTimeInputValue(iso: string | null): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export default function EditTenderPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -57,7 +68,7 @@ export default function EditTenderPage() {
           emdAmount: tender.emdAmount != null ? String(tender.emdAmount) : "",
           tenderFee: tender.tenderFee != null ? String(tender.tenderFee) : "",
           documentFee: tender.documentFee != null ? String(tender.documentFee) : "",
-          submissionDate: toDateInputValue(tender.submissionDate),
+          submissionDate: toDateTimeInputValue(tender.submissionDate),
           openingDate: toDateInputValue(tender.openingDate),
           validityPeriodDays: tender.validityPeriodDays != null ? String(tender.validityPeriodDays) : "",
           priority: tender.priority,

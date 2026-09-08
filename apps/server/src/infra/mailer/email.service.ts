@@ -69,7 +69,7 @@ export class EmailService {
     tenderId: string;
     tenderNumber: string;
     tenderTitle: string;
-    daysRemaining: number;
+    timeLabel: string;
   }): Promise<void> {
     await emailQueue.add("send-email", {
       type: "tender-deadline-reminder",
@@ -77,7 +77,7 @@ export class EmailService {
       firstName: params.firstName,
       tenderNumber: params.tenderNumber,
       tenderTitle: params.tenderTitle,
-      daysRemaining: params.daysRemaining,
+      timeLabel: params.timeLabel,
       tenderUrl: `${env.WEB_APP_URL}/tenders/${params.tenderId}`,
     });
   }
