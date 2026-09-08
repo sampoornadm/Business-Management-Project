@@ -1,17 +1,6 @@
-import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 
-import type { ExportableTable } from "./reports.service.js";
-
-export async function exportTableToXlsx(table: ExportableTable): Promise<Buffer> {
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet(table.title.slice(0, 31));
-  sheet.columns = table.columns.map((column) => ({ header: column.header, key: column.key, width: 22 }));
-  sheet.addRows(table.rows);
-  sheet.getRow(1).font = { bold: true };
-  const buffer = await workbook.xlsx.writeBuffer();
-  return Buffer.from(buffer);
-}
+import type { ExportableTable } from "../../shared/utils/table-export.js";
 
 export function exportTableToPdf(table: ExportableTable): Promise<Buffer> {
   return new Promise((resolve, reject) => {

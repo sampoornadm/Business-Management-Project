@@ -1,7 +1,8 @@
 import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
+import { exportTableToXlsx } from "../../shared/utils/table-export.js";
 
-import { exportTableToPdf, exportTableToXlsx } from "./reports.export.js";
+import { exportTableToPdf } from "./reports.export.js";
 import type { ReportsService } from "./reports.service.js";
 import type {
   ExportReportParams,

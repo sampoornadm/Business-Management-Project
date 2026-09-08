@@ -16,6 +16,7 @@ import { BadRequestError, ServiceUnavailableError } from "../../core/errors/Http
 import { embed } from "../../infra/llm/ollama.client.js";
 import { getCachedJson, setCachedJson } from "../../infra/redis/cache.js";
 import { round2 } from "../../shared/utils/math.js";
+import type { ExportableTable } from "../../shared/utils/table-export.js";
 
 import type { AttachmentMetadataRow, IReportsRepository } from "./reports.repository.js";
 
@@ -40,12 +41,6 @@ function monthKey(date: Date): string {
 function average(values: number[]): number | null {
   if (values.length === 0) return null;
   return round2(values.reduce((sum, v) => sum + v, 0) / values.length);
-}
-
-export interface ExportableTable {
-  title: string;
-  columns: { key: string; header: string }[];
-  rows: Record<string, string | number>[];
 }
 
 export class ReportsService {
