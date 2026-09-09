@@ -1,4 +1,12 @@
-import { TENDER_ASSIGNEE_ROLES, TENDER_KINDS, TENDER_PRIORITIES, TENDER_STATUSES } from "@bmp/types";
+import {
+  FILTER_OPERATORS,
+  TENDER_ASSIGNEE_ROLES,
+  TENDER_FILTER_FIELDS,
+  TENDER_KINDS,
+  TENDER_PRIORITIES,
+  TENDER_SORT_FIELDS,
+  TENDER_STATUSES,
+} from "@bmp/types";
 import { z } from "zod";
 
 const priceField = z.coerce.number().nonnegative().optional();
@@ -109,6 +117,21 @@ export const setTenderTagsSchema = z.object({
 });
 export type SetTenderTagsBody = z.infer<typeof setTenderTagsSchema>;
 
+const filterConditionSchema = z.object({
+  columnKey: z.enum(TENDER_FILTER_FIELDS),
+  operator: z.enum(FILTER_OPERATORS),
+  value: z.union([z.string(), z.number(), z.array(z.union([z.string(), z.number()]))]).optional(),
+});
+
+const filtersQueryParam = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}, z.array(filterConditionSchema).optional());
+
 export const listTendersQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().optional(),
@@ -121,6 +144,9 @@ export const listTendersQuerySchema = z.object({
   assigneeUserId: z.string().uuid().optional(),
   submissionDateFrom: z.coerce.date().optional(),
   submissionDateTo: z.coerce.date().optional(),
+  filters: filtersQueryParam,
+  sortBy: z.enum(TENDER_SORT_FIELDS).optional(),
+  sortDir: z.enum(["asc", "desc"]).optional(),
 });
 export type ListTendersQueryParsed = z.infer<typeof listTendersQuerySchema>;
 

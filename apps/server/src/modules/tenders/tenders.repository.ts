@@ -8,9 +8,13 @@ import type {
   TenderPriority,
   TenderStatus,
 } from "@bmp/database";
+import type { FilterCondition, TenderSortField } from "@bmp/types";
 
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
+import { buildPrismaFilterWhere } from "../../shared/utils/filtering.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
+
+import { TENDER_FILTER_COLUMNS, TENDER_SORT_COLUMNS } from "./tenders.filter-columns.js";
 
 const userSummarySelect = { id: true, firstName: true, lastName: true, email: true } as const;
 const actorSummarySelect = { id: true, firstName: true, lastName: true } as const;
@@ -93,6 +97,9 @@ export interface TenderFilters {
   assigneeUserId?: string;
   submissionDateFrom?: Date;
   submissionDateTo?: Date;
+  filters?: FilterCondition[];
+  sortBy?: TenderSortField;
+  sortDir?: "asc" | "desc";
 }
 
 export interface StatusChangeData {
@@ -173,7 +180,7 @@ export class TendersRepository implements ITendersRepository {
     pagination: PaginationParams,
     filters: TenderFilters,
   ): Promise<{ items: TenderListItem[]; totalItems: number }> {
-    const where: Prisma.TenderWhereInput = {
+    const baseWhere: Prisma.TenderWhereInput = {
       businessId: filters.businessId,
       status: filters.status,
       kind: filters.kind,
@@ -199,11 +206,22 @@ export class TendersRepository implements ITendersRepository {
         : {}),
     };
 
+    const chipWhere = buildPrismaFilterWhere(
+      filters.filters ?? [],
+      TENDER_FILTER_COLUMNS,
+    ) as Prisma.TenderWhereInput;
+    const where: Prisma.TenderWhereInput =
+      Object.keys(chipWhere).length > 0 ? { AND: [baseWhere, chipWhere] } : baseWhere;
+
+    const orderBy = filters.sortBy
+      ? TENDER_SORT_COLUMNS[filters.sortBy](filters.sortDir ?? "asc")
+      : ({ createdAt: "desc" } as const);
+
     const [items, totalItems] = await Promise.all([
       this.prisma.tender.findMany({
         where,
         ...tenderListArgs,
-        orderBy: { createdAt: "desc" },
+        orderBy,
         ...toSkipTake(pagination),
       }),
       this.prisma.tender.count({ where }),
