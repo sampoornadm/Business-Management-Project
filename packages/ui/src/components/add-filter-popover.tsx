@@ -26,6 +26,11 @@ function defaultOperator(column: FilterableColumnDef): FilterOperator {
   return operatorsForColumn(column)[0]!;
 }
 
+/** The empty value shape for a given operator: scalar, between two-tuple, or any_of array. */
+function emptyValueForOperator(op: FilterOperator): FilterCondition["value"] {
+  return op === "between" ? ["", ""] : op === "any_of" ? [] : "";
+}
+
 export function AddFilterPopover({
   columns,
   initialCondition,
@@ -51,7 +56,7 @@ export function AddFilterPopover({
     setSelectedKey(column.key);
     const op = defaultOperator(column);
     setOperator(op);
-    setValue(op === "between" ? ["", ""] : "");
+    setValue(emptyValueForOperator(op));
   }
 
   function handleApply() {
@@ -141,7 +146,10 @@ export function AddFilterPopover({
                       type="button"
                       role="radio"
                       aria-checked={operator === op}
-                      onClick={() => setOperator(op)}
+                      onClick={() => {
+                        setOperator(op);
+                        setValue(emptyValueForOperator(op));
+                      }}
                       className="flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-sm hover:bg-accent"
                     >
                       {operator === op ? (
