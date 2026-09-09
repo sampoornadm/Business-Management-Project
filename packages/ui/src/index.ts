@@ -30,6 +30,7 @@ export * from "./components/combobox";
 export * from "./components/skeleton";
 export * from "./components/stat-card";
 export * from "./components/pagination";
+export * from "./components/popover";
 export * from "./components/page-header";
 export * from "./components/separator";
 export * from "./components/stepper";
