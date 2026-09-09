@@ -41,3 +41,4 @@ export * from "./components/sortable-header";
 export * from "./components/stepper";
 export * from "./components/tabs";
 export * from "./components/editable-tree-table";
+export * from "./components/saved-view-tabs";
