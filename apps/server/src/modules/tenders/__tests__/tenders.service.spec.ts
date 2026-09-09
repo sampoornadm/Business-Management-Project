@@ -17,6 +17,7 @@ import type {
   ITendersRepository,
   StatusChangeData,
   TenderDetail,
+  TenderListItem,
   UpdateCompetitorData,
   UpdateTenderData,
 } from "../tenders.repository.js";
@@ -70,6 +71,7 @@ function buildTender(overrides: Partial<TenderDetail> = {}): TenderDetail {
 
 class FakeTendersRepository implements Partial<ITendersRepository> {
   tenders = new Map<string, TenderDetail>();
+  findManyResult: { items: TenderListItem[]; totalItems: number } = { items: [], totalItems: 0 };
 
   async findById(id: string, _businessId: string) {
     return this.tenders.get(id) ?? null;
@@ -81,7 +83,7 @@ class FakeTendersRepository implements Partial<ITendersRepository> {
   }
 
   async findMany() {
-    return { items: [], totalItems: 0 };
+    return this.findManyResult;
   }
 
   async create(data: CreateTenderData) {
@@ -614,6 +616,22 @@ describe("TendersService", () => {
       await expect(
         service.unpinNote(created.id, pinnedNoteId, actorId, BUSINESS_ID),
       ).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  describe("exportTenders", () => {
+    it("throws BadRequestError when more than EXPORT_MAX_ROWS rows match scope=all", async () => {
+      tendersRepository.findManyResult = { items: [], totalItems: 50_001 };
+      await expect(
+        service.exportTenders({ businessId: BUSINESS_ID }, "all", { page: 1, pageSize: 20 }),
+      ).rejects.toThrow(BadRequestError);
+    });
+
+    it("does not cap scope=view even with a large totalItems", async () => {
+      tendersRepository.findManyResult = { items: [], totalItems: 50_001 };
+      await expect(
+        service.exportTenders({ businessId: BUSINESS_ID }, "view", { page: 1, pageSize: 20 }),
+      ).resolves.toEqual([]);
     });
   });
 });

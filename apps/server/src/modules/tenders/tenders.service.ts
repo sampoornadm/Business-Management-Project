@@ -9,7 +9,7 @@ import {
   type TenderStatusHistoryEntryDto,
 } from "@bmp/types";
 
-import { GENERIC_UPLOAD_LIMITS } from "../../config/constants.js";
+import { EXPORT_MAX_ROWS, GENERIC_UPLOAD_LIMITS } from "../../config/constants.js";
 import { env } from "../../config/env.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
@@ -59,6 +59,21 @@ export class TendersService {
   ): Promise<PaginatedResult<TenderListItemDto>> {
     const { items, totalItems } = await this.tendersRepository.findMany(pagination, filters);
     return buildPaginatedResult(items.map(toTenderListItemDto), totalItems, pagination);
+  }
+
+  async exportTenders(
+    filters: TenderFilters,
+    scope: "view" | "all",
+    viewPagination: PaginationParams,
+  ): Promise<TenderListItemDto[]> {
+    const pagination = scope === "view" ? viewPagination : { page: 1, pageSize: EXPORT_MAX_ROWS };
+    const { items, totalItems } = await this.tendersRepository.findMany(pagination, filters);
+    if (scope === "all" && totalItems > EXPORT_MAX_ROWS) {
+      throw new BadRequestError(
+        `Narrow your filters — more than ${EXPORT_MAX_ROWS} rows match your current filters.`,
+      );
+    }
+    return items.map(toTenderListItemDto);
   }
 
   async getById(id: string, businessId: string): Promise<TenderDto> {

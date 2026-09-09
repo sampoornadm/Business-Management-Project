@@ -150,6 +150,16 @@ export const listTendersQuerySchema = z.object({
 });
 export type ListTendersQueryParsed = z.infer<typeof listTendersQuerySchema>;
 
+export const exportTendersQuerySchema = listTendersQuerySchema.extend({
+  format: z.enum(["csv", "xlsx"]),
+  scope: z.enum(["view", "all"]),
+  columns: z.preprocess(
+    (value) => (typeof value === "string" ? value.split(",") : value),
+    z.array(z.string()).optional(),
+  ),
+});
+export type ExportTendersQueryParsed = z.infer<typeof exportTendersQuerySchema>;
+
 export const uploadTenderDocumentSchema = z.object({
   documentType: z.string().min(1),
   replacesAttachmentId: z.string().uuid().optional(),

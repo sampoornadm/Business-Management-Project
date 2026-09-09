@@ -12,6 +12,7 @@ import {
   changeTenderStatusSchema,
   createCompetitorSchema,
   createTenderSchema,
+  exportTendersQuerySchema,
   listTendersQuerySchema,
   pinTenderNoteSchema,
   setTenderTagsSchema,
@@ -104,6 +105,33 @@ export function createTendersRouter(controller: TendersController): Router {
     authenticateMiddleware,
     requirePermission("tenders:read"),
     controller.dashboardStats,
+  );
+
+  /**
+   * @openapi
+   * /tenders/export:
+   *   get:
+   *     tags: [Tenders]
+   *     summary: Export tenders matching the current filters as CSV or XLSX
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: query
+   *         name: format
+   *         required: true
+   *         schema: { type: string, enum: [csv, xlsx] }
+   *       - in: query
+   *         name: scope
+   *         required: true
+   *         schema: { type: string, enum: [view, all] }
+   *     responses:
+   *       200: { description: File download }
+   */
+  router.get(
+    "/export",
+    authenticateMiddleware,
+    requirePermission("tenders:read"),
+    validate(exportTendersQuerySchema, "query"),
+    controller.exportTenders,
   );
 
   /**
