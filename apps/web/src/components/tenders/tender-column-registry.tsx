@@ -125,6 +125,11 @@ export function buildTenderColumnDefs({
     .filter((config): config is TenderColumnConfig => Boolean(config))
     .map((config) => ({
       id: config.key,
+      // TanStack's column.getCanSort() requires a truthy accessorFn regardless of
+      // enableSorting — with none, getToggleSortingHandler() silently no-ops on click. Sorting
+      // is fully server-driven (DataTable never calls getSortedRowModel), so this accessor's
+      // return value is never actually used for sorting — it only needs to exist.
+      ...(config.sortable ? { accessorFn: () => config.key } : {}),
       header: config.sortable
         ? ({ column }) => <SortableHeader column={column} label={config.label} />
         : config.label,
