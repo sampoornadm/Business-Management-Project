@@ -2,8 +2,8 @@ import type { SavedViewDto } from "@bmp/types";
 
 import { ForbiddenError, NotFoundError } from "../../core/errors/HttpErrors.js";
 
-import type { CreateSavedViewData, ISavedViewsRepository, UpdateSavedViewData } from "./saved-views.repository.js";
 import { toSavedViewDto } from "./saved-views.mapper.js";
+import type { CreateSavedViewData, ISavedViewsRepository, UpdateSavedViewData } from "./saved-views.repository.js";
 
 export class SavedViewsService {
   constructor(private readonly savedViewsRepository: ISavedViewsRepository) {}
