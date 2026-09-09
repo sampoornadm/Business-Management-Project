@@ -78,13 +78,55 @@ describe("buildPrismaFilterWhere", () => {
         [{ columnKey: "submissionDate", operator: "before", value: "2026-01-01" }],
         DESCRIPTORS,
       ),
-    ).toEqual({ submissionDate: { lt: "2026-01-01" } });
+    ).toEqual({ submissionDate: { lt: new Date("2026-01-01") } });
     expect(
       buildPrismaFilterWhere(
         [{ columnKey: "submissionDate", operator: "after", value: "2026-01-01" }],
         DESCRIPTORS,
       ),
-    ).toEqual({ submissionDate: { gt: "2026-01-01" } });
+    ).toEqual({ submissionDate: { gt: new Date("2026-01-01") } });
+  });
+
+  it("builds an 'is' clause on a date column as a whole-day range", () => {
+    const where = buildPrismaFilterWhere(
+      [{ columnKey: "submissionDate", operator: "is", value: "2026-01-01" }],
+      DESCRIPTORS,
+    );
+    expect(where).toEqual({
+      submissionDate: { gte: new Date("2026-01-01T00:00:00.000Z"), lt: new Date("2026-01-02T00:00:00.000Z") },
+    });
+  });
+
+  it("drops a clause with an empty-string value on a value-requiring operator", () => {
+    const where = buildPrismaFilterWhere(
+      [{ columnKey: "status", operator: "is", value: "" }],
+      DESCRIPTORS,
+    );
+    expect(where).toEqual({});
+  });
+
+  it("drops a clause whose operator is not valid for the column's type", () => {
+    const where = buildPrismaFilterWhere(
+      [{ columnKey: "status", operator: "contains", value: "DRAFT" }],
+      DESCRIPTORS,
+    );
+    expect(where).toEqual({});
+  });
+
+  it("drops a 'between' clause whose value is not a two-element array", () => {
+    const where = buildPrismaFilterWhere(
+      [{ columnKey: "assigneeCount", operator: "between", value: 5 }],
+      DESCRIPTORS,
+    );
+    expect(where).toEqual({});
+  });
+
+  it("drops an 'any_of' clause whose value is not an array", () => {
+    const where = buildPrismaFilterWhere(
+      [{ columnKey: "status", operator: "any_of", value: "DRAFT" }],
+      DESCRIPTORS,
+    );
+    expect(where).toEqual({});
   });
 
   it("builds an 'any_of' clause", () => {

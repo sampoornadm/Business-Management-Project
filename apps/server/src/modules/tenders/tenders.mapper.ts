@@ -154,7 +154,10 @@ function tenderExportRow(tender: TenderListItemDto): Record<string, string | num
 }
 
 export function buildTenderExportTable(tenders: TenderListItemDto[], columnKeys: string[]): ExportableTable {
-  const columns = TENDER_EXPORT_COLUMNS.filter((column) => columnKeys.includes(column.key));
+  const columnsByKey = new Map(TENDER_EXPORT_COLUMNS.map((column) => [column.key, column]));
+  const columns = columnKeys
+    .map((key) => columnsByKey.get(key))
+    .filter((column): column is { key: string; header: string } => Boolean(column));
   const rows = tenders.map((tender) => {
     const fullRow = tenderExportRow(tender);
     const row: Record<string, string | number> = {};
