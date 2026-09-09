@@ -33,6 +33,7 @@ export * from "./components/pagination";
 export * from "./components/popover";
 export * from "./components/page-header";
 export * from "./components/separator";
+export * from "./components/sortable-header";
 export * from "./components/stepper";
 export * from "./components/tabs";
 export * from "./components/editable-tree-table";
