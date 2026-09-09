@@ -85,4 +85,45 @@ describe("Saved views (integration)", () => {
       .set("Authorization", `Bearer ${userTwo.accessToken}`);
     expect(deleteAttempt.status).toBe(404);
   });
+
+  it("forbids a same-business colleague from renaming or deleting another user's saved view", async () => {
+    const createResponse = await request(app)
+      .post("/api/v1/saved-views")
+      .set("Authorization", `Bearer ${userOne.accessToken}`)
+      .send({
+        pageKey: "tenders",
+        name: "Owner only (same business)",
+        filters: [],
+        visibleColumns: [],
+        columnOrder: [],
+      });
+    const viewId = createResponse.body.data.id;
+
+    // Give userTwo real membership in userOne's business, then trade a fresh
+    // login for a token actually scoped to that business (switch-business
+    // requires a UserBusiness row — see AuthService.switchBusiness).
+    const role = await prisma.role.findFirst({ where: { name: "SUPER_ADMIN" } });
+    await prisma.userBusiness.create({
+      data: { userId: userTwo.userId, businessId: userOne.businessId, roleId: role!.id },
+    });
+    const login = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: userTwo.email, password: "Password123" });
+    const switchResponse = await request(app)
+      .post("/api/v1/auth/switch-business")
+      .set("Authorization", `Bearer ${login.body.data.accessToken}`)
+      .send({ businessId: userOne.businessId });
+    const sameBusinessToken = switchResponse.body.data.accessToken as string;
+
+    const renameAttempt = await request(app)
+      .patch(`/api/v1/saved-views/${viewId}`)
+      .set("Authorization", `Bearer ${sameBusinessToken}`)
+      .send({ name: "Hijacked" });
+    expect(renameAttempt.status).toBe(403);
+
+    const deleteAttempt = await request(app)
+      .delete(`/api/v1/saved-views/${viewId}`)
+      .set("Authorization", `Bearer ${sameBusinessToken}`);
+    expect(deleteAttempt.status).toBe(403);
+  });
 });
