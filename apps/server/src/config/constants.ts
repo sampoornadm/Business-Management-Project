@@ -61,3 +61,5 @@ export const ROLE_PERMISSIONS_CACHE_TTL_SECONDS = 60 * 60;
 export const REPORT_CACHE_TTL_SECONDS = 60;
 
 export const REFRESH_TOKEN_COOKIE_PATH = "/api/v1/auth";
+
+export const EXPORT_MAX_ROWS = 50_000;

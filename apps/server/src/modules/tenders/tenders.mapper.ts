@@ -7,6 +7,8 @@ import type {
   TenderTagDto,
 } from "@bmp/types";
 
+import type { ExportableTable } from "../../shared/utils/table-export.js";
+
 import type {
   TenderAssigneeWithRelations,
   TenderDetail,
@@ -123,3 +125,43 @@ export function toTenderDto(entity: TenderDetail): TenderDto {
     updatedAt: entity.updatedAt.toISOString(),
   };
 }
+
+// Keep this in exact sync with apps/web/src/components/tenders/tender-column-registry.ts's
+// TENDER_COLUMNS keys — every column a user can show via ColumnPicker must be exportable, or
+// showing it and then exporting silently drops it from the file.
+const TENDER_EXPORT_COLUMNS: { key: string; header: string }[] = [
+  { key: "tenderNumber", header: "Tender #" },
+  { key: "title", header: "Title" },
+  { key: "clientName", header: "Client" },
+  { key: "status", header: "Status" },
+  { key: "priority", header: "Priority" },
+  { key: "department", header: "Department" },
+  { key: "submissionDate", header: "Submission Date" },
+  { key: "assigneeCount", header: "Assignees" },
+];
+
+function tenderExportRow(tender: TenderListItemDto): Record<string, string | number> {
+  return {
+    tenderNumber: tender.tenderNumber,
+    title: tender.title,
+    clientName: tender.client.name,
+    status: tender.status,
+    priority: tender.priority,
+    department: tender.department ?? "",
+    submissionDate: tender.submissionDate ? tender.submissionDate.slice(0, 10) : "",
+    assigneeCount: tender.assigneeCount,
+  };
+}
+
+export function buildTenderExportTable(tenders: TenderListItemDto[], columnKeys: string[]): ExportableTable {
+  const columns = TENDER_EXPORT_COLUMNS.filter((column) => columnKeys.includes(column.key));
+  const rows = tenders.map((tender) => {
+    const fullRow = tenderExportRow(tender);
+    const row: Record<string, string | number> = {};
+    for (const column of columns) row[column.key] = fullRow[column.key] ?? "";
+    return row;
+  });
+  return { title: "Tenders", columns, rows };
+}
+
+export const TENDER_EXPORT_COLUMN_KEYS = TENDER_EXPORT_COLUMNS.map((column) => column.key);

@@ -349,4 +349,25 @@ describe("Tender workflow (integration)", () => {
       expect(betaIndex).toBeGreaterThan(alphaIndex);
     });
   });
+
+  describe("export", () => {
+    it("exports the current view as CSV", async () => {
+      const response = await request(app)
+        .get("/api/v1/tenders/export")
+        .query({ format: "csv", scope: "view", page: 1, pageSize: 20 })
+        .set("Authorization", `Bearer ${accessToken}`);
+      expect(response.status).toBe(200);
+      expect(response.headers["content-type"]).toContain("text/csv");
+      expect(response.text).toContain("Tender #");
+    });
+
+    it("exports all matching rows as XLSX", async () => {
+      const response = await request(app)
+        .get("/api/v1/tenders/export")
+        .query({ format: "xlsx", scope: "all" })
+        .set("Authorization", `Bearer ${accessToken}`);
+      expect(response.status).toBe(200);
+      expect(response.headers["content-type"]).toContain("spreadsheetml");
+    });
+  });
 });
