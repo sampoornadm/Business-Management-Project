@@ -5,6 +5,7 @@ export * from "./lib/filterable-column";
 export * from "./components/button";
 export * from "./components/add-filter-popover";
 export * from "./components/active-filter-chips";
+export * from "./components/column-picker";
 export * from "./components/input";
 export * from "./components/label";
 export * from "./components/textarea";
