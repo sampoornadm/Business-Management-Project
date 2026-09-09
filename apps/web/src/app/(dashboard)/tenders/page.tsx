@@ -138,7 +138,7 @@ export default function TendersPage() {
         JSON.stringify(activeView.filters) !== JSON.stringify(conditions) ||
         activeView.visibleColumns.join(",") !== visibleKeys.join(",") ||
         activeView.columnOrder.join(",") !== columnOrder.join(",") ||
-        activeView.sortBy !== sortBy ||
+        (activeView.sortBy ?? undefined) !== sortBy ||
         (activeView.sortDir ?? undefined) !== sortDir;
 
   async function saveCurrentAsNewView(name: string) {
