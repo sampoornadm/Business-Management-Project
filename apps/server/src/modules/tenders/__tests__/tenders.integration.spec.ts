@@ -271,4 +271,82 @@ describe("Tender workflow (integration)", () => {
       expect(patchResponse.body.data.convertedFrom.id).toBe(budgetaryId);
     });
   });
+
+  describe("filtering and sorting", () => {
+    let alphaId: string;
+    let betaId: string;
+
+    beforeAll(async () => {
+      const createAlpha = await request(app)
+        .post("/api/v1/tenders")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({
+          tenderNumber: `FLT-A-${randomUUID().slice(0, 8)}`,
+          title: "Filter Test Alpha",
+          department: "PWD",
+          clientId: organizationId,
+          type: "OPEN",
+          category: "ROAD",
+          location: "City Center",
+          state: "Maharashtra",
+          estimatedCost: 1_000_000,
+          submissionDate: new Date().toISOString(),
+          priority: "HIGH",
+        });
+      alphaId = createAlpha.body.data.id;
+
+      const createBeta = await request(app)
+        .post("/api/v1/tenders")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({
+          tenderNumber: `FLT-B-${randomUUID().slice(0, 8)}`,
+          title: "Filter Test Beta",
+          department: "PWD",
+          clientId: organizationId,
+          type: "OPEN",
+          category: "ROAD",
+          location: "City Center",
+          state: "Maharashtra",
+          estimatedCost: 1_000_000,
+          submissionDate: new Date().toISOString(),
+          priority: "LOW",
+        });
+      betaId = createBeta.body.data.id;
+    });
+
+    it("filters tenders by a chip condition on priority", async () => {
+      const filters = JSON.stringify([{ columnKey: "priority", operator: "is", value: "HIGH" }]);
+      const response = await request(app)
+        .get("/api/v1/tenders")
+        .query({ filters, pageSize: 100 })
+        .set("Authorization", `Bearer ${accessToken}`);
+      expect(response.status).toBe(200);
+      const ids = response.body.data.items.map((t: { id: string }) => t.id);
+      expect(ids).toContain(alphaId);
+      expect(ids).not.toContain(betaId);
+    });
+
+    it("filters tenders with a text 'contains' condition on title", async () => {
+      const filters = JSON.stringify([{ columnKey: "title", operator: "contains", value: "Beta" }]);
+      const response = await request(app)
+        .get("/api/v1/tenders")
+        .query({ filters, pageSize: 100 })
+        .set("Authorization", `Bearer ${accessToken}`);
+      const ids = response.body.data.items.map((t: { id: string }) => t.id);
+      expect(ids).toContain(betaId);
+      expect(ids).not.toContain(alphaId);
+    });
+
+    it("sorts tenders by title ascending", async () => {
+      const response = await request(app)
+        .get("/api/v1/tenders")
+        .query({ sortBy: "title", sortDir: "asc", pageSize: 100 })
+        .set("Authorization", `Bearer ${accessToken}`);
+      const titles: string[] = response.body.data.items.map((t: { title: string }) => t.title);
+      const alphaIndex = titles.indexOf("Filter Test Alpha");
+      const betaIndex = titles.indexOf("Filter Test Beta");
+      expect(alphaIndex).toBeGreaterThanOrEqual(0);
+      expect(betaIndex).toBeGreaterThan(alphaIndex);
+    });
+  });
 });
