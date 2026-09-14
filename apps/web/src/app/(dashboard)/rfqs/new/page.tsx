@@ -99,6 +99,13 @@ export default function NewRfqPage() {
     setSelectedBoqItemIds((prev) => (checked ? [...prev, itemId] : prev.filter((id) => id !== itemId)));
   }
 
+  const allBoqItemsSelected = boqItems.length > 0 && selectedBoqItemIds.length === boqItems.length;
+  const someBoqItemsSelected = selectedBoqItemIds.length > 0 && !allBoqItemsSelected;
+
+  function toggleAllBoqItems() {
+    setSelectedBoqItemIds(allBoqItemsSelected ? [] : boqItems.map((item) => item.id));
+  }
+
   function updateItem(index: number, patch: Partial<DraftItem>) {
     setItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)));
   }
@@ -257,7 +264,15 @@ export default function NewRfqPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-10" />
+                    <TableHead className="w-14">
+                      {boqItems.length > 0 && (
+                        <Checkbox
+                          checked={allBoqItemsSelected ? true : someBoqItemsSelected ? "indeterminate" : false}
+                          onCheckedChange={toggleAllBoqItems}
+                          aria-label="Select all items"
+                        />
+                      )}
+                    </TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead className="w-24">Unit</TableHead>
                     <TableHead className="w-24">Quantity</TableHead>
@@ -266,15 +281,27 @@ export default function NewRfqPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {boqItems.map((item) => {
+                  {boqItems.map((item, index) => {
                     const perItem = suggestions?.perItem.find((s) => s.boqItemId === item.id);
                     return (
                       <TableRow key={item.id}>
                         <TableCell>
-                          <Checkbox
-                            checked={selectedBoqItemIds.includes(item.id)}
-                            onCheckedChange={(checked) => toggleBoqItem(item.id, Boolean(checked))}
-                          />
+                          {/* Item order here is informational only — nothing lets a user
+                              reorder rows — so this sits inline just left of the checkbox as a
+                              subtle margin note rather than taking its own column. (Table's
+                              wrapper is overflow-auto, which clips anything positioned to
+                              actually escape the cell, so this stays inline rather than
+                              absolute.) */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-4 shrink-0 text-right text-xs text-muted-foreground">
+                              {index + 1}
+                            </span>
+                            <Checkbox
+                              checked={selectedBoqItemIds.includes(item.id)}
+                              onCheckedChange={(checked) => toggleBoqItem(item.id, Boolean(checked))}
+                              aria-label="Select row"
+                            />
+                          </div>
                         </TableCell>
                         <TableCell className="min-w-[16rem]">
                           <Input

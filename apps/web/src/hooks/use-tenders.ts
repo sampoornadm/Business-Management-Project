@@ -54,9 +54,10 @@ export function useTender(id: string | undefined) {
 
 export function useExtractTenderFromDocument() {
   return useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, aiNotesEnabled }: { file: File; aiNotesEnabled?: boolean }) => {
       const formData = new FormData();
       formData.append("file", file);
+      if (aiNotesEnabled !== undefined) formData.append("aiNotesEnabled", String(aiNotesEnabled));
       const response = await apiClient.post<ApiResponse<TenderExtractionResultDto>>(
         "/tenders/extract",
         formData,

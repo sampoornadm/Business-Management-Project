@@ -6,7 +6,11 @@ import type { FilterableColumnDescriptor } from "../../shared/utils/filtering.js
 export const TENDER_FILTER_COLUMNS: Record<TenderFilterField, FilterableColumnDescriptor> = {
   tenderNumber: { type: "text", prismaPath: ["tenderNumber"] },
   title: { type: "text", prismaPath: ["title"] },
-  clientName: { type: "text", prismaPath: ["client", "name"] },
+  // Type "enum" (not "text") so the frontend's "is"/"is_not"/"any_of" operators are all
+  // permitted here — the filter builder offers clients as a pick-list (derived from clients
+  // currently in view, see apps/web tenders page), not free text, but still matches by exact
+  // name at this prismaPath (no client-id relation involved), same as before.
+  clientName: { type: "enum", prismaPath: ["client", "name"] },
   status: { type: "enum", prismaPath: ["status"] },
   priority: { type: "enum", prismaPath: ["priority"] },
   department: { type: "text", prismaPath: ["department"], nullable: true },

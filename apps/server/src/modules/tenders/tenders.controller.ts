@@ -13,6 +13,7 @@ import type {
   CreateCompetitorBody,
   CreateTenderBody,
   ExportTendersQueryParsed,
+  ExtractTenderDocumentBody,
   ListTendersQueryParsed,
   PinTenderNoteBody,
   SetTenderTagsBody,
@@ -76,9 +77,11 @@ export class TendersController {
 
   extractFromDocument = asyncHandler(async (req, res) => {
     if (!req.file) throw new BadRequestError("No file provided");
+    const { aiNotesEnabled } = req.body as ExtractTenderDocumentBody;
     const result = await this.tenderExtractionService.extractFromDocument(
       req.file.buffer,
       req.file.mimetype,
+      { aiNotesEnabled },
     );
     sendSuccess(res, result, "Fields extracted from document");
   });

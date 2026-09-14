@@ -7,6 +7,8 @@ import type { IOrganizationsRepository } from "../organizations/organizations.re
 
 import { parseIiscoHeaderFields } from "./tender-header.parser.js";
 import { parseIiscoRfqItems } from "./tender-item.parser.js";
+import type { ExtractedSection } from "./tender-notes-sections.parser.js";
+import { parseIiscoNoteSections } from "./tender-notes-sections.parser.js";
 import { parseTenderNotes } from "./tender-notes.parser.js";
 
 export type GenerateJsonFn = (prompt: string) => Promise<unknown>;
@@ -80,6 +82,27 @@ Document text:
 // Notes/terms can sit deeper than the header fields (page 2+), so allow a larger window than
 // MAX_PROMPT_CHARS — but still bounded, since the item table (irrelevant here) follows.
 const MAX_NOTES_CHARS = 16_000;
+
+// Narrower per-section counterpart to NOTES_PROMPT, used when parseIiscoNoteSections has already
+// found and bounded a section deterministically — the model's job shrinks from "find every
+// section yourself across the whole document AND copy it verbatim" (which a real document showed
+// llama3.1:8b doesn't reliably follow — it paraphrased into a summary despite the section being
+// well within its prompt budget) down to "format this one already-identified, already-bounded
+// chunk verbatim". Same verbatim/no-paraphrase rules as NOTES_PROMPT, scoped to one section.
+function buildSectionCleanupPrompt(section: ExtractedSection): string {
+  return `You are formatting ONE already-identified section of a tender document, titled "${section.heading}". Copy it VERBATIM — do not paraphrase, summarize, shorten, translate, or add anything not in the text.
+
+Rules — follow exactly:
+- Output exactly one "## ${section.heading}" line, followed by the content.
+- Put each distinct point on its own line starting with "- ", copied word for word. If several points are run together (e.g. "1.Inspection... 2.Material..." or separated by "#"), split them so each point is on its own line.
+- Do not invent, rename, merge, reorder, or add any heading other than the one given above.
+- Output ONLY the markdown (no preamble, no explanation, no code fences).
+
+Text:
+"""
+${section.text.slice(0, MAX_NOTES_CHARS)}
+"""`;
+}
 
 // Raw markdown out, not JSON — a big multi-line string wrapped in JSON is needlessly fragile
 // (small local models routinely break the escaping). See generateText.
@@ -163,7 +186,14 @@ export function cleanupNotes(markdown: string): string {
       split.push(line);
       continue;
     }
-    const core = line.replace(/^[-*]\s*/, "").trim();
+    const core = line
+      .replace(/^[-*]\s*/, "")
+      .trim()
+      // A stray "#" wedged between a point's own number and its text (e.g. "1.#THE RATES..." —
+      // seen in this template's NIT section) rather than the usual "...Stores.#2. Inspection..."
+      // shape between two points — normalize to a space so POINT_BOUNDARY's existing
+      // "\d+[.)]\s*[A-Z]" lookahead matches it like any other point, instead of never matching.
+      .replace(/(\d+[.)])#+/g, "$1 ");
     if (!core) continue;
     const pieces = core
       .split(POINT_BOUNDARY)
@@ -234,10 +264,27 @@ export class TenderExtractionService {
   /**
    * Terms & Notes extraction is independent of the header-field path above: header fields for the
    * recognized template are deterministic (and return early), but notes should be captured either
-   * way. LLM by default (handles the messy, letterhead-interleaved prose); regex when the flag is
-   * off, or as a fallback when the LLM is unavailable/unusable.
+   * way.
+   *
+   * For the recognized IISCO/SAIL template, sections (RFQ Description/NIT/ITT/Note) are first
+   * sliced out deterministically by regex (parseIiscoNoteSections, against layout-mode text — see
+   * tender-notes-sections.parser.ts), then each is cleaned up by the LLM independently and in
+   * parallel — a real document showed the LLM doesn't reliably follow a "find every section
+   * yourself across the whole document AND copy it verbatim" instruction in one shot (it
+   * paraphrased into a summary instead, even with the relevant section well within its prompt
+   * budget); giving it one already-bounded, already-labeled section at a time is a much narrower,
+   * more reliable job. Falls back to today's whole-document single-call path (LLM by default,
+   * regex when the flag is off or the LLM is unusable) for any other template.
    */
-  private async extractNotes(text: string, warnings: string[]): Promise<string | undefined> {
+  private async extractNotes(
+    text: string,
+    layoutText: string,
+    warnings: string[],
+    aiNotesEnabled: boolean | undefined,
+  ): Promise<string | undefined> {
+    const sections = parseIiscoNoteSections(layoutText);
+    if (sections) return this.extractNotesFromSections(sections, warnings, aiNotesEnabled ?? env.TENDER_NOTES_AI_ENABLED);
+
     let notes: string | undefined;
     if (env.TENDER_NOTES_AI_ENABLED) {
       try {
@@ -251,11 +298,43 @@ export class TenderExtractionService {
     return cleanupNotes(notes) || undefined;
   }
 
-  async extractFromDocument(buffer: Buffer, mimeType: string): Promise<TenderExtractionResultDto> {
+  private async extractNotesFromSections(
+    sections: ExtractedSection[],
+    warnings: string[],
+    aiNotesEnabled: boolean,
+  ): Promise<string | undefined> {
+    // Promise.all preserves input-array order in its result regardless of resolution order, and
+    // `sections` is already in fixed document order — no manual reassembly/sorting needed to keep
+    // the final notes text in the right order even though the calls race each other.
+    const cleanedParts = await Promise.all(
+      sections.map((section) => this.cleanSection(section, warnings, aiNotesEnabled)),
+    );
+    return cleanupNotes(cleanedParts.join("\n\n")) || undefined;
+  }
+
+  private async cleanSection(
+    section: ExtractedSection,
+    warnings: string[],
+    aiNotesEnabled: boolean,
+  ): Promise<string> {
+    const raw = `## ${section.heading}\n${section.text.replace(/\s+/g, " ").trim()}`;
+    if (!aiNotesEnabled) return raw;
+    try {
+      const cleaned = stripCodeFence(await this.generateText(buildSectionCleanupPrompt(section)));
+      return cleaned || raw;
+    } catch {
+      warnings.push(`AI notes extraction was unavailable for "${section.heading}" — used the raw extracted text.`);
+      return raw;
+    }
+  }
+
+  async extractFromDocument(
+    buffer: Buffer,
+    mimeType: string,
+    options: { aiNotesEnabled?: boolean } = {},
+  ): Promise<TenderExtractionResultDto> {
     const warnings: string[] = [];
     const text = await this.extractText(buffer, mimeType);
-
-    const notes = await this.extractNotes(text, warnings);
 
     // Items are parsed deterministically (regex, not the LLM) — a document
     // can have dozens of items, and the 14-digit item code (the whole point
@@ -268,9 +347,13 @@ export class TenderExtractionService {
     // document. `-layout` keeps every row on one physical line and survives
     // page breaks. Not used for `text` above: parseIiscoHeaderFields's
     // regexes are written against the default mode's shape and would break
-    // under `-layout` — see pdf-text.ts#ExtractPdfTextOptions.
+    // under `-layout` — see pdf-text.ts#ExtractPdfTextOptions. The same
+    // layout-mode text is also what parseIiscoNoteSections (in extractNotes
+    // below) requires, for the same reason.
     const itemsText = await this.extractText(buffer, mimeType, { layout: true });
     const items = parseIiscoRfqItems(itemsText);
+
+    const notes = await this.extractNotes(text, itemsText, warnings, options.aiNotesEnabled);
 
     // Header fields for the recognized IISCO/SAIL template are also parsed
     // deterministically — tenderNumber is the DB's @unique key, so it gets

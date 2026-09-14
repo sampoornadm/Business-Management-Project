@@ -253,6 +253,13 @@ describe("TenderExtractionService", () => {
     expect(result.items).toEqual([
       { itemCode: "71804001603937", description: "O-RING MATERIAL : FKM", quantity: 1500, unit: "EA" },
     ]);
+    // IISCO_TEMPLATE_TEXT has an "Instructions to Tenderers (ITT)" heading, so this now also
+    // exercises the new section-split notes path (parseIiscoNoteSections finds RFQ Description +
+    // ITT; fakeGenerateText returns "" for each, so both fall back to their raw section text).
+    // Locked in explicitly so a future change to that path can't silently regress this fixture.
+    expect(result.fields.notes).toBe(
+      "## RFQ Description\n- AUTO COUPLER O RING 42 MM\n\n## Instructions to Tenderers (ITT)\n- Deliver within 120 days.",
+    );
   });
 
   it("extracts fields and resolves a confident client match", async () => {
@@ -363,6 +370,23 @@ describe("TenderExtractionService", () => {
     expect(out).toContain("4.Material clearance within 05 days.");
   });
 
+  it("cleans notes markdown: splits points where a stray '#' sits between the number and its text (NIT section shape)", () => {
+    // Real shape from a NIT section: "##1.#THE RATES..." — a stray "#" wedged between the
+    // point's own number and its text, unlike the more common "...Stores.#2. Inspection..."
+    // glue between two DIFFERENT points that the other test above already covers.
+    const raw = [
+      "## Notice Inviting Tender (NIT)",
+      "RFx Terms & Condition ##1.#THE RATES QUOTED SHOULD BE F.O.R. DESTINATION BASIS.#2.#OUR PAYMENT TERM IS 100% within 30 days after GRN",
+    ].join("\n");
+
+    const out = cleanupNotes(raw);
+
+    expect(out).toContain("1. THE RATES QUOTED SHOULD BE F.O.R. DESTINATION BASIS.");
+    expect(out).toContain("2. OUR PAYMENT TERM IS 100% within 30 days after GRN");
+    // No leftover "#" glued onto the point text.
+    expect(out).not.toMatch(/\d\.#/);
+  });
+
   it("propagates ServiceUnavailableError when Ollama is unreachable", async () => {
     const organizationsRepository = new FakeOrganizationsRepository();
     const generateJson: GenerateJsonFn = async () => {
@@ -373,5 +397,140 @@ describe("TenderExtractionService", () => {
     await expect(
       service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf"),
     ).rejects.toBeInstanceOf(ServiceUnavailableError);
+  });
+
+  describe("section-split notes extraction (IISCO/SAIL template)", () => {
+    // No "TE No:" anchor, so parseIiscoHeaderFields returns null and header fields fall back to
+    // the generic LLM path — irrelevant to these tests, which are only about the notes path.
+    const NO_HEADER_TEXT = "This document has no recognized header anchor.";
+
+    // Layout-mode text with all 4 sections, built the same way as
+    // tender-notes-sections.parser.spec.ts's fixture, trimmed to what these tests need.
+    const FOUR_SECTION_LAYOUT_TEXT = `RFQ Description :
+SELF ADHESSIVE PVC INSULATING TAPE 360 EA
+
+Notice Inviting Tender (NIT) :
+1.#THE RATES QUOTED SHOULD BE F.O.R. DESTINATION BASIS.#Note: SAIL ISP shall issue the Goods Receipt and
+Acceptance Note (GRN) and auto generated mail shall be sent for the same.
+
+Instructions to Tenderers (ITT) :
+3. Warranty certificate to be provided with material.##4. Delivery Schedule: 105 days from PO placement.#Note: SAIL ISP shall issue the Goods Receipt and
+Acceptance Note (GRN) and auto generated mail shall be sent for the same.
+
+ Sl No                     Item Code                      Qty                              UoM                    Expected Delivery
+                                                                                                                  Date`;
+
+    function extractTextForFourSections(): ExtractTextFn {
+      return async (_buffer, _mimeType, options) => (options?.layout ? FOUR_SECTION_LAYOUT_TEXT : NO_HEADER_TEXT);
+    }
+
+    it("calls generateText once per section, with 4 distinct section-scoped prompts (not the old whole-document prompt)", async () => {
+      const organizationsRepository = new FakeOrganizationsRepository();
+      const generateJson: GenerateJsonFn = async () => SAMPLE_PDF_TEXT_RESULT;
+      const prompts: string[] = [];
+      const generateText: GenerateTextFn = async (prompt) => {
+        prompts.push(prompt);
+        return "";
+      };
+      const service = new TenderExtractionService(
+        organizationsRepository,
+        generateJson,
+        extractTextForFourSections(),
+        generateText,
+      );
+
+      await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
+
+      expect(prompts).toHaveLength(4);
+      expect(new Set(prompts).size).toBe(4);
+      for (const prompt of prompts) {
+        expect(prompt).not.toContain("You copy the notes / terms / instructions text out of a tender document");
+      }
+    });
+
+    it("keeps sections in fixed document order even when their AI calls resolve out of order", async () => {
+      const organizationsRepository = new FakeOrganizationsRepository();
+      const generateJson: GenerateJsonFn = async () => SAMPLE_PDF_TEXT_RESULT;
+      let callIndex = 0;
+      const generateText: GenerateTextFn = async (prompt) => {
+        const index = callIndex++;
+        const headingMatch = prompt.match(/titled "([^"]+)"/);
+        const heading = headingMatch![1];
+        // Resolve in REVERSE call order (last call resolves first) — if the result were assembled
+        // by resolution order instead of the sections' own document order, this would reorder them.
+        await new Promise((resolve) => setTimeout(resolve, (4 - index) * 5));
+        return `## ${heading}\n- cleaned ${heading}`;
+      };
+      const service = new TenderExtractionService(
+        organizationsRepository,
+        generateJson,
+        extractTextForFourSections(),
+        generateText,
+      );
+
+      const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
+
+      const headingOrder = ["RFQ Description", "Notice Inviting Tender (NIT)", "Instructions to Tenderers (ITT)", "Note"];
+      const positions = headingOrder.map((heading) => result.fields.notes!.indexOf(`## ${heading}`));
+      expect(positions.every((p) => p >= 0)).toBe(true);
+      expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    });
+
+    it("falls back to raw section text and warns when exactly one section's AI call fails, without affecting the others", async () => {
+      const organizationsRepository = new FakeOrganizationsRepository();
+      const generateJson: GenerateJsonFn = async () => SAMPLE_PDF_TEXT_RESULT;
+      const generateText: GenerateTextFn = async (prompt) => {
+        if (prompt.includes("Notice Inviting Tender (NIT)")) {
+          throw new Error("Ollama hiccup for this one section");
+        }
+        const heading = prompt.match(/titled "([^"]+)"/)![1];
+        return `## ${heading}\n- cleaned ${heading}`;
+      };
+      const service = new TenderExtractionService(
+        organizationsRepository,
+        generateJson,
+        extractTextForFourSections(),
+        generateText,
+      );
+
+      const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
+
+      // The failed section still appears, via its raw (un-AI-cleaned) text — not dropped.
+      expect(result.fields.notes).toContain("## Notice Inviting Tender (NIT)");
+      expect(result.fields.notes).toContain("THE RATES QUOTED SHOULD BE F.O.R. DESTINATION BASIS");
+      // The other three sections were cleaned normally.
+      expect(result.fields.notes).toContain("cleaned RFQ Description");
+      expect(result.fields.notes).toContain("cleaned Instructions to Tenderers (ITT)");
+      expect(result.fields.notes).toContain("cleaned Note");
+      expect(result.warnings).toEqual([
+        'AI notes extraction was unavailable for "Notice Inviting Tender (NIT)" — used the raw extracted text.',
+      ]);
+    });
+
+    it("skips the LLM entirely and returns deterministic raw section text when aiNotesEnabled is explicitly false", async () => {
+      const organizationsRepository = new FakeOrganizationsRepository();
+      const generateJson: GenerateJsonFn = async () => SAMPLE_PDF_TEXT_RESULT;
+      let generateTextCalls = 0;
+      const generateText: GenerateTextFn = async () => {
+        generateTextCalls++;
+        throw new Error("generateText should not be called when aiNotesEnabled is false");
+      };
+      const service = new TenderExtractionService(
+        organizationsRepository,
+        generateJson,
+        extractTextForFourSections(),
+        generateText,
+      );
+
+      const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf", {
+        aiNotesEnabled: false,
+      });
+
+      expect(generateTextCalls).toBe(0);
+      expect(result.warnings).toEqual([]);
+      expect(result.fields.notes).toContain("## Notice Inviting Tender (NIT)");
+      expect(result.fields.notes).toContain("THE RATES QUOTED SHOULD BE F.O.R. DESTINATION BASIS");
+      expect(result.fields.notes).toContain("3. Warranty certificate to be provided with material.");
+    });
   });
 });

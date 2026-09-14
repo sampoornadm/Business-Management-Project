@@ -21,8 +21,7 @@ export function PinnedTenderNotes({ pinnedNotes, onUnpin, pendingLineText }: Pin
       {pinnedNotes.map((note) => {
         const isPending = pendingLineText === note.lineText;
         return (
-          <div key={note.id} className="flex items-start justify-between gap-2">
-            <span>{note.lineText}</span>
+          <div key={note.id} className="flex items-start gap-2">
             {onUnpin && (
               <button
                 type="button"
@@ -38,6 +37,7 @@ export function PinnedTenderNotes({ pinnedNotes, onUnpin, pendingLineText }: Pin
                 )}
               </button>
             )}
+            <span>{note.lineText}</span>
           </div>
         );
       })}

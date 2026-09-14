@@ -1,5 +1,7 @@
 import type { ExtractedTenderItem } from "@bmp/types";
 
+import { stripPageBoilerplate } from "./tender-pdf-boilerplate.js";
+
 // Requires text extracted via `pdftotext -layout` (see
 // tender-extraction.service.ts, which requests it specifically for this
 // parser). pdftotext's DEFAULT mode splits every table cell onto its own
@@ -25,67 +27,6 @@ const ROW = /^\s*(\d{1,3})\s+(\d{14})\s+([\d,]+\.\d+)\s+([A-Za-z]+)/gm;
 // ("Material Long Description O-RING MATERIAL : FKM ..."); the label's own
 // wrapped ":" then lands alone on the next line. Both are stripped below.
 const DESCRIPTION_BLOCK = /Material Long Description([\s\S]*?)Item Additional/;
-
-// pdftotext -layout reprints this exact letterhead + TE-No/RFQ-Title header
-// block at every page break, sandwiched between "Page N / M" and whatever
-// content resumes — 7 lines total (the Page-number line, then 6 more).
-// Column spacing drifts by a few characters page to page even though the
-// words are byte-identical (confirmed: diff after collapsing space runs is
-// empty) — likely `-layout` repositioning text based on what else shares
-// each page — so removal has to be whitespace-tolerant, not a literal
-// string match.
-const PAGE_BREAK_BLOCK = /Page \d+ \/ \d+\n(?:.*\n){6}/g;
-
-// Placeholder for the page number while checking whether the block recurs
-// unchanged: contains no regex metacharacters, so it survives the
-// metachar-escaping step in toWhitespaceTolerantPattern() untouched, and is
-// then swapped for a real `\d+` wildcard afterward.
-const PAGENUM_TOKEN = "XPAGENUMX";
-
-function normalizeBlockWhitespace(block: string): string {
-  return block
-    .split("\n")
-    .map((line) => line.replace(/[ \t]+/g, " ").trim())
-    .join("\n")
-    .trim();
-}
-
-function toWhitespaceTolerantPattern(block: string): RegExp {
-  const escaped = block
-    .trim()
-    .split("\n")
-    .map((line) =>
-      line
-        .trim()
-        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&") // escape regex metachars
-        .replace(/ +/g, "\\s+"), // any run of literal spaces -> flexible \s+
-    )
-    .join("\\s*\\n\\s*")
-    .replace(new RegExp(PAGENUM_TOKEN, "g"), "\\d+"); // restore the digit wildcard post-escaping
-  return new RegExp(`\\s*${escaped}\\s*\\n?`, "g");
-}
-
-// Strips every occurrence of the repeating page-break letterhead block from
-// the text, so it can never end up glued onto a description that spans a
-// page break. Two passes: (1) detect the block and confirm every occurrence
-// normalizes to the same shape — if a document's letterhead isn't uniform
-// across pages (a different template, say), this bails out and returns the
-// text unstripped rather than guessing; (2) build one whitespace-tolerant,
-// page-number-agnostic pattern from that shape and remove every real
-// occurrence (each with its own literal page number).
-function stripPageBoilerplate(text: string): string {
-  const candidates = [...text.matchAll(PAGE_BREAK_BLOCK)].map((m) => m[0]);
-  if (candidates.length === 0) return text;
-
-  const shapes = new Set<string>();
-  for (const raw of candidates) {
-    shapes.add(normalizeBlockWhitespace(raw).replace(/Page \d+ \/ \d+/, `Page ${PAGENUM_TOKEN} / ${PAGENUM_TOKEN}`));
-  }
-  if (shapes.size !== 1) return text;
-
-  const pattern = toWhitespaceTolerantPattern([...shapes][0]!);
-  return text.replace(pattern, "\n");
-}
 
 // Scoped to the IISCO/SAIL RFQ item-table layout only — other clients' bid
 // formats are a separate, later addition, not attempted here. If no row

@@ -36,6 +36,7 @@ import { useEffect, useState } from "react";
 
 import { QuoteCell } from "@/components/rfq/quote-cell";
 import { QuoteSheetActions } from "@/components/rfq/quote-sheet-actions";
+import { PinnedTenderNotes } from "@/components/tenders/pinned-tender-notes";
 import { useCreatePurchaseOrderFromRfq } from "@/hooks/use-purchase-orders";
 import {
   useCloseRfq,
@@ -49,6 +50,7 @@ import {
   useSelectQuote,
   useUpsertRfqQuote,
 } from "@/hooks/use-rfq";
+import { useTender } from "@/hooks/use-tenders";
 import { useVendors } from "@/hooks/use-vendors";
 import { useAuthStore } from "@/lib/auth-store";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
@@ -72,6 +74,10 @@ export default function RfqDetailPage() {
 
   const rfqQuery = useRfq(params.id);
   useBreadcrumbLabel(params.id, rfqQuery.data?.title);
+  // For the "Pinned Notes" preview below — these are the exact lines that get attached to this
+  // RFQ's generated Word/PDF (see rfq.service.ts#loadRfrDocumentData, which pulls the same
+  // tender's pinnedNotes). Read-only here; editing pins happens on the tender page.
+  const tenderQuery = useTender(rfqQuery.data?.tenderId ?? undefined);
   const comparisonQuery = useRfqComparison(params.id);
   const vendorsQuery = useVendors({ page: 1, pageSize: 100, isActive: true });
   const removeVendor = useRemoveRfqVendor(params.id);
@@ -205,6 +211,14 @@ export default function RfqDetailPage() {
             <h1 className="text-2xl font-semibold tracking-tight">{rfq.title}</h1>
             <Badge variant={STATUS_VARIANT[rfq.status]}>{rfq.status}</Badge>
           </div>
+          {rfq.tenderId && tenderQuery.data && (
+            <p className="text-sm text-muted-foreground">
+              for Tender:{" "}
+              <Link href={`/tenders/${rfq.tenderId}`} className="text-primary hover:underline">
+                {tenderQuery.data.title}
+              </Link>
+            </p>
+          )}
           <p className="text-sm text-muted-foreground">
             {rfq.itemCount} item(s) · {rfq.vendorCount} vendor(s) invited
             {rfq.dueDate ? ` · due ${formatDate(rfq.dueDate)}` : ""}
@@ -377,6 +391,17 @@ export default function RfqDetailPage() {
         </CardContent>
       </Card>
 
+      {tenderQuery.data && tenderQuery.data.pinnedNotes.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Pinned notes (included in this RFQ&apos;s documents)</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <PinnedTenderNotes pinnedNotes={tenderQuery.data.pinnedNotes} />
+          </CardContent>
+        </Card>
+      )}
+
       {comparisonQuery.data && comparisonQuery.data.vendorTotals.length > 0 && (
         <Card>
           <CardHeader>
@@ -406,12 +431,6 @@ export default function RfqDetailPage() {
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {rfq.tenderId && (
-        <Link href={`/tenders/${rfq.tenderId}`} className="text-sm text-primary hover:underline">
-          View linked tender
-        </Link>
       )}
     </div>
   );

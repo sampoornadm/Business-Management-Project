@@ -3,14 +3,9 @@
 import {
   TENDER_KIND_LABELS,
   TENDER_KINDS,
-  TENDER_STATUS_LABELS,
-  TENDER_STATUSES,
-  TENDER_PRIORITIES,
   type FilterCondition,
   type TenderKind,
-  type TenderPriority,
   type TenderSortField,
-  type TenderStatus,
 } from "@bmp/types";
 import {
   ActiveFilterChips,
@@ -27,17 +22,14 @@ import {
   Input,
   PageHeader,
   SavedViewTabs,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Tabs,
+  TabsList,
+  TabsTrigger,
   useToast,
 } from "@bmp/ui";
 import type { PaginationState, SortingState } from "@tanstack/react-table";
 import { Download, FilePlus, FileText, SearchX } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -58,20 +50,13 @@ import { downloadFile } from "@/lib/download";
 import { hasPermission } from "@/lib/permissions";
 
 const PAGE_KEY = "tenders";
-const FILTERABLE_COLUMNS = TENDER_COLUMNS.filter((c) => c.filterable);
 const PICKER_COLUMNS = TENDER_COLUMNS.map((c) => ({ key: c.key, label: c.label }));
 
 export default function TendersPage() {
   const { toast } = useToast();
   const roleName = useAuthStore((state) => state.user?.role.name);
-  const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [status, setStatus] = useState<string>(() => {
-    const fromUrl = searchParams.get("status");
-    return fromUrl && (TENDER_STATUSES as readonly string[]).includes(fromUrl) ? fromUrl : "";
-  });
-  const [priority, setPriority] = useState<string>("");
   const [kind, setKind] = useState<TenderKind>("TENDER");
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 20 });
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -98,17 +83,32 @@ export default function TendersPage() {
     page: pagination.pageIndex + 1,
     pageSize: pagination.pageSize,
     search: debouncedSearch || undefined,
-    status: (status || undefined) as TenderStatus | undefined,
-    priority: (priority || undefined) as TenderPriority | undefined,
     kind,
     filters: conditions.length > 0 ? conditions : undefined,
     sortBy,
     sortDir,
   });
 
+  // "Client" is a text column server-side (matches by name, not id — see
+  // tenders.filter-columns.ts), but its filter-builder options are derived here from clients
+  // actually present in the current view, so users pick from a list instead of typing a name.
+  // Recomputed as the page's data changes — the option list reflects what's currently loaded.
+  const clientOptions = useMemo(() => {
+    const names = new Set((tendersQuery.data?.items ?? []).map((t) => t.client.name));
+    return [...names].sort().map((name) => ({ value: name, label: name }));
+  }, [tendersQuery.data]);
+
+  const filterableColumns = useMemo(
+    () =>
+      TENDER_COLUMNS.filter((c) => c.filterable).map((c) =>
+        c.key === "clientName" ? { ...c, type: "enum" as const, enumOptions: clientOptions } : c,
+      ),
+    [clientOptions],
+  );
+
   const canCreate = hasPermission(roleName, "tenders:create");
   const canGenerateDocument = hasPermission(roleName, "tenders:generate_document");
-  const hasActiveFilters = Boolean(debouncedSearch || status || priority || conditions.length > 0);
+  const hasActiveFilters = Boolean(debouncedSearch || conditions.length > 0);
 
   function applySavedView(id: string) {
     setActiveViewId(id);
@@ -212,8 +212,6 @@ export default function TendersPage() {
     params.set("page", String(pagination.pageIndex + 1));
     params.set("pageSize", String(pagination.pageSize));
     if (debouncedSearch) params.set("search", debouncedSearch);
-    if (status) params.set("status", status);
-    if (priority) params.set("priority", priority);
     params.set("kind", kind);
     if (conditions.length > 0) params.set("filters", JSON.stringify(conditions));
     if (sortBy) params.set("sortBy", sortBy);
@@ -251,6 +249,27 @@ export default function TendersPage() {
         actions={canCreate ? newTenderButton : undefined}
       />
 
+      {/* First thing on the page below the header — which record kind you're browsing is a
+          bigger decision than any filter below it, so it gets its own prominent row instead of
+          blending into FilterBar's button row. Same segmented-tab control as SavedViewTabs below
+          (click either side, no drag/slider), just a different pair of options. Tender
+          pre-selected (kind's initial state). */}
+      <Tabs
+        value={kind}
+        onValueChange={(value) => {
+          setKind(value as TenderKind);
+          setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+        }}
+      >
+        <TabsList>
+          {TENDER_KINDS.map((option) => (
+            <TabsTrigger key={option} value={option}>
+              {TENDER_KIND_LABELS[option]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
       <SavedViewTabs
         views={savedViews.map((v) => ({ id: v.id, name: v.name }))}
         activeId={activeViewId}
@@ -263,22 +282,6 @@ export default function TendersPage() {
       />
 
       <FilterBar>
-        <div className="flex gap-1">
-          {TENDER_KINDS.map((option) => (
-            <Button
-              key={option}
-              type="button"
-              variant={kind === option ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setKind(option);
-                setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-              }}
-            >
-              {TENDER_KIND_LABELS[option]}
-            </Button>
-          ))}
-        </div>
         <Input
           placeholder="Search by title or tender number..."
           value={search}
@@ -288,47 +291,11 @@ export default function TendersPage() {
           }}
           className="max-w-xs"
         />
-        <Select
-          value={status}
-          onValueChange={(value) => {
-            setStatus(value);
-            setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-          }}
-        >
-          <SelectTrigger className="w-56">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            {TENDER_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {TENDER_STATUS_LABELS[s]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={priority}
-          onValueChange={(value) => {
-            setPriority(value);
-            setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-          }}
-        >
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Priority" />
-          </SelectTrigger>
-          <SelectContent>
-            {TENDER_PRIORITIES.map((p) => (
-              <SelectItem key={p} value={p}>
-                {p}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </FilterBar>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <ActiveFilterChips
-          columns={FILTERABLE_COLUMNS}
+          columns={filterableColumns}
           conditions={conditions}
           onChange={(next) => {
             setConditions(next);
@@ -385,7 +352,7 @@ export default function TendersPage() {
             <EmptyState
               icon={SearchX}
               title="No tenders match your filters"
-              description="Try adjusting your search, status, or filters."
+              description="Try adjusting your search or filters."
             />
           ) : (
             <EmptyState

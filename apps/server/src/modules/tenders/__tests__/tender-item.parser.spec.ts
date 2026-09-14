@@ -63,6 +63,43 @@ RFQ Title:    MJ/C06/2026/4236-SOCKET     Amendment No:                         
 Item Additional
 Description:`;
 
+// Real `pdftotext -layout` output for items 3 and 4 of a different real
+// document (TE No 1400014147, "SELF ADHESSIVE PVC INSULATING TAPE") that
+// broke the ITEMS_ACROSS_PAGE_BREAK_TEXT case above in two ways the shorter
+// sample didn't exercise: (1) its total page count prints as an unresolved
+// "*" ("Page 5 / *") rather than a digit until the document's last two
+// pages, and (2) its RFQ Title is long enough to wrap onto a second line
+// under "RFQ Title:". Both silently defeated the boilerplate stripper —
+// the `*` meant it never even attempted to strip this page break, and once
+// that was fixed, the wrap line still survived a fixed 6-line block. This
+// is the real, unmodified corruption reported against that document.
+const ITEMS_ACROSS_STARRED_PAGE_BREAK_TEXT = `  3                       51810101300351                     300.000           EA                                31.01.2027
+Material Long Description SELF ADHESSIVE PVC INSULATING TAPE,BLACK SELF ADHESSIVE PVC
+:                         INSULATING TAPE, 1100V GRADE, 1.80CM (W) X 7.5M(L), THICKNESS 0.125MM±0
+                          .025MM, COLOUR-BLACK. IS NO:7809 AND ISI MARKED.
+
+
+
+
+                                                                                                                                    Page 5 / *
+                                                                                                      IISCO STEEL PLANT
+                                              BID INVITATION                                          ISP GST : 19AAACS7062F6Z6
+                             (Kindly scrutinize the dates carefully for timely response submission)   Corporate Identity No:
+                                                                                                      L27109DL1973GOI006454
+TE No:        1400014147                  TE Date:    09.09.2026            Contracting Agency:        ISP MATERIAL MANAGEMENT DEPARTMENT
+RFQ Title:    MJ/C04/2026/4347_SELF       Amendment No:                           Amendment Date:
+              ADHESSIVE PVC INSU
+
+
+Item Additional
+Description:
+  4                       51810101300349                     360.000           EA                                31.01.2027
+Material Long Description SELF ADHESSIVE PVC INSULATING TAPE, BLUE SELF ADHESSIVE PVC
+:                         INSULATING TAPE, 1100V GRADE, 1.80CM (W) X 7.5M(L), THICKNESS 0.125MM±0
+                          .025MM, COLOUR-BLUE, IS NO:7809 AND ISI MARKED.
+Item Additional
+Description:`;
+
 describe("parseIiscoRfqItems", () => {
   it("extracts a single item with exact item code, quantity, unit, and description", () => {
     const items = parseIiscoRfqItems(SINGLE_ITEM_TEXT);
@@ -107,6 +144,24 @@ describe("parseIiscoRfqItems", () => {
     });
     for (const item of items) {
       expect(item.description).not.toMatch(/Page \d+|IISCO STEEL PLANT|BID INVITATION|TE No|RFQ Title/);
+    }
+  });
+
+  it("strips a page break whose total page count is an unresolved '*' and whose RFQ Title wraps onto two lines", () => {
+    const items = parseIiscoRfqItems(ITEMS_ACROSS_STARRED_PAGE_BREAK_TEXT);
+
+    expect(items).toHaveLength(2);
+    expect(items[0]).toEqual({
+      itemCode: "51810101300351",
+      description:
+        "SELF ADHESSIVE PVC INSULATING TAPE,BLACK SELF ADHESSIVE PVC : INSULATING TAPE, 1100V GRADE, 1.80CM (W) X 7.5M(L), THICKNESS 0.125MM±0 .025MM, COLOUR-BLACK. IS NO:7809 AND ISI MARKED.",
+      quantity: 300,
+      unit: "EA",
+    });
+    for (const item of items) {
+      expect(item.description).not.toMatch(
+        /Page \d+|IISCO STEEL PLANT|BID INVITATION|TE No|RFQ Title|ADHESSIVE PVC INSU$/,
+      );
     }
   });
 });
