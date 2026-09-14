@@ -64,6 +64,21 @@ function collectAllIds<TRow extends EditableTreeRow>(rows: TRow[], out: Set<stri
   return out;
 }
 
+// Everything selection-related (select-all's checked/indeterminate state, what it toggles) acts
+// on the WHOLE tree, not just the currently-expanded/visible rows — collapsing a category
+// shouldn't silently exclude its children from "select all".
+function collectSelectableIds<TRow extends EditableTreeRow>(
+  rows: TRow[],
+  isRowSelectable: ((row: TRow) => boolean) | undefined,
+  out: Set<string>,
+): Set<string> {
+  for (const row of rows) {
+    if (!isRowSelectable || isRowSelectable(row)) out.add(row.id);
+    if (row.children?.length) collectSelectableIds(row.children as TRow[], isRowSelectable, out);
+  }
+  return out;
+}
+
 function EditableCell<TRow extends EditableTreeRow>({
   row,
   column,
@@ -160,6 +175,27 @@ export function EditableTreeTable<TRow extends EditableTreeRow>({
     return out;
   }, [data, expanded]);
 
+  // Serial numbers leaf rows only (category/parent rows aren't "an item" to count), in document
+  // order, independent of whether selection is enabled — rendered as a subtle marker floating
+  // outside the table's left edge (see the expand-column cell below), not a real column, since
+  // item order here is informational only — nothing lets a user actually reorder rows.
+  const serialNumbers = React.useMemo(() => {
+    let n = 0;
+    return flatRows.map(({ row }) => {
+      const isLeaf = !(row.children && row.children.length > 0);
+      if (isLeaf) n += 1;
+      return isLeaf ? n : null;
+    });
+  }, [flatRows]);
+
+  const selectableIds = React.useMemo(
+    () => (selectable ? collectSelectableIds(data, isRowSelectable, new Set<string>()) : new Set<string>()),
+    [data, selectable, isRowSelectable],
+  );
+  const selectedCount = selectedIds ? [...selectableIds].filter((id) => selectedIds.has(id)).length : 0;
+  const allSelected = selectableIds.size > 0 && selectedCount === selectableIds.size;
+  const someSelected = selectedCount > 0 && !allSelected;
+
   function toggleExpanded(id: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -177,12 +213,33 @@ export function EditableTreeTable<TRow extends EditableTreeRow>({
     onSelectionChange(next);
   }
 
+  function toggleSelectAll() {
+    if (!onSelectionChange) return;
+    onSelectionChange(allSelected ? new Set() : new Set(selectableIds));
+  }
+
   return (
     <div className="rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
-            {selectable && <TableHead className="w-10" />}
+            {selectable && (
+              <TableHead className="w-14">
+                {selectableIds.size > 0 && (
+                  <Checkbox
+                    checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all rows"
+                  />
+                )}
+              </TableHead>
+            )}
+            {/* Expand/collapse is its own column (not nested inside the first data column) so
+                every column's header lines up with its body cells regardless of tree depth —
+                nesting the chevron inside column 0's cell shifted its content right of the
+                label above it with no way for a single static header offset to match every
+                row's depth. */}
+            <TableHead className={selectable ? "w-8" : "w-12"} />
             {columns.map((column) => (
               <TableHead
                 key={column.key}
@@ -198,30 +255,65 @@ export function EditableTreeTable<TRow extends EditableTreeRow>({
           {flatRows.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={columns.length + (selectable ? 1 : 0) + (renderRowActions ? 1 : 0)}
+                colSpan={columns.length + (selectable ? 1 : 0) + 1 + (renderRowActions ? 1 : 0)}
                 className="h-24 text-center text-muted-foreground"
               >
                 {emptyMessage}
               </TableCell>
             </TableRow>
           ) : (
-            flatRows.map(({ row, depth }) => {
+            flatRows.map(({ row, depth }, index) => {
               const hasChildren = Boolean(row.children && row.children.length > 0);
               const rowSelectable = selectable && (isRowSelectable ? isRowSelectable(row) : true);
               return (
                 <TableRow key={row.id}>
+                  {/* The serial number sits just left of whichever cell renders first in the
+                      row (the checkbox when selectable, otherwise the expand control) — inline
+                      within that same cell, not a separate column/header, and not absolutely
+                      positioned to escape it: Table's own wrapper is `overflow-auto` (for wide
+                      tables), which silently clips anything positioned outside a cell's box. */}
                   {selectable && (
-                    <TableCell className="w-10">
-                      {rowSelectable && (
-                        <Checkbox
-                          checked={selectedIds?.has(row.id) ?? false}
-                          onCheckedChange={() => toggleSelected(row.id)}
-                          aria-label="Select row"
-                        />
-                      )}
+                    <TableCell className="w-14">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-4 shrink-0 text-right text-xs text-muted-foreground">
+                          {serialNumbers[index]}
+                        </span>
+                        {rowSelectable && (
+                          <Checkbox
+                            checked={selectedIds?.has(row.id) ?? false}
+                            onCheckedChange={() => toggleSelected(row.id)}
+                            aria-label="Select row"
+                          />
+                        )}
+                      </div>
                     </TableCell>
                   )}
-                  {columns.map((column, columnIndex) => (
+                  <TableCell className={cn("align-top", selectable ? "w-8" : "w-12")}>
+                    <div className="flex items-center gap-1.5" style={{ paddingLeft: depth * 20 }}>
+                      {!selectable && (
+                        <span className="w-4 shrink-0 text-right text-xs text-muted-foreground">
+                          {serialNumbers[index]}
+                        </span>
+                      )}
+                      {hasChildren ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(row.id)}
+                          className="shrink-0 rounded p-0.5 hover:bg-muted"
+                          aria-label={expanded.has(row.id) ? "Collapse row" : "Expand row"}
+                        >
+                          {expanded.has(row.id) ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </button>
+                      ) : (
+                        <span className="inline-block h-4 w-4" />
+                      )}
+                    </div>
+                  </TableCell>
+                  {columns.map((column) => (
                     <TableCell
                       key={column.key}
                       // widthClassName was only ever applied to the header, so it never
@@ -233,31 +325,7 @@ export function EditableTreeTable<TRow extends EditableTreeRow>({
                         column.widthClassName,
                       )}
                     >
-                      {columnIndex === 0 ? (
-                        <div className="flex items-center gap-1" style={{ paddingLeft: depth * 20 }}>
-                          {hasChildren ? (
-                            <button
-                              type="button"
-                              onClick={() => toggleExpanded(row.id)}
-                              className="shrink-0 rounded p-0.5 hover:bg-muted"
-                              aria-label={expanded.has(row.id) ? "Collapse row" : "Expand row"}
-                            >
-                              {expanded.has(row.id) ? (
-                                <ChevronDown className="h-4 w-4" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4" />
-                              )}
-                            </button>
-                          ) : (
-                            <span className="inline-block w-5 shrink-0" />
-                          )}
-                          {column.editable ? (
-                            <EditableCell row={row} column={column} />
-                          ) : (
-                            (column.render?.(row) ?? column.getValue?.(row) ?? "")
-                          )}
-                        </div>
-                      ) : column.editable ? (
+                      {column.editable ? (
                         <EditableCell row={row} column={column} />
                       ) : (
                         (column.render?.(row) ?? column.getValue?.(row) ?? "")

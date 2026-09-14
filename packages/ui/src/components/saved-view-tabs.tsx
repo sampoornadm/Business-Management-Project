@@ -58,7 +58,14 @@ export function SavedViewTabs({
     <div className="flex flex-wrap items-center gap-2">
       <Tabs value={activeId} onValueChange={onSelect}>
         <TabsList>
-          <TabsTrigger value={DEFAULT_VIEW_ID}>Default</TabsTrigger>
+          {/* Radix Tabs' onValueChange only fires when the clicked value differs from the
+              current one — but "Default" is the initial/no-view-selected state, so it's already
+              active whenever there's nothing else to switch away from (no saved views yet, or
+              the user never picked one). Clicking it then would silently do nothing without this
+              explicit onClick, which always re-applies the reset regardless of Radix's gating. */}
+          <TabsTrigger value={DEFAULT_VIEW_ID} onClick={() => onSelect(DEFAULT_VIEW_ID)}>
+            Default
+          </TabsTrigger>
           {views.map((view) => (
             <div key={view.id} className="flex items-center">
               <TabsTrigger value={view.id}>{view.name}</TabsTrigger>

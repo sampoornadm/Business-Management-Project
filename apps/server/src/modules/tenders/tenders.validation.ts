@@ -165,3 +165,14 @@ export const uploadTenderDocumentSchema = z.object({
   replacesAttachmentId: z.string().uuid().optional(),
 });
 export type UploadTenderDocumentBody = z.infer<typeof uploadTenderDocumentSchema>;
+
+// multer parses multipart text fields as plain strings, so this arrives as "true"/"false" (or
+// absent), not a real boolean — z.coerce.boolean() would treat "false" as truthy since it's a
+// non-empty string, so this needs its own string->boolean mapping instead.
+export const extractTenderDocumentSchema = z.object({
+  aiNotesEnabled: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === "true")),
+});
+export type ExtractTenderDocumentBody = z.infer<typeof extractTenderDocumentSchema>;

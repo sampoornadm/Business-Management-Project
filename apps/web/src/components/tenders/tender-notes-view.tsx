@@ -91,7 +91,6 @@ function PinnableLine({
 
   return (
     <div className="group relative flex items-center gap-1">
-      <div className="flex-1">{children}</div>
       <button
         type="button"
         onClick={() => onTogglePin(lineText)}
@@ -107,6 +106,7 @@ function PinnableLine({
           <Pin className="h-3.5 w-3.5" fill={isPinned ? "currentColor" : "none"} />
         )}
       </button>
+      <div className="flex-1">{children}</div>
     </div>
   );
 }

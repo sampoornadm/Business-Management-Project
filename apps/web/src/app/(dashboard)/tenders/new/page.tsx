@@ -18,6 +18,7 @@ import {
   CITIES_BY_STATE,
   INDIA_STATES,
   PageHeader,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -137,12 +138,17 @@ export default function NewTenderPage() {
   const [extractedFile, setExtractedFile] = useState<File>();
   const [isCommittingItems, setIsCommittingItems] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
+  // Dev-env stopgap: only the recognized SAIL/IISCO template gets the deterministic-first
+  // per-section notes pipeline (see tender-notes-sections.parser.ts) — for that template,
+  // turning this off skips the LLM cleanup pass entirely (near-instant, regex-only). Every
+  // other document keeps going through the LLM regardless of this toggle, same as before.
+  const [aiNotesEnabled, setAiNotesEnabled] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleFileSelected(file: File) {
     setHint(undefined);
     try {
-      const result = await extract.mutateAsync(file);
+      const result = await extract.mutateAsync({ file, aiNotesEnabled });
       setDefaultValues(toFormDefaults(result));
       setExtractedItems(result.items);
       setExtractedFile(file);
@@ -276,6 +282,13 @@ export default function NewTenderPage() {
             Upload a bid invitation / NIT (PDF or Word) to pre-fill the form below using a local AI model.
             Nothing is saved until you review and submit.
           </p>
+          <label className="flex items-center gap-2 text-sm">
+            <Switch checked={aiNotesEnabled} onCheckedChange={setAiNotesEnabled} disabled={extract.isPending} />
+            Use AI to refine Terms &amp; Notes
+            <span className="text-muted-foreground">
+              — off skips the LLM for a recognized SAIL/IISCO document (near-instant instead of ~1 min)
+            </span>
+          </label>
           <div
             onDragOver={(e) => {
               e.preventDefault();

@@ -12,6 +12,7 @@ import {
   changeTenderStatusSchema,
   createCompetitorSchema,
   createTenderSchema,
+  extractTenderDocumentSchema,
   exportTendersQuerySchema,
   listTendersQuerySchema,
   pinTenderNoteSchema,
@@ -79,6 +80,14 @@ export function createTendersRouter(controller: TendersController): Router {
    *             type: object
    *             properties:
    *               file: { type: string, format: binary }
+   *               aiNotesEnabled:
+   *                 type: string
+   *                 enum: ["true", "false"]
+   *                 description: >
+   *                   For a recognized SAIL/IISCO document only — whether Terms & Notes sections
+   *                   go through the local LLM for cleanup, or straight through the deterministic
+   *                   regex parser (near-instant, ~99% as good on this template, no AI wait).
+   *                   Defaults to the server's TENDER_NOTES_AI_ENABLED setting when omitted.
    *     responses:
    *       200: { description: Extracted field preview }
    */
@@ -87,6 +96,7 @@ export function createTendersRouter(controller: TendersController): Router {
     authenticateMiddleware,
     requirePermission("tenders:create"),
     uploadForExtraction,
+    validate(extractTenderDocumentSchema),
     controller.extractFromDocument,
   );
 

@@ -2,7 +2,7 @@
 
 import type { TenderListItemDto } from "@bmp/types";
 import { TENDER_PRIORITIES, TENDER_STATUS_LABELS, TENDER_STATUSES } from "@bmp/types";
-import { Badge, formatDate, SortableHeader } from "@bmp/ui";
+import { Badge, formatDateTime, SortableHeader } from "@bmp/ui";
 import type { FilterableColumnDef } from "@bmp/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
@@ -93,7 +93,7 @@ export const TENDER_COLUMNS: TenderColumnConfig[] = [
     filterable: true,
     nullable: true,
     defaultVisible: true,
-    cell: ({ row }) => formatDate(row.original.submissionDate),
+    cell: ({ row }) => formatDateTime(row.original.submissionDate),
   },
   {
     key: "assigneeCount",
