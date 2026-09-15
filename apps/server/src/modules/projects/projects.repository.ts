@@ -8,9 +8,13 @@ import type {
   PrismaClient,
   ProjectStatus,
 } from "@bmp/database";
+import type { FilterCondition, ProjectSortField } from "@bmp/types";
 
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
+import { buildPrismaFilterWhere } from "../../shared/utils/filtering.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
+
+import { PROJECT_FILTER_COLUMNS, PROJECT_SORT_COLUMNS } from "./projects.filter-columns.js";
 
 const creatorSelect = { id: true, firstName: true, lastName: true } as const;
 
@@ -45,6 +49,9 @@ export type UpdateProjectData = Partial<
 export interface ProjectFilters {
   businessId: string;
   status?: ProjectStatus;
+  filters?: FilterCondition[];
+  sortBy?: ProjectSortField;
+  sortDir?: "asc" | "desc";
 }
 
 export interface CreateMilestoneData {
@@ -168,12 +175,24 @@ export class ProjectsRepository implements IProjectsRepository {
     pagination: PaginationParams,
     filters: ProjectFilters,
   ): Promise<{ items: ProjectDetail[]; totalItems: number }> {
-    const where: Prisma.ProjectWhereInput = { businessId: filters.businessId, status: filters.status };
+    const baseWhere: Prisma.ProjectWhereInput = { businessId: filters.businessId, status: filters.status };
+
+    const chipWhere = buildPrismaFilterWhere(
+      filters.filters ?? [],
+      PROJECT_FILTER_COLUMNS,
+    ) as Prisma.ProjectWhereInput;
+    const where: Prisma.ProjectWhereInput =
+      Object.keys(chipWhere).length > 0 ? { AND: [baseWhere, chipWhere] } : baseWhere;
+
+    const orderBy = filters.sortBy
+      ? PROJECT_SORT_COLUMNS[filters.sortBy](filters.sortDir ?? "asc")
+      : ({ createdAt: "desc" } as const);
+
     const [items, totalItems] = await Promise.all([
       this.prisma.project.findMany({
         where,
         ...projectDetailArgs,
-        orderBy: { createdAt: "desc" },
+        orderBy,
         ...toSkipTake(pagination),
       }),
       this.prisma.project.count({ where }),

@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
 
 import type { Prisma, PrismaClient } from "@bmp/database";
-import type { ThemeColorKey } from "@bmp/types";
+import type { BusinessSortField, FilterCondition, ThemeColorKey } from "@bmp/types";
 
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
+import { buildPrismaFilterWhere } from "../../shared/utils/filtering.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
+
+import { BUSINESS_FILTER_COLUMNS, BUSINESS_SORT_COLUMNS } from "./businesses.filter-columns.js";
 
 const businessWithContacts = {
   include: { contacts: { orderBy: { isPrimary: "desc" } }, _count: { select: { tenders: true } } },
@@ -32,6 +35,9 @@ export type UpdateBusinessData = Partial<CreateBusinessData> & { isActive?: bool
 export interface BusinessFilters {
   search?: string;
   isActive?: boolean;
+  filters?: FilterCondition[];
+  sortBy?: BusinessSortField;
+  sortDir?: "asc" | "desc";
 }
 
 export interface CreateContactData {
@@ -95,16 +101,27 @@ export class BusinessesRepository implements IBusinessesRepository {
     pagination: PaginationParams,
     filters: BusinessFilters,
   ): Promise<{ items: BusinessWithContacts[]; totalItems: number }> {
-    const where: Prisma.BusinessWhereInput = {
+    const baseWhere: Prisma.BusinessWhereInput = {
       isActive: filters.isActive,
       ...(filters.search ? { name: { contains: filters.search, mode: "insensitive" } } : {}),
     };
+
+    const chipWhere = buildPrismaFilterWhere(
+      filters.filters ?? [],
+      BUSINESS_FILTER_COLUMNS,
+    ) as Prisma.BusinessWhereInput;
+    const where: Prisma.BusinessWhereInput =
+      Object.keys(chipWhere).length > 0 ? { AND: [baseWhere, chipWhere] } : baseWhere;
+
+    const orderBy = filters.sortBy
+      ? BUSINESS_SORT_COLUMNS[filters.sortBy](filters.sortDir ?? "asc")
+      : ({ name: "asc" } as const);
 
     const [items, totalItems] = await Promise.all([
       this.prisma.business.findMany({
         where,
         ...businessWithContacts,
-        orderBy: { name: "asc" },
+        orderBy,
         ...toSkipTake(pagination),
       }),
       this.prisma.business.count({ where }),

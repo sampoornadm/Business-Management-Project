@@ -8,6 +8,7 @@ import type { OrganizationsController } from "./organizations.controller.js";
 import {
   createContactSchema,
   createOrganizationSchema,
+  exportOrganizationsQuerySchema,
   listOrganizationsQuerySchema,
   updateContactSchema,
   updateOrganizationSchema,
@@ -45,6 +46,33 @@ export function createOrganizationsRouter(controller: OrganizationsController): 
     requirePermission("organizations:create"),
     validate(createOrganizationSchema),
     controller.create,
+  );
+
+  /**
+   * @openapi
+   * /organizations/export:
+   *   get:
+   *     tags: [Organizations]
+   *     summary: Export organizations matching the current filters as CSV or XLSX
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: query
+   *         name: format
+   *         required: true
+   *         schema: { type: string, enum: [csv, xlsx] }
+   *       - in: query
+   *         name: scope
+   *         required: true
+   *         schema: { type: string, enum: [view, all] }
+   *     responses:
+   *       200: { description: File download }
+   */
+  router.get(
+    "/export",
+    authenticateMiddleware,
+    requirePermission("organizations:read"),
+    validate(exportOrganizationsQuerySchema, "query"),
+    controller.exportOrganizations,
   );
 
   /**

@@ -1,10 +1,13 @@
 import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 import { resolvePagination } from "../../shared/utils/pagination.js";
+import { exportTableToCsv, exportTableToXlsx } from "../../shared/utils/table-export.js";
 
+import { buildItemExportTable, ITEM_EXPORT_COLUMN_KEYS } from "./items.mapper.js";
 import type { ItemsService } from "./items.service.js";
 import type {
   ClassifyBatchQuery,
+  ExportItemsQueryParsed,
   ListItemsQueryParsed,
   RenameItemBody,
   UpdateItemCategoryBody,
@@ -20,10 +23,45 @@ export class ItemsController {
       businessId: req.user!.businessId,
       search: query.search,
       status: query.status,
+      filters: query.filters,
       sortBy: query.sortBy,
       sortDir: query.sortDir,
     });
     sendSuccess(res, result, "Items retrieved");
+  });
+
+  exportItems = asyncHandler(async (req, res) => {
+    const query = req.query as unknown as ExportItemsQueryParsed;
+    const pagination = resolvePagination(query);
+    const items = await this.itemsService.exportItems(
+      {
+        businessId: req.user!.businessId,
+        search: query.search,
+        status: query.status,
+        filters: query.filters,
+        sortBy: query.sortBy,
+        sortDir: query.sortDir,
+      },
+      query.scope,
+      pagination,
+    );
+
+    const columnKeys = query.columns ?? ITEM_EXPORT_COLUMN_KEYS;
+    const table = buildItemExportTable(items, columnKeys);
+    const date = new Date().toISOString().slice(0, 10);
+
+    if (query.format === "xlsx") {
+      const buffer = await exportTableToXlsx(table);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="items-export-${date}.xlsx"`);
+      res.send(buffer);
+      return;
+    }
+
+    const buffer = exportTableToCsv(table);
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="items-export-${date}.csv"`);
+    res.send(buffer);
   });
 
   getById = asyncHandler(async (req, res) => {

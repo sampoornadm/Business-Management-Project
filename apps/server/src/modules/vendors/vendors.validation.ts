@@ -1,4 +1,4 @@
-import { VENDOR_CATEGORIES } from "@bmp/types";
+import { FILTER_OPERATORS, VENDOR_CATEGORIES, VENDOR_FILTER_FIELDS, VENDOR_SORT_FIELDS } from "@bmp/types";
 import { z } from "zod";
 
 const vendorCategorySchema = z.enum(VENDOR_CATEGORIES);
@@ -23,14 +23,42 @@ export const updateVendorSchema = createVendorSchema.partial().extend({
 });
 export type UpdateVendorBody = z.infer<typeof updateVendorSchema>;
 
+const filterConditionSchema = z.object({
+  columnKey: z.enum(VENDOR_FILTER_FIELDS),
+  operator: z.enum(FILTER_OPERATORS),
+  value: z.union([z.string(), z.number(), z.array(z.union([z.string(), z.number()]))]).optional(),
+});
+
+const filtersQueryParam = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}, z.array(filterConditionSchema).optional());
+
 export const listVendorsQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().optional(),
   search: z.string().optional(),
   category: vendorCategorySchema.optional(),
   isActive: z.coerce.boolean().optional(),
+  filters: filtersQueryParam,
+  sortBy: z.enum(VENDOR_SORT_FIELDS).optional(),
+  sortDir: z.enum(["asc", "desc"]).optional(),
 });
 export type ListVendorsQuery = z.infer<typeof listVendorsQuerySchema>;
+
+export const exportVendorsQuerySchema = listVendorsQuerySchema.extend({
+  format: z.enum(["csv", "xlsx"]),
+  scope: z.enum(["view", "all"]),
+  columns: z.preprocess(
+    (value) => (typeof value === "string" ? value.split(",") : value),
+    z.array(z.string()).optional(),
+  ),
+});
+export type ExportVendorsQuery = z.infer<typeof exportVendorsQuerySchema>;
 
 export const createVendorItemTagSchema = z.object({
   itemType: z.string().min(1).max(100),

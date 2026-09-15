@@ -2,11 +2,14 @@ import { BadRequestError } from "../../core/errors/HttpErrors.js";
 import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 import { resolvePagination } from "../../shared/utils/pagination.js";
+import { exportTableToCsv, exportTableToXlsx } from "../../shared/utils/table-export.js";
 
+import { buildRfqExportTable, RFQ_EXPORT_COLUMN_KEYS } from "./rfq.mapper.js";
 import type { RfqService } from "./rfq.service.js";
 import type {
   AddRfqVendorBody,
   CreateRfqBody,
+  ExportRfqsQueryParsed,
   ImportQuotesBody,
   InviteVendorBody,
   InviteVendorPreviewBody,
@@ -25,11 +28,37 @@ export class RfqController {
     const query = req.query as unknown as ListRfqsQueryParsed;
     const pagination = resolvePagination(query);
     const result = await this.rfqService.listRfqs(pagination, {
+      ...query,
       businessId: req.user!.businessId,
-      status: query.status,
-      tenderId: query.tenderId,
     });
     sendSuccess(res, result, "RFQs retrieved");
+  });
+
+  exportRfqs = asyncHandler(async (req, res) => {
+    const query = req.query as unknown as ExportRfqsQueryParsed;
+    const pagination = resolvePagination(query);
+    const items = await this.rfqService.exportRfqs(
+      { ...query, businessId: req.user!.businessId },
+      query.scope,
+      pagination,
+    );
+
+    const columnKeys = query.columns ?? RFQ_EXPORT_COLUMN_KEYS;
+    const table = buildRfqExportTable(items, columnKeys);
+    const date = new Date().toISOString().slice(0, 10);
+
+    if (query.format === "xlsx") {
+      const buffer = await exportTableToXlsx(table);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="rfqs-export-${date}.xlsx"`);
+      res.send(buffer);
+      return;
+    }
+
+    const buffer = exportTableToCsv(table);
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="rfqs-export-${date}.csv"`);
+    res.send(buffer);
   });
 
   getById = asyncHandler(async (req, res) => {

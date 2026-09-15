@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import type { Prisma, PrismaClient } from "@bmp/database";
-import type { ListItemsQuery } from "@bmp/types";
+import type { FilterCondition, ListItemsQuery } from "@bmp/types";
+
+import { buildPrismaFilterWhere } from "../../shared/utils/filtering.js";
+
+import { ITEM_FILTER_COLUMNS } from "./items.filter-columns.js";
 
 const itemArgs = {
   select: {
@@ -85,7 +89,12 @@ export interface IItemsRepository {
   findBoqNames(ids: string[]): Promise<BoqNameRow[]>;
   findOrCreateItem(businessId: string, canonicalName: string, unit: string | null): Promise<{ id: string }>;
   linkRfqItems(itemId: string, rfqItemIds: string[]): Promise<void>;
-  findItems(businessId: string, search: string | undefined, status: ItemStatus | undefined): Promise<ItemRow[]>;
+  findItems(
+    businessId: string,
+    search: string | undefined,
+    status: ItemStatus | undefined,
+    filters?: FilterCondition[],
+  ): Promise<ItemRow[]>;
   findQuoteRowsForItems(itemIds: string[]): Promise<ItemQuoteRow[]>;
   findById(id: string, businessId: string): Promise<ItemRow | null>;
   findByCanonicalName(businessId: string, canonicalName: string): Promise<{ id: string } | null>;
@@ -142,15 +151,22 @@ export class ItemsRepository implements IItemsRepository {
     await this.prisma.rfqItem.updateMany({ where: { id: { in: rfqItemIds } }, data: { itemId } });
   }
 
-  findItems(businessId: string, search: string | undefined, status: ItemStatus | undefined): Promise<ItemRow[]> {
-    return this.prisma.item.findMany({
-      where: {
-        businessId,
-        ...statusWhere(status),
-        ...(search ? { canonicalName: { contains: search, mode: "insensitive" } } : {}),
-      },
-      ...itemArgs,
-    });
+  findItems(
+    businessId: string,
+    search: string | undefined,
+    status: ItemStatus | undefined,
+    filters: FilterCondition[] = [],
+  ): Promise<ItemRow[]> {
+    const baseWhere: Prisma.ItemWhereInput = {
+      businessId,
+      ...statusWhere(status),
+      ...(search ? { canonicalName: { contains: search, mode: "insensitive" } } : {}),
+    };
+    const chipWhere = buildPrismaFilterWhere(filters, ITEM_FILTER_COLUMNS) as Prisma.ItemWhereInput;
+    const where: Prisma.ItemWhereInput =
+      Object.keys(chipWhere).length > 0 ? { AND: [baseWhere, chipWhere] } : baseWhere;
+
+    return this.prisma.item.findMany({ where, ...itemArgs });
   }
 
   async findQuoteRowsForItems(itemIds: string[]): Promise<ItemQuoteRow[]> {

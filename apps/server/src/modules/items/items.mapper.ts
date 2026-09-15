@@ -1,6 +1,7 @@
 import type { ItemDetailDto, ItemListEntryDto, ItemPriceHistoryDto, ItemSortField } from "@bmp/types";
 
 import { round2 } from "../../shared/utils/math.js";
+import type { ExportableTable } from "../../shared/utils/table-export.js";
 
 import type { ItemQuoteRow, ItemRow } from "./items.repository.js";
 
@@ -103,6 +104,8 @@ export function sortItemEntries(
         return e.canonicalName;
       case "categoryPath":
         return e.categoryPath;
+      case "unit":
+        return e.unit;
       case "quoteCount":
         return e.quoteCount;
       case "minRate":
@@ -127,3 +130,51 @@ export function sortItemEntries(
     return (av < bv ? -1 : av > bv ? 1 : 0) * mul;
   });
 }
+
+// Keep this in exact sync with apps/web/src/components/items/item-column-registry.tsx's
+// ITEM_COLUMNS keys — every column a user can show via ColumnPicker must be exportable, or
+// showing it and then exporting silently drops it from the file.
+const ITEM_EXPORT_COLUMNS: { key: string; header: string }[] = [
+  { key: "canonicalName", header: "Item" },
+  { key: "categoryPath", header: "Category" },
+  { key: "unit", header: "Unit" },
+  { key: "quoteCount", header: "Quotes" },
+  { key: "vendorCount", header: "Vendors" },
+  { key: "minRate", header: "Rate Range" },
+  { key: "avgRate", header: "Avg Rate" },
+  { key: "lastQuotedAt", header: "Last Quoted" },
+];
+
+function itemExportRow(entry: ItemListEntryDto): Record<string, string | number> {
+  return {
+    canonicalName: entry.canonicalName,
+    categoryPath: entry.categoryPath ?? "",
+    unit: entry.unit ?? "",
+    quoteCount: entry.quoteCount,
+    vendorCount: entry.vendorCount,
+    minRate:
+      entry.minRate === null || entry.maxRate === null
+        ? ""
+        : entry.minRate === entry.maxRate
+          ? entry.minRate
+          : `${entry.minRate}-${entry.maxRate}`,
+    avgRate: entry.avgRate ?? "",
+    lastQuotedAt: entry.lastQuotedAt ? entry.lastQuotedAt.slice(0, 10) : "",
+  };
+}
+
+export function buildItemExportTable(entries: ItemListEntryDto[], columnKeys: string[]): ExportableTable {
+  const columnsByKey = new Map(ITEM_EXPORT_COLUMNS.map((column) => [column.key, column]));
+  const columns = columnKeys
+    .map((key) => columnsByKey.get(key))
+    .filter((column): column is { key: string; header: string } => Boolean(column));
+  const rows = entries.map((entry) => {
+    const fullRow = itemExportRow(entry);
+    const row: Record<string, string | number> = {};
+    for (const column of columns) row[column.key] = fullRow[column.key] ?? "";
+    return row;
+  });
+  return { title: "Items", columns, rows };
+}
+
+export const ITEM_EXPORT_COLUMN_KEYS = ITEM_EXPORT_COLUMNS.map((column) => column.key);

@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
 
 import type { Prisma, PrismaClient, PurchaseOrderStatus } from "@bmp/database";
+import type { FilterCondition, PurchaseOrderSortField } from "@bmp/types";
 
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
+import { buildPrismaFilterWhere } from "../../shared/utils/filtering.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
+
+import { PURCHASE_ORDER_FILTER_COLUMNS, PURCHASE_ORDER_SORT_COLUMNS } from "./purchase-orders.filter-columns.js";
 
 const creatorSelect = { id: true, firstName: true, lastName: true } as const;
 const vendorSummarySelect = { id: true, name: true } as const;
@@ -54,6 +58,9 @@ export interface PurchaseOrderFilters {
   status?: PurchaseOrderStatus;
   vendorId?: string;
   tenderId?: string;
+  filters?: FilterCondition[];
+  sortBy?: PurchaseOrderSortField;
+  sortDir?: "asc" | "desc";
 }
 
 export interface CreateGoodsReceiptItemData {
@@ -137,18 +144,29 @@ export class PurchaseOrdersRepository implements IPurchaseOrdersRepository {
     pagination: PaginationParams,
     filters: PurchaseOrderFilters,
   ): Promise<{ items: PurchaseOrderListItem[]; totalItems: number }> {
-    const where: Prisma.PurchaseOrderWhereInput = {
+    const baseWhere: Prisma.PurchaseOrderWhereInput = {
       businessId: filters.businessId,
       status: filters.status,
       vendorId: filters.vendorId,
       tenderId: filters.tenderId,
     };
 
+    const chipWhere = buildPrismaFilterWhere(
+      filters.filters ?? [],
+      PURCHASE_ORDER_FILTER_COLUMNS,
+    ) as Prisma.PurchaseOrderWhereInput;
+    const where: Prisma.PurchaseOrderWhereInput =
+      Object.keys(chipWhere).length > 0 ? { AND: [baseWhere, chipWhere] } : baseWhere;
+
+    const orderBy = filters.sortBy
+      ? PURCHASE_ORDER_SORT_COLUMNS[filters.sortBy](filters.sortDir ?? "asc")
+      : ({ createdAt: "desc" } as const);
+
     const [items, totalItems] = await Promise.all([
       this.prisma.purchaseOrder.findMany({
         where,
         ...poListArgs,
-        orderBy: { createdAt: "desc" },
+        orderBy,
         ...toSkipTake(pagination),
       }),
       this.prisma.purchaseOrder.count({ where }),

@@ -1,5 +1,20 @@
+import type { FilterCondition } from "./filtering.js";
+
 export const PROJECT_STATUSES = ["ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+export const PROJECT_FILTER_FIELDS = ["name", "status", "budget", "startDate", "endDate"] as const;
+export type ProjectFilterField = (typeof PROJECT_FILTER_FIELDS)[number];
+
+export const PROJECT_SORT_FIELDS = [
+  "name",
+  "status",
+  "budget",
+  "startDate",
+  "endDate",
+  "createdAt",
+] as const;
+export type ProjectSortField = (typeof PROJECT_SORT_FIELDS)[number];
 
 export const MILESTONE_STATUSES = ["PENDING", "IN_PROGRESS", "COMPLETED", "DELAYED"] as const;
 export type MilestoneStatus = (typeof MILESTONE_STATUSES)[number];
@@ -177,4 +192,7 @@ export interface ListProjectsQuery {
   page?: number;
   pageSize?: number;
   status?: ProjectStatus;
+  filters?: FilterCondition[];
+  sortBy?: ProjectSortField;
+  sortDir?: "asc" | "desc";
 }

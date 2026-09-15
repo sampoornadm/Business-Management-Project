@@ -18,8 +18,11 @@ export function useItems(query: ListItemsQuery) {
   return useQuery({
     queryKey: ["items", query],
     queryFn: async () => {
+      // See use-tenders.ts's identical comment: axios's default param serializer turns a
+      // `filters` array into bracket notation, but the backend expects one JSON-encoded string.
+      const { filters, ...rest } = query;
       const response = await apiClient.get<ApiResponse<PaginatedResult<ItemListEntryDto>>>("/items", {
-        params: query,
+        params: { ...rest, filters: filters && filters.length > 0 ? JSON.stringify(filters) : undefined },
       });
       return unwrap(response.data);
     },

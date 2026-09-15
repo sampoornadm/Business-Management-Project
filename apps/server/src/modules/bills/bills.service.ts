@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 
-import type { BillDto, CreateBillInput } from "@bmp/types";
+import type { BillDto, BillListItemDto, CreateBillInput } from "@bmp/types";
 
+import { EXPORT_MAX_ROWS } from "../../config/constants.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams, type PaginatedResult } from "../../core/interfaces/pagination.js";
 import type { ScopedRequestContext } from "../../core/interfaces/request-context.js";
@@ -11,7 +12,7 @@ import type { ITendersRepository } from "../tenders/tenders.repository.js";
 
 import { buildBillPdf, type BillDocumentData } from "./bill-document.js";
 import { toBillDto, toBillListItemDto } from "./bills.mapper.js";
-import type { BillDetail, IBillsRepository } from "./bills.repository.js";
+import type { BillDetail, BillFilters, IBillsRepository } from "./bills.repository.js";
 
 export class BillsService {
   constructor(
@@ -28,11 +29,25 @@ export class BillsService {
 
   async listBills(
     pagination: PaginationParams,
-    businessId: string,
-    tenderId?: string,
-  ): Promise<PaginatedResult<ReturnType<typeof toBillListItemDto>>> {
-    const { items, totalItems } = await this.billsRepository.findMany(pagination, { businessId, tenderId });
+    filters: BillFilters,
+  ): Promise<PaginatedResult<BillListItemDto>> {
+    const { items, totalItems } = await this.billsRepository.findMany(pagination, filters);
     return buildPaginatedResult(items.map(toBillListItemDto), totalItems, pagination);
+  }
+
+  async exportBills(
+    filters: BillFilters,
+    scope: "view" | "all",
+    viewPagination: PaginationParams,
+  ): Promise<BillListItemDto[]> {
+    const pagination = scope === "view" ? viewPagination : { page: 1, pageSize: EXPORT_MAX_ROWS };
+    const { items, totalItems } = await this.billsRepository.findMany(pagination, filters);
+    if (scope === "all" && totalItems > EXPORT_MAX_ROWS) {
+      throw new BadRequestError(
+        `Narrow your filters — more than ${EXPORT_MAX_ROWS} rows match your current filters.`,
+      );
+    }
+    return items.map(toBillListItemDto);
   }
 
   async getById(id: string, businessId: string): Promise<BillDto> {

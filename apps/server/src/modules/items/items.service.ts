@@ -1,11 +1,13 @@
 import type {
   CategoryLeafDto,
+  FilterCondition,
   ItemDetailDto,
   ItemListEntryDto,
   ItemSortField,
   PaginatedResult,
 } from "@bmp/types";
 
+import { EXPORT_MAX_ROWS } from "../../config/constants.js";
 import { env } from "../../config/env.js";
 import {
   BadRequestError,
@@ -53,6 +55,7 @@ export interface ItemListFilters {
   businessId: string;
   search?: string;
   status?: "classified" | "unclassified" | "unconfirmed" | "needs_review";
+  filters?: FilterCondition[];
   sortBy?: ItemSortField;
   sortDir?: "asc" | "desc";
 }
@@ -100,13 +103,20 @@ export class ItemsService {
     logger.info({ businessId, items: groups.size }, "Resolved items from RFQ lines");
   }
 
-  async listItems(
-    pagination: PaginationParams,
-    filters: ItemListFilters,
-  ): Promise<PaginatedResult<ItemListEntryDto>> {
+  /**
+   * Backfill + fetch (with chip filters pushed down to Prisma where possible) + aggregate +
+   * sort, all unpaginated. Shared by listItems and exportItems so both page through (or cap)
+   * the exact same sorted set instead of re-deriving it independently.
+   */
+  private async buildSortedEntries(filters: ItemListFilters): Promise<ItemListEntryDto[]> {
     await this.backfill(filters.businessId);
 
-    const items = await this.itemsRepository.findItems(filters.businessId, filters.search, filters.status);
+    const items = await this.itemsRepository.findItems(
+      filters.businessId,
+      filters.search,
+      filters.status,
+      filters.filters,
+    );
     const quoteRows = await this.itemsRepository.findQuoteRowsForItems(items.map((i) => i.id));
     const aggByItem = aggregateQuotes(quoteRows);
     const pathMap = await this.categoriesService.getPathMap();
@@ -121,9 +131,32 @@ export class ItemsService {
         item.categoryId ? pathMap.get(item.categoryId) ?? null : null,
       ),
     );
-    const sorted = sortItemEntries(entries, filters.sortBy, filters.sortDir ?? "asc");
+    return sortItemEntries(entries, filters.sortBy, filters.sortDir ?? "asc");
+  }
+
+  async listItems(
+    pagination: PaginationParams,
+    filters: ItemListFilters,
+  ): Promise<PaginatedResult<ItemListEntryDto>> {
+    const sorted = await this.buildSortedEntries(filters);
     const start = (pagination.page - 1) * pagination.pageSize;
     return buildPaginatedResult(sorted.slice(start, start + pagination.pageSize), sorted.length, pagination);
+  }
+
+  async exportItems(
+    filters: ItemListFilters,
+    scope: "view" | "all",
+    viewPagination: PaginationParams,
+  ): Promise<ItemListEntryDto[]> {
+    const sorted = await this.buildSortedEntries(filters);
+    if (scope === "all" && sorted.length > EXPORT_MAX_ROWS) {
+      throw new BadRequestError(
+        `Narrow your filters — more than ${EXPORT_MAX_ROWS} rows match your current filters.`,
+      );
+    }
+    const pagination = scope === "view" ? viewPagination : { page: 1, pageSize: EXPORT_MAX_ROWS };
+    const start = (pagination.page - 1) * pagination.pageSize;
+    return sorted.slice(start, start + pagination.pageSize);
   }
 
   async getItemDetail(id: string, businessId: string): Promise<ItemDetailDto> {

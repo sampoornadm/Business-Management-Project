@@ -2,12 +2,15 @@ import { BadRequestError } from "../../core/errors/HttpErrors.js";
 import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 import { resolvePagination } from "../../shared/utils/pagination.js";
+import { exportTableToCsv, exportTableToXlsx } from "../../shared/utils/table-export.js";
 
+import { buildVendorExportTable, VENDOR_EXPORT_COLUMN_KEYS } from "./vendors.mapper.js";
 import type { VendorsService } from "./vendors.service.js";
 import type {
   CreateContactBody,
   CreateVendorBody,
   CreateVendorItemTagBody,
+  ExportVendorsQuery,
   ListVendorsQuery,
   UpdateContactBody,
   UpdateVendorBody,
@@ -19,12 +22,31 @@ export class VendorsController {
   list = asyncHandler(async (req, res) => {
     const query = req.query as unknown as ListVendorsQuery;
     const pagination = resolvePagination(query);
-    const result = await this.vendorsService.listVendors(pagination, {
-      search: query.search,
-      category: query.category,
-      isActive: query.isActive,
-    });
+    const result = await this.vendorsService.listVendors(pagination, { ...query });
     sendSuccess(res, result, "Vendors retrieved");
+  });
+
+  exportVendors = asyncHandler(async (req, res) => {
+    const query = req.query as unknown as ExportVendorsQuery;
+    const pagination = resolvePagination(query);
+    const items = await this.vendorsService.exportVendors({ ...query }, query.scope, pagination);
+
+    const columnKeys = query.columns ?? VENDOR_EXPORT_COLUMN_KEYS;
+    const table = buildVendorExportTable(items, columnKeys);
+    const date = new Date().toISOString().slice(0, 10);
+
+    if (query.format === "xlsx") {
+      const buffer = await exportTableToXlsx(table);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="vendors-export-${date}.xlsx"`);
+      res.send(buffer);
+      return;
+    }
+
+    const buffer = exportTableToCsv(table);
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="vendors-export-${date}.csv"`);
+    res.send(buffer);
   });
 
   getById = asyncHandler(async (req, res) => {

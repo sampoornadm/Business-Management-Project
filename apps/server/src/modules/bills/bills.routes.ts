@@ -5,7 +5,7 @@ import { requirePermission } from "../../shared/middleware/requirePermission.mid
 import { validate } from "../../shared/middleware/validate.middleware.js";
 
 import type { BillsController } from "./bills.controller.js";
-import { createBillSchema, listBillsQuerySchema } from "./bills.validation.js";
+import { createBillSchema, exportBillsQuerySchema, listBillsQuerySchema } from "./bills.validation.js";
 
 /** Mounted at /bills */
 export function createBillsRouter(controller: BillsController): Router {
@@ -40,6 +40,35 @@ export function createBillsRouter(controller: BillsController): Router {
     requirePermission("bills:create"),
     validate(createBillSchema),
     controller.create,
+  );
+
+  /**
+   * @openapi
+   * /bills/export:
+   *   get:
+   *     tags: [Bills]
+   *     summary: Export bills matching the current filters as CSV or XLSX
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: query
+   *         name: format
+   *         required: true
+   *         schema: { type: string, enum: [csv, xlsx] }
+   *       - in: query
+   *         name: scope
+   *         required: true
+   *         schema: { type: string, enum: [view, all] }
+   *     responses:
+   *       200: { description: File download }
+   */
+  // Must be registered before GET /:id — Express would otherwise match "export" as the :id
+  // param (see tenders.routes.ts's identical ordering gotcha).
+  router.get(
+    "/export",
+    authenticateMiddleware,
+    requirePermission("bills:read"),
+    validate(exportBillsQuerySchema, "query"),
+    controller.exportBills,
   );
 
   /**

@@ -1,13 +1,21 @@
 "use client";
 
-import type { ItemListEntryDto, ItemSortField, ListItemsQuery } from "@bmp/types";
+import type { FilterCondition, ItemSortField, ListItemsQuery } from "@bmp/types";
 import {
-  Badge,
+  ActiveFilterChips,
   Button,
+  ColumnPicker,
   DataTable,
+  DEFAULT_VIEW_ID,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   EmptyState,
-  formatDate,
+  FilterBar,
   Input,
+  PageHeader,
+  SavedViewTabs,
   Select,
   SelectContent,
   SelectItem,
@@ -15,24 +23,31 @@ import {
   SelectValue,
   useToast,
 } from "@bmp/ui";
-import type { Column, ColumnDef, OnChangeFn, PaginationState, SortingState } from "@tanstack/react-table";
-import {
-  AlertTriangle,
-  ArrowDown,
-  ArrowUp,
-  ChevronsUpDown,
-  ListTree,
-  Loader2,
-  Package,
-  SearchX,
-  Sparkles,
-} from "lucide-react";
+import type { PaginationState, SortingState } from "@tanstack/react-table";
+import { Download, ListTree, Loader2, Package, SearchX, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import {
+  buildItemColumnDefs,
+  ITEM_COLUMNS,
+  ITEM_DEFAULT_ORDER,
+  ITEM_DEFAULT_VISIBLE_KEYS,
+} from "@/components/items/item-column-registry";
+import { useCategoryLeaves } from "@/hooks/use-categories";
 import { useClassifyItemsBatch, useItems } from "@/hooks/use-items";
+import {
+  useCreateSavedView,
+  useDeleteSavedView,
+  useSavedViews,
+  useUpdateSavedView,
+} from "@/hooks/use-saved-views";
 import { useAuthStore } from "@/lib/auth-store";
+import { downloadFile } from "@/lib/download";
 import { hasPermission } from "@/lib/permissions";
+
+const PAGE_KEY = "items";
+const PICKER_COLUMNS = ITEM_COLUMNS.map((c) => ({ key: c.key, label: c.label }));
 
 const ALL = "all";
 const STATUS_OPTIONS: { value: string; label: string }[] = [
@@ -43,102 +58,6 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "classified", label: "Confirmed" },
 ];
 
-function SortHeader({ column, label }: { column: Column<ItemListEntryDto, unknown>; label: string }) {
-  const sorted = column.getIsSorted();
-  return (
-    <button
-      type="button"
-      onClick={column.getToggleSortingHandler()}
-      className="flex items-center gap-1 hover:text-foreground"
-    >
-      {label}
-      {sorted === "asc" ? (
-        <ArrowUp className="h-3 w-3" />
-      ) : sorted === "desc" ? (
-        <ArrowDown className="h-3 w-3" />
-      ) : (
-        <ChevronsUpDown className="h-3 w-3 opacity-40" />
-      )}
-    </button>
-  );
-}
-
-function CategoryCell({ entry }: { entry: ItemListEntryDto }) {
-  if (!entry.categoryPath) return <span className="text-muted-foreground">Unclassified</span>;
-  if (entry.confirmed) return <span>{entry.categoryPath}</span>;
-  if (entry.needsReview) {
-    return (
-      <Badge
-        variant="destructive"
-        className="gap-1"
-        title="AI classified this with low similarity to any known item — please double-check."
-      >
-        <AlertTriangle className="h-3 w-3" /> AI: {entry.categoryPath}
-      </Badge>
-    );
-  }
-  return (
-    <Badge
-      variant="secondary"
-      title={entry.aiConfidence !== null ? `AI confidence ${Math.round(entry.aiConfidence * 100)}%` : undefined}
-    >
-      AI: {entry.categoryPath}
-    </Badge>
-  );
-}
-
-function rateRange(entry: ItemListEntryDto): string {
-  if (entry.minRate === null || entry.maxRate === null) return "-";
-  return entry.minRate === entry.maxRate
-    ? entry.minRate.toLocaleString()
-    : `${entry.minRate.toLocaleString()} – ${entry.maxRate.toLocaleString()}`;
-}
-
-const columns: ColumnDef<ItemListEntryDto>[] = [
-  {
-    accessorKey: "canonicalName",
-    header: ({ column }) => <SortHeader column={column} label="Item" />,
-    cell: ({ row }) => (
-      <Link href={`/items/${row.original.id}`} className="font-medium hover:underline">
-        {row.original.canonicalName}
-      </Link>
-    ),
-  },
-  {
-    accessorKey: "categoryPath",
-    header: ({ column }) => <SortHeader column={column} label="Category" />,
-    cell: ({ row }) => <CategoryCell entry={row.original} />,
-  },
-  {
-    accessorKey: "quoteCount",
-    header: ({ column }) => <SortHeader column={column} label="Quotes" />,
-    cell: ({ row }) => <span className="tabular-nums">{row.original.quoteCount}</span>,
-  },
-  {
-    accessorKey: "vendorCount",
-    header: "Vendors",
-    enableSorting: false,
-    cell: ({ row }) => <span className="tabular-nums">{row.original.vendorCount}</span>,
-  },
-  {
-    accessorKey: "minRate",
-    header: ({ column }) => <SortHeader column={column} label="Rate range" />,
-    cell: ({ row }) => <span className="tabular-nums">{rateRange(row.original)}</span>,
-  },
-  {
-    accessorKey: "avgRate",
-    header: ({ column }) => <SortHeader column={column} label="Avg" />,
-    cell: ({ row }) => (
-      <span className="tabular-nums">{row.original.avgRate?.toLocaleString() ?? "-"}</span>
-    ),
-  },
-  {
-    accessorKey: "lastQuotedAt",
-    header: ({ column }) => <SortHeader column={column} label="Last quoted" />,
-    cell: ({ row }) => (row.original.lastQuotedAt ? formatDate(row.original.lastQuotedAt) : "-"),
-  },
-];
-
 export default function ItemsPage() {
   const { toast } = useToast();
   const roleName = useAuthStore((state) => state.user?.role.name);
@@ -146,9 +65,17 @@ export default function ItemsPage() {
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  // "status" is a derived multi-field state (categoryId null / categoryConfirmed / needsReview —
+  // see items.repository.ts's statusWhere) that can't be expressed as a single filter chip, so
+  // it stays its own quick-filter dropdown alongside the new "+" advanced filters, same as how
+  // Tenders kept its "kind" toggle separate from the filter chips.
   const [status, setStatus] = useState(ALL);
-  const [sorting, setSorting] = useState<SortingState>([]);
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 20 });
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [conditions, setConditions] = useState<FilterCondition[]>([]);
+  const [visibleKeys, setVisibleKeys] = useState<string[]>(ITEM_DEFAULT_VISIBLE_KEYS);
+  const [columnOrder, setColumnOrder] = useState<string[]>(ITEM_DEFAULT_ORDER);
+  const [activeViewId, setActiveViewId] = useState<string>(DEFAULT_VIEW_ID);
 
   const classifyBatch = useClassifyItemsBatch();
 
@@ -157,21 +84,158 @@ export default function ItemsPage() {
     return () => clearTimeout(timeout);
   }, [search]);
 
-  const resetToFirstPage = () => setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  const handleSortingChange: OnChangeFn<SortingState> = (updater) => {
-    setSorting((prev) => (typeof updater === "function" ? updater(prev) : updater));
-    resetToFirstPage();
-  };
+  const savedViewsQuery = useSavedViews(PAGE_KEY);
+  const createSavedView = useCreateSavedView();
+  const updateSavedView = useUpdateSavedView(PAGE_KEY);
+  const deleteSavedView = useDeleteSavedView(PAGE_KEY);
+  const savedViews = savedViewsQuery.data ?? [];
 
-  const sort = sorting[0];
+  const sortBy = sorting[0]?.id as ItemSortField | undefined;
+  const sortDir = sorting[0] ? (sorting[0].desc ? "desc" : "asc") : undefined;
+
   const itemsQuery = useItems({
     page: pagination.pageIndex + 1,
     pageSize: pagination.pageSize,
     search: debouncedSearch || undefined,
     status: status === ALL ? undefined : (status as ListItemsQuery["status"]),
-    sortBy: sort ? (sort.id as ItemSortField) : undefined,
-    sortDir: sort ? (sort.desc ? "desc" : "asc") : undefined,
+    filters: conditions.length > 0 ? conditions : undefined,
+    sortBy,
+    sortDir,
   });
+
+  const categoryLeavesQuery = useCategoryLeaves();
+  const categoryOptions = useMemo(
+    () => (categoryLeavesQuery.data ?? []).map((leaf) => ({ value: leaf.id, label: leaf.path })),
+    [categoryLeavesQuery.data],
+  );
+
+  const filterableColumns = useMemo(
+    () =>
+      ITEM_COLUMNS.filter((c) => c.filterable).map((c) =>
+        c.key === "categoryPath" ? { ...c, type: "enum" as const, enumOptions: categoryOptions } : c,
+      ),
+    [categoryOptions],
+  );
+
+  const hasActiveFilters = Boolean(debouncedSearch || status !== ALL || conditions.length > 0);
+
+  function applySavedView(id: string) {
+    setActiveViewId(id);
+    if (id === DEFAULT_VIEW_ID) {
+      setConditions([]);
+      setVisibleKeys(ITEM_DEFAULT_VISIBLE_KEYS);
+      setColumnOrder(ITEM_DEFAULT_ORDER);
+      setSorting([]);
+      return;
+    }
+    const view = savedViews.find((v) => v.id === id);
+    if (!view) return;
+    setConditions(view.filters);
+    setVisibleKeys(view.visibleColumns);
+    setColumnOrder(view.columnOrder);
+    setSorting(view.sortBy ? [{ id: view.sortBy, desc: view.sortDir === "desc" }] : []);
+  }
+
+  const activeView = savedViews.find((v) => v.id === activeViewId) ?? null;
+  const hasUnsavedChanges =
+    activeViewId === DEFAULT_VIEW_ID
+      ? conditions.length > 0 ||
+        visibleKeys.join(",") !== ITEM_DEFAULT_VISIBLE_KEYS.join(",") ||
+        columnOrder.join(",") !== ITEM_DEFAULT_ORDER.join(",") ||
+        sorting.length > 0
+      : !activeView ||
+        JSON.stringify(activeView.filters) !== JSON.stringify(conditions) ||
+        activeView.visibleColumns.join(",") !== visibleKeys.join(",") ||
+        activeView.columnOrder.join(",") !== columnOrder.join(",") ||
+        (activeView.sortBy ?? undefined) !== sortBy ||
+        (activeView.sortDir ?? undefined) !== sortDir;
+
+  async function saveCurrentAsNewView(name: string) {
+    try {
+      const created = await createSavedView.mutateAsync({
+        pageKey: PAGE_KEY,
+        name,
+        filters: conditions,
+        visibleColumns: visibleKeys,
+        columnOrder,
+        sortBy,
+        sortDir,
+      });
+      setActiveViewId(created.id);
+      toast({ title: "View saved" });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not save view",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  async function updateActiveView(id: string) {
+    try {
+      await updateSavedView.mutateAsync({
+        id,
+        input: { filters: conditions, visibleColumns: visibleKeys, columnOrder, sortBy, sortDir },
+      });
+      toast({ title: "View updated" });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not update view",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  async function renameView(id: string, name: string) {
+    try {
+      await updateSavedView.mutateAsync({ id, input: { name } });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not rename view",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  async function deleteView(id: string) {
+    try {
+      await deleteSavedView.mutateAsync(id);
+      if (activeViewId === id) applySavedView(DEFAULT_VIEW_ID);
+      toast({ title: "View deleted" });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not delete view",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  async function handleExport(format: "csv" | "xlsx", scope: "view" | "all") {
+    const params = new URLSearchParams();
+    params.set("format", format);
+    params.set("scope", scope);
+    params.set("page", String(pagination.pageIndex + 1));
+    params.set("pageSize", String(pagination.pageSize));
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (status !== ALL) params.set("status", status);
+    if (conditions.length > 0) params.set("filters", JSON.stringify(conditions));
+    if (sortBy) params.set("sortBy", sortBy);
+    if (sortDir) params.set("sortDir", sortDir);
+    params.set("columns", visibleKeys.join(","));
+    try {
+      await downloadFile(`/items/export?${params.toString()}`, `items-export.${format}`);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Export failed",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
 
   async function handleClassify() {
     try {
@@ -188,48 +252,62 @@ export default function ItemsPage() {
       toast({
         variant: "destructive",
         title: "Could not classify",
-        description:
-          error instanceof Error ? error.message : "Is the local AI (Ollama) running?",
+        description: error instanceof Error ? error.message : "Is the local AI (Ollama) running?",
       });
     }
   }
 
+  const headerActions = (
+    <>
+      <Button variant="outline" asChild>
+        <Link href="/items/categories">
+          <ListTree className="mr-2 h-4 w-4" /> Manage categories
+        </Link>
+      </Button>
+      {canUpdate && (
+        <Button onClick={handleClassify} disabled={classifyBatch.isPending}>
+          {classifyBatch.isPending ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="mr-2 h-4 w-4" />
+          )}
+          {classifyBatch.isPending ? "Classifying…" : "Classify with AI"}
+        </Button>
+      )}
+    </>
+  );
+
+  const columns = useMemo(
+    () => buildItemColumnDefs({ visibleKeys, order: columnOrder }),
+    [visibleKeys, columnOrder],
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Items</h1>
-          <p className="text-sm text-muted-foreground">
-            Every quoted item, its category, and its historical vendor prices. Click an item for full
-            history.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <Link href="/items/categories">
-              <ListTree className="mr-2 h-4 w-4" /> Manage categories
-            </Link>
-          </Button>
-          {canUpdate && (
-            <Button onClick={handleClassify} disabled={classifyBatch.isPending}>
-              {classifyBatch.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="mr-2 h-4 w-4" />
-              )}
-              {classifyBatch.isPending ? "Classifying…" : "Classify with AI"}
-            </Button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Items"
+        description="Every quoted item, its category, and its historical vendor prices. Click an item for full history."
+        actions={headerActions}
+      />
 
-      <div className="flex flex-wrap items-center gap-2">
+      <SavedViewTabs
+        views={savedViews.map((v) => ({ id: v.id, name: v.name }))}
+        activeId={activeViewId}
+        hasUnsavedChanges={hasUnsavedChanges}
+        onSelect={applySavedView}
+        onSaveNew={saveCurrentAsNewView}
+        onRename={renameView}
+        onUpdate={updateActiveView}
+        onDelete={deleteView}
+      />
+
+      <FilterBar>
         <Input
           placeholder="Search items..."
           value={search}
           onChange={(event) => {
             setSearch(event.target.value);
-            resetToFirstPage();
+            setPagination((prev) => ({ ...prev, pageIndex: 0 }));
           }}
           className="max-w-sm"
         />
@@ -237,7 +315,7 @@ export default function ItemsPage() {
           value={status}
           onValueChange={(value) => {
             setStatus(value);
-            resetToFirstPage();
+            setPagination((prev) => ({ ...prev, pageIndex: 0 }));
           }}
         >
           <SelectTrigger className="w-48">
@@ -251,6 +329,51 @@ export default function ItemsPage() {
             ))}
           </SelectContent>
         </Select>
+      </FilterBar>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <ActiveFilterChips
+          columns={filterableColumns}
+          conditions={conditions}
+          onChange={(next) => {
+            setConditions(next);
+            setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+          }}
+        />
+        <div className="flex items-center gap-2">
+          <ColumnPicker
+            columns={PICKER_COLUMNS}
+            visibleKeys={visibleKeys}
+            order={columnOrder}
+            defaultVisibleKeys={ITEM_DEFAULT_VISIBLE_KEYS}
+            defaultOrder={ITEM_DEFAULT_ORDER}
+            onChange={({ visibleKeys: nextVisible, order: nextOrder }) => {
+              setVisibleKeys(nextVisible);
+              setColumnOrder(nextOrder);
+            }}
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" size="sm">
+                <Download className="mr-2 h-4 w-4" /> Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => handleExport("csv", "view")}>
+                Current view (CSV)
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => handleExport("xlsx", "view")}>
+                Current view (XLSX)
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => handleExport("csv", "all")}>
+                All matching (CSV)
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => handleExport("xlsx", "all")}>
+                All matching (XLSX)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       <DataTable
@@ -261,13 +384,13 @@ export default function ItemsPage() {
         pagination={pagination}
         onPaginationChange={setPagination}
         sorting={sorting}
-        onSortingChange={handleSortingChange}
+        onSortingChange={setSorting}
         emptyState={
-          debouncedSearch || status !== ALL ? (
+          hasActiveFilters ? (
             <EmptyState
               icon={SearchX}
               title="No items match your filters"
-              description="Try adjusting your search or status filter."
+              description="Try adjusting your search or filters."
             />
           ) : (
             <EmptyState

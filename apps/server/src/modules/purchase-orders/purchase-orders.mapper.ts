@@ -8,6 +8,7 @@ import type {
 } from "@bmp/types";
 
 import { round2 } from "../../shared/utils/math.js";
+import type { ExportableTable } from "../../shared/utils/table-export.js";
 
 import type { PurchaseOrderDetail, PurchaseOrderListItem } from "./purchase-orders.repository.js";
 
@@ -95,3 +96,44 @@ export function toPurchaseOrderDto(entity: PurchaseOrderDetail): PurchaseOrderDt
     updatedAt: entity.updatedAt.toISOString(),
   };
 }
+
+// Keep this in exact sync with
+// apps/web/src/components/purchase-orders/purchase-order-column-registry.tsx's
+// PURCHASE_ORDER_COLUMNS keys — every column a user can show via ColumnPicker must be
+// exportable, or showing it and then exporting silently drops it from the file.
+const PURCHASE_ORDER_EXPORT_COLUMNS: { key: string; header: string }[] = [
+  { key: "poNumber", header: "PO Number" },
+  { key: "vendorName", header: "Vendor" },
+  { key: "status", header: "Status" },
+  { key: "totalAmount", header: "Total" },
+  { key: "expectedDeliveryDate", header: "Expected Delivery" },
+];
+
+function purchaseOrderExportRow(po: PurchaseOrderListItemDto): Record<string, string | number> {
+  return {
+    poNumber: po.poNumber,
+    vendorName: po.vendor.name,
+    status: po.status,
+    totalAmount: po.totalAmount,
+    expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.slice(0, 10) : "",
+  };
+}
+
+export function buildPurchaseOrderExportTable(
+  purchaseOrders: PurchaseOrderListItemDto[],
+  columnKeys: string[],
+): ExportableTable {
+  const columnsByKey = new Map(PURCHASE_ORDER_EXPORT_COLUMNS.map((column) => [column.key, column]));
+  const columns = columnKeys
+    .map((key) => columnsByKey.get(key))
+    .filter((column): column is { key: string; header: string } => Boolean(column));
+  const rows = purchaseOrders.map((po) => {
+    const fullRow = purchaseOrderExportRow(po);
+    const row: Record<string, string | number> = {};
+    for (const column of columns) row[column.key] = fullRow[column.key] ?? "";
+    return row;
+  });
+  return { title: "Purchase Orders", columns, rows };
+}
+
+export const PURCHASE_ORDER_EXPORT_COLUMN_KEYS = PURCHASE_ORDER_EXPORT_COLUMNS.map((column) => column.key);

@@ -1,4 +1,4 @@
-import { ITEM_PRICE_SORT_FIELDS, RFQ_STATUSES } from "@bmp/types";
+import { FILTER_OPERATORS, ITEM_PRICE_SORT_FIELDS, RFQ_FILTER_FIELDS, RFQ_SORT_FIELDS, RFQ_STATUSES } from "@bmp/types";
 import { z } from "zod";
 
 const createRfqItemSchema = z.object({
@@ -27,13 +27,41 @@ export const updateRfqSchema = z.object({
 });
 export type UpdateRfqBody = z.infer<typeof updateRfqSchema>;
 
+const filterConditionSchema = z.object({
+  columnKey: z.enum(RFQ_FILTER_FIELDS),
+  operator: z.enum(FILTER_OPERATORS),
+  value: z.union([z.string(), z.number(), z.array(z.union([z.string(), z.number()]))]).optional(),
+});
+
+const filtersQueryParam = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}, z.array(filterConditionSchema).optional());
+
 export const listRfqsQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().optional(),
   status: z.enum(RFQ_STATUSES).optional(),
   tenderId: z.string().uuid().optional(),
+  filters: filtersQueryParam,
+  sortBy: z.enum(RFQ_SORT_FIELDS).optional(),
+  sortDir: z.enum(["asc", "desc"]).optional(),
 });
 export type ListRfqsQueryParsed = z.infer<typeof listRfqsQuerySchema>;
+
+export const exportRfqsQuerySchema = listRfqsQuerySchema.extend({
+  format: z.enum(["csv", "xlsx"]),
+  scope: z.enum(["view", "all"]),
+  columns: z.preprocess(
+    (value) => (typeof value === "string" ? value.split(",") : value),
+    z.array(z.string()).optional(),
+  ),
+});
+export type ExportRfqsQueryParsed = z.infer<typeof exportRfqsQuerySchema>;
 
 export const listItemPricesQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional(),

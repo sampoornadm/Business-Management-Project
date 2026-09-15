@@ -9,6 +9,7 @@ import type { RfqController } from "./rfq.controller.js";
 import {
   addRfqVendorSchema,
   createRfqSchema,
+  exportRfqsQuerySchema,
   importQuotesSchema,
   inviteVendorPreviewSchema,
   inviteVendorSchema,
@@ -92,6 +93,35 @@ export function createRfqRouter(controller: RfqController): Router {
     requirePermission("rfq:read"),
     validate(listItemPricesQuerySchema, "query"),
     controller.itemPrices,
+  );
+
+  /**
+   * @openapi
+   * /rfqs/export:
+   *   get:
+   *     tags: [RFQ]
+   *     summary: Export RFQs matching the current filters as CSV or XLSX
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: query
+   *         name: format
+   *         required: true
+   *         schema: { type: string, enum: [csv, xlsx] }
+   *       - in: query
+   *         name: scope
+   *         required: true
+   *         schema: { type: string, enum: [view, all] }
+   *     responses:
+   *       200: { description: File download }
+   */
+  // Must be registered before GET /:id — Express would otherwise match "export" as the :id
+  // param (see tenders.routes.ts's identical ordering gotcha).
+  router.get(
+    "/export",
+    authenticateMiddleware,
+    requirePermission("rfq:read"),
+    validate(exportRfqsQuerySchema, "query"),
+    controller.exportRfqs,
   );
 
   /**

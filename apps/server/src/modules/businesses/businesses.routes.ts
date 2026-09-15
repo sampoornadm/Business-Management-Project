@@ -9,6 +9,7 @@ import {
   addMemberSchema,
   createBusinessSchema,
   createContactSchema,
+  exportBusinessesQuerySchema,
   listBusinessesQuerySchema,
   updateBusinessSchema,
   updateContactSchema,
@@ -31,6 +32,16 @@ export function createBusinessesRouter(controller: BusinessesController): Router
     requirePermission("businesses:create"),
     validate(createBusinessSchema),
     controller.create,
+  );
+
+  // Registered before "/:id" — Express would otherwise match "export" as the :id param (same
+  // ordering gotcha as tenders.routes.ts).
+  router.get(
+    "/export",
+    authenticateMiddleware,
+    requirePermission("businesses:read"),
+    validate(exportBusinessesQuerySchema, "query"),
+    controller.exportBusinesses,
   );
 
   router.get("/:id", authenticateMiddleware, requirePermission("businesses:read"), controller.getById);

@@ -1,3 +1,4 @@
+import type { FilterCondition } from "./filtering.js";
 import type { ItemPriceHistoryDto } from "./rfq.js";
 
 // A resolved item's current classification. categoryId set + confirmed:false is an AI guess
@@ -36,6 +37,7 @@ export interface ItemDetailDto extends ItemClassificationDto {
 export const ITEM_SORT_FIELDS = [
   "canonicalName",
   "categoryPath",
+  "unit",
   "quoteCount",
   "minRate",
   "maxRate",
@@ -44,12 +46,19 @@ export const ITEM_SORT_FIELDS = [
 ] as const;
 export type ItemSortField = (typeof ITEM_SORT_FIELDS)[number];
 
+// Only columns with a real, directly-filterable Prisma field on Item. quoteCount/minRate/
+// maxRate/avgRate/lastQuotedAt are aggregates computed in-memory from RfqQuote rows (see
+// items.service.ts#listItems) and aren't pushed down as filter chips — they stay sortable only.
+export const ITEM_FILTER_FIELDS = ["canonicalName", "unit", "categoryPath"] as const;
+export type ItemFilterField = (typeof ITEM_FILTER_FIELDS)[number];
+
 export interface ListItemsQuery {
   page?: number;
   pageSize?: number;
   search?: string;
   // "classified" | "unclassified" | "unconfirmed" | "needs_review" — filter by classification state.
   status?: "classified" | "unclassified" | "unconfirmed" | "needs_review";
+  filters?: FilterCondition[];
   sortBy?: ItemSortField;
   sortDir?: "asc" | "desc";
 }

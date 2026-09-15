@@ -2,11 +2,14 @@ import { BadRequestError } from "../../core/errors/HttpErrors.js";
 import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 import { resolvePagination } from "../../shared/utils/pagination.js";
+import { exportTableToCsv, exportTableToXlsx } from "../../shared/utils/table-export.js";
 
+import { buildUserExportTable, USER_EXPORT_COLUMN_KEYS } from "./users.mapper.js";
 import type { UsersService } from "./users.service.js";
 import type {
   AssignRoleBody,
   CreateUserBody,
+  ExportUsersQueryParsed,
   ListUsersQuery,
   UpdateOwnProfileBody,
   UpdateThemeColorBody,
@@ -24,8 +27,46 @@ export class UsersController {
       search: query.search,
       roleId: query.roleId,
       isActive: query.isActive,
+      filters: query.filters,
+      sortBy: query.sortBy,
+      sortDir: query.sortDir,
     });
     sendSuccess(res, result, "Users retrieved");
+  });
+
+  exportUsers = asyncHandler(async (req, res) => {
+    const query = req.query as unknown as ExportUsersQueryParsed;
+    const pagination = resolvePagination(query);
+    const users = await this.usersService.exportUsers(
+      {
+        businessId: req.user!.businessId,
+        search: query.search,
+        roleId: query.roleId,
+        isActive: query.isActive,
+        filters: query.filters,
+        sortBy: query.sortBy,
+        sortDir: query.sortDir,
+      },
+      query.scope,
+      pagination,
+    );
+
+    const columnKeys = query.columns ?? USER_EXPORT_COLUMN_KEYS;
+    const table = buildUserExportTable(users, columnKeys);
+    const date = new Date().toISOString().slice(0, 10);
+
+    if (query.format === "xlsx") {
+      const buffer = await exportTableToXlsx(table);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="users-export-${date}.xlsx"`);
+      res.send(buffer);
+      return;
+    }
+
+    const buffer = exportTableToCsv(table);
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="users-export-${date}.csv"`);
+    res.send(buffer);
   });
 
   getById = asyncHandler(async (req, res) => {

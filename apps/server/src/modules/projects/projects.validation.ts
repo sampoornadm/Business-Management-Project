@@ -1,4 +1,12 @@
-import { BILL_STATUSES, LABOR_CATEGORIES, MILESTONE_STATUSES, PROJECT_STATUSES } from "@bmp/types";
+import {
+  BILL_STATUSES,
+  FILTER_OPERATORS,
+  LABOR_CATEGORIES,
+  MILESTONE_STATUSES,
+  PROJECT_FILTER_FIELDS,
+  PROJECT_SORT_FIELDS,
+  PROJECT_STATUSES,
+} from "@bmp/types";
 import { z } from "zod";
 
 const dateSchema = z.string().datetime().or(z.string().date());
@@ -26,12 +34,40 @@ export const updateProjectSchema = z.object({
 });
 export type UpdateProjectBody = z.infer<typeof updateProjectSchema>;
 
+const filterConditionSchema = z.object({
+  columnKey: z.enum(PROJECT_FILTER_FIELDS),
+  operator: z.enum(FILTER_OPERATORS),
+  value: z.union([z.string(), z.number(), z.array(z.union([z.string(), z.number()]))]).optional(),
+});
+
+const filtersQueryParam = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}, z.array(filterConditionSchema).optional());
+
 export const listProjectsQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().optional(),
   status: z.enum(PROJECT_STATUSES).optional(),
+  filters: filtersQueryParam,
+  sortBy: z.enum(PROJECT_SORT_FIELDS).optional(),
+  sortDir: z.enum(["asc", "desc"]).optional(),
 });
 export type ListProjectsQueryParsed = z.infer<typeof listProjectsQuerySchema>;
+
+export const exportProjectsQuerySchema = listProjectsQuerySchema.extend({
+  format: z.enum(["csv", "xlsx"]),
+  scope: z.enum(["view", "all"]),
+  columns: z.preprocess(
+    (value) => (typeof value === "string" ? value.split(",") : value),
+    z.array(z.string()).optional(),
+  ),
+});
+export type ExportProjectsQueryParsed = z.infer<typeof exportProjectsQuerySchema>;
 
 export const createMilestoneSchema = z.object({
   title: z.string().min(1).max(200),

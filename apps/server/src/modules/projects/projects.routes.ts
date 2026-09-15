@@ -11,6 +11,7 @@ import {
   createMaterialUsageSchema,
   createMilestoneSchema,
   createProjectFromTenderSchema,
+  exportProjectsQuerySchema,
   listProjectsQuerySchema,
   updateBillStatusSchema,
   updateMilestoneSchema,
@@ -26,6 +27,34 @@ export function createProjectsRouter(controller: ProjectsController): Router {
     requirePermission("projects:read"),
     validate(listProjectsQuerySchema, "query"),
     controller.list,
+  );
+
+  /**
+   * @openapi
+   * /projects/export:
+   *   get:
+   *     tags: [Projects]
+   *     summary: Export projects matching the current filters as CSV or XLSX
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: query
+   *         name: format
+   *         required: true
+   *         schema: { type: string, enum: [csv, xlsx] }
+   *       - in: query
+   *         name: scope
+   *         required: true
+   *         schema: { type: string, enum: [view, all] }
+   *     responses:
+   *       200: { description: File download }
+   */
+  // Registered before GET /:id — Express would otherwise match "export" as the :id param.
+  router.get(
+    "/export",
+    authenticateMiddleware,
+    requirePermission("projects:read"),
+    validate(exportProjectsQuerySchema, "query"),
+    controller.exportProjects,
   );
 
   /**

@@ -1,7 +1,11 @@
 import type { Prisma, PrismaClient } from "@bmp/database";
+import type { FilterCondition, UserSortField } from "@bmp/types";
 
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
+import { buildPrismaFilterWhere } from "../../shared/utils/filtering.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
+
+import { USER_FILTER_COLUMNS, USER_SORT_COLUMNS } from "./users.filter-columns.js";
 
 function userWithRoleArgs(businessId: string) {
   return {
@@ -38,6 +42,9 @@ export interface UserFilters {
   search?: string;
   roleId?: string;
   isActive?: boolean;
+  filters?: FilterCondition[];
+  sortBy?: UserSortField;
+  sortDir?: "asc" | "desc";
 }
 
 export interface IUsersRepository {
@@ -73,11 +80,29 @@ export class UsersRepository implements IUsersRepository {
     pagination: PaginationParams,
     filters: UserFilters,
   ): Promise<{ items: UserWithRole[]; totalItems: number }> {
-    const where: Prisma.UserWhereInput = {
+    // "role" is pulled out and merged into the SAME userBusinesses.some(...) block as
+    // businessId below, rather than AND'd in as an independent chip clause. Role is a global
+    // table (packages/database/prisma/schema.prisma's Role.name is @unique, not scoped per
+    // business), so a user with different roles in different businesses has multiple
+    // UserBusiness rows sharing the relation — two separate `some` filters (one for businessId,
+    // one for roleId) would each only need SOME row to match, which could be two DIFFERENT rows,
+    // incorrectly matching a user who doesn't actually hold that role in this business.
+    // buildPrismaFilterWhere with a single-segment prismaPath here just builds the
+    // `{ roleId: {...} }` fragment; it's spread into the shared `some` object, never AND'd.
+    const roleCondition = (filters.filters ?? []).find((f) => f.columnKey === "role");
+    const otherFilters = (filters.filters ?? []).filter((f) => f.columnKey !== "role");
+    const roleWhereFragment = roleCondition
+      ? (buildPrismaFilterWhere([roleCondition], {
+          role: { type: "enum", prismaPath: ["roleId"] },
+        }) as Pick<Prisma.UserBusinessWhereInput, "roleId">)
+      : {};
+
+    const baseWhere: Prisma.UserWhereInput = {
       userBusinesses: {
         some: {
           businessId: filters.businessId,
           ...(filters.roleId ? { roleId: filters.roleId } : {}),
+          ...roleWhereFragment,
         },
       },
       isActive: filters.isActive,
@@ -92,11 +117,19 @@ export class UsersRepository implements IUsersRepository {
         : {}),
     };
 
+    const chipWhere = buildPrismaFilterWhere(otherFilters, USER_FILTER_COLUMNS) as Prisma.UserWhereInput;
+    const where: Prisma.UserWhereInput =
+      Object.keys(chipWhere).length > 0 ? { AND: [baseWhere, chipWhere] } : baseWhere;
+
+    const orderBy = filters.sortBy
+      ? USER_SORT_COLUMNS[filters.sortBy](filters.sortDir ?? "asc")
+      : ({ createdAt: "desc" } as const);
+
     const [items, totalItems] = await Promise.all([
       this.prisma.user.findMany({
         where,
         ...userWithRoleArgs(filters.businessId),
-        orderBy: { createdAt: "desc" },
+        orderBy,
         ...toSkipTake(pagination),
       }),
       this.prisma.user.count({ where }),
