@@ -1,7 +1,16 @@
 import type { ContactDto } from "./contact.js";
+import type { FilterCondition } from "./filtering.js";
 
 export const ORGANIZATION_TYPES = ["GOVERNMENT", "PRIVATE"] as const;
 export type OrganizationType = (typeof ORGANIZATION_TYPES)[number];
+
+export const ORGANIZATION_FILTER_FIELDS = ["name", "type", "city", "state"] as const;
+export type OrganizationFilterField = (typeof ORGANIZATION_FILTER_FIELDS)[number];
+
+// `tenderCount` is sortable (see organizations.filter-columns.ts) but not filterable — Prisma has
+// no `where` filter for a relation's `_count`, only `orderBy`.
+export const ORGANIZATION_SORT_FIELDS = ["name", "type", "city", "state", "tenderCount"] as const;
+export type OrganizationSortField = (typeof ORGANIZATION_SORT_FIELDS)[number];
 
 export interface OrganizationListItemDto {
   id: string;
@@ -42,4 +51,7 @@ export interface ListOrganizationsQuery {
   pageSize?: number;
   search?: string;
   type?: OrganizationType;
+  filters?: FilterCondition[];
+  sortBy?: OrganizationSortField;
+  sortDir?: "asc" | "desc";
 }

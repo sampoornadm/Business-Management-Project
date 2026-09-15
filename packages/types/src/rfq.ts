@@ -1,5 +1,22 @@
+import type { FilterCondition } from "./filtering.js";
+
 export const RFQ_STATUSES = ["DRAFT", "SENT", "CLOSED", "CANCELLED"] as const;
 export type RfqStatus = (typeof RFQ_STATUSES)[number];
+
+export const RFQ_FILTER_FIELDS = ["title", "status", "dueDate"] as const;
+export type RfqFilterField = (typeof RFQ_FILTER_FIELDS)[number];
+
+// itemCount/vendorCount are sortable (Prisma can orderBy a relation's _count) but not
+// filterable — see rfq.filter-columns.ts's comment for why.
+export const RFQ_SORT_FIELDS = [
+  "title",
+  "status",
+  "dueDate",
+  "itemCount",
+  "vendorCount",
+  "createdAt",
+] as const;
+export type RfqSortField = (typeof RFQ_SORT_FIELDS)[number];
 
 export const RFQ_VENDOR_STATUSES = ["INVITED", "RESPONDED", "DECLINED"] as const;
 export type RfqVendorStatus = (typeof RFQ_VENDOR_STATUSES)[number];
@@ -184,6 +201,9 @@ export interface ListRfqsQuery {
   pageSize?: number;
   status?: RfqStatus;
   tenderId?: string;
+  filters?: FilterCondition[];
+  sortBy?: RfqSortField;
+  sortDir?: "asc" | "desc";
 }
 
 export interface SuggestRfqVendorsInput {

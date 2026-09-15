@@ -1,4 +1,5 @@
 import type { ContactDto } from "./contact.js";
+import type { FilterCondition } from "./filtering.js";
 
 export const VENDOR_CATEGORIES = [
   "MATERIAL_SUPPLIER",
@@ -7,6 +8,16 @@ export const VENDOR_CATEGORIES = [
   "EQUIPMENT_RENTAL",
 ] as const;
 export type VendorCategory = (typeof VENDOR_CATEGORIES)[number];
+
+export const VENDOR_FILTER_FIELDS = ["name", "category", "city", "state"] as const;
+export type VendorFilterField = (typeof VENDOR_FILTER_FIELDS)[number];
+
+// `averageRating` is display-only (no sort/filter): it's a derived average over VendorRating
+// rows, and Prisma's relation-aggregate `orderBy` only supports `_count`, not `_avg`, for
+// to-many relations — there's no clean way to sort by it without a raw query or a denormalized
+// column, out of scope for wiring up list-page filters/sort.
+export const VENDOR_SORT_FIELDS = ["name", "category", "city", "state", "isActive"] as const;
+export type VendorSortField = (typeof VENDOR_SORT_FIELDS)[number];
 
 export interface VendorListItemDto {
   id: string;
@@ -78,6 +89,9 @@ export interface ListVendorsQuery {
   search?: string;
   category?: VendorCategory;
   isActive?: boolean;
+  filters?: FilterCondition[];
+  sortBy?: VendorSortField;
+  sortDir?: "asc" | "desc";
 }
 
 export interface VendorRatingDto {

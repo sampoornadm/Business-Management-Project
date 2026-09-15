@@ -17,8 +17,11 @@ export function useBills(query: ListBillsQuery) {
   return useQuery({
     queryKey: ["bills", query],
     queryFn: async () => {
+      // See use-tenders.ts's useTenders for why `filters` must be pre-stringified rather than
+      // left to axios's default bracket-notation array serialization.
+      const { filters, ...rest } = query;
       const response = await apiClient.get<ApiResponse<PaginatedResult<BillListItemDto>>>("/bills", {
-        params: query,
+        params: { ...rest, filters: filters && filters.length > 0 ? JSON.stringify(filters) : undefined },
       });
       return unwrap(response.data);
     },

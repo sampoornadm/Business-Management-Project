@@ -1,5 +1,26 @@
+import type { FilterCondition } from "./filtering.js";
+
 export const MSME_CATEGORIES = ["MICRO", "SMALL", "MEDIUM"] as const;
 export type MsmeCategory = (typeof MSME_CATEGORIES)[number];
+
+// isActive is intentionally excluded: it's a boolean column, and packages/ui's
+// AddFilterPopover has no dedicated value-input for FilterColumnType "boolean" (it falls
+// through to a raw text Input, requiring the user to type true/false — not worth wiring up
+// for one column when the task is scoped to not touching packages/ui). Sorting isn't affected
+// by that gap (no value input needed), so isActive stays sortable, just not filterable.
+export const BUSINESS_FILTER_FIELDS = [
+  "name",
+  "code",
+  "city",
+  "state",
+  "gstNumber",
+  "panNumber",
+  "msmeCategory",
+] as const;
+export type BusinessFilterField = (typeof BUSINESS_FILTER_FIELDS)[number];
+
+export const BUSINESS_SORT_FIELDS = ["name", "code", "isActive", "tenderCount", "createdAt"] as const;
+export type BusinessSortField = (typeof BUSINESS_SORT_FIELDS)[number];
 
 export interface BusinessContactDto {
   id: string;
@@ -63,4 +84,7 @@ export interface ListBusinessesQuery {
   pageSize?: number;
   search?: string;
   isActive?: boolean;
+  filters?: FilterCondition[];
+  sortBy?: BusinessSortField;
+  sortDir?: "asc" | "desc";
 }

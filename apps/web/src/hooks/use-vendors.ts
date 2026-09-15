@@ -23,9 +23,15 @@ export function useVendors(query: ListVendorsQuery) {
   return useQuery({
     queryKey: ["vendors", query],
     queryFn: async () => {
+      // axios's default params serializer turns a nested array of objects into
+      // filters[0][columnKey]=...&filters[0][operator]=... bracket notation — the backend's
+      // listVendorsQuerySchema expects a single JSON-encoded string instead (it JSON.parses
+      // `filters` before validating), so it has to be pre-stringified here rather than left to
+      // axios's default serialization.
+      const { filters, ...rest } = query;
       const response = await apiClient.get<ApiResponse<PaginatedResult<VendorListItemDto>>>(
         "/vendors",
-        { params: query },
+        { params: { ...rest, filters: filters && filters.length > 0 ? JSON.stringify(filters) : undefined } },
       );
       return unwrap(response.data);
     },

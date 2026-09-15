@@ -1,7 +1,9 @@
 import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 import { resolvePagination } from "../../shared/utils/pagination.js";
+import { exportTableToCsv, exportTableToXlsx } from "../../shared/utils/table-export.js";
 
+import { buildProjectExportTable, PROJECT_EXPORT_COLUMN_KEYS } from "./projects.mapper.js";
 import type { ProjectsService } from "./projects.service.js";
 import type {
   CreateBillBody,
@@ -9,6 +11,7 @@ import type {
   CreateMaterialUsageBody,
   CreateMilestoneBody,
   CreateProjectFromTenderBody,
+  ExportProjectsQueryParsed,
   ListProjectsQueryParsed,
   UpdateBillStatusBody,
   UpdateMilestoneBody,
@@ -22,10 +25,37 @@ export class ProjectsController {
     const query = req.query as unknown as ListProjectsQueryParsed;
     const pagination = resolvePagination(query);
     const result = await this.projectsService.listProjects(pagination, {
-      status: query.status,
+      ...query,
       businessId: req.user!.businessId,
     });
     sendSuccess(res, result, "Projects retrieved");
+  });
+
+  exportProjects = asyncHandler(async (req, res) => {
+    const query = req.query as unknown as ExportProjectsQueryParsed;
+    const pagination = resolvePagination(query);
+    const items = await this.projectsService.exportProjects(
+      { ...query, businessId: req.user!.businessId },
+      query.scope,
+      pagination,
+    );
+
+    const columnKeys = query.columns ?? PROJECT_EXPORT_COLUMN_KEYS;
+    const table = buildProjectExportTable(items, columnKeys);
+    const date = new Date().toISOString().slice(0, 10);
+
+    if (query.format === "xlsx") {
+      const buffer = await exportTableToXlsx(table);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="projects-export-${date}.xlsx"`);
+      res.send(buffer);
+      return;
+    }
+
+    const buffer = exportTableToCsv(table);
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="projects-export-${date}.csv"`);
+    res.send(buffer);
   });
 
   getById = asyncHandler(async (req, res) => {

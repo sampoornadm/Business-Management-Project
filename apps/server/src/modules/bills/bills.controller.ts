@@ -1,10 +1,12 @@
 import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 import { resolvePagination } from "../../shared/utils/pagination.js";
+import { exportTableToCsv, exportTableToXlsx } from "../../shared/utils/table-export.js";
 import { saveGeneratedTenderDocument } from "../tenders/local-docs/generated-documents.js";
 
+import { BILL_EXPORT_COLUMN_KEYS, buildBillExportTable } from "./bills.mapper.js";
 import type { BillsService } from "./bills.service.js";
-import type { CreateBillBody, ListBillsQueryParsed } from "./bills.validation.js";
+import type { CreateBillBody, ExportBillsQueryParsed, ListBillsQueryParsed } from "./bills.validation.js";
 
 export class BillsController {
   constructor(private readonly billsService: BillsService) {}
@@ -12,8 +14,38 @@ export class BillsController {
   list = asyncHandler(async (req, res) => {
     const query = req.query as unknown as ListBillsQueryParsed;
     const pagination = resolvePagination(query);
-    const result = await this.billsService.listBills(pagination, req.user!.businessId, query.tenderId);
+    const result = await this.billsService.listBills(pagination, {
+      ...query,
+      businessId: req.user!.businessId,
+    });
     sendSuccess(res, result, "Bills retrieved");
+  });
+
+  exportBills = asyncHandler(async (req, res) => {
+    const query = req.query as unknown as ExportBillsQueryParsed;
+    const pagination = resolvePagination(query);
+    const items = await this.billsService.exportBills(
+      { ...query, businessId: req.user!.businessId },
+      query.scope,
+      pagination,
+    );
+
+    const columnKeys = query.columns ?? BILL_EXPORT_COLUMN_KEYS;
+    const table = buildBillExportTable(items, columnKeys);
+    const date = new Date().toISOString().slice(0, 10);
+
+    if (query.format === "xlsx") {
+      const buffer = await exportTableToXlsx(table);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="bills-export-${date}.xlsx"`);
+      res.send(buffer);
+      return;
+    }
+
+    const buffer = exportTableToCsv(table);
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="bills-export-${date}.csv"`);
+    res.send(buffer);
   });
 
   getById = asyncHandler(async (req, res) => {

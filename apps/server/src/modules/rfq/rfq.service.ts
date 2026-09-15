@@ -14,6 +14,7 @@ import type {
   SuggestedVendorDto,
 } from "@bmp/types";
 
+import { EXPORT_MAX_ROWS } from "../../config/constants.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
 import type { ScopedRequestContext } from "../../core/interfaces/request-context.js";
@@ -68,6 +69,21 @@ export class RfqService {
   ): Promise<PaginatedResult<RfqListItemDto>> {
     const { items, totalItems } = await this.rfqRepository.findMany(pagination, filters);
     return buildPaginatedResult(items.map(toRfqListItemDto), totalItems, pagination);
+  }
+
+  async exportRfqs(
+    filters: RfqFilters,
+    scope: "view" | "all",
+    viewPagination: PaginationParams,
+  ): Promise<RfqListItemDto[]> {
+    const pagination = scope === "view" ? viewPagination : { page: 1, pageSize: EXPORT_MAX_ROWS };
+    const { items, totalItems } = await this.rfqRepository.findMany(pagination, filters);
+    if (scope === "all" && totalItems > EXPORT_MAX_ROWS) {
+      throw new BadRequestError(
+        `Narrow your filters — more than ${EXPORT_MAX_ROWS} rows match your current filters.`,
+      );
+    }
+    return items.map(toRfqListItemDto);
   }
 
   async getById(id: string, businessId: string): Promise<RfqDto> {

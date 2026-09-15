@@ -7,6 +7,7 @@ import { validate } from "../../shared/middleware/validate.middleware.js";
 import type { ItemsController } from "./items.controller.js";
 import {
   classifyBatchSchema,
+  exportItemsQuerySchema,
   listItemsQuerySchema,
   renameItemSchema,
   updateItemCategorySchema,
@@ -50,6 +51,34 @@ export function createItemsRouter(controller: ItemsController): Router {
     requirePermission("rfq:update"),
     validate(classifyBatchSchema, "query"),
     controller.classifyBatch,
+  );
+
+  /**
+   * @openapi
+   * /items/export:
+   *   get:
+   *     tags: [Items]
+   *     summary: Export items matching the current filters as CSV or XLSX
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: query
+   *         name: format
+   *         required: true
+   *         schema: { type: string, enum: [csv, xlsx] }
+   *       - in: query
+   *         name: scope
+   *         required: true
+   *         schema: { type: string, enum: [view, all] }
+   *     responses:
+   *       200: { description: File download }
+   */
+  // Registered before /:id — Express would otherwise match "export" as the :id param.
+  router.get(
+    "/export",
+    authenticateMiddleware,
+    requirePermission("rfq:read"),
+    validate(exportItemsQuerySchema, "query"),
+    controller.exportItems,
   );
 
   /**

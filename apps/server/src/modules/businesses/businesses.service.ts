@@ -1,9 +1,10 @@
+import type { BusinessDto } from "@bmp/types";
+
+import { EXPORT_MAX_ROWS } from "../../config/constants.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
 import type { RequestContext } from "../../core/interfaces/request-context.js";
 import type { AuditService } from "../audit/audit.service.js";
-
-import type { BusinessDto } from "@bmp/types";
 
 import { toBusinessDto } from "./businesses.mapper.js";
 import type {
@@ -28,6 +29,21 @@ export class BusinessesService {
   ): Promise<PaginatedResult<BusinessDto>> {
     const { items, totalItems } = await this.businessesRepository.findMany(pagination, filters);
     return buildPaginatedResult(items.map(toBusinessDto), totalItems, pagination);
+  }
+
+  async exportBusinesses(
+    filters: BusinessFilters,
+    scope: "view" | "all",
+    viewPagination: PaginationParams,
+  ): Promise<BusinessDto[]> {
+    const pagination = scope === "view" ? viewPagination : { page: 1, pageSize: EXPORT_MAX_ROWS };
+    const { items, totalItems } = await this.businessesRepository.findMany(pagination, filters);
+    if (scope === "all" && totalItems > EXPORT_MAX_ROWS) {
+      throw new BadRequestError(
+        `Narrow your filters — more than ${EXPORT_MAX_ROWS} rows match your current filters.`,
+      );
+    }
+    return items.map(toBusinessDto);
   }
 
   async getById(id: string): Promise<BusinessDto> {

@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
 
 import type { Prisma, PrismaClient } from "@bmp/database";
+import type { FilterCondition, OrganizationSortField } from "@bmp/types";
 
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
 import { listAllBusinessIds } from "../../infra/prisma/business-ids.js";
+import { buildPrismaFilterWhere } from "../../shared/utils/filtering.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
+
+import { ORGANIZATION_FILTER_COLUMNS, ORGANIZATION_SORT_COLUMNS } from "./organizations.filter-columns.js";
 
 const organizationArgs = {
   include: { _count: { select: { tenders: true } } },
@@ -30,6 +34,9 @@ export type UpdateOrganizationData = Partial<Omit<CreateOrganizationData, "creat
 export interface OrganizationFilters {
   search?: string;
   type?: "GOVERNMENT" | "PRIVATE";
+  filters?: FilterCondition[];
+  sortBy?: OrganizationSortField;
+  sortDir?: "asc" | "desc";
 }
 
 export interface IOrganizationsRepository {
@@ -55,16 +62,27 @@ export class OrganizationsRepository implements IOrganizationsRepository {
     pagination: PaginationParams,
     filters: OrganizationFilters,
   ): Promise<{ items: OrganizationEntity[]; totalItems: number }> {
-    const where: Prisma.OrganizationWhereInput = {
+    const baseWhere: Prisma.OrganizationWhereInput = {
       type: filters.type,
       ...(filters.search ? { name: { contains: filters.search, mode: "insensitive" } } : {}),
     };
+
+    const chipWhere = buildPrismaFilterWhere(
+      filters.filters ?? [],
+      ORGANIZATION_FILTER_COLUMNS,
+    ) as Prisma.OrganizationWhereInput;
+    const where: Prisma.OrganizationWhereInput =
+      Object.keys(chipWhere).length > 0 ? { AND: [baseWhere, chipWhere] } : baseWhere;
+
+    const orderBy = filters.sortBy
+      ? ORGANIZATION_SORT_COLUMNS[filters.sortBy](filters.sortDir ?? "asc")
+      : ({ name: "asc" } as const);
 
     const [items, totalItems] = await Promise.all([
       this.prisma.organization.findMany({
         where,
         ...organizationArgs,
-        orderBy: { name: "asc" },
+        orderBy,
         ...toSkipTake(pagination),
       }),
       this.prisma.organization.count({ where }),

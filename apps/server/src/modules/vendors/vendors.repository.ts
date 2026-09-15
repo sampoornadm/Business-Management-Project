@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
 
 import type { Prisma, PrismaClient, VendorCategory } from "@bmp/database";
+import type { FilterCondition, VendorSortField } from "@bmp/types";
 
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
 import { listAllBusinessIds } from "../../infra/prisma/business-ids.js";
+import { buildPrismaFilterWhere } from "../../shared/utils/filtering.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
+
+import { VENDOR_FILTER_COLUMNS, VENDOR_SORT_COLUMNS } from "./vendors.filter-columns.js";
 
 const vendorArgs = {
   include: {
@@ -43,6 +47,9 @@ export interface VendorFilters {
   search?: string;
   category?: VendorCategory;
   isActive?: boolean;
+  filters?: FilterCondition[];
+  sortBy?: VendorSortField;
+  sortDir?: "asc" | "desc";
 }
 
 export interface CreateItemTagData {
@@ -94,17 +101,28 @@ export class VendorsRepository implements IVendorsRepository {
     pagination: PaginationParams,
     filters: VendorFilters,
   ): Promise<{ items: VendorEntity[]; totalItems: number }> {
-    const where: Prisma.VendorWhereInput = {
+    const baseWhere: Prisma.VendorWhereInput = {
       category: filters.category,
       isActive: filters.isActive,
       ...(filters.search ? { name: { contains: filters.search, mode: "insensitive" } } : {}),
     };
 
+    const chipWhere = buildPrismaFilterWhere(
+      filters.filters ?? [],
+      VENDOR_FILTER_COLUMNS,
+    ) as Prisma.VendorWhereInput;
+    const where: Prisma.VendorWhereInput =
+      Object.keys(chipWhere).length > 0 ? { AND: [baseWhere, chipWhere] } : baseWhere;
+
+    const orderBy = filters.sortBy
+      ? VENDOR_SORT_COLUMNS[filters.sortBy](filters.sortDir ?? "asc")
+      : ({ name: "asc" } as const);
+
     const [items, totalItems] = await Promise.all([
       this.prisma.vendor.findMany({
         where,
         ...vendorArgs,
-        orderBy: { name: "asc" },
+        orderBy,
         ...toSkipTake(pagination),
       }),
       this.prisma.vendor.count({ where }),

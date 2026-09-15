@@ -8,7 +8,8 @@ import type {
   VendorPerformanceDto,
 } from "@bmp/types";
 
-import { ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
+import { EXPORT_MAX_ROWS } from "../../config/constants.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { ContactsService } from "../contacts/contacts.service.js";
@@ -40,6 +41,21 @@ export class VendorsService {
   ): Promise<PaginatedResult<VendorListItemDto>> {
     const { items, totalItems } = await this.vendorsRepository.findMany(pagination, filters);
     return buildPaginatedResult(items.map(toVendorListItemDto), totalItems, pagination);
+  }
+
+  async exportVendors(
+    filters: VendorFilters,
+    scope: "view" | "all",
+    viewPagination: PaginationParams,
+  ): Promise<VendorListItemDto[]> {
+    const pagination = scope === "view" ? viewPagination : { page: 1, pageSize: EXPORT_MAX_ROWS };
+    const { items, totalItems } = await this.vendorsRepository.findMany(pagination, filters);
+    if (scope === "all" && totalItems > EXPORT_MAX_ROWS) {
+      throw new BadRequestError(
+        `Narrow your filters — more than ${EXPORT_MAX_ROWS} rows match your current filters.`,
+      );
+    }
+    return items.map(toVendorListItemDto);
   }
 
   async getById(id: string): Promise<VendorDto> {

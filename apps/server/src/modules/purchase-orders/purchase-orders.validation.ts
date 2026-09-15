@@ -1,4 +1,9 @@
-import { PURCHASE_ORDER_STATUSES } from "@bmp/types";
+import {
+  FILTER_OPERATORS,
+  PURCHASE_ORDER_FILTER_FIELDS,
+  PURCHASE_ORDER_SORT_FIELDS,
+  PURCHASE_ORDER_STATUSES,
+} from "@bmp/types";
 import { z } from "zod";
 
 const createPurchaseOrderItemSchema = z.object({
@@ -49,11 +54,39 @@ export const upsertVendorRatingSchema = z.object({
 });
 export type UpsertVendorRatingBody = z.infer<typeof upsertVendorRatingSchema>;
 
+const filterConditionSchema = z.object({
+  columnKey: z.enum(PURCHASE_ORDER_FILTER_FIELDS),
+  operator: z.enum(FILTER_OPERATORS),
+  value: z.union([z.string(), z.number(), z.array(z.union([z.string(), z.number()]))]).optional(),
+});
+
+const filtersQueryParam = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}, z.array(filterConditionSchema).optional());
+
 export const listPurchaseOrdersQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().optional(),
   status: z.enum(PURCHASE_ORDER_STATUSES).optional(),
   vendorId: z.string().uuid().optional(),
   tenderId: z.string().uuid().optional(),
+  filters: filtersQueryParam,
+  sortBy: z.enum(PURCHASE_ORDER_SORT_FIELDS).optional(),
+  sortDir: z.enum(["asc", "desc"]).optional(),
 });
 export type ListPurchaseOrdersQueryParsed = z.infer<typeof listPurchaseOrdersQuerySchema>;
+
+export const exportPurchaseOrdersQuerySchema = listPurchaseOrdersQuerySchema.extend({
+  format: z.enum(["csv", "xlsx"]),
+  scope: z.enum(["view", "all"]),
+  columns: z.preprocess(
+    (value) => (typeof value === "string" ? value.split(",") : value),
+    z.array(z.string()).optional(),
+  ),
+});
+export type ExportPurchaseOrdersQueryParsed = z.infer<typeof exportPurchaseOrdersQuerySchema>;

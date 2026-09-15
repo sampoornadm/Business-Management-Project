@@ -7,6 +7,8 @@ import type {
   RfqVendorInviteDto,
 } from "@bmp/types";
 
+import type { ExportableTable } from "../../shared/utils/table-export.js";
+
 import type { ItemPriceRow, RfqDetail, RfqItemDetail, RfqListItem } from "./rfq.repository.js";
 
 function toQuoteDto(quote: RfqItemDetail["quotes"][number]): RfqQuoteDto {
@@ -105,3 +107,40 @@ export function toRfqDto(entity: RfqDetail): RfqDto {
     updatedAt: entity.updatedAt.toISOString(),
   };
 }
+
+// Keep this in exact sync with apps/web/src/components/rfqs/rfq-column-registry.tsx's
+// RFQ_COLUMNS keys — every column a user can show via ColumnPicker must be exportable, or
+// showing it and then exporting silently drops it from the file.
+const RFQ_EXPORT_COLUMNS: { key: string; header: string }[] = [
+  { key: "title", header: "Title" },
+  { key: "status", header: "Status" },
+  { key: "dueDate", header: "Due Date" },
+  { key: "itemCount", header: "Items" },
+  { key: "vendorCount", header: "Vendors Invited" },
+];
+
+function rfqExportRow(rfq: RfqListItemDto): Record<string, string | number> {
+  return {
+    title: rfq.title,
+    status: rfq.status,
+    dueDate: rfq.dueDate ? rfq.dueDate.slice(0, 10) : "",
+    itemCount: rfq.itemCount,
+    vendorCount: rfq.vendorCount,
+  };
+}
+
+export function buildRfqExportTable(rfqs: RfqListItemDto[], columnKeys: string[]): ExportableTable {
+  const columnsByKey = new Map(RFQ_EXPORT_COLUMNS.map((column) => [column.key, column]));
+  const columns = columnKeys
+    .map((key) => columnsByKey.get(key))
+    .filter((column): column is { key: string; header: string } => Boolean(column));
+  const rows = rfqs.map((rfq) => {
+    const fullRow = rfqExportRow(rfq);
+    const row: Record<string, string | number> = {};
+    for (const column of columns) row[column.key] = fullRow[column.key] ?? "";
+    return row;
+  });
+  return { title: "RFQs", columns, rows };
+}
+
+export const RFQ_EXPORT_COLUMN_KEYS = RFQ_EXPORT_COLUMNS.map((column) => column.key);

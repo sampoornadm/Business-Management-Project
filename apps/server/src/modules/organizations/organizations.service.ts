@@ -1,6 +1,7 @@
 import type { CreateContactInput, OrganizationDto, OrganizationListItemDto, PaginatedResult, UpdateContactInput } from "@bmp/types";
 
-import { ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
+import { EXPORT_MAX_ROWS } from "../../config/constants.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
 import type { RequestContext } from "../../core/interfaces/request-context.js";
 import type { AuditService } from "../audit/audit.service.js";
@@ -30,6 +31,21 @@ export class OrganizationsService {
   ): Promise<PaginatedResult<OrganizationListItemDto>> {
     const { items, totalItems } = await this.organizationsRepository.findMany(pagination, filters);
     return buildPaginatedResult(items.map(toOrganizationListItemDto), totalItems, pagination);
+  }
+
+  async exportOrganizations(
+    filters: OrganizationFilters,
+    scope: "view" | "all",
+    viewPagination: PaginationParams,
+  ): Promise<OrganizationListItemDto[]> {
+    const pagination = scope === "view" ? viewPagination : { page: 1, pageSize: EXPORT_MAX_ROWS };
+    const { items, totalItems } = await this.organizationsRepository.findMany(pagination, filters);
+    if (scope === "all" && totalItems > EXPORT_MAX_ROWS) {
+      throw new BadRequestError(
+        `Narrow your filters — more than ${EXPORT_MAX_ROWS} rows match your current filters.`,
+      );
+    }
+    return items.map(toOrganizationListItemDto);
   }
 
   async getById(id: string): Promise<OrganizationDto> {

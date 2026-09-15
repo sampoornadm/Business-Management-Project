@@ -1,12 +1,15 @@
 import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 import { resolvePagination } from "../../shared/utils/pagination.js";
+import { exportTableToCsv, exportTableToXlsx } from "../../shared/utils/table-export.js";
 
+import { buildPurchaseOrderExportTable, PURCHASE_ORDER_EXPORT_COLUMN_KEYS } from "./purchase-orders.mapper.js";
 import type { PurchaseOrdersService } from "./purchase-orders.service.js";
 import type {
   CreateGoodsReceiptBody,
   CreatePurchaseOrderBody,
   CreatePurchaseOrderFromRfqBody,
+  ExportPurchaseOrdersQueryParsed,
   ListPurchaseOrdersQueryParsed,
   UpdatePurchaseOrderStatusBody,
   UpsertVendorRatingBody,
@@ -19,12 +22,37 @@ export class PurchaseOrdersController {
     const query = req.query as unknown as ListPurchaseOrdersQueryParsed;
     const pagination = resolvePagination(query);
     const result = await this.purchaseOrdersService.listPurchaseOrders(pagination, {
+      ...query,
       businessId: req.user!.businessId,
-      status: query.status,
-      vendorId: query.vendorId,
-      tenderId: query.tenderId,
     });
     sendSuccess(res, result, "Purchase orders retrieved");
+  });
+
+  exportPurchaseOrders = asyncHandler(async (req, res) => {
+    const query = req.query as unknown as ExportPurchaseOrdersQueryParsed;
+    const pagination = resolvePagination(query);
+    const items = await this.purchaseOrdersService.exportPurchaseOrders(
+      { ...query, businessId: req.user!.businessId },
+      query.scope,
+      pagination,
+    );
+
+    const columnKeys = query.columns ?? PURCHASE_ORDER_EXPORT_COLUMN_KEYS;
+    const table = buildPurchaseOrderExportTable(items, columnKeys);
+    const date = new Date().toISOString().slice(0, 10);
+
+    if (query.format === "xlsx") {
+      const buffer = await exportTableToXlsx(table);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="purchase-orders-export-${date}.xlsx"`);
+      res.send(buffer);
+      return;
+    }
+
+    const buffer = exportTableToCsv(table);
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="purchase-orders-export-${date}.csv"`);
+    res.send(buffer);
   });
 
   getById = asyncHandler(async (req, res) => {

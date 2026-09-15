@@ -11,6 +11,7 @@ import {
   createContactSchema,
   createVendorItemTagSchema,
   createVendorSchema,
+  exportVendorsQuerySchema,
   listVendorsQuerySchema,
   updateContactSchema,
   updateVendorSchema,
@@ -71,6 +72,33 @@ export function createVendorsRouter(controller: VendorsController): Router {
     requirePermission("vendors:create"),
     validate(createVendorSchema),
     controller.create,
+  );
+
+  /**
+   * @openapi
+   * /vendors/export:
+   *   get:
+   *     tags: [Vendors]
+   *     summary: Export vendors matching the current filters as CSV or XLSX
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: query
+   *         name: format
+   *         required: true
+   *         schema: { type: string, enum: [csv, xlsx] }
+   *       - in: query
+   *         name: scope
+   *         required: true
+   *         schema: { type: string, enum: [view, all] }
+   *     responses:
+   *       200: { description: File download }
+   */
+  router.get(
+    "/export",
+    authenticateMiddleware,
+    requirePermission("vendors:read"),
+    validate(exportVendorsQuerySchema, "query"),
+    controller.exportVendors,
   );
 
   /**

@@ -1,3 +1,5 @@
+import type { FilterCondition } from "./filtering.js";
+
 export const PURCHASE_ORDER_STATUSES = [
   "DRAFT",
   "ISSUED",
@@ -6,6 +8,27 @@ export const PURCHASE_ORDER_STATUSES = [
   "CANCELLED",
 ] as const;
 export type PurchaseOrderStatus = (typeof PURCHASE_ORDER_STATUSES)[number];
+
+// totalAmount is deliberately absent here — it's a computed sum of PurchaseOrderItem.amount
+// (see purchase-orders.mapper.ts), not a stored column, so Prisma can't filter/sort on it
+// server-side (mirrors tenders' assigneeCount exclusion from TENDER_FILTER_FIELDS, though that
+// one at least stays sortable via a relation _count; a relation sum has no orderBy equivalent).
+export const PURCHASE_ORDER_FILTER_FIELDS = [
+  "poNumber",
+  "vendorName",
+  "status",
+  "expectedDeliveryDate",
+] as const;
+export type PurchaseOrderFilterField = (typeof PURCHASE_ORDER_FILTER_FIELDS)[number];
+
+export const PURCHASE_ORDER_SORT_FIELDS = [
+  "poNumber",
+  "vendorName",
+  "status",
+  "expectedDeliveryDate",
+  "createdAt",
+] as const;
+export type PurchaseOrderSortField = (typeof PURCHASE_ORDER_SORT_FIELDS)[number];
 
 export interface PurchaseOrderItemDto {
   id: string;
@@ -111,4 +134,7 @@ export interface ListPurchaseOrdersQuery {
   status?: PurchaseOrderStatus;
   vendorId?: string;
   tenderId?: string;
+  filters?: FilterCondition[];
+  sortBy?: PurchaseOrderSortField;
+  sortDir?: "asc" | "desc";
 }

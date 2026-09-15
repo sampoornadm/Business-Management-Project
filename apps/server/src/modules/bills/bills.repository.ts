@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
 
 import type { Prisma, PrismaClient } from "@bmp/database";
+import type { BillSortField, FilterCondition } from "@bmp/types";
 
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
+import { buildPrismaFilterWhere } from "../../shared/utils/filtering.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
+
+import { BILL_FILTER_COLUMNS, BILL_SORT_COLUMNS } from "./bills.filter-columns.js";
 
 const creatorSelect = { id: true, firstName: true, lastName: true } as const;
 
@@ -48,6 +52,9 @@ export interface CreateBillData {
 export interface BillFilters {
   businessId: string;
   tenderId?: string;
+  filters?: FilterCondition[];
+  sortBy?: BillSortField;
+  sortDir?: "asc" | "desc";
 }
 
 export interface IBillsRepository {
@@ -101,12 +108,24 @@ export class BillsRepository implements IBillsRepository {
     pagination: PaginationParams,
     filters: BillFilters,
   ): Promise<{ items: BillListItem[]; totalItems: number }> {
-    const where: Prisma.BillWhereInput = { businessId: filters.businessId, tenderId: filters.tenderId };
+    const baseWhere: Prisma.BillWhereInput = { businessId: filters.businessId, tenderId: filters.tenderId };
+
+    const chipWhere = buildPrismaFilterWhere(
+      filters.filters ?? [],
+      BILL_FILTER_COLUMNS,
+    ) as Prisma.BillWhereInput;
+    const where: Prisma.BillWhereInput =
+      Object.keys(chipWhere).length > 0 ? { AND: [baseWhere, chipWhere] } : baseWhere;
+
+    const orderBy = filters.sortBy
+      ? BILL_SORT_COLUMNS[filters.sortBy](filters.sortDir ?? "asc")
+      : ({ createdAt: "desc" } as const);
+
     const [items, totalItems] = await Promise.all([
       this.prisma.bill.findMany({
         where,
         ...billListArgs,
-        orderBy: { createdAt: "desc" },
+        orderBy,
         ...toSkipTake(pagination),
       }),
       this.prisma.bill.count({ where }),

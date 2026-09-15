@@ -1,3 +1,4 @@
+import { BUSINESS_FILTER_FIELDS, BUSINESS_SORT_FIELDS, FILTER_OPERATORS } from "@bmp/types";
 import { z } from "zod";
 
 export const createBusinessSchema = z.object({
@@ -21,13 +22,41 @@ export const updateBusinessSchema = createBusinessSchema.partial().extend({
 });
 export type UpdateBusinessBody = z.infer<typeof updateBusinessSchema>;
 
+const filterConditionSchema = z.object({
+  columnKey: z.enum(BUSINESS_FILTER_FIELDS),
+  operator: z.enum(FILTER_OPERATORS),
+  value: z.union([z.string(), z.number(), z.array(z.union([z.string(), z.number()]))]).optional(),
+});
+
+const filtersQueryParam = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}, z.array(filterConditionSchema).optional());
+
 export const listBusinessesQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().optional(),
   search: z.string().optional(),
   isActive: z.coerce.boolean().optional(),
+  filters: filtersQueryParam,
+  sortBy: z.enum(BUSINESS_SORT_FIELDS).optional(),
+  sortDir: z.enum(["asc", "desc"]).optional(),
 });
-export type ListBusinessesQuery = z.infer<typeof listBusinessesQuerySchema>;
+export type ListBusinessesQueryParsed = z.infer<typeof listBusinessesQuerySchema>;
+
+export const exportBusinessesQuerySchema = listBusinessesQuerySchema.extend({
+  format: z.enum(["csv", "xlsx"]),
+  scope: z.enum(["view", "all"]),
+  columns: z.preprocess(
+    (value) => (typeof value === "string" ? value.split(",") : value),
+    z.array(z.string()).optional(),
+  ),
+});
+export type ExportBusinessesQueryParsed = z.infer<typeof exportBusinessesQuerySchema>;
 
 export const createContactSchema = z.object({
   name: z.string().min(1).max(150),

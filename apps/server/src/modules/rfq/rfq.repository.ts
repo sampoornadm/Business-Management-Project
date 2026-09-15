@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
 
 import type { Prisma, PrismaClient, RfqStatus, RfqVendorStatus } from "@bmp/database";
-import type { ItemPriceSortField } from "@bmp/types";
+import type { FilterCondition, ItemPriceSortField, RfqSortField } from "@bmp/types";
 
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
+import { buildPrismaFilterWhere } from "../../shared/utils/filtering.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
+
+import { RFQ_FILTER_COLUMNS, RFQ_SORT_COLUMNS } from "./rfq.filter-columns.js";
 
 const creatorSelect = { id: true, firstName: true, lastName: true } as const;
 const vendorSummarySelect = { id: true, name: true } as const;
@@ -129,6 +132,9 @@ export interface RfqFilters {
   businessId: string;
   status?: RfqStatus;
   tenderId?: string;
+  filters?: FilterCondition[];
+  sortBy?: RfqSortField;
+  sortDir?: "asc" | "desc";
 }
 
 export interface IRfqRepository {
@@ -210,17 +216,28 @@ export class RfqRepository implements IRfqRepository {
     pagination: PaginationParams,
     filters: RfqFilters,
   ): Promise<{ items: RfqListItem[]; totalItems: number }> {
-    const where: Prisma.RfqWhereInput = {
+    const baseWhere: Prisma.RfqWhereInput = {
       businessId: filters.businessId,
       status: filters.status,
       tenderId: filters.tenderId,
     };
 
+    const chipWhere = buildPrismaFilterWhere(
+      filters.filters ?? [],
+      RFQ_FILTER_COLUMNS,
+    ) as Prisma.RfqWhereInput;
+    const where: Prisma.RfqWhereInput =
+      Object.keys(chipWhere).length > 0 ? { AND: [baseWhere, chipWhere] } : baseWhere;
+
+    const orderBy = filters.sortBy
+      ? RFQ_SORT_COLUMNS[filters.sortBy](filters.sortDir ?? "asc")
+      : ({ createdAt: "desc" } as const);
+
     const [items, totalItems] = await Promise.all([
       this.prisma.rfq.findMany({
         where,
         ...rfqListArgs,
-        orderBy: { createdAt: "desc" },
+        orderBy,
         ...toSkipTake(pagination),
       }),
       this.prisma.rfq.count({ where }),

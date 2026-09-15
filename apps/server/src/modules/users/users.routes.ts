@@ -10,6 +10,7 @@ import type { UsersController } from "./users.controller.js";
 import {
   assignRoleSchema,
   createUserSchema,
+  exportUsersQuerySchema,
   listUsersQuerySchema,
   updateOwnProfileSchema,
   updateThemeColorSchema,
@@ -120,6 +121,34 @@ export function createUsersRouter(controller: UsersController): Router {
     requirePermission("users:create"),
     validate(createUserSchema),
     controller.create,
+  );
+
+  /**
+   * @openapi
+   * /users/export:
+   *   get:
+   *     tags: [Users]
+   *     summary: Export users matching the current filters as CSV or XLSX
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: query
+   *         name: format
+   *         required: true
+   *         schema: { type: string, enum: [csv, xlsx] }
+   *       - in: query
+   *         name: scope
+   *         required: true
+   *         schema: { type: string, enum: [view, all] }
+   *     responses:
+   *       200: { description: File download }
+   */
+  // Registered before /:id — Express would otherwise match "export" as the :id param.
+  router.get(
+    "/export",
+    authenticateMiddleware,
+    requirePermission("users:read"),
+    validate(exportUsersQuerySchema, "query"),
+    controller.exportUsers,
   );
 
   /**

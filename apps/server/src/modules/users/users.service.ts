@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import type { Prisma } from "@bmp/database";
 import type { PaginatedResult, UserDto } from "@bmp/types";
 
-import { AVATAR_UPLOAD_LIMITS } from "../../config/constants.js";
+import { AVATAR_UPLOAD_LIMITS, EXPORT_MAX_ROWS } from "../../config/constants.js";
 import { env } from "../../config/env.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
@@ -65,6 +65,21 @@ export class UsersService {
     const { items, totalItems } = await this.usersRepository.findMany(pagination, filters);
     const dtos = await Promise.all(items.map((item) => this.toDto(item)));
     return buildPaginatedResult(dtos, totalItems, pagination);
+  }
+
+  async exportUsers(
+    filters: UserFilters,
+    scope: "view" | "all",
+    viewPagination: PaginationParams,
+  ): Promise<UserDto[]> {
+    const pagination = scope === "view" ? viewPagination : { page: 1, pageSize: EXPORT_MAX_ROWS };
+    const { items, totalItems } = await this.usersRepository.findMany(pagination, filters);
+    if (scope === "all" && totalItems > EXPORT_MAX_ROWS) {
+      throw new BadRequestError(
+        `Narrow your filters — more than ${EXPORT_MAX_ROWS} rows match your current filters.`,
+      );
+    }
+    return Promise.all(items.map((item) => this.toDto(item)));
   }
 
   async getById(id: string, businessId: string): Promise<UserDto> {

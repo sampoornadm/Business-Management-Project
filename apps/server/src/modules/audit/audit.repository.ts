@@ -1,7 +1,11 @@
 import type { Prisma, PrismaClient } from "@bmp/database";
+import type { AuditLogSortField, FilterCondition } from "@bmp/types";
 
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
+import { buildPrismaFilterWhere } from "../../shared/utils/filtering.js";
 import { toSkipTake } from "../../shared/utils/pagination.js";
+
+import { AUDIT_LOG_FILTER_COLUMNS, AUDIT_LOG_SORT_COLUMNS } from "./audit.filter-columns.js";
 
 export interface CreateAuditLogData {
   actorId?: string | null;
@@ -18,6 +22,9 @@ export interface AuditLogFilters {
   entityId?: string;
   actorId?: string;
   action?: string;
+  filters?: FilterCondition[];
+  sortBy?: AuditLogSortField;
+  sortDir?: "asc" | "desc";
 }
 
 const auditLogWithActor = {
@@ -55,18 +62,29 @@ export class AuditRepository implements IAuditRepository {
     pagination: PaginationParams,
     filters: AuditLogFilters,
   ): Promise<{ items: AuditLogWithActor[]; totalItems: number }> {
-    const where: Prisma.AuditLogWhereInput = {
+    const baseWhere: Prisma.AuditLogWhereInput = {
       entityType: filters.entityType,
       entityId: filters.entityId,
       actorId: filters.actorId,
       action: filters.action,
     };
 
+    const chipWhere = buildPrismaFilterWhere(
+      filters.filters ?? [],
+      AUDIT_LOG_FILTER_COLUMNS,
+    ) as Prisma.AuditLogWhereInput;
+    const where: Prisma.AuditLogWhereInput =
+      Object.keys(chipWhere).length > 0 ? { AND: [baseWhere, chipWhere] } : baseWhere;
+
+    const orderBy = filters.sortBy
+      ? AUDIT_LOG_SORT_COLUMNS[filters.sortBy](filters.sortDir ?? "asc")
+      : ({ createdAt: "desc" } as const);
+
     const [items, totalItems] = await Promise.all([
       this.prisma.auditLog.findMany({
         where,
         ...auditLogWithActor,
-        orderBy: { createdAt: "desc" },
+        orderBy,
         ...toSkipTake(pagination),
       }),
       this.prisma.auditLog.count({ where }),

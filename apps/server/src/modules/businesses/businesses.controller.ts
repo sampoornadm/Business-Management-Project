@@ -1,13 +1,16 @@
 import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 import { resolvePagination } from "../../shared/utils/pagination.js";
+import { exportTableToCsv, exportTableToXlsx } from "../../shared/utils/table-export.js";
 
+import { BUSINESS_EXPORT_COLUMN_KEYS, buildBusinessExportTable } from "./businesses.mapper.js";
 import type { BusinessesService } from "./businesses.service.js";
 import type {
   AddMemberBody,
   CreateBusinessBody,
   CreateContactBody,
-  ListBusinessesQuery,
+  ExportBusinessesQueryParsed,
+  ListBusinessesQueryParsed,
   UpdateBusinessBody,
   UpdateContactBody,
   UpdateMemberBody,
@@ -17,13 +20,49 @@ export class BusinessesController {
   constructor(private readonly businessesService: BusinessesService) {}
 
   list = asyncHandler(async (req, res) => {
-    const query = req.query as unknown as ListBusinessesQuery;
+    const query = req.query as unknown as ListBusinessesQueryParsed;
     const pagination = resolvePagination(query);
     const result = await this.businessesService.listBusinesses(pagination, {
       search: query.search,
       isActive: query.isActive,
+      filters: query.filters,
+      sortBy: query.sortBy,
+      sortDir: query.sortDir,
     });
     sendSuccess(res, result, "Businesses retrieved");
+  });
+
+  exportBusinesses = asyncHandler(async (req, res) => {
+    const query = req.query as unknown as ExportBusinessesQueryParsed;
+    const pagination = resolvePagination(query);
+    const items = await this.businessesService.exportBusinesses(
+      {
+        search: query.search,
+        isActive: query.isActive,
+        filters: query.filters,
+        sortBy: query.sortBy,
+        sortDir: query.sortDir,
+      },
+      query.scope,
+      pagination,
+    );
+
+    const columnKeys = query.columns ?? BUSINESS_EXPORT_COLUMN_KEYS;
+    const table = buildBusinessExportTable(items, columnKeys);
+    const date = new Date().toISOString().slice(0, 10);
+
+    if (query.format === "xlsx") {
+      const buffer = await exportTableToXlsx(table);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="businesses-export-${date}.xlsx"`);
+      res.send(buffer);
+      return;
+    }
+
+    const buffer = exportTableToCsv(table);
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="businesses-export-${date}.csv"`);
+    res.send(buffer);
   });
 
   getById = asyncHandler(async (req, res) => {
