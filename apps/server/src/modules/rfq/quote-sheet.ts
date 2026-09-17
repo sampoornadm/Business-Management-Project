@@ -10,6 +10,7 @@ import { buildAddressLine, type RfrDocumentData } from "./rfq-document.js";
  */
 const COLUMNS = [
   { header: "rfqItemId", key: "rfqItemId", width: 38 },
+  { header: "Sl. No.", key: "slNo", width: 8 },
   { header: "Item Code", key: "itemCode", width: 16 },
   { header: "Description", key: "description", width: 60 },
   { header: "Unit", key: "unit", width: 10 },
@@ -36,11 +37,11 @@ export const ITEM_TABLE_HEADER_ROW = 6;
 // a workbook reloaded from bytes (the vendor's filled-in upload) does not retain the key
 // mapping set at write time, only genuine column position and row number.
 const COL_RFQ_ITEM_ID = 1;
-const COL_RATE = 7;
-const COL_MAKE = 8;
-const COL_MODEL = 9;
-const COL_REGRET = 10;
-const COL_REMARKS = 11;
+const COL_RATE = 8;
+const COL_MAKE = 9;
+const COL_MODEL = 10;
+const COL_REGRET = 11;
+const COL_REMARKS = 12;
 
 export interface ParsedQuoteRow {
   rfqItemId: string;
@@ -95,15 +96,16 @@ export async function buildQuoteSheet(data: RfrDocumentData): Promise<Buffer> {
   const headerRow = sheet.addRow(COLUMNS.map((c) => c.header));
   headerRow.font = { bold: true };
 
-  for (const item of data.items) {
+  data.items.forEach((item, index) => {
     sheet.addRow({
       rfqItemId: item.rfqItemId,
+      slNo: index + 1,
       description: item.description,
       unit: item.unit ?? "",
       quantity: item.quantity,
       instructions: item.instructions ?? "",
     });
-  }
+  });
 
   sheet.getColumn("rfqItemId").hidden = true;
 

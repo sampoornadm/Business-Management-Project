@@ -348,9 +348,18 @@ export default function RfqDetailPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rfq.items.map((item) => (
+                {rfq.items.map((item, index) => (
                   <TableRow key={item.id}>
-                    <TableCell>{item.description}</TableCell>
+                    <TableCell>
+                      {/* Item order here is informational only, same as the tender items view —
+                          a subtle margin note left of the content rather than its own column. */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-4 shrink-0 text-right text-xs text-muted-foreground">
+                          {index + 1}
+                        </span>
+                        <span>{item.description}</span>
+                      </div>
+                    </TableCell>
                     <TableCell>{item.unit ?? "-"}</TableCell>
                     <TableCell className="text-right">{item.quantity}</TableCell>
                     {rfq.vendorInvites.map((invite) => {

@@ -21,8 +21,8 @@ const DATA: RfrDocumentData = {
 const FIRST_ITEM_ROW = ITEM_TABLE_HEADER_ROW + 1;
 
 // Column letters, fixed regardless of the business-header rows above: A=rfqItemId (hidden),
-// B=Item Code, C=Description, D=Unit, E=Qty, F=Instructions, G=Rate, H=Make, I=Model,
-// J=Regret, K=Remarks. Data starts at ITEM_TABLE_HEADER_ROW + 1.
+// B=Sl. No., C=Item Code, D=Description, E=Unit, F=Qty, G=Instructions, H=Rate, I=Make,
+// J=Model, K=Regret, L=Remarks. Data starts at ITEM_TABLE_HEADER_ROW + 1.
 async function fill(edit: (sheet: ExcelJS.Worksheet) => void): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(await buildQuoteSheet(DATA));
@@ -33,9 +33,9 @@ async function fill(edit: (sheet: ExcelJS.Worksheet) => void): Promise<Buffer> {
 describe("quote sheet", () => {
   it("round-trips a filled rate with make and model", async () => {
     const buffer = await fill((sheet) => {
-      sheet.getCell(`G${FIRST_ITEM_ROW}`).value = 152.5;
-      sheet.getCell(`H${FIRST_ITEM_ROW}`).value = "Polycab";
-      sheet.getCell(`I${FIRST_ITEM_ROW}`).value = "FRLS-16";
+      sheet.getCell(`H${FIRST_ITEM_ROW}`).value = 152.5;
+      sheet.getCell(`I${FIRST_ITEM_ROW}`).value = "Polycab";
+      sheet.getCell(`J${FIRST_ITEM_ROW}`).value = "FRLS-16";
     });
 
     const { rows, errors } = await parseQuoteSheet(buffer);
@@ -53,8 +53,8 @@ describe("quote sheet", () => {
 
   it("reads Regret=Y as a regret with no rate, ignoring any rate in the row", async () => {
     const buffer = await fill((sheet) => {
-      sheet.getCell(`G${FIRST_ITEM_ROW}`).value = 999; // must be ignored
-      sheet.getCell(`J${FIRST_ITEM_ROW}`).value = "Y";
+      sheet.getCell(`H${FIRST_ITEM_ROW}`).value = 999; // must be ignored
+      sheet.getCell(`K${FIRST_ITEM_ROW}`).value = "Y";
     });
 
     const { rows } = await parseQuoteSheet(buffer);
@@ -72,7 +72,7 @@ describe("quote sheet", () => {
   it("reports an unknown rfqItemId instead of guessing which item it meant", async () => {
     const buffer = await fill((sheet) => {
       sheet.getCell(`A${FIRST_ITEM_ROW}`).value = "";
-      sheet.getCell(`G${FIRST_ITEM_ROW}`).value = 10;
+      sheet.getCell(`H${FIRST_ITEM_ROW}`).value = 10;
     });
 
     const { rows, errors } = await parseQuoteSheet(buffer);
@@ -83,7 +83,7 @@ describe("quote sheet", () => {
 
   it("still imports rates when rows above the header block are deleted (header shifts up)", async () => {
     const buffer = await fill((sheet) => {
-      sheet.getCell(`G${FIRST_ITEM_ROW}`).value = 152.5;
+      sheet.getCell(`H${FIRST_ITEM_ROW}`).value = 152.5;
       // A vendor deleting the business-name/address/meta/instructions/spacer rows before
       // re-uploading shifts everything up by 5 — the header that was at ITEM_TABLE_HEADER_ROW
       // (6) is now at row 1. parseQuoteSheet must find it via its full-sheet scan fallback
@@ -120,6 +120,16 @@ describe("quote sheet", () => {
 
     expect(name).not.toMatch(/[:\\/?*[\]]/);
     expect(name.length).toBeLessThanOrEqual(31);
+  });
+
+  it("writes a 1-based Sl. No. as the first visible column, in item order", async () => {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await buildQuoteSheet(DATA));
+    const sheet = wb.worksheets[0]!;
+
+    expect(sheet.getCell(`B${ITEM_TABLE_HEADER_ROW}`).value).toBe("Sl. No.");
+    expect(sheet.getCell(`B${FIRST_ITEM_ROW}`).value).toBe(1);
+    expect(sheet.getCell(`B${FIRST_ITEM_ROW + 1}`).value).toBe(2);
   });
 
   it("writes the business header and instructions above the item table", async () => {
