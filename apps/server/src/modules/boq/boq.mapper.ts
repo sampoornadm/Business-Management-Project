@@ -36,6 +36,7 @@ export function buildBoqItemTree(items: BoqItemWithBreakdown[]): BoqItemDto[] {
       rate: item.rate,
       amount: item.amount,
       gstRate: item.gstRate,
+      hsnCode: item.hsnCode,
       remarks: item.remarks,
       sortOrder: item.sortOrder,
       rateBreakdown: toRateBreakdownDto(item.rateBreakdown),
@@ -47,6 +48,9 @@ export function buildBoqItemTree(items: BoqItemWithBreakdown[]): BoqItemDto[] {
       aiSource: item.aiSource,
       aiEnrichedAt: item.aiEnrichedAt?.toISOString() ?? null,
       rateSourceConfirmed: item.rateSourceConfirmed,
+      suggestedHsnCode: item.suggestedHsnCode,
+      suggestedGstRate: item.suggestedGstRate,
+      hsnCodeConfirmed: item.hsnCodeConfirmed,
       children: [],
     });
   }

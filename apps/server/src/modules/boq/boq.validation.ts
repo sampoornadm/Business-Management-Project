@@ -3,6 +3,11 @@ import { z } from "zod";
 /** GST percent. Bounded at 100 — a rate above that is a typo, not a tax slab. */
 const gstRateField = z.number().min(0).max(100);
 
+/** Real Indian HSN codes are 2-8 digits, no letters or punctuation. Empty string clears it. */
+const hsnCodeField = z
+  .string()
+  .refine((v) => v === "" || /^\d{2,8}$/.test(v), "HSN code must be 2-8 digits");
+
 const commitBoqItemSchema = z.object({
   tempId: z.string().min(1),
   parentTempId: z.string().min(1).optional(),
@@ -45,6 +50,7 @@ export const updateBoqItemSchema = z
     quantity: z.number().nonnegative().optional(),
     rate: z.number().nonnegative().optional(),
     gstRate: gstRateField.optional(),
+    hsnCode: hsnCodeField.optional(),
     remarks: z.string().max(1000).optional(),
     sortOrder: z.number().int().optional(),
   })

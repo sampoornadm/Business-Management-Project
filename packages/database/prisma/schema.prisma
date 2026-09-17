@@ -736,6 +736,15 @@ model BoqItem {
   remarks     String?
   sortOrder   Int     @default(0)
 
+  // HSN (tax classification) code, AI-suggested then human-confirmed — same shape as
+  // rate/suggestedRate/rateSourceConfirmed below. `hsnCode` is the estimator-owned final
+  // value (set either by typing it directly or by applying suggestedHsnCode); it is never
+  // written by the enrichment worker.
+  hsnCode          String?
+  suggestedHsnCode String?
+  suggestedGstRate Float?
+  hsnCodeConfirmed Boolean @default(false)
+
   // AI enrichment (optional, written only by the ai-enrichment worker). Deliberately
   // separate from `category` above: that one is estimator-typed and must never be
   // clobbered by a suggestion — the UI offers "apply" instead.
@@ -978,6 +987,14 @@ model Item {
   category          Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   categoryConfirmed Boolean   @default(false)
   aiConfidence      Float?
+
+  // HSN code + GST%, written only by propagation from a BoqItem whose estimator just
+  // confirmed its own hsnCode (see BoqService#propagateHsnToItem) — never suggested or
+  // edited directly here. hsnCodeConfirmed=true means later BOQ items for the same
+  // canonical item reuse this instead of asking the AI again.
+  hsnCode          String?
+  gstRate          Float?
+  hsnCodeConfirmed Boolean @default(false)
 
   // Set when the LLM classify path reports high confidence but the nearest known item (by
   // embedding) is a weak semantic match — the combination that produced a real misclassification

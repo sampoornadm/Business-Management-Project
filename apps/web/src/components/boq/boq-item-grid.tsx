@@ -68,9 +68,19 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
 
   async function commitField(
     item: BoqItemDto,
-    field: "description" | "unit" | "quantity" | "rate" | "gstRate",
+    field: "description" | "unit" | "quantity" | "rate" | "gstRate" | "hsnCode",
     value: string,
   ) {
+    if (field === "hsnCode") {
+      if (value !== "" && !/^\d{2,8}$/.test(value)) {
+        toast({ variant: "destructive", title: "HSN code must be 2-8 digits" });
+        return;
+      }
+      // Empty string is a real, meaningful value here (it clears hsnCodeConfirmed server-side) —
+      // never coerce it to undefined like unit does below.
+      await commitUpdate(item, { hsnCode: value });
+      return;
+    }
     if (field === "gstRate") {
       // Unlike quantity/rate, GST is non-nullable — a cleared box means "back to default".
       const parsed = value === "" ? DEFAULT_GST_RATE : Number(value);
@@ -223,6 +233,15 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
       header: "Amount",
       align: "right",
       getValue: (item) => item.amount?.toLocaleString() ?? "-",
+    },
+    {
+      key: "hsnCode",
+      header: "HSN Code",
+      editable: canEdit,
+      inputType: "number",
+      widthClassName: "w-28",
+      getValue: (item) => item.hsnCode ?? "",
+      onCommit: (item, value) => void commitField(item, "hsnCode", value),
     },
     {
       key: "ai",

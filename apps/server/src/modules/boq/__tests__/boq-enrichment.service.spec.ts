@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ServiceUnavailableError } from "../../../core/errors/HttpErrors.js";
 import { cosineSimilarity } from "../../../shared/utils/math.js";
+import type { IItemsRepository } from "../../items/items.repository.js";
 import type {
   CreateHistoricalRateData,
   HistoricalRateMatch,
@@ -118,14 +119,24 @@ class FakeRatesRepository implements Partial<IHistoricalRatesRepository> {
   }
 }
 
+class FakeItemsRepository implements Partial<IItemsRepository> {
+  confirmed = new Map<string, { hsnCode: string; gstRate: number }>();
+
+  async findConfirmedHsn(_businessId: string, canonicalName: string) {
+    return this.confirmed.get(canonicalName) ?? null;
+  }
+}
+
 function buildService() {
   const boqRepository = new FakeBoqRepository();
   const ratesRepository = new FakeRatesRepository();
+  const itemsRepository = new FakeItemsRepository();
   const service = new BoqEnrichmentService(
     boqRepository as unknown as IBoqRepository,
     ratesRepository as unknown as IHistoricalRatesRepository,
+    itemsRepository as unknown as IItemsRepository,
   );
-  return { service, boqRepository, ratesRepository };
+  return { service, boqRepository, ratesRepository, itemsRepository };
 }
 
 describe("BoqEnrichmentService", () => {
@@ -338,5 +349,79 @@ describe("BoqEnrichmentService", () => {
 
     expect(embedMock).not.toHaveBeenCalled();
     expect(boqRepository.enrichment.size).toBe(0);
+  });
+
+  it("auto-fills hsnCode and gstRate directly (no separate apply step) from the LLM's guess, snapped to the nearest real slab", async () => {
+    const { service, boqRepository } = buildService();
+    const item = makeItem("XLPE cable 4 core 16 sqmm");
+    boqRepository.items = [item];
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock.mockResolvedValueOnce({
+      normalizedName: "XLPE Cable 4C x16",
+      category: "Electrical",
+      subcategory: "Cable",
+      confidence: 0.8,
+      hsnCode: "8544",
+      gstRatePercent: 17.5, // not a real slab — must snap to 18
+    });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    const result = boqRepository.enrichment.get(item.id);
+    expect(result?.suggestedHsnCode).toBe("8544");
+    expect(result?.suggestedGstRate).toBe(18);
+    expect(result?.hsnCode).toBe("8544");
+    expect(result?.gstRate).toBe(18);
+  });
+
+  it("prefers a confirmed catalog HSN over the LLM's own guess for the same item, and auto-fills that too", async () => {
+    const { service, boqRepository, itemsRepository } = buildService();
+    const item = makeItem("XLPE cable 4 core 16 sqmm");
+    boqRepository.items = [item];
+    // Keyed on the canonical name the enrichment loop derives (no normalizedName yet, so it's
+    // the collapsed description) — same identity rule items.service.ts's backfill uses.
+    itemsRepository.confirmed.set("XLPE cable 4 core 16 sqmm", { hsnCode: "854430", gstRate: 28 });
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock.mockResolvedValueOnce({
+      normalizedName: "XLPE Cable 4C x16",
+      category: "Electrical",
+      subcategory: "Cable",
+      confidence: 0.8,
+      hsnCode: "9999", // conflicting guess — the catalog match must win
+      gstRatePercent: 5,
+    });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    const result = boqRepository.enrichment.get(item.id);
+    expect(result?.suggestedHsnCode).toBe("854430");
+    expect(result?.suggestedGstRate).toBe(28);
+    expect(result?.hsnCode).toBe("854430");
+    expect(result?.gstRate).toBe(28);
+  });
+
+  it("never overwrites an already human-confirmed hsnCode/gstRate on re-enrichment", async () => {
+    const { service, boqRepository } = buildService();
+    const item = { ...makeItem("XLPE cable 4 core 16 sqmm"), hsnCodeConfirmed: true } as BoqItemWithBreakdown;
+    boqRepository.items = [item];
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock.mockResolvedValueOnce({
+      normalizedName: "XLPE Cable 4C x16",
+      category: "Electrical",
+      subcategory: "Cable",
+      confidence: 0.8,
+      hsnCode: "9999",
+      gstRatePercent: 5,
+    });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    const result = boqRepository.enrichment.get(item.id);
+    // The suggestion record still updates (provenance/audit trail)...
+    expect(result?.suggestedHsnCode).toBe("9999");
+    // ...but the real, human-confirmed fields are never touched — the key must be absent
+    // entirely (not null/undefined-valued), since that's what makes Prisma skip the column.
+    expect(result).not.toHaveProperty("hsnCode");
+    expect(result).not.toHaveProperty("gstRate");
   });
 });

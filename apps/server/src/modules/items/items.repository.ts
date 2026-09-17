@@ -89,6 +89,14 @@ export interface IItemsRepository {
   findBoqNames(ids: string[]): Promise<BoqNameRow[]>;
   findOrCreateItem(businessId: string, canonicalName: string, unit: string | null): Promise<{ id: string }>;
   linkRfqItems(itemId: string, rfqItemIds: string[]): Promise<void>;
+  findConfirmedHsn(businessId: string, canonicalName: string): Promise<{ hsnCode: string; gstRate: number } | null>;
+  confirmItemHsn(
+    businessId: string,
+    canonicalName: string,
+    unit: string | null,
+    hsnCode: string,
+    gstRate: number,
+  ): Promise<{ id: string; propagated: boolean }>;
   findItems(
     businessId: string,
     search: string | undefined,
@@ -149,6 +157,45 @@ export class ItemsRepository implements IItemsRepository {
 
   async linkRfqItems(itemId: string, rfqItemIds: string[]): Promise<void> {
     await this.prisma.rfqItem.updateMany({ where: { id: { in: rfqItemIds } }, data: { itemId } });
+  }
+
+  async findConfirmedHsn(
+    businessId: string,
+    canonicalName: string,
+  ): Promise<{ hsnCode: string; gstRate: number } | null> {
+    const item = await this.prisma.item.findUnique({
+      where: { businessId_canonicalName: { businessId, canonicalName } },
+      select: { hsnCode: true, gstRate: true, hsnCodeConfirmed: true },
+    });
+    if (!item?.hsnCodeConfirmed || item.hsnCode === null) return null;
+    return { hsnCode: item.hsnCode, gstRate: item.gstRate ?? 18 };
+  }
+
+  /**
+   * Find-or-create the canonical Item (same identity rule as findOrCreateItem), then write the
+   * HSN/GST fact onto it only if a human hasn't already confirmed one — a later BoqItem must
+   * never clobber an earlier estimator's confirmed catalog entry. Returns propagated=false when
+   * this call was a no-op (an already-confirmed Item), so the caller can skip audit-logging it.
+   */
+  async confirmItemHsn(
+    businessId: string,
+    canonicalName: string,
+    unit: string | null,
+    hsnCode: string,
+    gstRate: number,
+  ): Promise<{ id: string; propagated: boolean }> {
+    const item = await this.prisma.item.upsert({
+      where: { businessId_canonicalName: { businessId, canonicalName } },
+      create: { id: randomUUID(), businessId, canonicalName, unit },
+      update: {},
+      select: { id: true, hsnCodeConfirmed: true },
+    });
+    if (item.hsnCodeConfirmed) return { id: item.id, propagated: false };
+    await this.prisma.item.update({
+      where: { id: item.id },
+      data: { hsnCode, gstRate, hsnCodeConfirmed: true },
+    });
+    return { id: item.id, propagated: true };
   }
 
   findItems(

@@ -12,6 +12,7 @@ vi.mock("../../../infra/llm/ollama.client.js", () => ({
 import { BadRequestError, NotFoundError } from "../../../core/errors/HttpErrors.js";
 import type { AttachmentsService } from "../../attachments/attachments.service.js";
 import type { AuditService } from "../../audit/audit.service.js";
+import type { IItemsRepository } from "../../items/items.repository.js";
 import type { HistoricalRateMatch, IHistoricalRatesRepository } from "../../rates/rates.repository.js";
 import type { ITendersRepository } from "../../tenders/tenders.repository.js";
 import type {
@@ -66,6 +67,11 @@ class FakeBoqRepository implements IBoqRepository {
         aiRateSourceId: null,
         aiEnrichedAt: null,
         rateSourceConfirmed: false,
+        gstRate: 18,
+        hsnCode: null,
+        suggestedHsnCode: null,
+        suggestedGstRate: null,
+        hsnCodeConfirmed: false,
         ...item,
         boqId: data.id,
         rateBreakdown: null,
@@ -189,6 +195,7 @@ class FakeBoqRepository implements IBoqRepository {
       rateSourceConfirmed: false,
     });
   }
+
 }
 
 class FakeHistoricalRatesRepository implements Partial<IHistoricalRatesRepository> {
@@ -196,6 +203,28 @@ class FakeHistoricalRatesRepository implements Partial<IHistoricalRatesRepositor
 
   findNearest(): Promise<HistoricalRateMatch[]> {
     return Promise.resolve(this.nearest);
+  }
+}
+
+class FakeItemsRepository implements Partial<IItemsRepository> {
+  /** Keyed by canonicalName, mirroring the real repository's (businessId, canonicalName) identity. */
+  items = new Map<string, { id: string; hsnCode: string | null; gstRate: number | null; hsnCodeConfirmed: boolean }>();
+
+  async confirmItemHsn(
+    _businessId: string,
+    canonicalName: string,
+    _unit: string | null,
+    hsnCode: string,
+    gstRate: number,
+  ): Promise<{ id: string; propagated: boolean }> {
+    let item = this.items.get(canonicalName);
+    if (!item) {
+      item = { id: randomUUID(), hsnCode: null, gstRate: null, hsnCodeConfirmed: false };
+      this.items.set(canonicalName, item);
+    }
+    if (item.hsnCodeConfirmed) return { id: item.id, propagated: false };
+    Object.assign(item, { hsnCode, gstRate, hsnCodeConfirmed: true });
+    return { id: item.id, propagated: true };
   }
 }
 
@@ -214,6 +243,7 @@ describe("BoqService", () => {
   let auditService: AuditService;
   let auditLog: ReturnType<typeof vi.fn>;
   let historicalRatesRepository: FakeHistoricalRatesRepository;
+  let itemsRepository: FakeItemsRepository;
   let service: BoqService;
   const tenderId = randomUUID();
   const actorId = randomUUID();
@@ -228,12 +258,14 @@ describe("BoqService", () => {
     auditLog = vi.fn().mockResolvedValue(undefined);
     auditService = { log: auditLog } as unknown as AuditService;
     historicalRatesRepository = new FakeHistoricalRatesRepository();
+    itemsRepository = new FakeItemsRepository();
     service = new BoqService(
       boqRepository as unknown as IBoqRepository,
       tendersRepository as unknown as ITendersRepository,
       attachmentsService,
       auditService,
       historicalRatesRepository as unknown as IHistoricalRatesRepository,
+      itemsRepository as unknown as IItemsRepository,
     );
   });
 
@@ -564,5 +596,101 @@ describe("BoqService", () => {
 
       expect(candidates).toEqual([]);
     });
+  });
+
+  describe("hsn code confirm/reject", () => {
+    it("confirms hsnCode via a direct edit and propagates it (with the item's GST%) to the master Item catalog", async () => {
+      const boq = await service.commitBoq(
+        tenderId,
+        businessId,
+        { items: [{ tempId: "1", description: "XLPE Cable 4C x16", unit: "m", quantity: 100, rate: 50 }] },
+        actorId,
+        {},
+      );
+      const itemId = boq.items[0]!.id;
+
+      const updated = await service.updateItem(itemId, { hsnCode: "8544" }, actorId, businessId);
+
+      const item = updated.items.find((i) => i.id === itemId)!;
+      expect(item.hsnCode).toBe("8544");
+      expect(item.hsnCodeConfirmed).toBe(true);
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "ITEM_HSN_CODE_CONFIRMED",
+          entityType: "Item",
+          metadata: expect.objectContaining({ hsnCode: "8544", gstRate: 18 }),
+        }),
+      );
+      const catalogItem = itemsRepository.items.get("XLPE Cable 4C x16");
+      expect(catalogItem?.hsnCode).toBe("8544");
+      expect(catalogItem?.gstRate).toBe(18);
+      expect(catalogItem?.hsnCodeConfirmed).toBe(true);
+    });
+
+    it("bundles a changed gstRate into the same propagation when both are edited together", async () => {
+      const boq = await service.commitBoq(
+        tenderId,
+        businessId,
+        { items: [{ tempId: "1", description: "XLPE Cable 4C x16", unit: "m", quantity: 100, rate: 50 }] },
+        actorId,
+        {},
+      );
+      const itemId = boq.items[0]!.id;
+
+      await service.updateItem(itemId, { hsnCode: "8544", gstRate: 28 }, actorId, businessId);
+
+      const catalogItem = itemsRepository.items.get("XLPE Cable 4C x16");
+      expect(catalogItem?.gstRate).toBe(28);
+    });
+
+    it("does not overwrite an already-confirmed master Item from a later, different confirmation", async () => {
+      const firstBoq = await service.commitBoq(
+        tenderId,
+        businessId,
+        { items: [{ tempId: "1", description: "Common Item", unit: "nos", quantity: 1, rate: 10 }] },
+        actorId,
+        {},
+      );
+      await service.updateItem(firstBoq.items[0]!.id, { hsnCode: "1111" }, actorId, businessId);
+      auditLog.mockClear();
+
+      const secondBoq = await service.commitBoq(
+        tenderId,
+        businessId,
+        { items: [{ tempId: "1", description: "Common Item", unit: "nos", quantity: 1, rate: 10 }] },
+        actorId,
+        {},
+      );
+      await service.updateItem(secondBoq.items[0]!.id, { hsnCode: "2222" }, actorId, businessId);
+
+      const catalogItem = itemsRepository.items.get("Common Item");
+      expect(catalogItem?.hsnCode).toBe("1111"); // unchanged — first confirmation wins
+      expect(auditLog).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: "ITEM_HSN_CODE_CONFIRMED" }),
+      );
+    });
+
+    it("clears hsnCode and hsnCodeConfirmed on an empty edit, without touching the catalog", async () => {
+      const boq = await service.commitBoq(
+        tenderId,
+        businessId,
+        { items: [{ tempId: "1", description: "Clearable Item", unit: "nos", quantity: 1 }] },
+        actorId,
+        {},
+      );
+      const itemId = boq.items[0]!.id;
+      await service.updateItem(itemId, { hsnCode: "5555" }, actorId, businessId);
+      auditLog.mockClear();
+
+      const updated = await service.updateItem(itemId, { hsnCode: "" }, actorId, businessId);
+
+      const item = updated.items.find((i) => i.id === itemId)!;
+      expect(item.hsnCode).toBeNull();
+      expect(item.hsnCodeConfirmed).toBe(false);
+      expect(auditLog).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: "ITEM_HSN_CODE_CONFIRMED" }),
+      );
+    });
+
   });
 });
