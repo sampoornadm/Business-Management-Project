@@ -4,6 +4,8 @@ import { embed, generateJson } from "../../infra/llm/ollama.client.js";
 import { logger } from "../../shared/logger/logger.js";
 import { round2 } from "../../shared/utils/math.js";
 import { sameSpec } from "../../shared/utils/spec-match.js";
+import { deriveCanonicalName } from "../items/items.helpers.js";
+import type { IItemsRepository } from "../items/items.repository.js";
 import type {
   HistoricalRateMatch,
   IHistoricalRatesRepository,
@@ -26,11 +28,26 @@ const RATE_MATCH_CANDIDATES = 10;
  */
 const LLM_CONFIDENCE_CEILING = 0.9;
 
+/**
+ * Indian GST slabs. The LLM's own percentage guess is unreliable at the exact number (e.g.
+ * "17.5%" isn't a real slab) — snapping to the nearest real slab is a cheap deterministic
+ * guard on top of the guess, same spirit as sameSpec() gating a rate match.
+ */
+const GST_SLABS = [0, 5, 12, 18, 28];
+
+function snapToGstSlab(value: number): number {
+  return GST_SLABS.reduce((closest, slab) =>
+    Math.abs(slab - value) < Math.abs(closest - value) ? slab : closest,
+  );
+}
+
 interface LlmClassification {
   normalizedName: string;
   category: string;
   subcategory: string | null;
   confidence: number;
+  hsnCode: string | null;
+  gstRatePercent: number | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -50,8 +67,17 @@ function parseClassification(raw: unknown): LlmClassification | null {
   const confidence = typeof raw.confidence === "number" && Number.isFinite(raw.confidence)
     ? Math.min(Math.max(raw.confidence, 0), 1)
     : 0.5;
+  // Real HSN codes are 2-8 digits only — a model reply like "8544 (Cable)" or "N/A" is
+  // discarded rather than stored malformed (same "validate before trusting" rule everywhere
+  // else here).
+  const rawHsnCode = typeof raw.hsnCode === "string" ? raw.hsnCode.trim() : "";
+  const hsnCode = /^\d{2,8}$/.test(rawHsnCode) ? rawHsnCode : null;
+  const gstRatePercent =
+    typeof raw.gstRatePercent === "number" && Number.isFinite(raw.gstRatePercent)
+      ? snapToGstSlab(raw.gstRatePercent)
+      : null;
 
-  return { normalizedName, category, subcategory, confidence };
+  return { normalizedName, category, subcategory, confidence, hsnCode, gstRatePercent };
 }
 
 /**
@@ -84,6 +110,11 @@ function buildPrompt(description: string, unit: string | null, candidates: Histo
     '  "category": a broad trade category (e.g. "Electrical", "Civil", "Plumbing")',
     '  "subcategory": a narrower type within that category (e.g. "Cable"), or null',
     '  "confidence": your confidence in this classification, 0 to 1',
+    '  "hsnCode": your best-guess Indian HSN (tax classification) code for this item — DIGITS',
+    "                ONLY, no letters, spaces or punctuation, 4-8 characters, or null if you're",
+    "                not confident",
+    '  "gstRatePercent": the Indian GST rate percent for that HSN code — one of 0, 5, 12, 18,',
+    "                     28 — or null if unsure",
   ].join("\n");
 }
 
@@ -91,6 +122,7 @@ export class BoqEnrichmentService {
   constructor(
     private readonly boqRepository: IBoqRepository,
     private readonly ratesRepository: IHistoricalRatesRepository,
+    private readonly itemsRepository: IItemsRepository,
   ) {}
 
   /**
@@ -114,6 +146,8 @@ export class BoqEnrichmentService {
     description: string,
     unit: string | null,
     matches: HistoricalRateMatch[],
+    catalogHsn: { hsnCode: string; gstRate: number } | null,
+    hsnAlreadyConfirmed: boolean,
   ): Promise<UpdateBoqItemEnrichmentData> {
     const best = matches[0];
 
@@ -144,6 +178,11 @@ export class BoqEnrichmentService {
     const parsed = parseClassification(raw);
     if (!parsed) throw new ServiceUnavailableError("Ollama returned an unusable classification.");
 
+    // A confirmed catalog match always outranks the LLM's own guess for the same call — same
+    // "human feedback beats a fresh guess" rule the rate/category matching already use.
+    const hsnCode = catalogHsn?.hsnCode ?? parsed.hsnCode;
+    const gstRate = catalogHsn?.gstRate ?? parsed.gstRatePercent;
+
     return {
       normalizedName: matched ? matched.itemName : parsed.normalizedName,
       aiCategory: parsed.category,
@@ -157,6 +196,15 @@ export class BoqEnrichmentService {
       aiSource: matched ? "historical" : "llm",
       aiRateSourceId: matched?.id ?? null,
       aiEnrichedAt: new Date(),
+      suggestedHsnCode: hsnCode,
+      suggestedGstRate: gstRate,
+      // Unlike rate (which always needs an explicit "Apply"), HSN/GST auto-fill directly into
+      // the real editable fields so the estimator sees a usable value without an extra click —
+      // "if it needs changing, I'll change it" is the review step, not a separate confirm
+      // button. Once a human has confirmed one (hsnAlreadyConfirmed), never touch it again —
+      // omitting the key (not writing null/undefined explicitly) makes Prisma leave it alone.
+      ...(!hsnAlreadyConfirmed && hsnCode !== null ? { hsnCode } : {}),
+      ...(!hsnAlreadyConfirmed && gstRate !== null ? { gstRate } : {}),
     };
   }
 
@@ -185,7 +233,15 @@ export class BoqEnrichmentService {
       // One bad item (unusable LLM output) must not abandon the rest of the BOQ.
       try {
         const matches = await this.ratesRepository.findNearest(businessId, vector, RATE_MATCH_CANDIDATES);
-        const enrichment = await this.classify(item.description, item.unit, matches);
+        const canonicalName = deriveCanonicalName(item.normalizedName, item.description);
+        const catalogHsn = await this.itemsRepository.findConfirmedHsn(businessId, canonicalName);
+        const enrichment = await this.classify(
+          item.description,
+          item.unit,
+          matches,
+          catalogHsn,
+          item.hsnCodeConfirmed,
+        );
         await this.boqRepository.updateItemEnrichment(item.id, enrichment);
         enriched += 1;
       } catch (err) {

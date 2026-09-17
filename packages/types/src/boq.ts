@@ -46,6 +46,8 @@ export interface BoqItemDto {
   amount: number | null;
   /** GST percent for this line (default 18). Not included in `amount` — see the BoqItem model. */
   gstRate: number;
+  /** HSN (tax classification) code, estimator-owned — set by typing it or applying the AI suggestion. */
+  hsnCode: string | null;
   remarks: string | null;
   sortOrder: number;
   rateBreakdown: BoqItemRateBreakdownDto | null;
@@ -59,6 +61,11 @@ export interface BoqItemDto {
   aiEnrichedAt: string | null;
   // True once a human has explicitly confirmed the rate-source match (not just applied it once).
   rateSourceConfirmed: boolean;
+  /** AI-suggested HSN code + its paired GST% guess — travel together, see BoqItemGrid's Apply. */
+  suggestedHsnCode: string | null;
+  suggestedGstRate: number | null;
+  // True once a human has set hsnCode (typed it, or applied the suggestion) — never AI-set.
+  hsnCodeConfirmed: boolean;
   children: BoqItemDto[];
 }
 
@@ -164,6 +171,8 @@ export interface UpdateBoqItemInput {
   quantity?: number;
   rate?: number;
   gstRate?: number;
+  /** Empty string clears it back to unconfirmed; a non-empty value confirms + propagates. */
+  hsnCode?: string;
   remarks?: string;
   sortOrder?: number;
 }

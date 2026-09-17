@@ -50,6 +50,8 @@ export interface UpdateBoqItemData {
   rate?: number | null;
   amount?: number | null;
   gstRate?: number;
+  hsnCode?: string | null;
+  hsnCodeConfirmed?: boolean;
   remarks?: string | null;
   sortOrder?: number;
 }
@@ -85,6 +87,13 @@ export interface UpdateBoqItemEnrichmentData {
   aiSource: string | null;
   aiRateSourceId: string | null;
   aiEnrichedAt: Date;
+  suggestedHsnCode: string | null;
+  suggestedGstRate: number | null;
+  // Omitted (not present at all, not set to undefined/null) when hsnCode is already
+  // human-confirmed — Prisma's update() skips any key that's absent from `data`, so leaving
+  // these out is what makes the "never touch a confirmed value" guarantee actually hold.
+  hsnCode?: string;
+  gstRate?: number;
 }
 
 export interface ConfirmRateSourceData {

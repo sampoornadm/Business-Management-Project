@@ -20,12 +20,15 @@ import { round2 } from "../../shared/utils/math.js";
 import { sameSpec } from "../../shared/utils/spec-match.js";
 import type { AttachmentsService } from "../attachments/attachments.service.js";
 import type { AuditService } from "../audit/audit.service.js";
+import { deriveCanonicalName } from "../items/items.helpers.js";
+import type { IItemsRepository } from "../items/items.repository.js";
 import type { IHistoricalRatesRepository } from "../rates/rates.repository.js";
 import type { ITendersRepository } from "../tenders/tenders.repository.js";
 
 import { sumItemAmounts, toBoqDto, toBoqListItemDto } from "./boq.mapper.js";
 import { parseBoqFile } from "./boq.parser.js";
 import type {
+  BoqItemWithBreakdown,
   CreateBoqItemRow,
   IBoqRepository,
   UpsertRateBreakdownData,
@@ -54,6 +57,7 @@ export class BoqService {
     private readonly attachmentsService: AttachmentsService,
     private readonly auditService: AuditService,
     private readonly historicalRatesRepository: IHistoricalRatesRepository,
+    private readonly itemsRepository: IItemsRepository,
   ) {}
 
   private async assertTenderExists(tenderId: string, businessId: string): Promise<void> {
@@ -254,7 +258,17 @@ export class BoqService {
     const rate = data.rate !== undefined ? data.rate : existing.rate;
     const amount = quantity !== null && rate !== null ? round2(quantity * rate) : null;
 
-    await this.boqRepository.updateItem(itemId, { ...data, amount });
+    // Any human-committed hsnCode (typed directly, or applied from the AI suggestion) counts
+    // as this estimator's verified answer — same "a human touch confirms it" rule Item.category
+    // uses. An empty value clears it back to unconfirmed rather than storing "".
+    const hsnCode = data.hsnCode !== undefined ? data.hsnCode.trim() || null : undefined;
+    const hsnCodeConfirmed = hsnCode !== undefined ? hsnCode !== null : undefined;
+
+    await this.boqRepository.updateItem(itemId, {
+      ...data,
+      amount,
+      ...(hsnCode !== undefined ? { hsnCode, hsnCodeConfirmed } : {}),
+    });
     await this.auditService.log({
       actorId,
       action: "BOQ_ITEM_UPDATED",
@@ -262,7 +276,43 @@ export class BoqService {
       entityId: itemId,
       metadata: { boqId: existing.boqId, changes: data },
     });
+
+    if (hsnCode) {
+      await this.propagateHsnToItem(existing, hsnCode, data.gstRate ?? existing.gstRate, actorId, businessId);
+    }
+
     return this.buildBoqDto(existing.boqId, businessId);
+  }
+
+  /**
+   * Once an estimator confirms a BoqItem's HSN code, carry it (with whatever GST% the item now
+   * has) onto the matching master Item catalog entry — same find-or-create identity rule the RFQ
+   * backfill uses (items.service.ts) — so future tenders reusing this item skip the AI guess
+   * entirely. A no-op, un-logged, when that Item already has its own confirmed HSN.
+   */
+  private async propagateHsnToItem(
+    existing: BoqItemWithBreakdown,
+    hsnCode: string,
+    gstRate: number,
+    actorId: string,
+    businessId: string,
+  ): Promise<void> {
+    const canonicalName = deriveCanonicalName(existing.normalizedName, existing.description);
+    const result = await this.itemsRepository.confirmItemHsn(
+      businessId,
+      canonicalName,
+      existing.unit,
+      hsnCode,
+      gstRate,
+    );
+    if (!result.propagated) return;
+    await this.auditService.log({
+      actorId,
+      action: "ITEM_HSN_CODE_CONFIRMED",
+      entityType: "Item",
+      entityId: result.id,
+      metadata: { boqItemId: existing.id, canonicalName, hsnCode, gstRate },
+    });
   }
 
   async addItem(
