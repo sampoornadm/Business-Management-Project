@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState, type PropsWithChildren } from "react";
 
+import { AssistantWidget } from "@/components/assistant/assistant-widget";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { useAuthStore } from "@/lib/auth-store";
@@ -56,6 +57,7 @@ export default function DashboardLayout({ children }: PropsWithChildren) {
         <Topbar onMenuClick={() => setMobileNavOpen(true)} />
         <main id="main-content" className="flex-1 overflow-y-auto bg-muted/20 p-6">{children}</main>
       </div>
+      <AssistantWidget />
     </div>
   );
 }
