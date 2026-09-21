@@ -37,6 +37,9 @@ import { z } from "zod";
 import { CreateOrganizationDialog } from "@/components/organizations/create-organization-dialog";
 import { useOrganizations } from "@/hooks/use-organizations";
 
+// `lang="en-IN"` is a best-effort nudge for browsers that respect it (Firefox); Chrome/Edge/
+// Safari render <input type="date">/"datetime-local" text in the browser's own UI language
+// regardless — there's no per-element override for that, native inputs have no format API.
 const optionalNumericString = z
   .string()
   .optional()
@@ -538,7 +541,7 @@ export function TenderForm({
                 <FormItem>
                   <FormLabel>Submission date &amp; time</FormLabel>
                   <FormControl>
-                    <Input type="datetime-local" {...field} />
+                    <Input type="datetime-local" lang="en-IN" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -551,7 +554,7 @@ export function TenderForm({
                 <FormItem>
                   <FormLabel>Opening date</FormLabel>
                   <FormControl>
-                    <Input type="date" {...field} />
+                    <Input type="date" lang="en-IN" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
