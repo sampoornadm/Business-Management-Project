@@ -14,6 +14,7 @@ import { fillDocxTemplate, formatDate, getTemplateStatus } from "./document-gene
 export type QuotationFormat = "docx" | "csv" | "pdf";
 
 export interface QuotationRow {
+  slNo: string;
   itemCode: string;
   description: string;
   unit: string;
@@ -53,7 +54,8 @@ function formatNumber(value: number | null): string {
 
 /** BOQ tree (as `buildBoqItemTree` produces) -> a flat, print-ordered row list. */
 export function buildQuotationRows(items: BoqItemDto[]): QuotationRow[] {
-  return flattenBoqItems(items).map(({ node, depth }) => ({
+  return flattenBoqItems(items).map(({ node, depth }, index) => ({
+    slNo: String(index + 1),
     itemCode: node.itemCode ?? "",
     description: `${"  ".repeat(depth)}${node.description}`,
     unit: node.unit ?? "",
@@ -67,12 +69,23 @@ function escapeCsvField(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-export function buildQuotationCsv(rows: QuotationRow[], totalAmount: number): Buffer {
-  const header = ["Item Code", "Description", "Unit", "Quantity", "Rate", "Amount"];
-  const dataLines = rows.map((r) => [r.itemCode, r.description, r.unit, r.quantity, r.rate, r.amount]);
-  const totalLine = ["", "", "", "", "Total", formatNumber(totalAmount)];
-  const lines = [header, ...dataLines, totalLine].map((cols) => cols.map(escapeCsvField).join(","));
-  return Buffer.from(lines.join("\r\n"), "utf-8");
+export function buildQuotationCsv(rows: QuotationRow[], totalAmount: number, pinnedNotes: string[] = []): Buffer {
+  const header = ["Sl. No.", "Item Code", "Description", "Unit", "Quantity", "Rate", "Amount"];
+  const dataLines = rows.map((r) => [r.slNo, r.itemCode, r.description, r.unit, r.quantity, r.rate, r.amount]);
+  const totalLine = ["", "", "", "", "", "Total", formatNumber(totalAmount)];
+  const blank = ["", "", "", "", "", "", ""];
+  // Notes have no natural column of their own, so they're placed under Description (the one
+  // free-text column) — keeps them visually aligned with the item table instead of stranded
+  // in column A when opened in a spreadsheet.
+  const noteLines =
+    pinnedNotes.length > 0
+      ? [blank, ["", "", "Notes", "", "", "", ""], ...pinnedNotes.map((note) => ["", "", `• ${note}`, "", "", "", ""])]
+      : [];
+  const lines = [header, ...dataLines, totalLine, ...noteLines].map((cols) => cols.map(escapeCsvField).join(","));
+  // Prepend a UTF-8 BOM: without it, Excel opens the file assuming the system codepage
+  // (e.g. Windows-1252) and renders non-ASCII bytes like "Ø" (diameter symbol, common in
+  // cable/pipe descriptions) as mojibake instead of the intended glyph.
+  return Buffer.concat([Buffer.from("﻿", "utf-8"), Buffer.from(lines.join("\r\n"), "utf-8")]);
 }
 
 // Fixed per-column widths sized for a description-heavy table (item descriptions in this app
@@ -80,13 +93,14 @@ export function buildQuotationCsv(rows: QuotationRow[], totalAmount: number): Bu
 // doc.heightOfString and page-break handling — same pattern as rfq/rfq-document.ts#buildRfrPdf.
 // Deliberately not the reports module's exportTableToPdf (reports/reports.export.ts), which uses
 // equal-width columns and a flat row height with no wrapping — wrong fit for this data.
-const QUOTATION_COLUMN_HEADERS = ["Item Code", "Description", "Unit", "Qty", "Rate", "Amount"];
-const QUOTATION_COLUMN_WIDTHS = [50, 220, 40, 45, 60, 70];
+const QUOTATION_COLUMN_HEADERS = ["Sl. No.", "Item Code", "Description", "Unit", "Qty", "Rate", "Amount"];
+const QUOTATION_COLUMN_WIDTHS = [30, 50, 200, 40, 45, 60, 70];
 
 export function buildQuotationPdf(
   rows: QuotationRow[],
   totalAmount: number,
   header: { businessName: string; tenderNumber: string; tenderTitle: string; clientName: string },
+  pinnedNotes: string[] = [],
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40, size: "A4" });
@@ -129,12 +143,36 @@ export function buildQuotationPdf(
     y += 4;
 
     for (const row of rows) {
-      drawRow([row.itemCode, row.description, row.unit, row.quantity, row.rate, row.amount], false);
+      drawRow(
+        [row.slNo, row.itemCode, row.description, row.unit, row.quantity, row.rate, row.amount],
+        false,
+      );
     }
     y += 4;
     doc.moveTo(startX, y).lineTo(startX + tableWidth, y).stroke();
     y += 6;
-    drawRow(["", "", "", "", "Total", formatNumber(totalAmount)], true);
+    drawRow(["", "", "", "", "", "Total", formatNumber(totalAmount)], true);
+
+    if (pinnedNotes.length > 0) {
+      y += 10;
+      if (y + 20 > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+        y = doc.page.margins.top;
+      }
+      doc.font("Helvetica-Bold").fontSize(10).text("Important Notes", startX, y);
+      y += doc.heightOfString("Important Notes", { width: tableWidth }) + 4;
+      doc.font("Helvetica").fontSize(9);
+      for (const note of pinnedNotes) {
+        const bullet = `• ${note}`;
+        const noteHeight = doc.heightOfString(bullet, { width: tableWidth }) + 3;
+        if (y + noteHeight > doc.page.height - doc.page.margins.bottom) {
+          doc.addPage();
+          y = doc.page.margins.top;
+        }
+        doc.text(bullet, startX, y, { width: tableWidth });
+        y += noteHeight;
+      }
+    }
 
     doc.end();
   });
@@ -158,17 +196,23 @@ export async function generateQuotation(
   const totalAmount = round2(items.reduce((sum, item) => sum + (item.amount ?? 0), 0));
   const generatedDate = formatDate(new Date());
   const filenameBase = `Quotation-${tender.tenderNumber}-${generatedDate}`;
+  const pinnedNotes = tender.pinnedNotes.map((note) => note.lineText);
 
   let buffer: Buffer;
   if (format === "csv") {
-    buffer = buildQuotationCsv(rows, totalAmount);
+    buffer = buildQuotationCsv(rows, totalAmount, pinnedNotes);
   } else if (format === "pdf") {
-    buffer = await buildQuotationPdf(rows, totalAmount, {
-      businessName: tender.business.name,
-      tenderNumber: tender.tenderNumber,
-      tenderTitle: tender.title,
-      clientName: tender.client.name,
-    });
+    buffer = await buildQuotationPdf(
+      rows,
+      totalAmount,
+      {
+        businessName: tender.business.name,
+        tenderNumber: tender.tenderNumber,
+        tenderTitle: tender.title,
+        clientName: tender.client.name,
+      },
+      pinnedNotes,
+    );
   } else {
     const status = await getTemplateStatus(tender.business.code, "quotation");
     if (!status.exists) {
@@ -185,6 +229,12 @@ export async function generateQuotation(
       generatedDate,
       totalAmount: formatNumber(totalAmount),
       items: rows,
+      // Same {{#hasPinnedNotes}}{{#pinnedNotes}}{{.}}{{/pinnedNotes}}{{/hasPinnedNotes}}
+      // convention as the RFR template (rfq-document.ts#buildRfrDocx) — add that block at the
+      // end of quotation.docx to render these; docxtemplater can't inject a section a template
+      // doesn't already reference.
+      pinnedNotes,
+      hasPinnedNotes: pinnedNotes.length > 0 ? [{}] : [],
     });
   }
 

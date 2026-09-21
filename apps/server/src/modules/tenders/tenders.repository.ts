@@ -50,6 +50,7 @@ const tenderDocGenArgs = {
   include: {
     business: { select: { code: true, name: true, address: true, gstNumber: true, panNumber: true } },
     client: { select: { name: true, address: true } },
+    pinnedNotes: { orderBy: { createdAt: "asc" } },
   },
 } satisfies Prisma.TenderDefaultArgs;
 
