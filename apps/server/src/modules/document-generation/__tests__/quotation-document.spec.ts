@@ -57,13 +57,14 @@ describe("buildQuotationCsv", () => {
     const rows = buildQuotationRows([item()]);
 
     const csv = buildQuotationCsv(rows, 1000).toString("utf-8");
-    const lines = csv.split("\r\n");
+    // Strip the leading UTF-8 BOM before splitting into lines.
+    const lines = csv.replace(/^﻿/, "").split("\r\n");
 
-    expect(lines[0]).toBe("Item Code,Description,Unit,Quantity,Rate,Amount");
+    expect(lines[0]).toBe("Sl. No.,Item Code,Description,Unit,Quantity,Rate,Amount");
     // amount formats as "1,000" (en-IN grouping) — its own comma makes escapeCsvField quote the
     // whole field, same as it would quote any description containing a comma.
-    expect(lines[1]).toBe('IT-1,Widget,Nos,10,100,"1,000"');
-    expect(lines[2]).toBe(',,,,Total,"1,000"');
+    expect(lines[1]).toBe('1,IT-1,Widget,Nos,10,100,"1,000"');
+    expect(lines[2]).toBe(',,,,,Total,"1,000"');
   });
 
   it("quotes a description containing a comma", async () => {
@@ -73,6 +74,16 @@ describe("buildQuotationCsv", () => {
     const csv = buildQuotationCsv(rows, 1000).toString("utf-8");
 
     expect(csv).toContain('"Widget, large"');
+  });
+
+  it("starts with a UTF-8 BOM so Excel renders non-ASCII glyphs like Ø correctly", async () => {
+    const { buildQuotationCsv, buildQuotationRows } = await import("../quotation-document.js");
+    const rows = buildQuotationRows([item({ description: "Cable Ø25mm" })]);
+
+    const csv = buildQuotationCsv(rows, 1000);
+
+    expect(csv.subarray(0, 3)).toEqual(Buffer.from([0xef, 0xbb, 0xbf]));
+    expect(csv.toString("utf-8")).toContain("Ø25mm");
   });
 });
 
@@ -101,6 +112,7 @@ describe("generateQuotation", () => {
         title: "Road Widening",
         business: { code: "ARCHIE", name: "Archie Udyog", address: null, gstNumber: null, panNumber: null },
         client: { name: "Acme Corp", address: null },
+        pinnedNotes: [],
       }),
     };
     const fakeBoqRepository = {
@@ -121,6 +133,35 @@ describe("generateQuotation", () => {
     expect(result.filename).toMatch(/^Quotation-TEN-001-\d{2}-\d{2}-\d{4}\.csv$/);
     expect(result.buffer.toString("utf-8")).toContain("Widget");
     expect(fakeBoqRepository.findCurrentBoq).toHaveBeenCalledWith("tender-1", "business-1");
+  });
+
+  it("appends pinned notes to the generated csv", async () => {
+    const fakeTendersRepository = {
+      findForDocumentGeneration: vi.fn().mockResolvedValue({
+        tenderNumber: "TEN-001",
+        title: "Road Widening",
+        business: { code: "ARCHIE", name: "Archie Udyog", address: null, gstNumber: null, panNumber: null },
+        client: { name: "Acme Corp", address: null },
+        pinnedNotes: [{ lineText: "Confirm site access before delivery" }],
+      }),
+    };
+    const fakeBoqRepository = {
+      findCurrentBoq: vi.fn().mockResolvedValue({ id: "boq-1" }),
+      findItemsByBoqId: vi.fn().mockResolvedValue([item()]),
+    };
+
+    const { generateQuotation } = await import("../quotation-document.js");
+    const result = await generateQuotation(
+      fakeTendersRepository,
+      fakeBoqRepository,
+      "tender-1",
+      "business-1",
+      "csv",
+    );
+
+    const csv = result.buffer.toString("utf-8");
+    expect(csv).toContain("Notes");
+    expect(csv).toContain("Confirm site access before delivery");
   });
 
   it("throws NotFoundError when the tender doesn't exist", async () => {
