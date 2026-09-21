@@ -16,10 +16,10 @@ export function createAssistantRouter(controller: AssistantController): Router {
    * /assistant/query:
    *   post:
    *     tags: [Assistant]
-   *     summary: Natural-language document search (retrieval only — no content Q&A)
+   *     summary: Natural-language search over tenders, RFQs, POs and bills (item/status/date filters, follow-ups via echoed state)
    *     security: [{ bearerAuth: [] }]
    *     responses:
-   *       200: { description: Assistant reply plus matching search results }
+   *       200: { description: Reply, result links, filter chips, and the query state to send back with the next message }
    */
   router.post(
     "/query",

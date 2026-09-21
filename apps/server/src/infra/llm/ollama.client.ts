@@ -9,17 +9,34 @@ interface OllamaEmbedResponse {
   embeddings: number[][];
 }
 
-export async function generateJson(prompt: string, model: string = env.OLLAMA_MODEL): Promise<unknown> {
+export interface GenerateJsonOptions {
+  /**
+   * JSON Schema for grammar-constrained decoding (Ollama structured outputs). Guarantees the
+   * response parses and has the right keys/enums — plain `format: "json"` only guarantees syntax.
+   */
+  schema?: Record<string, unknown>;
+  /** Abort and throw ServiceUnavailableError after this long. Default: no timeout. */
+  timeoutMs?: number;
+  temperature?: number;
+}
+
+export async function generateJson(
+  prompt: string,
+  model: string = env.OLLAMA_MODEL,
+  options: GenerateJsonOptions = {},
+): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(`${env.OLLAMA_BASE_URL}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
       body: JSON.stringify({
         model,
         prompt,
-        format: "json",
+        format: options.schema ?? "json",
         stream: false,
+        ...(options.temperature !== undefined ? { options: { temperature: options.temperature } } : {}),
         // Thinking models (qwen3, deepseek-r1, ...) put ALL their output in a separate
         // `thinking` field and leave `response` empty — this helper would then always throw
         // "not valid JSON". Disabling it is also just faster on a CPU-only box, and we want
@@ -40,10 +57,11 @@ export async function generateJson(prompt: string, model: string = env.OLLAMA_MO
     );
   }
 
-  const data = (await response.json()) as OllamaGenerateResponse;
   try {
+    const data = (await response.json()) as OllamaGenerateResponse;
     return JSON.parse(data.response);
   } catch {
+    // Covers a body that never finishes arriving (timeout mid-read) as well as bad JSON.
     throw new ServiceUnavailableError("Ollama returned a response that was not valid JSON.");
   }
 }

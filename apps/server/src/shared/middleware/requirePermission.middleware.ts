@@ -26,6 +26,11 @@ function isAuthorized(permissionKeys: string[], required: string): boolean {
   return permissionKeys.includes(`${resource}:*`);
 }
 
+/** Service-level counterpart of requirePermission, for endpoints that gate per result kind. */
+export async function roleHasPermission(roleId: string, permissionKey: string): Promise<boolean> {
+  return isAuthorized(await loadRolePermissionKeys(roleId), permissionKey);
+}
+
 export function requirePermission(permissionKey: string): RequestHandler {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {

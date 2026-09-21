@@ -2,7 +2,7 @@
 
 import type { SearchEntityType, SearchResultItemDto } from "@bmp/types";
 import { Card, CardContent } from "@bmp/ui";
-import { Building2, FileSearch, FileText, HardHat, Truck } from "lucide-react";
+import { Building2, FileSearch, FileSpreadsheet, FileText, HardHat, Receipt, ShoppingCart, Truck } from "lucide-react";
 import Link from "next/link";
 import type { ComponentType } from "react";
 
@@ -12,7 +12,12 @@ const ENTITY_ICONS: Record<SearchEntityType, ComponentType<{ className?: string 
   Vendor: Truck,
   Project: HardHat,
   Attachment: FileSearch,
+  Rfq: FileSpreadsheet,
+  PurchaseOrder: ShoppingCart,
+  Bill: Receipt,
 };
+
+const TYPE_LABELS: Partial<Record<SearchEntityType, string>> = { Rfq: "RFQ", PurchaseOrder: "Purchase order" };
 
 export function SearchResultList({ results }: { results: SearchResultItemDto[] }) {
   if (results.length === 0) return null;
@@ -31,9 +36,9 @@ export function SearchResultList({ results }: { results: SearchResultItemDto[] }
               <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{result.title}</p>
-                {result.subtitle && <p className="truncate text-xs text-muted-foreground">{result.subtitle}</p>}
+                {result.subtitle && <p className="line-clamp-2 text-xs text-muted-foreground">{result.subtitle}</p>}
               </div>
-              <span className="shrink-0 text-xs text-muted-foreground">{result.type}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{TYPE_LABELS[result.type] ?? result.type}</span>
             </Link>
           );
         })}

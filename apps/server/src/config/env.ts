@@ -93,6 +93,9 @@ const envSchema = z.object({
   // every embedded document through as a "match". Re-measure once real indexed documents exist,
   // same way AI_MATCH_THRESHOLD was measured against bge-m3 rather than guessed.
   DOCUMENT_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.9),
+  // IANA timezone the assistant resolves "last month" / "this week" in. A single-region business:
+  // month boundaries must be the user's local midnights, not UTC's.
+  ASSISTANT_TIMEZONE: z.string().default("Asia/Kolkata"),
 });
 
 export type Env = z.infer<typeof envSchema>;
