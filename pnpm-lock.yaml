@@ -47,6 +47,9 @@ importers:
       chokidar:
         specifier: ^5.0.0
         version: 5.0.0
+      chrono-node:
+        specifier: ^2.10.1
+        version: 2.10.1
       compression:
         specifier: ^1.8.1
         version: 1.8.1
@@ -2979,6 +2982,10 @@ packages:
   chownr@2.0.0:
     resolution: {integrity: sha512-bIomtDF5KGpdogkLd9VspvFzk9KfpyyGlS8YFVZl7TGPBHL5snIOnxeshwVgPteQ9b4Eydl+pVbIyE1DcvCWgQ==}
     engines: {node: '>=10'}
+
+  chrono-node@2.10.1:
+    resolution: {integrity: sha512-tPOsBzYVAK5zth+CiHCgp5NGeqRc4mMD8FPthQ5IxkgjPWWxIFdM5odnmfw//IRAzl6C++Xy8olQW7wn5qBR1g==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
   citty@0.1.6:
     resolution: {integrity: sha512-tskPPKEs8D2KPafUypv2gxwJP8h/OaJmC82QQGGDQcHvXX43xF2VDACcJVmZ0EuSxkpO9Kc4MlrA3q0+FG58AQ==}
@@ -8356,6 +8363,8 @@ snapshots:
       readdirp: 5.0.0
 
   chownr@2.0.0: {}
+
+  chrono-node@2.10.1: {}
 
   citty@0.1.6:
     dependencies:

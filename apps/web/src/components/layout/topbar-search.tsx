@@ -2,7 +2,17 @@
 
 import type { SearchEntityType } from "@bmp/types";
 import { Button, Input } from "@bmp/ui";
-import { Building2, FileSearch, FileText, HardHat, Search, Truck } from "lucide-react";
+import {
+  Building2,
+  FileSearch,
+  FileSpreadsheet,
+  FileText,
+  HardHat,
+  Receipt,
+  Search,
+  ShoppingCart,
+  Truck,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ComponentType, type KeyboardEvent } from "react";
 
@@ -14,6 +24,9 @@ const ENTITY_ICONS: Record<SearchEntityType, ComponentType<{ className?: string 
   Vendor: Truck,
   Project: HardHat,
   Attachment: FileSearch,
+  Rfq: FileSpreadsheet,
+  PurchaseOrder: ShoppingCart,
+  Bill: Receipt,
 };
 
 export function TopbarSearch() {

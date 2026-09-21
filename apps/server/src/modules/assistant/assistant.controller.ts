@@ -8,8 +8,9 @@ export class AssistantController {
   constructor(private readonly assistantService: AssistantService) {}
 
   query = asyncHandler(async (req, res) => {
-    const { message } = req.body as AssistantQueryBody;
-    const result = await this.assistantService.query(message, req.user!.businessId);
+    const body = req.body as AssistantQueryBody;
+    const { roleId, businessId } = req.user!;
+    const result = await this.assistantService.query(body, { roleId, businessId });
     sendSuccess(res, result, "Assistant response");
   });
 }
