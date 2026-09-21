@@ -145,6 +145,19 @@ receiving status.
   `ALTER DATABASE ... SET` is not carried by a plain `pg_dump` of table data) needs the migration
   run, and the setting only takes effect on **new** sessions. Verify with `SHOW hnsw.iterative_scan;`
   after reconnecting.
+- The Assistant (`modules/assistant/`) turns chat messages into a structured query state and runs it
+  as plain business-scoped Prisma reads — **never model-written SQL** (text-to-SQL tools like
+  Vanna/Wren/Dataherald were rejected: wrong stack, and a generated query can drop the `businessId`
+  predicate or bypass per-kind permissions). Deterministic code owns everything with a closed
+  vocabulary — document kind, status, which date, the time phrase (`assistant.dates.ts`, IST default via
+  `ASSISTANT_TIMEZONE`, Indian FY), follow-up wording and state merging — because benchmarked against
+  `llama3.1:8b`/`qwen3:4b`, small models invent statuses, drop still-valid filters when asked to patch a
+  previous query, and one call hung 120s. The LLM only extracts item/party names (schema-constrained via
+  Ollama `format`, 15s timeout, heuristic fallback in `assistant.terms.ts`). The client echoes the
+  returned `state` on the next message; there is no server session. "Quoted" for a tender = earliest of
+  an audit `TENDER_STATUS_CHANGED → SUBMITTED` row and a `QUOTATION` attachment (`quotedAtByTender`); item
+  text is matched against **current** BOQ items only (`boq.isCurrent`), like every other BOQ read.
+  Tenders live in one business: a superadmin logged into another business correctly sees no matches.
 - Repeatedly re-running integration tests against the same Redis burns through the login rate
   limiter (`RATE_LIMITS.LOGIN`) and integration tests will start failing with 429s that look like
   real bugs. `docker compose exec redis redis-cli FLUSHALL` before a fresh run if that happens.

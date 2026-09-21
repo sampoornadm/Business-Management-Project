@@ -134,6 +134,7 @@ historical-rate lookup for those.
 |---|---|---|---|
 | `DOCUMENT_INDEXING_ENABLED` | No (default `false`) | No | Master switch. When false, uploaded attachments are never queued for text extraction/embedding and `/search` and `/assistant` only match on structured fields (tender number, title, etc.), not document content. |
 | `DOCUMENT_MATCH_THRESHOLD` | No (default `0.9`) | No | Cosine similarity a document's content embedding must clear to appear as a content match. Unmeasured placeholder — unlike `AI_MATCH_THRESHOLD`, no real indexed documents exist yet to measure against. Set above bge-m3's documented unrelated-pair noise ceiling (0.843-0.860) rather than below it, so it errs toward under- not over-matching. Re-measure once real indexed documents exist. |
+| `ASSISTANT_TIMEZONE` | No (default `Asia/Kolkata`) | No | IANA timezone the Assistant resolves "last month", "this week", "FY 2025-26" etc. in. Month/day boundaries are local midnights in this zone, not UTC. |
 
 ## Web (Next.js)
 
