@@ -6,6 +6,7 @@ node_modules/
 dist/
 build/
 .next/
+.next-autologin/
 out/
 coverage/
 playwright-report/
@@ -75,3 +76,4 @@ project-flow.drawio
 .gitignore
 project-flow.png
 start.sh
+brag-output/
