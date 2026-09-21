@@ -6,6 +6,9 @@ const currentDir = path.dirname(fileURLToPath(import.meta.url));
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  // Lets a second `next dev` (scripts/dev-autologin.sh) run beside the main one without both
+  // fighting over .next — see the .next race note in CLAUDE.md.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   outputFileTracingRoot: path.join(currentDir, "../.."),
   transpilePackages: ["@bmp/ui", "@bmp/types"],
   eslint: {

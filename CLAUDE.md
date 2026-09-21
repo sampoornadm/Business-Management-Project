@@ -30,6 +30,7 @@ packages/database/ Prisma schema, migrations, seed (@bmp/database)
 ```bash
 pnpm dev             # web (:3000) + server (:4000) + BullMQ worker, watch mode
 pnpm build / lint / typecheck / test   # across all workspaces via Turborepo
+pnpm dev:autologin   # DEV/TEST ONLY: 2nd web instance on 127.0.0.1:3100, auto-signed-in as superadmin (needs API on :4000)
 pnpm db:migrate      # prisma migrate dev (uses root .env)
 pnpm db:seed         # idempotent: roles/permissions/sample users from @bmp/types' matrix
 docker compose up -d # postgres, redis, minio(+init), mailhog, nginx
