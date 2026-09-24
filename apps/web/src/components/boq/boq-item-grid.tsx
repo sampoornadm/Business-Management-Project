@@ -257,6 +257,21 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
                 {classification}
               </Badge>
             )}
+            {item.suggestedHsnCode && item.suggestedHsnCode !== item.hsnCode && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                HSN: {item.suggestedHsnCode}
+                {canEdit && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => void commitField(item, "hsnCode", item.suggestedHsnCode!)}
+                  >
+                    Apply
+                  </Button>
+                )}
+              </span>
+            )}
             {item.suggestedRate !== null ? (
               <>
                 <span className="tabular-nums">{item.suggestedRate.toLocaleString()}</span>
