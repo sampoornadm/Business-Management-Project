@@ -12,6 +12,7 @@ import type {
 } from "../rates/rates.repository.js";
 import { buildHsnMatchPrompt, parseHsnMatch } from "../reference-data/hsn-matcher.js";
 import type { IReferenceDataRepository } from "../reference-data/reference-data.repository.js";
+import type { SettingsService } from "../settings/settings.service.js";
 
 import type { IBoqRepository, UpdateBoqItemEnrichmentData } from "./boq.repository.js";
 
@@ -131,6 +132,7 @@ export class BoqEnrichmentService {
     private readonly ratesRepository: IHistoricalRatesRepository,
     private readonly itemsRepository: IItemsRepository,
     private readonly referenceDataRepository: IReferenceDataRepository,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /**
@@ -159,13 +161,14 @@ export class BoqEnrichmentService {
     vector: number[],
   ): Promise<UpdateBoqItemEnrichmentData> {
     const best = matches[0];
+    const matchThreshold = await this.settingsService.get<number>("AI_MATCH_THRESHOLD");
 
     // A rate is only ever suggested when this is provably the SAME item: near-exact wording,
     // identical numeric specs, and the same unit. All three are required — see sameSpec()
     // above for why neither the embedding nor the LLM is trusted with this call.
     const matched =
       best !== undefined &&
-      best.similarity >= env.AI_MATCH_THRESHOLD &&
+      best.similarity >= matchThreshold &&
       sameSpec(description, best.itemName) &&
       (unit === null || best.unit === unit)
         ? best

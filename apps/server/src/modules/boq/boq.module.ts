@@ -4,6 +4,7 @@ import { auditService } from "../audit/audit.module.js";
 import { ItemsRepository } from "../items/items.repository.js";
 import { HistoricalRatesRepository } from "../rates/rates.repository.js";
 import { ReferenceDataRepository } from "../reference-data/reference-data.repository.js";
+import { settingsService } from "../settings/settings.module.js";
 import { TendersRepository } from "../tenders/tenders.repository.js";
 
 import { BoqEnrichmentService } from "./boq-enrichment.service.js";
@@ -29,6 +30,7 @@ export const boqEnrichmentService = new BoqEnrichmentService(
   historicalRatesRepository,
   itemsRepository,
   referenceDataRepository,
+  settingsService,
 );
 
 export const boqService = new BoqService(
