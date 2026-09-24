@@ -47,7 +47,6 @@ class FakeBoqRepository implements IBoqRepository {
       groupId: data.groupId,
       version: data.version,
       isCurrent: true,
-      status: "DRAFT",
       createdById: data.createdById,
       createdBy: CREATOR,
       createdAt: new Date(),
@@ -163,11 +162,6 @@ class FakeBoqRepository implements IBoqRepository {
     return [...this.items.values()]
       .filter((item) => item.boqId === boqId)
       .reduce((sum, item) => sum + (item.amount ?? 0), 0);
-  }
-
-  async finalize(boqId: string) {
-    const boq = this.boqs.get(boqId);
-    if (boq) boq.status = "FINALIZED";
   }
 
   async confirmRateSource(id: string, data: ConfirmRateSourceData) {

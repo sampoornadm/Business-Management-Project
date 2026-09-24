@@ -81,7 +81,6 @@ export function toBoqDto(boq: BoqWithCreator, items: BoqItemWithBreakdown[]): Bo
     groupId: boq.groupId ?? boq.id,
     version: boq.version,
     isCurrent: boq.isCurrent,
-    status: boq.status,
     createdBy: {
       id: boq.createdBy.id,
       firstName: boq.createdBy.firstName,
@@ -100,7 +99,6 @@ export function toBoqListItemDto(boq: BoqWithCreator, totalAmount: number): BoqL
     groupId: boq.groupId ?? boq.id,
     version: boq.version,
     isCurrent: boq.isCurrent,
-    status: boq.status,
     totalAmount: round2(totalAmount),
     createdBy: {
       id: boq.createdBy.id,

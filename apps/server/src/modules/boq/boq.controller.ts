@@ -51,11 +51,6 @@ export class BoqController {
     sendSuccess(res, versions, "BOQ versions retrieved");
   });
 
-  finalize = asyncHandler(async (req, res) => {
-    const boq = await this.boqService.finalize(req.params.id!, req.user!.id, req.user!.businessId);
-    sendSuccess(res, boq, "BOQ finalized");
-  });
-
   compare = asyncHandler(async (req, res) => {
     const query = req.query as unknown as CompareBoqQueryParsed;
     const result = await this.boqService.compare(req.params.id!, query.withTenderId, req.user!.businessId);
