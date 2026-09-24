@@ -10,6 +10,8 @@ import type {
   HistoricalRateMatch,
   IHistoricalRatesRepository,
 } from "../rates/rates.repository.js";
+import { buildHsnMatchPrompt, parseHsnMatch } from "../reference-data/hsn-matcher.js";
+import type { IReferenceDataRepository } from "../reference-data/reference-data.repository.js";
 
 import type { IBoqRepository, UpdateBoqItemEnrichmentData } from "./boq.repository.js";
 
@@ -18,6 +20,11 @@ const LLM_CONTEXT_CANDIDATES = 3;
 
 /** How many nearest historical rates the ANN query returns per item, before threshold filtering. */
 const RATE_MATCH_CANDIDATES = 10;
+
+/** Matching only targets 4-digit HSN headings for now — see the design spec's scope boundary. */
+const HSN_CODE_LENGTH = 4;
+/** How many ANN-retrieved HSN headings the LLM is offered to pick from. */
+const HSN_CANDIDATE_LIMIT = 8;
 
 /**
  * The LLM self-reports its own confidence, which is not calibrated against anything.
@@ -123,6 +130,7 @@ export class BoqEnrichmentService {
     private readonly boqRepository: IBoqRepository,
     private readonly ratesRepository: IHistoricalRatesRepository,
     private readonly itemsRepository: IItemsRepository,
+    private readonly referenceDataRepository: IReferenceDataRepository,
   ) {}
 
   /**
@@ -148,6 +156,7 @@ export class BoqEnrichmentService {
     matches: HistoricalRateMatch[],
     catalogHsn: { hsnCode: string; gstRate: number } | null,
     hsnAlreadyConfirmed: boolean,
+    vector: number[],
   ): Promise<UpdateBoqItemEnrichmentData> {
     const best = matches[0];
 
@@ -178,9 +187,12 @@ export class BoqEnrichmentService {
     const parsed = parseClassification(raw);
     if (!parsed) throw new ServiceUnavailableError("Ollama returned an unusable classification.");
 
-    // A confirmed catalog match always outranks the LLM's own guess for the same call — same
-    // "human feedback beats a fresh guess" rule the rate/category matching already use.
-    const hsnCode = catalogHsn?.hsnCode ?? parsed.hsnCode;
+    // A confirmed catalog match always outranks a fresh match for the same call — same "human
+    // feedback beats a fresh guess" rule the rate/category matching already use. A fresh match
+    // is never trusted enough to become the real hsnCode — see the spread below.
+    const freshMatch = catalogHsn ? null : await this.matchHsnCode(description, unit, vector);
+    const hsnCode = catalogHsn?.hsnCode ?? null;
+    const suggestedHsnCode = catalogHsn?.hsnCode ?? freshMatch?.code ?? null;
     const gstRate = catalogHsn?.gstRate ?? parsed.gstRatePercent;
 
     return {
@@ -196,16 +208,46 @@ export class BoqEnrichmentService {
       aiSource: matched ? "historical" : "llm",
       aiRateSourceId: matched?.id ?? null,
       aiEnrichedAt: new Date(),
-      suggestedHsnCode: hsnCode,
+      suggestedHsnCode,
       suggestedGstRate: gstRate,
-      // Unlike rate (which always needs an explicit "Apply"), HSN/GST auto-fill directly into
-      // the real editable fields so the estimator sees a usable value without an extra click —
-      // "if it needs changing, I'll change it" is the review step, not a separate confirm
-      // button. Once a human has confirmed one (hsnAlreadyConfirmed), never touch it again —
-      // omitting the key (not writing null/undefined explicitly) makes Prisma leave it alone.
+      // hsnCode (the real billing field) is only ever set by an explicit human action — typing
+      // over it, clicking Apply on a suggestion, or (here) a catalog match a human already
+      // confirmed for this exact item elsewhere. A fresh, never-confirmed match only ever lands
+      // in suggestedHsnCode above. GST rate keeps its original auto-fill behavior (unchanged —
+      // out of scope here, see the design spec). Once a human has confirmed hsnCode
+      // (hsnAlreadyConfirmed), never touch it again — omitting the key (not writing
+      // null/undefined explicitly) makes Prisma leave it alone.
       ...(!hsnAlreadyConfirmed && hsnCode !== null ? { hsnCode } : {}),
       ...(!hsnAlreadyConfirmed && gstRate !== null ? { gstRate } : {}),
     };
+  }
+
+  /**
+   * ANN-retrieves real HSN headings close to this item's embedding, then asks the model to pick
+   * one of them — never lets it invent a code. See hsn-matcher.ts for why this specific shape
+   * makes the wrong-chapter hallucination (7310/7318/7321/... for a pipe fitting) structurally
+   * impossible.
+   */
+  private async matchHsnCode(
+    description: string,
+    unit: string | null,
+    vector: number[],
+  ): Promise<{ code: string; description: string } | null> {
+    const candidates = await this.referenceDataRepository.findNearestHsn(
+      vector,
+      HSN_CODE_LENGTH,
+      HSN_CANDIDATE_LIMIT,
+    );
+    if (candidates.length === 0) return null;
+
+    const raw = await generateJson(
+      buildHsnMatchPrompt(description, unit, candidates),
+      env.OLLAMA_ENRICHMENT_MODEL,
+    );
+    const code = parseHsnMatch(raw, new Set(candidates.map((c) => c.code)));
+    if (!code) return null;
+    const match = candidates.find((c) => c.code === code);
+    return match ? { code: match.code, description: match.description } : null;
   }
 
   /**
@@ -241,6 +283,7 @@ export class BoqEnrichmentService {
           matches,
           catalogHsn,
           item.hsnCodeConfirmed,
+          vector,
         );
         await this.boqRepository.updateItemEnrichment(item.id, enrichment);
         enriched += 1;
