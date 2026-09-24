@@ -2,7 +2,6 @@
 
 import type { TenderDto } from "@bmp/types";
 import {
-  Badge,
   Button,
   Card,
   CardContent,
@@ -17,7 +16,7 @@ import { useState } from "react";
 
 import { BoqItemGrid } from "@/components/boq/boq-item-grid";
 import { BoqUploadPanel } from "@/components/boq/boq-upload-panel";
-import { useAddBoqItem, useBoqVersions, useCurrentBoq, useFinalizeBoq } from "@/hooks/use-boq";
+import { useAddBoqItem, useBoqVersions, useCurrentBoq } from "@/hooks/use-boq";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
 
@@ -82,31 +81,15 @@ function AddItemForm({ tenderId }: { tenderId: string }) {
 }
 
 export function TenderItemsTab({ tender }: { tender: TenderDto }) {
-  const { toast } = useToast();
   const roleName = useAuthStore((state) => state.user?.role.name);
   const canCreate = hasPermission(roleName, "boq:create");
-  const canUpdate = hasPermission(roleName, "boq:update");
 
   const boqQuery = useCurrentBoq(tender.id);
   const versionsQuery = useBoqVersions(tender.id);
-  const finalize = useFinalizeBoq(tender.id);
 
   const [showReupload, setShowReupload] = useState(false);
 
   const notFound = (boqQuery.error as AxiosError | undefined)?.response?.status === 404;
-
-  async function handleFinalize() {
-    try {
-      await finalize.mutateAsync();
-      toast({ title: "BOQ finalized" });
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Could not finalize BOQ",
-        description: error instanceof Error ? error.message : "Please try again.",
-      });
-    }
-  }
 
   if (boqQuery.isLoading) {
     return <Skeleton className="h-64 w-full" />;
@@ -134,9 +117,6 @@ export function TenderItemsTab({ tender }: { tender: TenderDto }) {
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
           <div className="flex items-center gap-3">
-            <Badge variant={boqQuery.data.status === "FINALIZED" ? "success" : "outline"}>
-              {boqQuery.data.status}
-            </Badge>
             <span className="text-sm text-muted-foreground">
               Version {boqQuery.data.version} · {versionsQuery.data?.length ?? 1} version(s)
             </span>
@@ -153,18 +133,11 @@ export function TenderItemsTab({ tender }: { tender: TenderDto }) {
                 <RefreshCw className="mr-2 h-4 w-4" /> Upload new version
               </Button>
             )}
-            {canUpdate && boqQuery.data.status === "DRAFT" && (
-              <Button size="sm" onClick={handleFinalize} disabled={finalize.isPending}>
-                Finalize
-              </Button>
-            )}
           </div>
         </CardContent>
       </Card>
 
-      {canCreate && boqQuery.data.status === "DRAFT" && (
-        <AddItemForm tenderId={tender.id} />
-      )}
+      {canCreate && <AddItemForm tenderId={tender.id} />}
 
       <BoqItemGrid tenderId={tender.id} boq={boqQuery.data} />
     </div>

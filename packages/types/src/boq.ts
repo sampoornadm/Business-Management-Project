@@ -1,6 +1,3 @@
-export const BOQ_STATUSES = ["DRAFT", "FINALIZED"] as const;
-export type BoqStatus = (typeof BOQ_STATUSES)[number];
-
 export const HISTORICAL_RATE_CATEGORIES = ["MATERIAL", "LABOR", "MACHINERY", "TRANSPORT"] as const;
 export type HistoricalRateCategory = (typeof HISTORICAL_RATE_CATEGORIES)[number];
 
@@ -99,7 +96,6 @@ export interface BoqDto {
   groupId: string;
   version: number;
   isCurrent: boolean;
-  status: BoqStatus;
   createdBy: { id: string; firstName: string; lastName: string };
   items: BoqItemDto[];
   totalAmount: number;
@@ -112,7 +108,6 @@ export interface BoqListItemDto {
   groupId: string;
   version: number;
   isCurrent: boolean;
-  status: BoqStatus;
   totalAmount: number;
   createdBy: { id: string; firstName: string; lastName: string };
   createdAt: string;

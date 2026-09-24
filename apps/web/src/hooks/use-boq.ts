@@ -74,17 +74,6 @@ export function useCommitBoq(tenderId: string) {
   });
 }
 
-export function useFinalizeBoq(tenderId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const response = await apiClient.patch<ApiResponse<BoqDto>>(`/tenders/${tenderId}/boq/finalize`);
-      return unwrap(response.data);
-    },
-    onSuccess: () => invalidateBoq(queryClient, tenderId),
-  });
-}
-
 export function useAddBoqItem(tenderId: string) {
   const queryClient = useQueryClient();
   return useMutation({
