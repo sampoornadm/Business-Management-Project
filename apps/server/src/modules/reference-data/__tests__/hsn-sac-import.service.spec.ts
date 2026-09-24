@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { embedMock } = vi.hoisted(() => ({ embedMock: vi.fn() }));
 vi.mock("../../../infra/llm/ollama.client.js", () => ({ embed: embedMock }));
 
-import { HsnSacImportService, parseHsnSacWorkbook } from "../hsn-sac-import.service.js";
+import { HsnSacImportService, OLLAMA_EMBED_CHUNK_SIZE, parseHsnSacWorkbook } from "../hsn-sac-import.service.js";
 import type { HsnCodeRow, IReferenceDataRepository, UpsertCodeInput } from "../reference-data.repository.js";
 
 async function buildFixtureWorkbook(): Promise<Buffer> {
@@ -119,6 +119,30 @@ describe("HsnSacImportService.importFromBuffer", () => {
     expect(result).toEqual({ hsnRowCount: 2, sacRowCount: 1 });
     expect(repository.imports).toHaveLength(1);
     expect(repository.embedded.size).toBe(0);
+  });
+
+  it("chunks embedding calls so a single Ollama request never gets an oversized batch", async () => {
+    // Ollama's local runner has been observed to drop the connection (EOF from its internal
+    // tokenize call) on a single 500+-item /api/embed request on this hardware — chunking is a
+    // real, measured constraint, not speculative.
+    const workbook = new ExcelJS.Workbook();
+    const hsn = workbook.addWorksheet("HSN_MSTR");
+    hsn.addRow(["HSN_CD", "HSN_Description"]);
+    const rowCount = OLLAMA_EMBED_CHUNK_SIZE + 5;
+    for (let i = 0; i < rowCount; i++) {
+      hsn.addRow([String(1000 + i), `Description ${i}`]);
+    }
+    workbook.addWorksheet("SAC_MSTR").addRow(["SAC_CD", "SAC_Description"]);
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+
+    embedMock.mockImplementation(async (texts: string[]) => texts.map(() => [0.1, 0.2]));
+
+    await service.importFromBuffer(buffer, "https://example.test", null, null);
+
+    expect(embedMock).toHaveBeenCalledTimes(2);
+    expect(embedMock.mock.calls[0]?.[0]).toHaveLength(OLLAMA_EMBED_CHUNK_SIZE);
+    expect(embedMock.mock.calls[1]?.[0]).toHaveLength(5);
+    expect(repository.embedded.size).toBe(rowCount);
   });
 
   it("does not re-embed a row that's already embedded and whose description hasn't changed", async () => {

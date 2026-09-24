@@ -10,6 +10,20 @@ export const CBIC_HSN_SAC_URL = "https://tutorial.gst.gov.in/downloads/HSN_SAC.x
 const DATASET_NAME = "HSN_SAC";
 /** How many still-unembedded 4-digit HSN headings get embedded per import pass. */
 const EMBED_BATCH_LIMIT = 2000;
+/**
+ * Max texts sent to Ollama's /api/embed in one call. Measured, not speculative: a single
+ * 500+-item request against this app's local bge-m3 runner drops the connection (the runner's
+ * internal tokenize call returns EOF — an OOM/crash symptom, not a documented API limit) while
+ * 200 succeeds reliably. Comfortably under that observed failure point, with margin since the
+ * real ceiling is hardware-dependent, not a fixed constant.
+ */
+export const OLLAMA_EMBED_CHUNK_SIZE = 150;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}
 
 export interface ParsedWorkbook {
   hsnRows: UpsertCodeInput[];
@@ -83,18 +97,27 @@ export class HsnSacImportService {
     const pending = await this.referenceDataRepository.findUnembeddedHsnCodes(EMBED_BATCH_LIMIT);
     if (pending.length === 0) return;
 
-    let vectors: number[][];
-    try {
-      vectors = await embed(pending.map((row) => row.description));
-    } catch (err) {
-      logger.warn({ err, count: pending.length }, "Skipped HSN embedding pass (Ollama unavailable)");
-      return;
+    let embedded = 0;
+    for (const batch of chunk(pending, OLLAMA_EMBED_CHUNK_SIZE)) {
+      let vectors: number[][];
+      try {
+        vectors = await embed(batch.map((row) => row.description));
+      } catch (err) {
+        // Abort the remaining chunks too — a failure here is Ollama being unreachable, not a
+        // per-chunk problem, so retrying more chunks would just repeat the same failure. The
+        // rows in this and later chunks stay unembedded for the next pass to pick up (same
+        // "one bad step doesn't abandon the rest" rule boq-enrichment.service.ts#enrichBoq
+        // follows for the BOQ it's mid-way through, one level up).
+        logger.warn({ err, embedded, remaining: pending.length - embedded }, "Stopped HSN embedding pass (Ollama unavailable)");
+        return;
+      }
+      for (const [index, row] of batch.entries()) {
+        const vector = vectors[index];
+        if (vector) await this.referenceDataRepository.setHsnEmbedding(row.code, vector);
+      }
+      embedded += batch.length;
     }
-    for (const [index, row] of pending.entries()) {
-      const vector = vectors[index];
-      if (vector) await this.referenceDataRepository.setHsnEmbedding(row.code, vector);
-    }
-    logger.info({ count: pending.length }, "Embedded HSN codes");
+    logger.info({ count: embedded }, "Embedded HSN codes");
   }
 
   async fetchAndImport(
