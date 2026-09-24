@@ -24,6 +24,7 @@ import { permissionsRouter } from "../modules/permissions/permissions.module.js"
 import { projectsRouter } from "../modules/projects/projects.module.js";
 import { purchaseOrdersRouter } from "../modules/purchase-orders/purchase-orders.module.js";
 import { ratesRouter } from "../modules/rates/rates.module.js";
+import { referenceDataRouter } from "../modules/reference-data/reference-data.module.js";
 import { reportsRouter, searchRouter } from "../modules/reports/reports.module.js";
 import { rfqItemsRouter, rfqRouter } from "../modules/rfq/rfq.module.js";
 import { rolesRouter } from "../modules/roles/roles.module.js";
@@ -55,6 +56,7 @@ v1Router.use("/tenders", documentGenerationRouter);
 v1Router.use("/tenders", boqRouter);
 v1Router.use("/boq-items", boqItemsRouter);
 v1Router.use("/rates", ratesRouter);
+v1Router.use("/reference-data", referenceDataRouter);
 v1Router.use("/vendors", vendorsRouter);
 v1Router.use("/categories", categoriesRouter);
 v1Router.use("/contacts", contactsRouter);
