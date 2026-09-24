@@ -75,6 +75,8 @@ export const PERMISSION_KEYS = [
   "businesses:update",
   "businesses:delete",
   "businesses:manage_members",
+  "settings:read",
+  "settings:manage",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -91,8 +93,11 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = PERMISSION_KEYS.ma
   return { key, resource, action, description: `Permission to ${action} ${resource}` };
 });
 
+// SUPER_ADMIN-only, via the wildcard permission — not through this matrix. Mirrors the
+// businesses: exclusion above: ADMIN explicitly "cannot modify system settings"
+// (see ROLE_DESCRIPTIONS.ADMIN below).
 const ALL_STANDARD_PERMISSIONS: PermissionKey[] = PERMISSION_KEYS.filter(
-  (key) => !key.startsWith("businesses:"),
+  (key) => !key.startsWith("businesses:") && !key.startsWith("settings:"),
 );
 
 const TENDER_VIEW_BASELINE: PermissionKey[] = [
