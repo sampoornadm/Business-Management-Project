@@ -14,6 +14,7 @@ import type {
   ListHistoricalRatesFilters,
 } from "../../rates/rates.repository.js";
 import type { HsnCandidate, IReferenceDataRepository } from "../../reference-data/reference-data.repository.js";
+import type { SettingsService } from "../../settings/settings.service.js";
 import { BoqEnrichmentService } from "../boq-enrichment.service.js";
 import type {
   BoqItemWithBreakdown,
@@ -141,11 +142,13 @@ function buildService() {
   const ratesRepository = new FakeRatesRepository();
   const itemsRepository = new FakeItemsRepository();
   const referenceDataRepository = new FakeReferenceDataRepository();
+  const settingsService = { get: vi.fn().mockResolvedValue(0.98) } as unknown as SettingsService;
   const service = new BoqEnrichmentService(
     boqRepository as unknown as IBoqRepository,
     ratesRepository as unknown as IHistoricalRatesRepository,
     itemsRepository as unknown as IItemsRepository,
     referenceDataRepository as unknown as IReferenceDataRepository,
+    settingsService,
   );
   return { service, boqRepository, ratesRepository, itemsRepository, referenceDataRepository };
 }

@@ -29,6 +29,7 @@ import { reportsRouter, searchRouter } from "../modules/reports/reports.module.j
 import { rfqItemsRouter, rfqRouter } from "../modules/rfq/rfq.module.js";
 import { rolesRouter } from "../modules/roles/roles.module.js";
 import { savedViewsRouter } from "../modules/saved-views/saved-views.module.js";
+import { settingsRouter } from "../modules/settings/settings.module.js";
 import { tagsRouter } from "../modules/tags/tags.module.js";
 import { tendersRouter } from "../modules/tenders/tenders.module.js";
 import { usersRouter } from "../modules/users/users.module.js";
@@ -50,6 +51,7 @@ v1Router.use("/businesses", businessesRouter);
 v1Router.use("/tags", tagsRouter);
 v1Router.use("/notifications", notificationsRouter);
 v1Router.use("/saved-views", savedViewsRouter);
+v1Router.use("/settings", settingsRouter);
 v1Router.use("/bills", billsRouter);
 v1Router.use("/tenders", tendersRouter);
 v1Router.use("/tenders", documentGenerationRouter);
