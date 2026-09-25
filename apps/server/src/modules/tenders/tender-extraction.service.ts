@@ -12,7 +12,7 @@ import { parseIiscoNoteSections } from "./tender-notes-sections.parser.js";
 import { parseTenderNotes } from "./tender-notes.parser.js";
 
 export type GenerateJsonFn = (prompt: string) => Promise<unknown>;
-export type GenerateTextFn = (prompt: string) => Promise<string>;
+export type GenerateTextFn = (prompt: string, options?: { timeoutMs?: number }) => Promise<string>;
 export type ExtractTextFn = (
   buffer: Buffer,
   mimeType: string,
@@ -82,6 +82,13 @@ Document text:
 // Notes/terms can sit deeper than the header fields (page 2+), so allow a larger window than
 // MAX_PROMPT_CHARS — but still bounded, since the item table (irrelevant here) follows.
 const MAX_NOTES_CHARS = 16_000;
+
+// A large ITT/notes section pushed against the local model's runtime context window can turn
+// into a very slow generation instead of a clean failure — measured against a real tender whose
+// ITT section alone ran several minutes with no output, long enough to look like a hung request
+// upstream. Bounding the call lets the existing catch-and-fall-back-to-raw-text path (below) take
+// over quickly instead of the whole extraction request stalling indefinitely.
+const NOTES_CLEANUP_TIMEOUT_MS = 45_000;
 
 // Narrower per-section counterpart to NOTES_PROMPT, used when parseIiscoNoteSections has already
 // found and bounded a section deterministically — the model's job shrinks from "find every
@@ -288,7 +295,11 @@ export class TenderExtractionService {
     let notes: string | undefined;
     if (env.TENDER_NOTES_AI_ENABLED) {
       try {
-        notes = stripCodeFence(await this.generateText(`${NOTES_PROMPT}${text.slice(0, MAX_NOTES_CHARS)}\n"""`));
+        notes = stripCodeFence(
+          await this.generateText(`${NOTES_PROMPT}${text.slice(0, MAX_NOTES_CHARS)}\n"""`, {
+            timeoutMs: NOTES_CLEANUP_TIMEOUT_MS,
+          }),
+        );
       } catch {
         warnings.push("AI notes extraction was unavailable — used a basic parser for Terms & Notes.");
       }
@@ -320,7 +331,9 @@ export class TenderExtractionService {
     const raw = `## ${section.heading}\n${section.text.replace(/\s+/g, " ").trim()}`;
     if (!aiNotesEnabled) return raw;
     try {
-      const cleaned = stripCodeFence(await this.generateText(buildSectionCleanupPrompt(section)));
+      const cleaned = stripCodeFence(
+        await this.generateText(buildSectionCleanupPrompt(section), { timeoutMs: NOTES_CLEANUP_TIMEOUT_MS }),
+      );
       return cleaned || raw;
     } catch {
       warnings.push(`AI notes extraction was unavailable for "${section.heading}" — used the raw extracted text.`);

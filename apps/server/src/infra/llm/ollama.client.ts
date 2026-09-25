@@ -66,17 +66,27 @@ export async function generateJson(
   }
 }
 
+export interface GenerateTextOptions {
+  /** Abort and throw ServiceUnavailableError after this long. Default: no timeout. */
+  timeoutMs?: number;
+}
+
 /**
  * Free-form text generation — no `format: "json"`, no JSON.parse. For outputs that are prose
  * (e.g. a multi-line markdown notes block), where wrapping a big multi-line string in JSON is
  * needlessly fragile. Same reachability/error handling and `think: false` as generateJson.
  */
-export async function generateText(prompt: string, model: string = env.OLLAMA_MODEL): Promise<string> {
+export async function generateText(
+  prompt: string,
+  model: string = env.OLLAMA_MODEL,
+  options: GenerateTextOptions = {},
+): Promise<string> {
   let response: Response;
   try {
     response = await fetch(`${env.OLLAMA_BASE_URL}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
       body: JSON.stringify({ model, prompt, stream: false, think: false }),
     });
   } catch {
