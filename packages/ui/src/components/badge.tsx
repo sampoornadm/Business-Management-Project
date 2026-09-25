@@ -1,6 +1,7 @@
 "use client";
 
 import { cva, type VariantProps } from "class-variance-authority";
+import { Sparkles } from "lucide-react";
 import * as React from "react";
 
 
@@ -18,6 +19,7 @@ const badgeVariants = cva(
           "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
         signal: "border-transparent bg-signal text-signal-foreground hover:bg-signal/80",
         success: "border-transparent bg-success text-success-foreground hover:bg-success/80",
+        ai: "border-transparent bg-ai text-ai-foreground hover:bg-ai/80",
         outline: "text-foreground",
       },
     },
@@ -35,4 +37,19 @@ function Badge({ className, variant, ...props }: BadgeProps) {
   return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
 
-export { Badge, badgeVariants };
+/**
+ * The app's one visual marker for AI-suggested / autosuggested content — anything a model
+ * proposed rather than a human entered. Use it wherever such a value is shown (BOQ item
+ * category, HSN suggestion, suggested rate, etc.) instead of a plain Badge, so the same
+ * icon+color reads as "the app proposed this" everywhere in the product.
+ */
+function AiBadge({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={cn(badgeVariants({ variant: "ai" }), "gap-1", className)} {...props}>
+      <Sparkles className="h-3 w-3 shrink-0" aria-hidden="true" />
+      {children}
+    </div>
+  );
+}
+
+export { AiBadge, Badge, badgeVariants };

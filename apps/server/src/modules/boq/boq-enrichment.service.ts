@@ -10,6 +10,7 @@ import type {
   HistoricalRateMatch,
   IHistoricalRatesRepository,
 } from "../rates/rates.repository.js";
+import { matchHsnByKeyword } from "../reference-data/hsn-keyword-rules.js";
 import { buildHsnMatchPrompt, parseHsnMatch } from "../reference-data/hsn-matcher.js";
 import type { IReferenceDataRepository } from "../reference-data/reference-data.repository.js";
 import type { SettingsService } from "../settings/settings.service.js";
@@ -236,6 +237,11 @@ export class BoqEnrichmentService {
     unit: string | null,
     vector: number[],
   ): Promise<{ code: string; description: string } | null> {
+    // Checked before the ANN/LLM path — cheaper, and a measured fix for phrasing that path gets
+    // wrong. See hsn-keyword-rules.ts for the grounding and the real mismatches it corrects.
+    const keywordMatch = matchHsnByKeyword(description);
+    if (keywordMatch) return keywordMatch;
+
     const candidates = await this.referenceDataRepository.findNearestHsn(
       vector,
       HSN_CODE_LENGTH,

@@ -60,6 +60,12 @@ module.exports = {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",
         },
+        // AI-suggested / autosuggested content marker — see globals.css's --ai for why it's
+        // kept distinct from primary/signal/success.
+        ai: {
+          DEFAULT: "hsl(var(--ai))",
+          foreground: "hsl(var(--ai-foreground))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

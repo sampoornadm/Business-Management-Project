@@ -388,43 +388,43 @@ describe("BoqEnrichmentService", () => {
 
   it("suggests a fresh (non-catalog) HSN match but never auto-fills the real hsnCode field", async () => {
     const { service, boqRepository, referenceDataRepository } = buildService();
-    const item = makeItem("TEE MATERIAL: MILD STEEL SIZE: 15MM");
+    const item = makeItem("PORTLAND CEMENT OPC 43 GRADE 50KG BAG");
     boqRepository.items = [item];
     referenceDataRepository.nearestHsn = [
-      { code: "7307", description: "TUBE OR PIPE FITTINGS, OF IRON OR STEEL", similarity: 0.9 },
+      { code: "2523", description: "PORTLAND CEMENT, ALUMINOUS CEMENT, SLAG CEMENT", similarity: 0.9 },
     ];
     embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
     generateJsonMock
       .mockResolvedValueOnce({
-        normalizedName: "Pipe Tee 15mm",
-        category: "Plumbing",
-        subcategory: "Fittings",
+        normalizedName: "OPC 43 Grade Cement",
+        category: "Civil",
+        subcategory: "Cement",
         confidence: 0.8,
         hsnCode: null,
         gstRatePercent: 18,
       })
-      .mockResolvedValueOnce({ hsnCode: "7307" });
+      .mockResolvedValueOnce({ hsnCode: "2523" });
 
     await service.enrichBoq(BOQ_ID, BUSINESS_ID);
 
     const result = boqRepository.enrichment.get(item.id);
-    expect(result?.suggestedHsnCode).toBe("7307");
+    expect(result?.suggestedHsnCode).toBe("2523");
     expect(result).not.toHaveProperty("hsnCode");
   });
 
   it("rejects an HSN code the model returns that wasn't in the offered candidate list", async () => {
     const { service, boqRepository, referenceDataRepository } = buildService();
-    const item = makeItem("TEE MATERIAL: MILD STEEL SIZE: 15MM");
+    const item = makeItem("PORTLAND CEMENT OPC 43 GRADE 50KG BAG");
     boqRepository.items = [item];
     referenceDataRepository.nearestHsn = [
-      { code: "7307", description: "TUBE OR PIPE FITTINGS, OF IRON OR STEEL", similarity: 0.9 },
+      { code: "2523", description: "PORTLAND CEMENT, ALUMINOUS CEMENT, SLAG CEMENT", similarity: 0.9 },
     ];
     embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
     generateJsonMock
       .mockResolvedValueOnce({
-        normalizedName: "Pipe Tee 15mm",
-        category: "Plumbing",
-        subcategory: "Fittings",
+        normalizedName: "OPC 43 Grade Cement",
+        category: "Civil",
+        subcategory: "Cement",
         confidence: 0.8,
         hsnCode: null,
         gstRatePercent: 18,
@@ -538,5 +538,35 @@ describe("BoqEnrichmentService", () => {
     // entirely (not null/undefined-valued), since that's what makes Prisma skip the column.
     expect(result).not.toHaveProperty("hsnCode");
     expect(result).not.toHaveProperty("gstRate");
+  });
+
+  it("resolves a known steel pipe-fitting description deterministically, skipping the ANN/LLM HSN pick", async () => {
+    const { service, boqRepository, referenceDataRepository } = buildService();
+    const item = makeItem("SOCKET MATERIAL : MILD STEEL SIZE : 2IN MEDIUM QUALITY");
+    boqRepository.items = [item];
+    // Deliberately wrong candidates — if the ANN/LLM path ran, this is what it would pick from.
+    referenceDataRepository.nearestHsn = [
+      {
+        code: "8547",
+        description: "INSULATING FITTINGS FOR ELECTRICAL MACHINES",
+        similarity: 0.9,
+      },
+    ];
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock.mockResolvedValueOnce({
+      normalizedName: "Pipe Socket 2in",
+      category: "Plumbing",
+      subcategory: "Fittings",
+      confidence: 0.8,
+      hsnCode: null,
+      gstRatePercent: 18,
+    });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    const result = boqRepository.enrichment.get(item.id);
+    expect(result?.suggestedHsnCode).toBe("7307");
+    // Only the classification call ran — the keyword match short-circuits the HSN pick call.
+    expect(generateJsonMock).toHaveBeenCalledTimes(1);
   });
 });
