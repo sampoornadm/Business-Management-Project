@@ -448,6 +448,29 @@ Acceptance Note (GRN) and auto generated mail shall be sent for the same.
       }
     });
 
+    it("bounds each section's AI call with a timeout, so one stuck Ollama call can't hang the whole request", async () => {
+      const organizationsRepository = new FakeOrganizationsRepository();
+      const generateJson: GenerateJsonFn = async () => SAMPLE_PDF_TEXT_RESULT;
+      const timeouts: (number | undefined)[] = [];
+      const generateText: GenerateTextFn = async (_prompt, options) => {
+        timeouts.push(options?.timeoutMs);
+        return "";
+      };
+      const service = new TenderExtractionService(
+        organizationsRepository,
+        generateJson,
+        extractTextForFourSections(),
+        generateText,
+      );
+
+      await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
+
+      expect(timeouts).toHaveLength(4);
+      for (const timeoutMs of timeouts) {
+        expect(timeoutMs).toBeGreaterThan(0);
+      }
+    });
+
     it("keeps sections in fixed document order even when their AI calls resolve out of order", async () => {
       const organizationsRepository = new FakeOrganizationsRepository();
       const generateJson: GenerateJsonFn = async () => SAMPLE_PDF_TEXT_RESULT;
