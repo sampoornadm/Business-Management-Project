@@ -98,9 +98,10 @@ export const TENDER_COLUMNS: TenderColumnConfig[] = [
       const due = row.original.submissionDate;
       if (!due) return formatDateTime(due);
       const daysLeft = daysUntil(due);
+      const pastDue = isPastDue(due);
       return (
         <span title={formatDateTime(due)}>
-          <DeadlineBadge daysLeft={daysLeft} label={deadlineLabel(daysLeft, isPastDue(due))} />
+          <DeadlineBadge daysLeft={daysLeft} label={deadlineLabel(daysLeft, pastDue)} pastDue={pastDue} />
         </span>
       );
     },

@@ -164,6 +164,7 @@ export default function TenderDetailPage() {
                 <DeadlineBadge
                   daysLeft={daysUntil(tender.submissionDate)}
                   label={deadlineLabel(daysUntil(tender.submissionDate), isPastDue(tender.submissionDate))}
+                  pastDue={isPastDue(tender.submissionDate)}
                 />
               </span>
             )}
