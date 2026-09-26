@@ -2,12 +2,13 @@
 
 import type { TenderListItemDto } from "@bmp/types";
 import { TENDER_PRIORITIES, TENDER_STATUS_LABELS, TENDER_STATUSES } from "@bmp/types";
-import { Badge, formatDateTime, SortableHeader } from "@bmp/ui";
+import { Badge, DeadlineBadge, formatDateTime, SortableHeader } from "@bmp/ui";
 import type { FilterableColumnDef } from "@bmp/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 
 import { TenderDownloadMenu } from "@/components/tenders/tender-download-menu";
+import { daysUntil, deadlineLabel } from "@/lib/deadline";
 import { tenderPriorityBadgeVariant, tenderStatusBadgeVariant } from "@/lib/tender-status";
 
 export interface TenderColumnConfig extends FilterableColumnDef {
@@ -93,7 +94,16 @@ export const TENDER_COLUMNS: TenderColumnConfig[] = [
     filterable: true,
     nullable: true,
     defaultVisible: true,
-    cell: ({ row }) => formatDateTime(row.original.submissionDate),
+    cell: ({ row }) => {
+      const due = row.original.submissionDate;
+      if (!due) return formatDateTime(due);
+      const daysLeft = daysUntil(due);
+      return (
+        <span title={formatDateTime(due)}>
+          <DeadlineBadge daysLeft={daysLeft} label={deadlineLabel(daysLeft)} />
+        </span>
+      );
+    },
   },
   {
     key: "assigneeCount",
