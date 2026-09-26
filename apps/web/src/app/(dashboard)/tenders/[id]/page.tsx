@@ -57,7 +57,7 @@ import {
 } from "@/hooks/use-tenders";
 import { useAuthStore } from "@/lib/auth-store";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
-import { daysUntil, deadlineLabel } from "@/lib/deadline";
+import { daysUntil, deadlineLabel, isPastDue } from "@/lib/deadline";
 import { hasPermission } from "@/lib/permissions";
 import { tenderKindBadgeVariant, tenderPriorityBadgeVariant, tenderStatusBadgeVariant } from "@/lib/tender-status";
 import { buildTenderSteps, isOnHappyPath } from "@/lib/tender-stepper";
@@ -163,7 +163,7 @@ export default function TenderDetailPage() {
               <span title={formatDateTime(tender.submissionDate)}>
                 <DeadlineBadge
                   daysLeft={daysUntil(tender.submissionDate)}
-                  label={deadlineLabel(daysUntil(tender.submissionDate))}
+                  label={deadlineLabel(daysUntil(tender.submissionDate), isPastDue(tender.submissionDate))}
                 />
               </span>
             )}

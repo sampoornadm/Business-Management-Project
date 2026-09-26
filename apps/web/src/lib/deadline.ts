@@ -14,8 +14,18 @@ export function daysUntil(dueDate: string | Date, now: Date = new Date()): numbe
   return Math.round((startOfDay(due) - startOfDay(now)) / MS_PER_DAY);
 }
 
-export function deadlineLabel(daysLeft: number): string {
-  if (daysLeft < 0) return "Closed";
+/**
+ * True once the deadline's exact timestamp has passed — not just once its calendar date has, so
+ * a deadline later today (e.g. 3pm) reads as still-open until 3pm actually passes, not the
+ * moment the calendar flips to that date.
+ */
+export function isPastDue(dueDate: string | Date, now: Date = new Date()): boolean {
+  const due = typeof dueDate === "string" ? new Date(dueDate) : dueDate;
+  return due.getTime() <= now.getTime();
+}
+
+export function deadlineLabel(daysLeft: number, pastDue: boolean): string {
+  if (pastDue) return "Closed";
   if (daysLeft === 0) return "Due today";
   if (daysLeft === 1) return "Due tomorrow";
   return `${daysLeft} days left`;
