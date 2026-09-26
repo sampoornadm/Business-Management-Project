@@ -93,6 +93,12 @@ export const TENDER_DOCUMENT_TYPES = [
 ] as const;
 export type TenderDocumentType = (typeof TENDER_DOCUMENT_TYPES)[number];
 
+export interface TenderDocumentChecklistDto {
+  required: Array<{ type: TenderDocumentType; matchedPhrase: string }>;
+  uploaded: TenderDocumentType[];
+  missing: TenderDocumentType[];
+}
+
 /**
  * Short, filesystem-friendly subfolder names for the local-docs-sync feature
  * (apps/server/src/modules/tenders/local-docs/). Used both to create the

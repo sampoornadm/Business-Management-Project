@@ -96,7 +96,16 @@ export interface CreateRfqInput {
   vendorIds?: string[];
 }
 
-export type UpdateRfqInput = Partial<Pick<CreateRfqInput, "title" | "dueDate" | "instructions">>;
+// `id` present = edit that existing line (identity, quotes and price history carry over); absent
+// = a new line. Any existing item left out of the array is removed — blocked server-side if it
+// already has a vendor quote, so editing can't silently drop priced data.
+export interface UpdateRfqItemInput extends CreateRfqItemInput {
+  id?: string;
+}
+
+export type UpdateRfqInput = Partial<Pick<CreateRfqInput, "title" | "dueDate" | "instructions">> & {
+  items?: UpdateRfqItemInput[];
+};
 
 export interface AddRfqVendorInput {
   vendorId: string;

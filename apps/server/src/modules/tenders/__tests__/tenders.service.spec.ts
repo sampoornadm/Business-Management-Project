@@ -300,6 +300,7 @@ describe("TendersService", () => {
   let auditService: AuditService;
   let notificationsService: NotificationsService;
   let emailService: EmailService;
+  let attachmentsService: { listByEntity: ReturnType<typeof vi.fn> };
   let service: TendersService;
   const actorId = randomUUID();
   const ctx = { businessId: BUSINESS_ID };
@@ -328,6 +329,7 @@ describe("TendersService", () => {
     emailService = {
       queueTenderAssignedEmail: vi.fn().mockResolvedValue(undefined),
     } as unknown as EmailService;
+    attachmentsService = { listByEntity: vi.fn().mockResolvedValue([]) };
 
     service = new TendersService(
       tendersRepository as unknown as ITendersRepository,
@@ -336,7 +338,7 @@ describe("TendersService", () => {
       new FakeTagsRepository() as unknown as ITagsRepository,
       new FakeBusinessesRepository() as unknown as IBusinessesRepository,
       auditService,
-      {} as AttachmentsService,
+      attachmentsService as unknown as AttachmentsService,
       notificationsService,
       emailService,
     );
@@ -632,6 +634,49 @@ describe("TendersService", () => {
       await expect(
         service.exportTenders({ businessId: BUSINESS_ID }, "view", { page: 1, pageSize: 20 }),
       ).resolves.toEqual([]);
+    });
+  });
+
+  describe("getDocumentChecklist", () => {
+    it("flags a document type mentioned in the notes that has no current upload", async () => {
+      const created = await service.create(
+        { ...baseInput, notes: "## Notes\n- Drawings for the site layout are attached separately." },
+        ctx,
+      );
+      attachmentsService.listByEntity.mockResolvedValue([]);
+
+      const checklist = await service.getDocumentChecklist(created.id, BUSINESS_ID);
+
+      expect(checklist).toEqual({
+        required: [{ type: "DRAWINGS", matchedPhrase: "Drawings" }],
+        uploaded: [],
+        missing: ["DRAWINGS"],
+      });
+    });
+
+    it("does not flag a required type that already has a current upload", async () => {
+      const created = await service.create(
+        { ...baseInput, notes: "Refer to Corrigendum No. 2 dated 12.03.2026." },
+        ctx,
+      );
+      attachmentsService.listByEntity.mockResolvedValue([{ documentType: "CORRIGENDUM" }]);
+
+      const checklist = await service.getDocumentChecklist(created.id, BUSINESS_ID);
+
+      expect(checklist.missing).toEqual([]);
+      expect(checklist.uploaded).toEqual(["CORRIGENDUM"]);
+    });
+
+    it("returns nothing required when the notes mention no known document type", async () => {
+      const created = await service.create({ ...baseInput, notes: "Delivery within 30 days." }, ctx);
+
+      const checklist = await service.getDocumentChecklist(created.id, BUSINESS_ID);
+
+      expect(checklist).toEqual({ required: [], uploaded: [], missing: [] });
+    });
+
+    it("throws NotFoundError for a tender that does not exist", async () => {
+      await expect(service.getDocumentChecklist(randomUUID(), BUSINESS_ID)).rejects.toThrow(NotFoundError);
     });
   });
 });

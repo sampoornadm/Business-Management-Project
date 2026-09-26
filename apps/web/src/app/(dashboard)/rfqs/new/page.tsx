@@ -48,17 +48,11 @@ function flattenBoqItems(items: BoqItemDto[]): BoqItemDto[] {
   return items.flatMap((item) => [item, ...flattenBoqItems(item.children)]);
 }
 
-/** normalizedName is the AI's concise, use-case-stripped rewrite — the right default for text a
- * vendor will actually read. Falls back to the raw tender description when it hasn't been
- * enriched yet (Ollama not run / not available). Always overridable below before sending. */
-function defaultVendorDescription(item: BoqItemDto): string {
-  return item.normalizedName || item.description;
-}
-
 export default function NewRfqPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTenderId = searchParams.get("tenderId") ?? "";
+  const initialBoqItemIds = searchParams.get("boqItemIds")?.split(",").filter(Boolean) ?? [];
   const { toast } = useToast();
   const createRfq = useCreateRfq();
   const suggestVendors = useSuggestRfqVendors();
@@ -70,7 +64,7 @@ export default function NewRfqPage() {
   const [dueDate, setDueDate] = useState("");
   const [instructions, setInstructions] = useState("");
   const [items, setItems] = useState<DraftItem[]>([emptyItem()]);
-  const [selectedBoqItemIds, setSelectedBoqItemIds] = useState<string[]>([]);
+  const [selectedBoqItemIds, setSelectedBoqItemIds] = useState<string[]>(initialBoqItemIds);
   const [boqItemInstructions, setBoqItemInstructions] = useState<Record<string, string>>({});
   const [boqItemDescriptions, setBoqItemDescriptions] = useState<Record<string, string>>({});
   const [vendorIds, setVendorIds] = useState<string[]>([]);
@@ -129,7 +123,7 @@ export default function NewRfqPage() {
           .filter((item) => selectedBoqItemIds.includes(item.id))
           .map((item) => ({
             boqItemId: item.id,
-            description: (boqItemDescriptions[item.id] ?? defaultVendorDescription(item)).trim(),
+            description: (boqItemDescriptions[item.id] ?? item.description).trim(),
             unit: item.unit ?? undefined,
             quantity: item.quantity ?? 0,
             instructions: boqItemInstructions[item.id]?.trim() || undefined,
@@ -304,15 +298,13 @@ export default function NewRfqPage() {
                           </div>
                         </TableCell>
                         <TableCell className="min-w-[16rem]">
+                          {/* Same wording the tender's BOQ shows — never item.normalizedName
+                              (the AI's shortened rewrite), so an item reads identically here and
+                              on the tender page. Still fully editable before sending. */}
                           <Input
-                            value={boqItemDescriptions[item.id] ?? defaultVendorDescription(item)}
+                            value={boqItemDescriptions[item.id] ?? item.description}
                             onChange={(e) =>
                               setBoqItemDescriptions((prev) => ({ ...prev, [item.id]: e.target.value }))
-                            }
-                            title={
-                              item.normalizedName && item.normalizedName !== item.description
-                                ? `Full tender description: ${item.description}`
-                                : undefined
                             }
                           />
                         </TableCell>

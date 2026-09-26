@@ -2,11 +2,12 @@
 
 import { TENDER_DOCUMENT_TYPES, type TenderDocumentType } from "@bmp/types";
 import { DocumentUpload, Skeleton, type DocumentVersion, useToast } from "@bmp/ui";
-import { Loader2, Plus } from "lucide-react";
+import { AlertTriangle, Loader2, Plus } from "lucide-react";
 import { useRef, type ChangeEvent } from "react";
 
 import {
   useDeleteTenderDocument,
+  useTenderDocumentChecklist,
   useTenderDocumentVersions,
   useTenderDocuments,
   useUploadTenderDocument,
@@ -172,18 +173,26 @@ function DocumentTypeSection({
   documentType,
   documentGroupIds,
   canDelete,
+  flagged,
 }: {
   tenderId: string;
   documentType: TenderDocumentType;
   documentGroupIds: string[];
   canDelete: boolean;
+  flagged: boolean;
 }) {
   const hasFiles = documentGroupIds.length > 0;
 
   return (
     <div role="group" aria-label={DOCUMENT_TYPE_LABELS[documentType]}>
-      <h3 className="px-4 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <h3 className="flex items-center gap-1.5 px-4 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {DOCUMENT_TYPE_LABELS[documentType]}
+        {flagged && !hasFiles && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium normal-case tracking-normal text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
+            <AlertTriangle className="h-3 w-3" />
+            Mentioned in notes
+          </span>
+        )}
       </h3>
       <div className="divide-y px-4">
         {hasFiles ? (
@@ -208,6 +217,7 @@ function DocumentTypeSection({
 // Compact row-based layout for tender documents
 export function TenderDocumentsTab({ tenderId }: { tenderId: string }) {
   const documentsQuery = useTenderDocuments(tenderId);
+  const checklistQuery = useTenderDocumentChecklist(tenderId);
   const roleName = useAuthStore((state) => state.user?.role.name);
   const canDelete = hasPermission(roleName, "attachments:delete");
 
@@ -224,17 +234,31 @@ export function TenderDocumentsTab({ tenderId }: { tenderId: string }) {
     groupIdsByType.set(type, existing);
   }
 
+  const missing = checklistQuery.data?.missing ?? [];
+
   return (
-    <div className="divide-y rounded-md border">
-      {TENDER_DOCUMENT_TYPES.map((documentType) => (
-        <DocumentTypeSection
-          key={documentType}
-          tenderId={tenderId}
-          documentType={documentType}
-          documentGroupIds={groupIdsByType.get(documentType) ?? []}
-          canDelete={canDelete}
-        />
-      ))}
+    <div className="space-y-3">
+      {missing.length > 0 && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            The tender&apos;s notes mention {missing.map((type) => DOCUMENT_TYPE_LABELS[type]).join(", ")},
+            but {missing.length === 1 ? "it hasn't" : "they haven't"} been uploaded yet.
+          </p>
+        </div>
+      )}
+      <div className="divide-y rounded-md border">
+        {TENDER_DOCUMENT_TYPES.map((documentType) => (
+          <DocumentTypeSection
+            key={documentType}
+            tenderId={tenderId}
+            documentType={documentType}
+            documentGroupIds={groupIdsByType.get(documentType) ?? []}
+            canDelete={canDelete}
+            flagged={missing.includes(documentType)}
+          />
+        ))}
+      </div>
     </div>
   );
 }

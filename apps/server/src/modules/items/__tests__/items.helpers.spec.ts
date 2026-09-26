@@ -57,26 +57,27 @@ describe("aggregateQuotes", () => {
 });
 
 describe("pickConfirmedMatch", () => {
-  const candidate = (categoryId: string, canonicalName: string, unit: string | null, similarity: number) => ({
-    categoryId,
-    canonicalName,
-    unit,
-    similarity,
-  });
+  const candidate = (
+    id: string,
+    categoryId: string,
+    canonicalName: string,
+    unit: string | null,
+    similarity: number,
+  ) => ({ id, categoryId, canonicalName, unit, similarity });
 
   it("reuses a confirmed sibling when cosine, specs and unit all agree", () => {
     const match = pickConfirmedMatch(
       { canonicalName: "PU Tube ID 4 OD 6", unit: "M" },
-      candidate("c1", "PU Tube ID 4 OD 6", "M", 1),
+      [candidate("c1", "cat-a", "PU Tube ID 4 OD 6", "M", 1)],
       0.98,
     );
-    expect(match).toEqual({ categoryId: "c1", confidence: 1 });
+    expect(match).toEqual({ categoryId: "cat-a", confidence: 1, matchedId: "c1", matchedCanonicalName: "PU Tube ID 4 OD 6" });
   });
 
   it("refuses a spec mismatch even at cosine 1 (different size is a different item)", () => {
     const match = pickConfirmedMatch(
       { canonicalName: "PU Tube ID 4 OD 6", unit: "M" },
-      candidate("c1", "PU Tube ID 7 OD 10", "M", 1),
+      [candidate("c1", "cat-a", "PU Tube ID 7 OD 10", "M", 1)],
       0.98,
     );
     expect(match).toBeNull();
@@ -85,7 +86,7 @@ describe("pickConfirmedMatch", () => {
   it("refuses when cosine is below threshold", () => {
     const match = pickConfirmedMatch(
       { canonicalName: "PU Tube ID 4 OD 6", unit: "M" },
-      candidate("c1", "PU Tube ID 4 OD 6", "M", 0),
+      [candidate("c1", "cat-a", "PU Tube ID 4 OD 6", "M", 0)],
       0.98,
     );
     expect(match).toBeNull();
@@ -94,14 +95,52 @@ describe("pickConfirmedMatch", () => {
   it("refuses on a unit mismatch", () => {
     const match = pickConfirmedMatch(
       { canonicalName: "PU Tube ID 4 OD 6", unit: "M" },
-      candidate("c1", "PU Tube ID 4 OD 6", "NOS", 1),
+      [candidate("c1", "cat-a", "PU Tube ID 4 OD 6", "NOS", 1)],
       0.98,
     );
     expect(match).toBeNull();
   });
 
-  it("returns null when there is no candidate", () => {
-    expect(pickConfirmedMatch({ canonicalName: "PU Tube ID 4 OD 6", unit: "M" }, null, 0.98)).toBeNull();
+  it("returns null when there are no candidates", () => {
+    expect(pickConfirmedMatch({ canonicalName: "PU Tube ID 4 OD 6", unit: "M" }, [], 0.98)).toBeNull();
+  });
+
+  it("falls through to a lower-ranked candidate when the nearest one fails the gate", () => {
+    // #1 by cosine is a different size (fails sameSpec); #2 is the true match. Today's code
+    // only ever looks at index 0, so this case falls through to the LLM even though a perfectly
+    // good deterministic sibling is sitting right there.
+    const match = pickConfirmedMatch(
+      { canonicalName: "PU Tube ID 4 OD 6", unit: "M" },
+      [
+        candidate("c1", "cat-wrong", "PU Tube ID 7 OD 10", "M", 0.995),
+        candidate("c2", "cat-a", "PU Tube ID 4 OD 6", "M", 0.99),
+      ],
+      0.98,
+    );
+    expect(match).toEqual({ categoryId: "cat-a", confidence: 0.99, matchedId: "c2", matchedCanonicalName: "PU Tube ID 4 OD 6" });
+  });
+
+  it("breaks a tie between qualifying candidates in different categories by majority vote", () => {
+    const match = pickConfirmedMatch(
+      { canonicalName: "PU Tube ID 4 OD 6", unit: "M" },
+      [
+        candidate("c1", "cat-minority", "PU Tube ID 4 OD 6", "M", 0.999),
+        candidate("c2", "cat-majority", "PU Tube ID 4 OD 6", "M", 0.991),
+        candidate("c3", "cat-majority", "PU Tube ID 4 OD 6", "M", 0.99),
+      ],
+      0.98,
+    );
+    expect(match?.categoryId).toBe("cat-majority");
+  });
+
+  it("only considers the top 5 candidates — a qualifying match past that window is not reused", () => {
+    const filler = Array.from({ length: 5 }, (_, i) => candidate(`f${i}`, "cat-filler", "Something Else", "M", 0.99 - i * 0.001));
+    const match = pickConfirmedMatch(
+      { canonicalName: "PU Tube ID 4 OD 6", unit: "M" },
+      [...filler, candidate("c1", "cat-a", "PU Tube ID 4 OD 6", "M", 0.981)],
+      0.98,
+    );
+    expect(match).toBeNull();
   });
 });
 

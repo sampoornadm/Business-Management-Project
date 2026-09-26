@@ -47,7 +47,6 @@ class FakeBoqRepository implements IBoqRepository {
       groupId: data.groupId,
       version: data.version,
       isCurrent: true,
-      status: "DRAFT",
       createdById: data.createdById,
       createdBy: CREATOR,
       createdAt: new Date(),
@@ -163,11 +162,6 @@ class FakeBoqRepository implements IBoqRepository {
     return [...this.items.values()]
       .filter((item) => item.boqId === boqId)
       .reduce((sum, item) => sum + (item.amount ?? 0), 0);
-  }
-
-  async finalize(boqId: string) {
-    const boq = this.boqs.get(boqId);
-    if (boq) boq.status = "FINALIZED";
   }
 
   async confirmRateSource(id: string, data: ConfirmRateSourceData) {
@@ -625,6 +619,32 @@ describe("BoqService", () => {
       expect(catalogItem?.hsnCode).toBe("8544");
       expect(catalogItem?.gstRate).toBe(18);
       expect(catalogItem?.hsnCodeConfirmed).toBe(true);
+    });
+
+    it("propagates under the item's own description, not the AI's normalizedName rewrite", async () => {
+      const boq = await service.commitBoq(
+        tenderId,
+        businessId,
+        { items: [{ tempId: "1", description: "XLPE Cable 4C x16 sqmm", unit: "m", quantity: 10, rate: 50 }] },
+        actorId,
+        {},
+      );
+      const itemId = boq.items[0]!.id;
+      await boqRepository.updateItemEnrichment(itemId, {
+        normalizedName: "XLPE Cable 4C x16",
+        aiCategory: "Electrical",
+        aiSubcategory: "Cables",
+        aiConfidence: 0.99,
+        suggestedRate: 50,
+        aiSource: "historical",
+        aiRateSourceId: "rate-1",
+        aiEnrichedAt: new Date(),
+      });
+
+      await service.updateItem(itemId, { hsnCode: "8544" }, actorId, businessId);
+
+      expect(itemsRepository.items.get("XLPE Cable 4C x16 sqmm")?.hsnCode).toBe("8544");
+      expect(itemsRepository.items.has("XLPE Cable 4C x16")).toBe(false);
     });
 
     it("bundles a changed gstRate into the same propagation when both are edited together", async () => {

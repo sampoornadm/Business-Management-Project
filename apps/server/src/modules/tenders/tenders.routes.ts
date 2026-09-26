@@ -486,6 +486,28 @@ export function createTendersRouter(controller: TendersController): Router {
     requirePermission("tenders:read"),
     controller.listDocuments,
   );
+
+  /**
+   * @openapi
+   * /tenders/{id}/document-checklist:
+   *   get:
+   *     tags: [Tenders]
+   *     summary: Document types mentioned in the tender's notes, cross-checked against current uploads
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Required vs. uploaded vs. missing document types }
+   */
+  router.get(
+    "/:id/document-checklist",
+    authenticateMiddleware,
+    requirePermission("tenders:read"),
+    controller.getDocumentChecklist,
+  );
   router.post(
     "/:id/documents",
     authenticateMiddleware,

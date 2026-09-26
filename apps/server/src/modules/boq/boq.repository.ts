@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { BoqStatus, Prisma, PrismaClient } from "@bmp/database";
+import type { Prisma, PrismaClient } from "@bmp/database";
 
 const creatorSummarySelect = { id: true, firstName: true, lastName: true } as const;
 
@@ -131,7 +131,6 @@ export interface IBoqRepository {
   rejectRateSource(id: string): Promise<void>;
   upsertRateBreakdown(itemId: string, data: UpsertRateBreakdownData): Promise<void>;
   sumAmountByBoqId(boqId: string): Promise<number>;
-  finalize(boqId: string): Promise<void>;
 }
 
 export class BoqRepository implements IBoqRepository {
@@ -156,7 +155,6 @@ export class BoqRepository implements IBoqRepository {
           groupId: data.groupId,
           version: data.version,
           isCurrent: true,
-          status: "DRAFT" as BoqStatus,
           createdById: data.createdById,
         },
       }),
@@ -286,9 +284,5 @@ export class BoqRepository implements IBoqRepository {
       _sum: { amount: true },
     });
     return result._sum.amount ?? 0;
-  }
-
-  async finalize(boqId: string): Promise<void> {
-    await this.prisma.boq.update({ where: { id: boqId }, data: { status: "FINALIZED" } });
   }
 }

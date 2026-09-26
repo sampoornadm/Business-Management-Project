@@ -235,6 +235,11 @@ export class TendersController {
     sendSuccess(res, documents, "Documents retrieved");
   });
 
+  getDocumentChecklist = asyncHandler(async (req, res) => {
+    const checklist = await this.tendersService.getDocumentChecklist(req.params.id!, req.user!.businessId);
+    sendSuccess(res, checklist, "Document checklist retrieved");
+  });
+
   uploadDocument = asyncHandler(async (req, res) => {
     if (!req.file) throw new BadRequestError("No file provided");
     const body = req.body as UploadTenderDocumentBody;

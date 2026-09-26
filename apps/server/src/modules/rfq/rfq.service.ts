@@ -152,10 +152,60 @@ export class RfqService {
     return this.getById(rfqId, context.businessId);
   }
 
+  // Same rule as Tender.delete: only a not-yet-sent draft can be hard-deleted. Once an RFQ has
+  // gone to a vendor (or beyond), it's real business record — closing/cancelling it is the
+  // reversible way to retire it instead.
+  async delete(id: string, actorId: string, context: ScopedRequestContext): Promise<void> {
+    const rfq = await this.getDetailOrThrow(id, context.businessId);
+    if (rfq.status !== "DRAFT") {
+      throw new ConflictError("Only RFQs in Draft status can be deleted");
+    }
+    await this.rfqRepository.delete(id);
+    await this.auditService.log({
+      actorId,
+      action: "RFQ_DELETED",
+      entityType: "Rfq",
+      entityId: id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+    });
+  }
+
   async update(id: string, data: UpdateRfqData, actorId: string, businessId: string): Promise<RfqDto> {
-    await this.getDetailOrThrow(id, businessId);
+    const rfq = await this.getDetailOrThrow(id, businessId);
+
+    if (data.items) {
+      if (FINALIZED_STATUSES.has(rfq.status)) {
+        throw new ConflictError("Cannot edit items on a finalized RFQ");
+      }
+      const existingIds = new Set(rfq.items.map((item) => item.id));
+      for (const item of data.items) {
+        if (item.id && !existingIds.has(item.id)) {
+          throw new BadRequestError(`Item ${item.id} does not belong to this RFQ`);
+        }
+      }
+      // An item dropped from the payload is a removal. Once a vendor has priced a line, that
+      // price is real data (feeds the comparative statement and item price history) — removing
+      // the line would cascade-delete its quotes, so block it instead of silently losing them.
+      const keepIds = new Set(data.items.flatMap((item) => (item.id ? [item.id] : [])));
+      const removedWithQuotes = rfq.items.filter((item) => !keepIds.has(item.id) && item.quotes.length > 0);
+      if (removedWithQuotes.length > 0) {
+        throw new ConflictError(
+          `Cannot remove item(s) that already have vendor quotes: ${removedWithQuotes
+            .map((item) => item.description)
+            .join(", ")}`,
+        );
+      }
+    }
+
     await this.rfqRepository.update(id, data);
-    await this.auditService.log({ actorId, action: "RFQ_UPDATED", entityType: "Rfq", entityId: id });
+    await this.auditService.log({
+      actorId,
+      action: "RFQ_UPDATED",
+      entityType: "Rfq",
+      entityId: id,
+      metadata: data.items ? { itemsChanged: true } : undefined,
+    });
     return this.getById(id, businessId);
   }
 

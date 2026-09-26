@@ -104,11 +104,21 @@ export class RfqController {
         title: body.title,
         dueDate: body.dueDate ? new Date(body.dueDate) : undefined,
         instructions: body.instructions,
+        items: body.items,
       },
       req.user!.id,
       req.user!.businessId,
     );
     sendSuccess(res, rfq, "RFQ updated");
+  });
+
+  deleteById = asyncHandler(async (req, res) => {
+    await this.rfqService.delete(req.params.id!, req.user!.id, {
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+      businessId: req.user!.businessId,
+    });
+    sendSuccess(res, null, "RFQ deleted");
   });
 
   addVendor = asyncHandler(async (req, res) => {

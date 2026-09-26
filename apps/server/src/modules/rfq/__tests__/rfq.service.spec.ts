@@ -26,6 +26,7 @@ import type {
   IRfqRepository,
   RfqDetail,
   RfqFilters,
+  RfqItemDetail,
   UpdateRfqData,
   UpsertQuoteData,
 } from "../rfq.repository.js";
@@ -85,10 +86,34 @@ class FakeRfqRepository implements IRfqRepository {
     return { items: items as never, totalItems: items.length };
   }
 
+  async delete(id: string) {
+    this.rfqs.delete(id);
+  }
+
   async update(id: string, data: UpdateRfqData) {
     const rfq = this.rfqs.get(id);
     if (!rfq) throw new Error("not found");
-    Object.assign(rfq, data);
+    const { items, ...scalar } = data;
+    Object.assign(rfq, scalar);
+    if (items) {
+      // Mirrors the real repository's reconcile-by-id: an existing id is edited in place (and
+      // keeps its quotes), a missing id is a new line, and any existing item left out is dropped.
+      const existingById = new Map(rfq.items.map((item) => [item.id, item]));
+      rfq.items = items.map((item, index) => {
+        const existing = item.id ? existingById.get(item.id) : undefined;
+        return {
+          id: item.id ?? randomUUID(),
+          rfqId: id,
+          boqItemId: item.boqItemId ?? null,
+          description: item.description,
+          unit: item.unit ?? null,
+          quantity: item.quantity,
+          instructions: item.instructions ?? null,
+          sortOrder: item.sortOrder ?? index,
+          quotes: existing?.quotes ?? [],
+        } as unknown as RfqItemDetail;
+      });
+    }
   }
 
   async updateStatus(id: string, status: RfqDetail["status"]) {
@@ -410,6 +435,141 @@ describe("RfqService", () => {
 
     expect(updated.title).toBe("Revised Cement Supply RFQ");
     expect(updated.dueDate).toBe(dueDate.toISOString());
+  });
+
+  it("deletes a draft RFQ", async () => {
+    const rfq = await createBasicRfq();
+
+    await service.delete(rfq.id, actorId, { businessId });
+
+    await expect(service.getById(rfq.id, businessId)).rejects.toThrow(NotFoundError);
+    expect(auditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "RFQ_DELETED", entityType: "Rfq", entityId: rfq.id }),
+    );
+  });
+
+  it("rejects deleting an RFQ that has already been sent", async () => {
+    const rfq = await createBasicRfq();
+    await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
+    expect((await service.getById(rfq.id, businessId)).status).toBe("SENT");
+
+    await expect(service.delete(rfq.id, actorId, { businessId })).rejects.toThrow(ConflictError);
+  });
+
+  it("rejects deleting a closed RFQ", async () => {
+    const rfq = await createBasicRfq();
+    await service.close(rfq.id, actorId, businessId);
+
+    await expect(service.delete(rfq.id, actorId, { businessId })).rejects.toThrow(ConflictError);
+  });
+
+  it("edits an item's own wording without touching its id", async () => {
+    const rfq = await createBasicRfq();
+    const itemId = rfq.items[0]!.id;
+
+    const updated = await service.update(
+      rfq.id,
+      { items: [{ id: itemId, description: "OPC Cement 53 grade", unit: "bag", quantity: 600 }] },
+      actorId,
+      businessId,
+    );
+
+    expect(updated.items).toHaveLength(1);
+    expect(updated.items[0]).toMatchObject({ id: itemId, description: "OPC Cement 53 grade", quantity: 600 });
+  });
+
+  it("adds a new item alongside the existing one", async () => {
+    const rfq = await createBasicRfq();
+    const itemId = rfq.items[0]!.id;
+
+    const updated = await service.update(
+      rfq.id,
+      {
+        items: [
+          { id: itemId, description: "OPC Cement", unit: "bag", quantity: 500 },
+          { description: "Fly Ash", unit: "bag", quantity: 100 },
+        ],
+      },
+      actorId,
+      businessId,
+    );
+
+    expect(updated.items).toHaveLength(2);
+    expect(updated.items.map((i) => i.description)).toEqual(["OPC Cement", "Fly Ash"]);
+  });
+
+  it("removes an item that has no quotes", async () => {
+    const rfq = await createBasicRfq();
+    const itemId = rfq.items[0]!.id;
+    const updated = await service.update(
+      rfq.id,
+      { items: [{ id: itemId, description: "OPC Cement", unit: "bag", quantity: 500 }, { description: "Fly Ash", quantity: 100 }] },
+      actorId,
+      businessId,
+    );
+    const newItemId = updated.items.find((i) => i.description === "Fly Ash")!.id;
+
+    const afterRemoval = await service.update(
+      rfq.id,
+      { items: [{ id: newItemId, description: "Fly Ash", quantity: 100 }] },
+      actorId,
+      businessId,
+    );
+
+    expect(afterRemoval.items).toHaveLength(1);
+    expect(afterRemoval.items[0]!.description).toBe("Fly Ash");
+  });
+
+  it("rejects removing an item that already has a vendor quote", async () => {
+    const rfq = await createBasicRfq();
+    const itemId = rfq.items[0]!.id;
+    await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
+    await service.upsertQuote(itemId, vendorA, { rate: 380 }, actorId, businessId);
+
+    await expect(
+      service.update(rfq.id, { items: [{ description: "Fly Ash", quantity: 100 }] }, actorId, businessId),
+    ).rejects.toThrow(ConflictError);
+  });
+
+  it("still allows editing the wording of a quoted item (only removal is blocked)", async () => {
+    const rfq = await createBasicRfq();
+    const itemId = rfq.items[0]!.id;
+    await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
+    await service.upsertQuote(itemId, vendorA, { rate: 380 }, actorId, businessId);
+
+    const updated = await service.update(
+      rfq.id,
+      { items: [{ id: itemId, description: "OPC Cement 53 grade", unit: "bag", quantity: 500 }] },
+      actorId,
+      businessId,
+    );
+
+    expect(updated.items[0]!.description).toBe("OPC Cement 53 grade");
+    expect(updated.items[0]!.quotes).toHaveLength(1);
+  });
+
+  it("rejects an item id that doesn't belong to this RFQ", async () => {
+    const rfq = await createBasicRfq();
+    const otherRfq = await createBasicRfq();
+    const foreignItemId = otherRfq.items[0]!.id;
+
+    await expect(
+      service.update(
+        rfq.id,
+        { items: [{ id: foreignItemId, description: "Hijacked", quantity: 1 }] },
+        actorId,
+        businessId,
+      ),
+    ).rejects.toThrow(BadRequestError);
+  });
+
+  it("rejects editing items on a finalized RFQ", async () => {
+    const rfq = await createBasicRfq();
+    await service.close(rfq.id, actorId, businessId);
+
+    await expect(
+      service.update(rfq.id, { items: [{ description: "New Item", quantity: 1 }] }, actorId, businessId),
+    ).rejects.toThrow(ConflictError);
   });
 
   it("rejects an RFQ referencing an unknown tender", async () => {

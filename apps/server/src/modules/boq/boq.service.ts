@@ -230,21 +230,6 @@ export class BoqService {
     );
   }
 
-  async finalize(tenderId: string, actorId: string, businessId: string): Promise<BoqDto> {
-    await this.assertTenderExists(tenderId, businessId);
-    const boq = await this.boqRepository.findCurrentBoq(tenderId, businessId);
-    if (!boq) throw new NotFoundError("This tender has no BOQ yet");
-    await this.boqRepository.finalize(boq.id);
-    await this.auditService.log({
-      actorId,
-      action: "BOQ_FINALIZED",
-      entityType: "Tender",
-      entityId: tenderId,
-      metadata: { boqId: boq.id },
-    });
-    return this.getCurrentBoq(tenderId, businessId);
-  }
-
   async updateItem(
     itemId: string,
     data: UpdateBoqItemBody,
@@ -297,7 +282,9 @@ export class BoqService {
     actorId: string,
     businessId: string,
   ): Promise<void> {
-    const canonicalName = deriveCanonicalName(existing.normalizedName, existing.description);
+    // Deliberately `null`, not `existing.normalizedName` — see items.service.ts#backfill's
+    // comment: the catalog's item name stays the tender's own wording, never the AI rewrite.
+    const canonicalName = deriveCanonicalName(null, existing.description);
     const result = await this.itemsRepository.confirmItemHsn(
       businessId,
       canonicalName,

@@ -23,24 +23,61 @@ export interface ClassificationResult {
   confidence: number;
 }
 
+/** How many of the (already similarity-ranked) ANN candidates Rung 1 will even look at. */
+const CONFIRMED_MATCH_WINDOW = 5;
+
+type ConfirmedMatchCandidate = Pick<
+  NearestConfirmedMatch,
+  "id" | "categoryId" | "canonicalName" | "unit" | "similarity"
+>;
+
 /**
  * Rung-1 human-feedback reuse: reuse a human-confirmed item's category if it's provably the SAME
- * item as `target` — cosine already found `best` as the nearest confirmed candidate (via ANN);
- * this only checks the two signals cosine similarity alone can't guarantee: identical numeric
- * specs and matching unit. The same bar boq-enrichment uses before trusting a historical rate.
+ * item as `target`. Cosine ranks `candidates` (nearest confirmed items via ANN); each is checked
+ * against the two signals cosine similarity alone can't guarantee — identical numeric specs and
+ * matching unit — the same bar boq-enrichment uses before trusting a historical rate.
+ *
+ * Only the top `CONFIRMED_MATCH_WINDOW` candidates are considered (cosine order isn't spec-match
+ * order, so the true sibling isn't always index 0). When more than one candidate in that window
+ * qualifies, the category with the most qualifying candidates wins (ties broken by similarity) —
+ * catches both "the nearest one just misses the gate" and "the catalog has more than one
+ * confirmed item with this exact spec, possibly in different categories."
  */
 export function pickConfirmedMatch(
   target: { canonicalName: string; unit: string | null },
-  best: Pick<NearestConfirmedMatch, "categoryId" | "canonicalName" | "unit" | "similarity"> | null,
+  candidates: ConfirmedMatchCandidate[],
   threshold: number,
-): { categoryId: string; confidence: number } | null {
-  if (!best) return null;
+): { categoryId: string; confidence: number; matchedId: string; matchedCanonicalName: string } | null {
+  const qualifying = candidates.slice(0, CONFIRMED_MATCH_WINDOW).filter((c) => {
+    const unitOk = target.unit === null || c.unit === target.unit;
+    return c.similarity >= threshold && unitOk && sameSpec(target.canonicalName, c.canonicalName);
+  });
+  if (qualifying.length === 0) return null;
 
-  const unitOk = target.unit === null || best.unit === target.unit;
-  if (best.similarity >= threshold && unitOk && sameSpec(target.canonicalName, best.canonicalName)) {
-    return { categoryId: best.categoryId, confidence: best.similarity };
+  const byCategory = new Map<string, ConfirmedMatchCandidate[]>();
+  for (const c of qualifying) {
+    const list = byCategory.get(c.categoryId);
+    if (list) list.push(c);
+    else byCategory.set(c.categoryId, [c]);
   }
-  return null;
+
+  let winner: ConfirmedMatchCandidate[] = [];
+  let winnerMaxSimilarity = -1;
+  for (const list of byCategory.values()) {
+    const maxSimilarity = Math.max(...list.map((c) => c.similarity));
+    if (list.length > winner.length || (list.length === winner.length && maxSimilarity > winnerMaxSimilarity)) {
+      winner = list;
+      winnerMaxSimilarity = maxSimilarity;
+    }
+  }
+
+  const best = winner.reduce((a, b) => (b.similarity > a.similarity ? b : a));
+  return {
+    categoryId: best.categoryId,
+    confidence: best.similarity,
+    matchedId: best.id,
+    matchedCanonicalName: best.canonicalName,
+  };
 }
 
 /**
