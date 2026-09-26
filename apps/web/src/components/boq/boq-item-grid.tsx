@@ -312,36 +312,21 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
     },
   ];
 
+  function goToCreateRfq() {
+    const params = new URLSearchParams({ tenderId });
+    if (selectedIds.size > 0) params.set("boqItemIds", [...selectedIds].join(","));
+    router.push(`/rfqs/new?${params.toString()}`);
+  }
+
   return (
     <div className="space-y-3">
-      {(canEdit || canSendRfq) && selectedIds.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-3">
-          <span className="text-sm">{selectedIds.size} item(s) selected</span>
-          {canEdit && (
-            <>
-              <Input
-                type="number"
-                step="0.01"
-                placeholder="% adjustment"
-                value={percentAdjustment}
-                onChange={(e) => setPercentAdjustment(e.target.value)}
-                className="h-8 w-40"
-              />
-              <Button size="sm" onClick={handleBulkApply} disabled={bulkUpdate.isPending}>
-                Apply to rates
-              </Button>
-            </>
-          )}
-          {canSendRfq && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => router.push(`/rfqs/new?tenderId=${tenderId}`)}
-            >
-              <Send className="mr-2 h-4 w-4" /> Create RFQ
-            </Button>
-          )}
-          {canSendRfq && suggestions && suggestions.recommended.length > 0 && (
+      {canSendRfq && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={goToCreateRfq}>
+            <Send className="mr-2 h-4 w-4" /> Create RFQ
+            {selectedIds.size > 0 && ` (${selectedIds.size} selected)`}
+          </Button>
+          {suggestions && suggestions.recommended.length > 0 && (
             <div className="flex flex-wrap items-center gap-1">
               <span className="text-xs text-muted-foreground">Suggested:</span>
               {suggestions.recommended.map((rec) => (
@@ -351,6 +336,23 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {canEdit && selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-3">
+          <span className="text-sm">{selectedIds.size} item(s) selected</span>
+          <Input
+            type="number"
+            step="0.01"
+            placeholder="% adjustment"
+            value={percentAdjustment}
+            onChange={(e) => setPercentAdjustment(e.target.value)}
+            className="h-8 w-40"
+          />
+          <Button size="sm" onClick={handleBulkApply} disabled={bulkUpdate.isPending}>
+            Apply to rates
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
             Clear
           </Button>

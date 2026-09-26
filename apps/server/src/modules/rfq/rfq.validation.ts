@@ -20,10 +20,19 @@ export const createRfqSchema = z.object({
 });
 export type CreateRfqBody = z.infer<typeof createRfqSchema>;
 
+const updateRfqItemSchema = createRfqItemSchema.extend({
+  // Present = edit that existing line; absent = a new one. Ownership (the id actually belongs to
+  // this RFQ) is checked in the service, not here — validation only shapes the payload.
+  id: z.string().uuid().optional(),
+});
+
 export const updateRfqSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   dueDate: z.string().datetime().or(z.string().date()).optional(),
   instructions: z.string().max(2000).optional(),
+  // Omit entirely to leave items untouched; send the full desired item list to change them
+  // (present ids are edited, new rows have no id, any existing id left out is removed).
+  items: z.array(updateRfqItemSchema).min(1, "An RFQ needs at least one item").optional(),
 });
 export type UpdateRfqBody = z.infer<typeof updateRfqSchema>;
 

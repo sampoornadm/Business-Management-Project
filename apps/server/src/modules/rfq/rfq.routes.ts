@@ -140,7 +140,7 @@ export function createRfqRouter(controller: RfqController): Router {
    *       200: { description: RFQ }
    *   patch:
    *     tags: [RFQ]
-   *     summary: Update an RFQ's title/due date
+   *     summary: Update an RFQ's title/due date/instructions, and optionally its item list
    *     security: [{ bearerAuth: [] }]
    *     parameters:
    *       - in: path
@@ -149,6 +149,17 @@ export function createRfqRouter(controller: RfqController): Router {
    *         schema: { type: string }
    *     responses:
    *       200: { description: RFQ updated }
+   *   delete:
+   *     tags: [RFQ]
+   *     summary: Delete an RFQ (only allowed while status is Draft)
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: RFQ deleted }
    */
   router.get("/:id", authenticateMiddleware, requirePermission("rfq:read"), controller.getById);
   router.patch(
@@ -158,6 +169,7 @@ export function createRfqRouter(controller: RfqController): Router {
     validate(updateRfqSchema),
     controller.update,
   );
+  router.delete("/:id", authenticateMiddleware, requirePermission("rfq:delete"), controller.deleteById);
 
   /**
    * @openapi

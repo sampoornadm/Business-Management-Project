@@ -10,6 +10,7 @@ import type {
   ListTendersQuery,
   PaginatedResult,
   PinTenderNoteInput,
+  TenderDocumentChecklistDto,
   TenderDto,
   TenderExtractionResultDto,
   TenderListItemDto,
@@ -266,6 +267,19 @@ export function useTenderDocuments(id: string | undefined, documentType?: string
   });
 }
 
+export function useTenderDocumentChecklist(id: string | undefined) {
+  return useQuery({
+    queryKey: ["tenders", id, "document-checklist"],
+    queryFn: async () => {
+      const response = await apiClient.get<ApiResponse<TenderDocumentChecklistDto>>(
+        `/tenders/${id}/document-checklist`,
+      );
+      return unwrap(response.data);
+    },
+    enabled: Boolean(id),
+  });
+}
+
 export function useUploadTenderDocument(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -291,6 +305,7 @@ export function useUploadTenderDocument(id: string) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["tenders", id, "documents"] });
+      void queryClient.invalidateQueries({ queryKey: ["tenders", id, "document-checklist"] });
     },
   });
 }
@@ -316,6 +331,7 @@ export function useDeleteTenderDocument(id: string) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["tenders", id, "documents"] });
+      void queryClient.invalidateQueries({ queryKey: ["tenders", id, "document-checklist"] });
     },
   });
 }

@@ -138,28 +138,6 @@ export function createBoqRouter(controller: BoqController): Router {
 
   /**
    * @openapi
-   * /tenders/{id}/boq/finalize:
-   *   patch:
-   *     tags: [BOQ]
-   *     summary: Mark the current BOQ version as finalized
-   *     security: [{ bearerAuth: [] }]
-   *     parameters:
-   *       - in: path
-   *         name: id
-   *         required: true
-   *         schema: { type: string }
-   *     responses:
-   *       200: { description: BOQ finalized }
-   */
-  router.patch(
-    "/:id/boq/finalize",
-    authenticateMiddleware,
-    requirePermission("boq:update"),
-    controller.finalize,
-  );
-
-  /**
-   * @openapi
    * /tenders/{id}/boq/compare:
    *   get:
    *     tags: [BOQ]

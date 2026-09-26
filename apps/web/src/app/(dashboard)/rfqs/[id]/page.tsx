@@ -1,6 +1,15 @@
 "use client";
 
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
   Badge,
   Button,
   Card,
@@ -29,7 +38,7 @@ import {
   Textarea,
   useToast,
 } from "@bmp/ui";
-import { Send, ShoppingCart, Trash2 } from "lucide-react";
+import { Pencil, Send, ShoppingCart, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -40,6 +49,7 @@ import { PinnedTenderNotes } from "@/components/tenders/pinned-tender-notes";
 import { useCreatePurchaseOrderFromRfq } from "@/hooks/use-purchase-orders";
 import {
   useCloseRfq,
+  useDeleteRfq,
   useInviteVendor,
   usePreviewInviteVendor,
   usePushRatesToTender,
@@ -71,6 +81,7 @@ export default function RfqDetailPage() {
   const canUpdate = hasPermission(roleName, "rfq:update");
   const canCreatePo = hasPermission(roleName, "purchase_orders:create");
   const canSendRfq = hasPermission(roleName, "rfq:create");
+  const canDelete = hasPermission(roleName, "rfq:delete");
 
   const rfqQuery = useRfq(params.id);
   useBreadcrumbLabel(params.id, rfqQuery.data?.title);
@@ -89,6 +100,7 @@ export default function RfqDetailPage() {
   const closeRfq = useCloseRfq(params.id);
   const reopenRfq = useReopenRfq(params.id);
   const createPoFromRfq = useCreatePurchaseOrderFromRfq();
+  const deleteRfq = useDeleteRfq();
 
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [sendVendorId, setSendVendorId] = useState("");
@@ -145,6 +157,20 @@ export default function RfqDetailPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sendDialogOpen, sendVendorId]);
+
+  async function handleDelete() {
+    try {
+      await deleteRfq.mutateAsync(params.id);
+      toast({ title: "RFQ deleted" });
+      router.push("/rfqs");
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not delete RFQ",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
 
   async function handleClose() {
     try {
@@ -225,9 +251,35 @@ export default function RfqDetailPage() {
           </p>
         </div>
         {canUpdate && !isFinalized && (
+          <Button variant="outline" asChild>
+            <Link href={`/rfqs/${rfq.id}/edit`}>
+              <Pencil className="mr-2 h-4 w-4" /> Edit RFQ
+            </Link>
+          </Button>
+        )}
+        {canUpdate && !isFinalized && (
           <Button variant="outline" onClick={handleClose} disabled={closeRfq.isPending}>
             Close RFQ
           </Button>
+        )}
+        {canDelete && rfq.status === "DRAFT" && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive">
+                <Trash2 className="mr-2 h-4 w-4" /> Delete
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this RFQ?</AlertDialogTitle>
+                <AlertDialogDescription>This can&apos;t be undone.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         )}
         {canUpdate && isFinalized && (
           <Button variant="outline" onClick={handleReopen} disabled={reopenRfq.isPending}>

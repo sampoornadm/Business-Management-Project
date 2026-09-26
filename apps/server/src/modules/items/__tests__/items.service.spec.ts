@@ -256,6 +256,36 @@ describe("ItemsService classification audit logging", () => {
     );
   });
 
+  it("reuses a qualifying sibling ranked below the nearest candidate, without calling the LLM", async () => {
+    repository.items.set("item-new", makeItem({ id: "item-new", canonicalName: "PU Tube ID 4 OD 6" }));
+    repository.itemForClassify = {
+      id: "item-new",
+      canonicalName: "PU Tube ID 4 OD 6",
+      unit: "M",
+      embedding: [0.1, 0.2],
+      embeddedAt: new Date(),
+    };
+    // #1 by cosine is a different size (fails sameSpec); #2 is the true match.
+    repository.nearestMatches = [
+      { id: "item-wrong-size", categoryId: "cat-1", canonicalName: "PU Tube ID 7 OD 10", unit: "M", similarity: 0.995 },
+      { id: "item-sibling", categoryId: "cat-1", canonicalName: "PU Tube ID 4 OD 6", unit: "M", similarity: 0.99 },
+    ];
+
+    await service.classifyItem("item-new", BUSINESS_ID, ACTOR_ID);
+
+    expect(generateJsonMock).not.toHaveBeenCalled();
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          path: "sibling_reuse",
+          categoryId: "cat-1",
+          matchedItemId: "item-sibling",
+          matchedCanonicalName: "PU Tube ID 4 OD 6",
+        }),
+      }),
+    );
+  });
+
   it("logs an LLM decision, including which model and how many examples grounded it", async () => {
     repository.items.set("item-new", makeItem({ id: "item-new", canonicalName: "Widget Type Z" }));
     repository.itemForClassify = {

@@ -680,11 +680,6 @@ model SavedView {
 // BOQ & Estimation
 // ---------------------------------------------------------------------------
 
-enum BoqStatus {
-  DRAFT
-  FINALIZED
-}
-
 model Boq {
   id                 String    @id @default(uuid())
   businessId         String
@@ -697,7 +692,6 @@ model Boq {
   groupId            String?
   version            Int       @default(1)
   isCurrent          Boolean   @default(true)
-  status             BoqStatus @default(DRAFT)
 
   createdById String
   createdBy   User   @relation("BoqCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)

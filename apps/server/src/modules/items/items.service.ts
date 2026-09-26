@@ -85,7 +85,10 @@ export class ItemsService {
     const groups = new Map<string, { unit: string | null; rfqItemIds: string[] }>();
     for (const line of unlinked) {
       const boq = line.boqItemId ? boqNames.get(line.boqItemId) : undefined;
-      const canonicalName = deriveCanonicalName(boq?.normalizedName ?? null, line.description);
+      // Deliberately `null`, not `boq?.normalizedName`: the item catalog's name must stay the
+      // same wording the estimator typed into the tender's BOQ, not the AI's shortened rewrite —
+      // deriveCanonicalName still takes a normalizedName param for when that's wanted again.
+      const canonicalName = deriveCanonicalName(null, line.description);
       const group = groups.get(canonicalName);
       const unit = line.unit ?? boq?.unit ?? null;
       if (group) {
@@ -315,8 +318,9 @@ export class ItemsService {
       if (embedding.length > 0) await this.itemsRepository.setEmbedding(item.id, embedding);
     }
 
-    // One ANN query serves both downstream consumers: the sibling-reuse check (needs only the
-    // nearest candidate) and the LLM's few-shot examples (needs up to CLASSIFY_EXAMPLE_LIMIT).
+    // One ANN query serves both downstream consumers: the sibling-reuse check (scans up to its
+    // own top-5 window, see pickConfirmedMatch) and the LLM's few-shot examples (needs up to
+    // CLASSIFY_EXAMPLE_LIMIT).
     const nearest =
       embedding.length > 0
         ? await this.itemsRepository.findNearestConfirmedMatch(businessId, item.id, embedding, CLASSIFY_EXAMPLE_LIMIT)
@@ -324,21 +328,20 @@ export class ItemsService {
 
     const sibling = pickConfirmedMatch(
       { canonicalName: item.canonicalName, unit: item.unit },
-      nearest[0] ?? null,
+      nearest,
       env.AI_MATCH_THRESHOLD,
     );
     if (sibling) {
-      const match = nearest[0]!;
       await this.logClassification(actorId, item, {
         path: "sibling_reuse",
         categoryId: sibling.categoryId,
         confidence: sibling.confidence,
-        matchedItemId: match.id,
-        matchedCanonicalName: match.canonicalName,
+        matchedItemId: sibling.matchedId,
+        matchedCanonicalName: sibling.matchedCanonicalName,
         candidateCount: nearest.length,
       });
       // Deterministic match on cosine + spec + unit — never ambiguous, never needs review.
-      return { ...sibling, needsReview: false };
+      return { categoryId: sibling.categoryId, confidence: sibling.confidence, needsReview: false };
     }
 
     // Nearest confirmed examples ground the LLM — the practical "learn from feedback" lever.

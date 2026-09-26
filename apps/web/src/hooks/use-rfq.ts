@@ -114,6 +114,18 @@ export function useUpdateRfq(id: string) {
   });
 }
 
+export function useDeleteRfq() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.delete(`/rfqs/${id}`);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["rfqs"] });
+    },
+  });
+}
+
 export function useAddRfqVendor(id: string) {
   const queryClient = useQueryClient();
   return useMutation({

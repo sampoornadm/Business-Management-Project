@@ -116,7 +116,13 @@ export interface CreateRfqData {
   items: CreateRfqItemData[];
 }
 
-export type UpdateRfqData = Partial<Pick<CreateRfqData, "title" | "dueDate" | "instructions">>;
+export interface UpdateRfqItemData extends CreateRfqItemData {
+  id?: string;
+}
+
+export type UpdateRfqData = Partial<Pick<CreateRfqData, "title" | "dueDate" | "instructions">> & {
+  items?: UpdateRfqItemData[];
+};
 
 export interface UpsertQuoteData {
   // Null is a regret — the absence of a price, never 0. See RfqQuote.rate in schema.prisma.
@@ -146,6 +152,7 @@ export interface IRfqRepository {
     filters: RfqFilters,
   ): Promise<{ items: RfqListItem[]; totalItems: number }>;
   update(id: string, data: UpdateRfqData): Promise<void>;
+  delete(id: string): Promise<void>;
   updateStatus(id: string, status: RfqStatus): Promise<void>;
   selectQuote(rfqItemId: string, quoteId: string): Promise<void>;
   reopen(id: string, status: RfqStatus): Promise<void>;
@@ -247,7 +254,44 @@ export class RfqRepository implements IRfqRepository {
   }
 
   async update(id: string, data: UpdateRfqData): Promise<void> {
-    await this.prisma.rfq.update({ where: { id }, data });
+    const { items, ...scalar } = data;
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+
+    if (Object.keys(scalar).length > 0) {
+      ops.push(this.prisma.rfq.update({ where: { id }, data: scalar }));
+    }
+
+    if (items) {
+      // Same create-or-update-by-presence-of-id split the rest of the app uses for a versioned
+      // line-item list — reconciled here, in one transaction with the scalar update, rather than
+      // as a separate round trip.
+      const keepIds = items.flatMap((item) => (item.id ? [item.id] : []));
+      ops.push(this.prisma.rfqItem.deleteMany({ where: { rfqId: id, id: { notIn: keepIds } } }));
+      items.forEach((item, index) => {
+        const fields = {
+          boqItemId: item.boqItemId ?? null,
+          description: item.description,
+          unit: item.unit ?? null,
+          quantity: item.quantity,
+          instructions: item.instructions ?? null,
+          sortOrder: item.sortOrder ?? index,
+        };
+        ops.push(
+          item.id
+            ? this.prisma.rfqItem.update({ where: { id: item.id }, data: fields })
+            : this.prisma.rfqItem.create({ data: { id: randomUUID(), rfqId: id, ...fields } }),
+        );
+      });
+    }
+
+    if (ops.length > 0) await this.prisma.$transaction(ops);
+  }
+
+  // RfqItem/RfqQuote cascade (onDelete: Cascade in schema.prisma); PurchaseOrder.sourceRfqId is
+  // SetNull, so an awarded PO (should this ever run on a non-DRAFT RFQ) survives with the link
+  // cleared rather than being dragged into the delete.
+  async delete(id: string): Promise<void> {
+    await this.prisma.rfq.delete({ where: { id } });
   }
 
   async updateStatus(id: string, status: RfqStatus): Promise<void> {

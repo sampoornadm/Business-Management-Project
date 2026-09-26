@@ -3,6 +3,7 @@ import {
   type AttachmentDto,
   type PaginatedResult,
   type TenderDashboardStatsDto,
+  type TenderDocumentChecklistDto,
   type TenderDto,
   type TenderListItemDto,
   type TenderStatus,
@@ -26,6 +27,7 @@ import type { ITagsRepository } from "../tags/tags.repository.js";
 import type { IUsersRepository } from "../users/users.repository.js";
 
 import { ensureTenderFolders } from "./local-docs/folder-naming.js";
+import { detectRequiredDocuments } from "./tender-document-requirements.parser.js";
 import { toTenderDto, toTenderListItemDto } from "./tenders.mapper.js";
 import type {
   CreateCompetitorData,
@@ -538,6 +540,17 @@ export class TendersService {
     await this.assertTenderExists(tenderId, businessId);
     const attachments = await this.attachmentsService.listByEntity("Tender", tenderId, documentType);
     return Promise.all(attachments.map(toAttachmentDto));
+  }
+
+  async getDocumentChecklist(tenderId: string, businessId: string): Promise<TenderDocumentChecklistDto> {
+    const tender = await this.assertTenderExists(tenderId, businessId);
+    const required = detectRequiredDocuments(tender.notes ?? "");
+    const attachments = await this.attachmentsService.listByEntity("Tender", tenderId);
+    const uploadedTypes = new Set(attachments.map((a) => a.documentType).filter((t): t is string => t !== null));
+
+    const uploaded = required.map((r) => r.type).filter((type) => uploadedTypes.has(type));
+    const missing = required.map((r) => r.type).filter((type) => !uploadedTypes.has(type));
+    return { required, uploaded, missing };
   }
 
   async listDocumentVersions(
