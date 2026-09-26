@@ -1,7 +1,7 @@
 "use client";
 
 import { DEFAULT_GST_RATE, type BoqDto, type BoqItemDto, type RfqVendorSuggestionsDto } from "@bmp/types";
-import { Badge, Button, EditableTreeTable, Input, useToast, type EditableTreeColumn } from "@bmp/ui";
+import { AiBadge, Badge, Button, EditableTreeTable, Input, useToast, type EditableTreeColumn } from "@bmp/ui";
 import { Check, Send, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -245,21 +245,32 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
     },
     {
       key: "ai",
-      header: "AI suggestion",
+      header: "Item Category",
       render: (item) => {
         if (!item.aiEnrichedAt) return <span className="text-muted-foreground">-</span>;
         const confidence = item.aiConfidence ?? 0;
         const classification = [item.aiCategory, item.aiSubcategory].filter(Boolean).join(" · ");
         return (
-          <div className="flex items-center gap-2" title={item.normalizedName ?? undefined}>
-            {classification && (
-              <Badge variant="secondary" className="text-xs font-normal">
-                {classification}
-              </Badge>
+          <div className="flex flex-wrap items-center gap-2" title={item.normalizedName ?? undefined}>
+            {classification && <AiBadge>{classification}</AiBadge>}
+            {item.suggestedHsnCode && item.suggestedHsnCode !== item.hsnCode && (
+              <span className="flex items-center gap-1">
+                <AiBadge>HSN {item.suggestedHsnCode}</AiBadge>
+                {canEdit && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => void commitField(item, "hsnCode", item.suggestedHsnCode!)}
+                  >
+                    Apply
+                  </Button>
+                )}
+              </span>
             )}
             {item.suggestedRate !== null ? (
               <>
-                <span className="tabular-nums">{item.suggestedRate.toLocaleString()}</span>
+                <AiBadge className="tabular-nums">{item.suggestedRate.toLocaleString()}</AiBadge>
                 <Badge variant={confidence >= 0.95 ? "success" : "outline"} className="text-xs">
                   {Math.round(confidence * 100)}%
                 </Badge>

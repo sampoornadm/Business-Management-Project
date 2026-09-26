@@ -89,3 +89,10 @@ export const documentIndexingQueue = new Queue<DocumentIndexingJobPayload, void,
     },
   },
 );
+
+export const HSN_SAC_REFRESH_QUEUE_NAME = "hsn-sac-refresh";
+
+export const hsnSacRefreshQueue = new Queue<Record<string, never>, void, "refresh">(
+  HSN_SAC_REFRESH_QUEUE_NAME,
+  { connection: redis },
+);

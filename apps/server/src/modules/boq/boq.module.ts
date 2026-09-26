@@ -3,6 +3,8 @@ import { attachmentsService } from "../attachments/attachments.module.js";
 import { auditService } from "../audit/audit.module.js";
 import { ItemsRepository } from "../items/items.repository.js";
 import { HistoricalRatesRepository } from "../rates/rates.repository.js";
+import { ReferenceDataRepository } from "../reference-data/reference-data.repository.js";
+import { settingsService } from "../settings/settings.module.js";
 import { TendersRepository } from "../tenders/tenders.repository.js";
 
 import { BoqEnrichmentService } from "./boq-enrichment.service.js";
@@ -20,12 +22,15 @@ const historicalRatesRepository = new HistoricalRatesRepository(prisma);
 // ItemsRepository holds no state beyond the Prisma client, so a second instance is harmless —
 // same reasoning as tendersRepository/historicalRatesRepository above.
 const itemsRepository = new ItemsRepository(prisma);
+const referenceDataRepository = new ReferenceDataRepository(prisma);
 
 // Exported for the ai-enrichment worker, which runs in the worker process (no router).
 export const boqEnrichmentService = new BoqEnrichmentService(
   boqRepository,
   historicalRatesRepository,
   itemsRepository,
+  referenceDataRepository,
+  settingsService,
 );
 
 export const boqService = new BoqService(
