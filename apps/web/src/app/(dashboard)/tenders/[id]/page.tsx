@@ -17,6 +17,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  DeadlineBadge,
   EMPTY_VALUE,
   formatDate,
   formatDateTime,
@@ -56,6 +57,7 @@ import {
 } from "@/hooks/use-tenders";
 import { useAuthStore } from "@/lib/auth-store";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
+import { daysUntil, deadlineLabel } from "@/lib/deadline";
 import { hasPermission } from "@/lib/permissions";
 import { tenderKindBadgeVariant, tenderPriorityBadgeVariant, tenderStatusBadgeVariant } from "@/lib/tender-status";
 import { buildTenderSteps, isOnHappyPath } from "@/lib/tender-stepper";
@@ -157,6 +159,14 @@ export default function TenderDetailPage() {
               {TENDER_STATUS_LABELS[tender.status]}
             </Badge>
             <Badge variant={tenderPriorityBadgeVariant(tender.priority)}>{tender.priority}</Badge>
+            {tender.submissionDate && (
+              <span title={formatDateTime(tender.submissionDate)}>
+                <DeadlineBadge
+                  daysLeft={daysUntil(tender.submissionDate)}
+                  label={deadlineLabel(daysUntil(tender.submissionDate))}
+                />
+              </span>
+            )}
           </div>
           <p className="text-sm text-muted-foreground">
             {tender.tenderNumber} · {tender.client.name}
