@@ -1,8 +1,9 @@
 import { env } from "./config/env.js";
-import { tenderReminderQueue } from "./infra/queue/queues.js";
+import { hsnSacRefreshQueue, tenderReminderQueue } from "./infra/queue/queues.js";
 import { startAiEnrichmentWorker } from "./infra/queue/workers/ai-enrichment.worker.js";
 import { startDocumentIndexingWorker } from "./infra/queue/workers/document-indexing.worker.js";
 import { startEmailWorker } from "./infra/queue/workers/email.worker.js";
+import { startHsnSacRefreshWorker } from "./infra/queue/workers/hsn-sac-refresh.worker.js";
 import { startTenderReminderWorker } from "./infra/queue/workers/tender-reminder.worker.js";
 import { startLocalDocsWatcher } from "./modules/tenders/local-docs/docs-watcher.service.js";
 import { startIncomingTendersWatcher } from "./modules/tenders/local-docs/incoming-tenders.service.js";
@@ -10,6 +11,7 @@ import { logger } from "./shared/logger/logger.js";
 
 const emailWorker = startEmailWorker();
 const tenderReminderWorker = startTenderReminderWorker();
+const hsnSacRefreshWorker = startHsnSacRefreshWorker();
 const localDocsWatcher = env.LOCAL_DOCS_SYNC_ENABLED
   ? await startLocalDocsWatcher(env.BUSINESSES_ROOT_DIR)
   : undefined;
@@ -35,6 +37,14 @@ await tenderReminderQueue.add(
   {},
   { repeat: { pattern: "*/15 * * * *" }, jobId: "tender-hourly-deadline-check" },
 );
+// Sundays 03:00 — this data changes rarely (GST Council notifications, not daily), so a weekly
+// cadence is deliberately not configurable via env; the per-run enable/disable toggle lives in
+// Settings (HSN_SAC_AUTO_REFRESH_ENABLED).
+await hsnSacRefreshQueue.add(
+  "refresh",
+  {},
+  { repeat: { pattern: "0 3 * * 0" }, jobId: "hsn-sac-weekly-refresh" },
+);
 
 logger.info(
   `Background worker process started (email queue, tender reminders${localDocsWatcher ? ", local docs sync" : ""}${incomingTendersWatcher ? ", incoming tenders ingestion" : ""}${aiEnrichmentWorker ? ", AI enrichment" : ""}${documentIndexingWorker ? ", document indexing" : ""})`,
@@ -45,6 +55,7 @@ async function shutdown(signal: string): Promise<void> {
   await Promise.all([
     emailWorker.close(),
     tenderReminderWorker.close(),
+    hsnSacRefreshWorker.close(),
     localDocsWatcher?.close(),
     incomingTendersWatcher?.close(),
     aiEnrichmentWorker?.close(),

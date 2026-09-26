@@ -61,6 +61,8 @@ model User {
   createdBills           Bill[]                 @relation("BillCreatedBy")
   createdExpenses        Expense[]              @relation("ExpenseCreatedBy")
   recordedPayments       Payment[]              @relation("PaymentRecordedBy")
+  referenceDataImports   ReferenceDataImport[]  @relation("ReferenceDataImportTriggeredBy")
+  settingsUpdated        Setting[]              @relation("SettingUpdatedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -674,6 +676,61 @@ model SavedView {
   @@unique([userId, businessId, pageKey, name])
   @@index([userId, businessId, pageKey])
   @@map("saved_views")
+}
+
+model HsnCode {
+  id              String    @id @default(uuid())
+  code            String    @unique
+  description     String
+  codeLength      Int
+  embedding       Float[]
+  embeddedAt      DateTime?
+  embeddingVector Unsupported("vector(1024)")?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([codeLength])
+  @@map("hsn_codes")
+}
+
+model SacCode {
+  id              String    @id @default(uuid())
+  code            String    @unique
+  description     String
+  codeLength      Int
+  embedding       Float[]
+  embeddedAt      DateTime?
+  embeddingVector Unsupported("vector(1024)")?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([codeLength])
+  @@map("sac_codes")
+}
+
+model ReferenceDataImport {
+  id            String   @id @default(uuid())
+  dataset       String
+  sourceUrl     String
+  sourceEtag    String?
+  hsnRowCount   Int
+  sacRowCount   Int
+  triggeredById String?
+  triggeredBy   User?    @relation("ReferenceDataImportTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+  importedAt    DateTime @default(now())
+
+  @@index([dataset, importedAt])
+  @@map("reference_data_imports")
+}
+
+model Setting {
+  key         String   @id
+  value       String
+  updatedById String?
+  updatedBy   User?    @relation("SettingUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt
+
+  @@map("settings")
 }
 
 // ---------------------------------------------------------------------------

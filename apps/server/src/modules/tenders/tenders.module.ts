@@ -1,4 +1,4 @@
-import { generateJson, generateText } from "../../infra/llm/ollama.client.js";
+import { generateJson, generateText as ollamaGenerateText } from "../../infra/llm/ollama.client.js";
 import { EmailService } from "../../infra/mailer/email.service.js";
 import { prisma } from "../../infra/prisma/client.js";
 import { attachmentsService } from "../attachments/attachments.module.js";
@@ -10,6 +10,7 @@ import { TagsRepository } from "../tags/tags.repository.js";
 import { usersRepository } from "../users/users.module.js";
 
 import { extractDocumentText } from "./tender-extraction.parser.js";
+import type { GenerateTextFn } from "./tender-extraction.service.js";
 import { TenderExtractionService } from "./tender-extraction.service.js";
 import { TendersController } from "./tenders.controller.js";
 import { TendersRepository } from "./tenders.repository.js";
@@ -31,6 +32,10 @@ export const tendersService = new TendersService(
   notificationsService,
   emailService,
 );
+// Adapts ollama.client's (prompt, model?, options?) to the service's own narrower (prompt,
+// options?) — the service never picks a model (always the env default), only ever a timeout.
+const generateText: GenerateTextFn = (prompt, options) => ollamaGenerateText(prompt, undefined, options);
+
 export const tenderExtractionService = new TenderExtractionService(
   organizationsRepository,
   generateJson,

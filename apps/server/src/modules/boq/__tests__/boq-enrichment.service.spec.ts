@@ -13,6 +13,8 @@ import type {
   IHistoricalRatesRepository,
   ListHistoricalRatesFilters,
 } from "../../rates/rates.repository.js";
+import type { HsnCandidate, IReferenceDataRepository } from "../../reference-data/reference-data.repository.js";
+import type { SettingsService } from "../../settings/settings.service.js";
 import { BoqEnrichmentService } from "../boq-enrichment.service.js";
 import type {
   BoqItemWithBreakdown,
@@ -127,16 +129,28 @@ class FakeItemsRepository implements Partial<IItemsRepository> {
   }
 }
 
+class FakeReferenceDataRepository implements Partial<IReferenceDataRepository> {
+  nearestHsn: HsnCandidate[] = [];
+
+  async findNearestHsn(): Promise<HsnCandidate[]> {
+    return this.nearestHsn;
+  }
+}
+
 function buildService() {
   const boqRepository = new FakeBoqRepository();
   const ratesRepository = new FakeRatesRepository();
   const itemsRepository = new FakeItemsRepository();
+  const referenceDataRepository = new FakeReferenceDataRepository();
+  const settingsService = { get: vi.fn().mockResolvedValue(0.98) } as unknown as SettingsService;
   const service = new BoqEnrichmentService(
     boqRepository as unknown as IBoqRepository,
     ratesRepository as unknown as IHistoricalRatesRepository,
     itemsRepository as unknown as IItemsRepository,
+    referenceDataRepository as unknown as IReferenceDataRepository,
+    settingsService,
   );
-  return { service, boqRepository, ratesRepository, itemsRepository };
+  return { service, boqRepository, ratesRepository, itemsRepository, referenceDataRepository };
 }
 
 describe("BoqEnrichmentService", () => {
@@ -351,7 +365,7 @@ describe("BoqEnrichmentService", () => {
     expect(boqRepository.enrichment.size).toBe(0);
   });
 
-  it("auto-fills hsnCode and gstRate directly (no separate apply step) from the LLM's guess, snapped to the nearest real slab", async () => {
+  it("auto-fills gstRate directly from the LLM's guess, snapped to the nearest real slab (unchanged — only hsnCode is confirm-gated)", async () => {
     const { service, boqRepository } = buildService();
     const item = makeItem("XLPE cable 4 core 16 sqmm");
     boqRepository.items = [item];
@@ -361,17 +375,113 @@ describe("BoqEnrichmentService", () => {
       category: "Electrical",
       subcategory: "Cable",
       confidence: 0.8,
-      hsnCode: "8544",
+      hsnCode: null,
       gstRatePercent: 17.5, // not a real slab — must snap to 18
     });
 
     await service.enrichBoq(BOQ_ID, BUSINESS_ID);
 
     const result = boqRepository.enrichment.get(item.id);
-    expect(result?.suggestedHsnCode).toBe("8544");
     expect(result?.suggestedGstRate).toBe(18);
-    expect(result?.hsnCode).toBe("8544");
     expect(result?.gstRate).toBe(18);
+  });
+
+  it("suggests a fresh (non-catalog) HSN match but never auto-fills the real hsnCode field", async () => {
+    const { service, boqRepository, referenceDataRepository } = buildService();
+    const item = makeItem("PORTLAND CEMENT OPC 43 GRADE 50KG BAG");
+    boqRepository.items = [item];
+    referenceDataRepository.nearestHsn = [
+      { code: "2523", description: "PORTLAND CEMENT, ALUMINOUS CEMENT, SLAG CEMENT", similarity: 0.9 },
+    ];
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock
+      .mockResolvedValueOnce({
+        normalizedName: "OPC 43 Grade Cement",
+        category: "Civil",
+        subcategory: "Cement",
+        confidence: 0.8,
+        hsnCode: null,
+        gstRatePercent: 18,
+      })
+      .mockResolvedValueOnce({ hsnCode: "2523" });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    const result = boqRepository.enrichment.get(item.id);
+    expect(result?.suggestedHsnCode).toBe("2523");
+    expect(result).not.toHaveProperty("hsnCode");
+  });
+
+  it("rejects an HSN code the model returns that wasn't in the offered candidate list", async () => {
+    const { service, boqRepository, referenceDataRepository } = buildService();
+    const item = makeItem("PORTLAND CEMENT OPC 43 GRADE 50KG BAG");
+    boqRepository.items = [item];
+    referenceDataRepository.nearestHsn = [
+      { code: "2523", description: "PORTLAND CEMENT, ALUMINOUS CEMENT, SLAG CEMENT", similarity: 0.9 },
+    ];
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock
+      .mockResolvedValueOnce({
+        normalizedName: "OPC 43 Grade Cement",
+        category: "Civil",
+        subcategory: "Cement",
+        confidence: 0.8,
+        hsnCode: null,
+        gstRatePercent: 18,
+      })
+      // The model hallucinates a code that was never offered — must be rejected, not stored.
+      .mockResolvedValueOnce({ hsnCode: "9999" });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    expect(boqRepository.enrichment.get(item.id)?.suggestedHsnCode).toBeNull();
+  });
+
+  it("suggests nothing when ANN retrieval finds no HSN candidates at all", async () => {
+    const { service, boqRepository, referenceDataRepository } = buildService();
+    referenceDataRepository.nearestHsn = [];
+    const item = makeItem("SOME ITEM WITH NO CLEAN HSN ANALOG");
+    boqRepository.items = [item];
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock.mockResolvedValueOnce({
+      normalizedName: "Unusual Item",
+      category: "Other",
+      subcategory: null,
+      confidence: 0.5,
+      hsnCode: null,
+      gstRatePercent: 18,
+    });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    const result = boqRepository.enrichment.get(item.id);
+    expect(result?.suggestedHsnCode).toBeNull();
+    // No second generateJson call for the HSN pick — there was nothing to offer it.
+    expect(generateJsonMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("suggests nothing when the model itself says none of the offered candidates fit", async () => {
+    const { service, boqRepository, referenceDataRepository } = buildService();
+    referenceDataRepository.nearestHsn = [
+      { code: "7307", description: "TUBE OR PIPE FITTINGS, OF IRON OR STEEL", similarity: 0.7 },
+    ];
+    const item = makeItem("SOME ITEM WITH NO CLEAN HSN ANALOG");
+    boqRepository.items = [item];
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock
+      .mockResolvedValueOnce({
+        normalizedName: "Unusual Item",
+        category: "Other",
+        subcategory: null,
+        confidence: 0.5,
+        hsnCode: null,
+        gstRatePercent: 18,
+      })
+      .mockResolvedValueOnce({ hsnCode: null });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    expect(boqRepository.enrichment.get(item.id)?.suggestedHsnCode).toBeNull();
   });
 
   it("prefers a confirmed catalog HSN over the LLM's own guess for the same item, and auto-fills that too", async () => {
@@ -401,27 +511,62 @@ describe("BoqEnrichmentService", () => {
   });
 
   it("never overwrites an already human-confirmed hsnCode/gstRate on re-enrichment", async () => {
-    const { service, boqRepository } = buildService();
+    const { service, boqRepository, referenceDataRepository } = buildService();
     const item = { ...makeItem("XLPE cable 4 core 16 sqmm"), hsnCodeConfirmed: true } as BoqItemWithBreakdown;
     boqRepository.items = [item];
+    referenceDataRepository.nearestHsn = [
+      { code: "8544", description: "Insulated wire, cable and other conductors", similarity: 0.85 },
+    ];
     embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
-    generateJsonMock.mockResolvedValueOnce({
-      normalizedName: "XLPE Cable 4C x16",
-      category: "Electrical",
-      subcategory: "Cable",
-      confidence: 0.8,
-      hsnCode: "9999",
-      gstRatePercent: 5,
-    });
+    generateJsonMock
+      .mockResolvedValueOnce({
+        normalizedName: "XLPE Cable 4C x16",
+        category: "Electrical",
+        subcategory: "Cable",
+        confidence: 0.8,
+        hsnCode: null,
+        gstRatePercent: 5,
+      })
+      .mockResolvedValueOnce({ hsnCode: "8544" });
 
     await service.enrichBoq(BOQ_ID, BUSINESS_ID);
 
     const result = boqRepository.enrichment.get(item.id);
     // The suggestion record still updates (provenance/audit trail)...
-    expect(result?.suggestedHsnCode).toBe("9999");
+    expect(result?.suggestedHsnCode).toBe("8544");
     // ...but the real, human-confirmed fields are never touched — the key must be absent
     // entirely (not null/undefined-valued), since that's what makes Prisma skip the column.
     expect(result).not.toHaveProperty("hsnCode");
     expect(result).not.toHaveProperty("gstRate");
+  });
+
+  it("resolves a known steel pipe-fitting description deterministically, skipping the ANN/LLM HSN pick", async () => {
+    const { service, boqRepository, referenceDataRepository } = buildService();
+    const item = makeItem("SOCKET MATERIAL : MILD STEEL SIZE : 2IN MEDIUM QUALITY");
+    boqRepository.items = [item];
+    // Deliberately wrong candidates — if the ANN/LLM path ran, this is what it would pick from.
+    referenceDataRepository.nearestHsn = [
+      {
+        code: "8547",
+        description: "INSULATING FITTINGS FOR ELECTRICAL MACHINES",
+        similarity: 0.9,
+      },
+    ];
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock.mockResolvedValueOnce({
+      normalizedName: "Pipe Socket 2in",
+      category: "Plumbing",
+      subcategory: "Fittings",
+      confidence: 0.8,
+      hsnCode: null,
+      gstRatePercent: 18,
+    });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    const result = boqRepository.enrichment.get(item.id);
+    expect(result?.suggestedHsnCode).toBe("7307");
+    // Only the classification call ran — the keyword match short-circuits the HSN pick call.
+    expect(generateJsonMock).toHaveBeenCalledTimes(1);
   });
 });

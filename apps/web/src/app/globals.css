@@ -39,6 +39,12 @@
     --success: 142 60% 30%;
     --success-foreground: 210 40% 98%;
 
+    /* AI-suggested / autosuggested content marker — deliberately outside the primary/signal/
+       success semantic set (action / warning / positive-status) so it reads as "the app
+       proposed this," not as any of those. Used by AiBadge (packages/ui). */
+    --ai: 262 60% 48%;
+    --ai-foreground: 210 40% 98%;
+
     --border: 217.7 16% 90.2%;
     --input: 217.7 16% 90.2%;
     --ring: 216 65% 34%;
@@ -80,6 +86,9 @@
 
     --success: 142 50% 45%;
     --success-foreground: 222 47% 11%;
+
+    --ai: 262 65% 68%;
+    --ai-foreground: 222 47% 11%;
 
     --border: 217 20% 18%;
     --input: 217 20% 18%;

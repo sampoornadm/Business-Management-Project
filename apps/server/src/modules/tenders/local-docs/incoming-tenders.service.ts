@@ -4,13 +4,14 @@ import path from "node:path";
 import chokidar, { type FSWatcher } from "chokidar";
 
 import { ConflictError } from "../../../core/errors/HttpErrors.js";
-import { generateJson, generateText } from "../../../infra/llm/ollama.client.js";
+import { generateJson, generateText as ollamaGenerateText } from "../../../infra/llm/ollama.client.js";
 import { prisma } from "../../../infra/prisma/client.js";
 import { logger } from "../../../shared/logger/logger.js";
 import { auditService } from "../../audit/audit.module.js";
 import { boqService } from "../../boq/boq.module.js";
 import { organizationsRepository, organizationsService } from "../../organizations/organizations.module.js";
 import { extractDocumentText } from "../tender-extraction.parser.js";
+import type { GenerateTextFn } from "../tender-extraction.service.js";
 import { TenderExtractionService } from "../tender-extraction.service.js";
 import { tendersRepository, tendersService } from "../tenders.module.js";
 
@@ -154,6 +155,10 @@ export async function processIncomingTenderFile(
 
   logger.info(`Incoming tenders: created tender ${tender.tenderNumber} from "${filename}"`);
 }
+
+// Adapts ollama.client's (prompt, model?, options?) to the service's own narrower (prompt,
+// options?) — see tenders.module.ts's identical adapter for why.
+const generateText: GenerateTextFn = (prompt, options) => ollamaGenerateText(prompt, undefined, options);
 
 export async function startIncomingTendersWatcher(rootDirRaw: string): Promise<FSWatcher> {
   const rootDir = expandHome(rootDirRaw);
