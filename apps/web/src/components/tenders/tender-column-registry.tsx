@@ -8,7 +8,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 
 import { TenderDownloadMenu } from "@/components/tenders/tender-download-menu";
-import { daysUntil, deadlineLabel } from "@/lib/deadline";
+import { daysUntil, deadlineLabel, isPastDue } from "@/lib/deadline";
 import { tenderPriorityBadgeVariant, tenderStatusBadgeVariant } from "@/lib/tender-status";
 
 export interface TenderColumnConfig extends FilterableColumnDef {
@@ -100,7 +100,7 @@ export const TENDER_COLUMNS: TenderColumnConfig[] = [
       const daysLeft = daysUntil(due);
       return (
         <span title={formatDateTime(due)}>
-          <DeadlineBadge daysLeft={daysLeft} label={deadlineLabel(daysLeft)} />
+          <DeadlineBadge daysLeft={daysLeft} label={deadlineLabel(daysLeft, isPastDue(due))} />
         </span>
       );
     },
