@@ -2,7 +2,7 @@
 
 import type { TenderListItemDto } from "@bmp/types";
 import { TENDER_PRIORITIES, TENDER_STATUS_LABELS, TENDER_STATUSES } from "@bmp/types";
-import { Badge, DeadlineBadge, formatDateTime, SortableHeader } from "@bmp/ui";
+import { Badge, DeadlineProgress, formatDateTime, SortableHeader } from "@bmp/ui";
 import type { FilterableColumnDef } from "@bmp/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
@@ -100,9 +100,13 @@ export const TENDER_COLUMNS: TenderColumnConfig[] = [
       const daysLeft = daysUntil(due);
       const pastDue = isPastDue(due);
       return (
-        <span title={formatDateTime(due)}>
-          <DeadlineBadge daysLeft={daysLeft} label={deadlineLabel(daysLeft, pastDue)} pastDue={pastDue} />
-        </span>
+        <DeadlineProgress
+          dateText={formatDateTime(due)}
+          daysLeft={daysLeft}
+          label={deadlineLabel(daysLeft, pastDue)}
+          pastDue={pastDue}
+          className="min-w-40"
+        />
       );
     },
   },
