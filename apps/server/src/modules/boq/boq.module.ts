@@ -1,6 +1,7 @@
 import { prisma } from "../../infra/prisma/client.js";
 import { attachmentsService } from "../attachments/attachments.module.js";
 import { auditService } from "../audit/audit.module.js";
+import { categoriesService } from "../categories/categories.module.js";
 import { ItemsRepository } from "../items/items.repository.js";
 import { HistoricalRatesRepository } from "../rates/rates.repository.js";
 import { ReferenceDataRepository } from "../reference-data/reference-data.repository.js";
@@ -31,6 +32,7 @@ export const boqEnrichmentService = new BoqEnrichmentService(
   itemsRepository,
   referenceDataRepository,
   settingsService,
+  categoriesService,
 );
 
 export const boqService = new BoqService(
