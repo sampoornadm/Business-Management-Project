@@ -27,4 +27,29 @@ describe("matchHsnByKeyword", () => {
   it("returns null for a steel item that isn't a pipe fitting", () => {
     expect(matchHsnByKeyword("MILD STEEL FLAT BAR 50X6MM")).toBeNull();
   });
+
+  it("matches a disc spring washer to 7320, not 7318's fastener spring washers", () => {
+    const result = matchHsnByKeyword(
+      "WASHER TYPE : DISC SPRING MATERIAL : : SPRING STEEL MATERIAL SPEC : 51CRV4 COATING : BLACK PHOSPHATE",
+    );
+    expect(result).toEqual({
+      code: "7320",
+      description: "SPRINGS AND LEAVES FOR SPRINGS, OF IRON OR STEEL",
+    });
+  });
+
+  it("matches a bearing preload spring to 7320", () => {
+    const result = matchHsnByKeyword(
+      'BEARING PRELOAD SPRING, TYPE: K, NON SLOTTED / CUP SPRING, SIZE: 25.7 X14.3 X 0.4, MATERIAL: SPRING STEEL',
+    );
+    expect(result?.code).toBe("7320");
+  });
+
+  it("matches a Belleville washer to 7320 by name alone", () => {
+    expect(matchHsnByKeyword("BELLEVILLE WASHER, SPRING STEEL, 20MM")?.code).toBe("7320");
+  });
+
+  it("does not misclassify a plain (non-spring) steel washer as 7320", () => {
+    expect(matchHsnByKeyword("MILD STEEL WASHER, BLACK PHOSPHATE FINISH, 31MM DIA (M30)")).toBeNull();
+  });
 });
