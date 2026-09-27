@@ -1,10 +1,18 @@
+import type { CategoryLeafDto } from "@bmp/types";
+
 import { env } from "../../config/env.js";
 import { ServiceUnavailableError } from "../../core/errors/HttpErrors.js";
 import { embed, generateJson } from "../../infra/llm/ollama.client.js";
 import { logger } from "../../shared/logger/logger.js";
 import { round2 } from "../../shared/utils/math.js";
 import { sameSpec } from "../../shared/utils/spec-match.js";
-import { deriveCanonicalName } from "../items/items.helpers.js";
+import type { CategoriesService } from "../categories/categories.service.js";
+import {
+  buildClassifyPrompt,
+  deriveCanonicalName,
+  parseClassification as parseCategoryClassification,
+  pickConfirmedMatch,
+} from "../items/items.helpers.js";
 import type { IItemsRepository } from "../items/items.repository.js";
 import type {
   HistoricalRateMatch,
@@ -27,6 +35,9 @@ const RATE_MATCH_CANDIDATES = 10;
 const HSN_CODE_LENGTH = 4;
 /** How many ANN-retrieved HSN headings the LLM is offered to pick from. */
 const HSN_CANDIDATE_LIMIT = 8;
+
+/** Mirrors items.service.ts's CLASSIFY_EXAMPLE_LIMIT — same ANN call shape, same window size. */
+const CATEGORY_EXAMPLE_LIMIT = 20;
 
 /**
  * The LLM self-reports its own confidence, which is not calibrated against anything.
@@ -52,10 +63,7 @@ function snapToGstSlab(value: number): number {
 
 interface LlmClassification {
   normalizedName: string;
-  category: string;
-  subcategory: string | null;
   confidence: number;
-  hsnCode: string | null;
   gstRatePercent: number | null;
 }
 
@@ -68,44 +76,38 @@ function parseClassification(raw: unknown): LlmClassification | null {
   if (!isRecord(raw)) return null;
 
   const normalizedName = typeof raw.normalizedName === "string" ? raw.normalizedName.trim() : "";
-  const category = typeof raw.category === "string" ? raw.category.trim() : "";
-  if (!normalizedName || !category) return null;
+  if (!normalizedName) return null;
 
-  const subcategory =
-    typeof raw.subcategory === "string" && raw.subcategory.trim() ? raw.subcategory.trim() : null;
   const confidence = typeof raw.confidence === "number" && Number.isFinite(raw.confidence)
     ? Math.min(Math.max(raw.confidence, 0), 1)
     : 0.5;
-  // Real HSN codes are 2-8 digits only — a model reply like "8544 (Cable)" or "N/A" is
-  // discarded rather than stored malformed (same "validate before trusting" rule everywhere
-  // else here).
-  const rawHsnCode = typeof raw.hsnCode === "string" ? raw.hsnCode.trim() : "";
-  const hsnCode = /^\d{2,8}$/.test(rawHsnCode) ? rawHsnCode : null;
   const gstRatePercent =
     typeof raw.gstRatePercent === "number" && Number.isFinite(raw.gstRatePercent)
       ? snapToGstSlab(raw.gstRatePercent)
       : null;
 
-  return { normalizedName, category, subcategory, confidence, hsnCode, gstRatePercent };
+  return { normalizedName, confidence, gstRatePercent };
 }
 
 /**
- * Classification only — the model is never asked to pick a rate. Nearby historical items are
- * included purely so it reuses this company's own category vocabulary instead of inventing
- * new labels for the same trade.
+ * Naming and GST-rate guessing only — trade category is a separate, grounded call (see
+ * classifyCategory below); this free-text prompt used to also ask for "category"/"subcategory"
+ * directly, which is exactly the ungrounded-guess problem the HSN matcher already had to fix for
+ * hsnCode (same trap: items that are obviously the same trade got different free-text labels
+ * independently per call — see hsn-keyword-rules.ts's design note for the pattern).
  */
 function buildPrompt(description: string, unit: string | null, candidates: HistoricalRateMatch[]): string {
   const context = candidates.length
-    ? candidates.map((c) => `  - "${c.itemName}" (category: ${c.category})`).join("\n")
+    ? candidates.map((c) => `  - "${c.itemName}"`).join("\n")
     : "  (none)";
 
   return [
-    "You classify line items from a construction tender's Bill of Quantities.",
+    "You name and price-classify a line item from a construction tender's Bill of Quantities.",
     "",
     `Item description: "${description}"`,
     `Item unit: ${unit ?? "unknown"}`,
     "",
-    "Similar items this company has priced before, for category vocabulary:",
+    "Similar items this company has priced before, for naming vocabulary:",
     context,
     "",
     "Return JSON only, with exactly these keys:",
@@ -116,14 +118,9 @@ function buildPrompt(description: string, unit: string | null, candidates: Histo
     "                    context for this tender, not part of the item's own identity, and a",
     "                    vendor being quoted this name doesn't need it. Never drop a real spec",
     "                    (size, grade, material, standard) even if it appears late in the sentence.",
-    '  "category": a broad trade category (e.g. "Electrical", "Civil", "Plumbing")',
-    '  "subcategory": a narrower type within that category (e.g. "Cable"), or null',
-    '  "confidence": your confidence in this classification, 0 to 1',
-    '  "hsnCode": your best-guess Indian HSN (tax classification) code for this item — DIGITS',
-    "                ONLY, no letters, spaces or punctuation, 4-8 characters, or null if you're",
-    "                not confident",
-    '  "gstRatePercent": the Indian GST rate percent for that HSN code — one of 0, 5, 12, 18,',
-    "                     28 — or null if unsure",
+    '  "confidence": your confidence in this naming, 0 to 1',
+    '  "gstRatePercent": the Indian GST rate percent for this item — one of 0, 5, 12, 18, 28 —',
+    "                     or null if unsure",
   ].join("\n");
 }
 
@@ -134,6 +131,7 @@ export class BoqEnrichmentService {
     private readonly itemsRepository: IItemsRepository,
     private readonly referenceDataRepository: IReferenceDataRepository,
     private readonly settingsService: SettingsService,
+    private readonly categoriesService: CategoriesService,
   ) {}
 
   /**
@@ -160,6 +158,10 @@ export class BoqEnrichmentService {
     catalogHsn: { hsnCode: string; gstRate: number } | null,
     hsnAlreadyConfirmed: boolean,
     vector: number[],
+    businessId: string,
+    itemId: string,
+    canonicalName: string,
+    categoryContext: { leaves: CategoryLeafDto[]; pathMap: Map<string, string> },
   ): Promise<UpdateBoqItemEnrichmentData> {
     const best = matches[0];
     const matchThreshold = await this.settingsService.get<number>("AI_MATCH_THRESHOLD");
@@ -175,11 +177,9 @@ export class BoqEnrichmentService {
         ? best
         : null;
 
-    // The LLM always classifies, even when a rate matched. HistoricalRate.category is a
-    // cost-type (MATERIAL/LABOR/...), not a trade, so it cannot fill aiCategory — reusing it
-    // would make aiCategory mean "Electrical" on one row and "MATERIAL" on the next. The
-    // model is only asked what it's measurably good at (naming and categorising); pricing
-    // stays with the deterministic check above.
+    // The LLM always names the item, even when a rate matched — pricing stays with the
+    // deterministic check above; naming and GST-rate guessing are what it's measurably good at.
+    // Trade category is a separate, grounded call (classifyCategory below), not this free text.
     const raw = await generateJson(
       buildPrompt(
         description,
@@ -199,10 +199,20 @@ export class BoqEnrichmentService {
     const suggestedHsnCode = catalogHsn?.hsnCode ?? freshMatch?.code ?? null;
     const gstRate = catalogHsn?.gstRate ?? parsed.gstRatePercent;
 
+    const category = await this.classifyCategory(
+      canonicalName,
+      unit,
+      vector,
+      businessId,
+      itemId,
+      categoryContext,
+      matchThreshold,
+    );
+
     return {
       normalizedName: matched ? matched.itemName : parsed.normalizedName,
-      aiCategory: parsed.category,
-      aiSubcategory: parsed.subcategory,
+      aiCategory: category?.category ?? null,
+      aiSubcategory: category?.subcategory ?? null,
       // A matched rate is backed by a measured near-exact match; a classification is only the
       // model's own say-so, so it never scores as high.
       aiConfidence: matched
@@ -260,6 +270,62 @@ export class BoqEnrichmentService {
   }
 
   /**
+   * Same two-rung shape as items.service.ts#suggestForItem (that pipeline is where this one was
+   * copied from) — reused here rather than forked, because BOQ's aiCategory/aiSubcategory used
+   * to be a free-text LLM guess with no retrieval and no closed vocabulary, so items that are
+   * obviously the same trade could land on different labels independently per call. Same failure
+   * shape the HSN matcher already had to fix for hsnCode (see hsn-keyword-rules.ts).
+   *
+   * Rung 1 — reuse a confirmed catalog sibling's category outright if one matches on cosine,
+   * identical specs, and unit (pickConfirmedMatch, deterministic, no LLM).
+   * Rung 2 — otherwise the LLM picks from the real leaf category list, never inventing one
+   * (parseClassification rejects any id not in that list).
+   *
+   * `itemId` excludes nothing here (a BoqItem id never collides with an Items-catalog id, since
+   * they're different tables) — it's only meaningful for items.service.ts's own self-match
+   * exclusion, kept for signature compatibility with the shared repository method.
+   */
+  private async classifyCategory(
+    canonicalName: string,
+    unit: string | null,
+    vector: number[],
+    businessId: string,
+    itemId: string,
+    categoryContext: { leaves: CategoryLeafDto[]; pathMap: Map<string, string> },
+    matchThreshold: number,
+  ): Promise<{ category: string; subcategory: string | null } | null> {
+    const { leaves, pathMap } = categoryContext;
+    if (leaves.length === 0) return null;
+
+    const nearest = await this.itemsRepository.findNearestConfirmedMatch(
+      businessId,
+      itemId,
+      vector,
+      CATEGORY_EXAMPLE_LIMIT,
+    );
+
+    const sibling = pickConfirmedMatch({ canonicalName, unit }, nearest, matchThreshold);
+    let categoryId = sibling?.categoryId ?? null;
+
+    if (!categoryId) {
+      const examples = nearest
+        .map((row) => ({ name: row.canonicalName, path: pathMap.get(row.categoryId) ?? "" }))
+        .filter((e) => e.path);
+      const raw = await generateJson(
+        buildClassifyPrompt(canonicalName, unit, leaves, examples),
+        env.OLLAMA_ENRICHMENT_MODEL,
+      );
+      categoryId = parseCategoryClassification(raw, new Set(leaves.map((l) => l.id))).categoryId;
+    }
+    if (!categoryId) return null;
+
+    const path = pathMap.get(categoryId);
+    if (!path) return null;
+    const parts = path.split(" > ");
+    return { category: parts[0]!, subcategory: parts.length > 1 ? parts[parts.length - 1]! : null };
+  }
+
+  /**
    * Enriches every item on a BOQ in place. Safe to re-run — each run overwrites only the
    * ai* columns, never estimator-entered data.
    */
@@ -270,6 +336,12 @@ export class BoqEnrichmentService {
     if (leaves.length === 0) return;
 
     await this.embedPendingRates(businessId);
+    // Category leaves/paths are the same for every item on this BOQ — fetched once, not per
+    // item, same reason embedPendingRates runs once up here instead of inside the loop.
+    const [categoryLeaves, categoryPathMap] = await Promise.all([
+      this.categoriesService.getLeaves(),
+      this.categoriesService.getPathMap(),
+    ]);
     // Prefer normalizedName when this item was already enriched once (a re-run) — it's the
     // use-case-stripped, spec-only form, which is what should drive the historical-rate ANN
     // search. A first-time pass has no normalizedName yet (it's this call's own output, via
@@ -293,6 +365,10 @@ export class BoqEnrichmentService {
           catalogHsn,
           item.hsnCodeConfirmed,
           vector,
+          businessId,
+          item.id,
+          canonicalName,
+          { leaves: categoryLeaves, pathMap: categoryPathMap },
         );
         await this.boqRepository.updateItemEnrichment(item.id, enrichment);
         enriched += 1;

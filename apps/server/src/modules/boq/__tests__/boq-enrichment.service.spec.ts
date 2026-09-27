@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ServiceUnavailableError } from "../../../core/errors/HttpErrors.js";
 import { cosineSimilarity } from "../../../shared/utils/math.js";
-import type { IItemsRepository } from "../../items/items.repository.js";
+import type { CategoriesService } from "../../categories/categories.service.js";
+import type { IItemsRepository, NearestConfirmedMatch } from "../../items/items.repository.js";
 import type {
   CreateHistoricalRateData,
   HistoricalRateMatch,
@@ -123,9 +124,14 @@ class FakeRatesRepository implements Partial<IHistoricalRatesRepository> {
 
 class FakeItemsRepository implements Partial<IItemsRepository> {
   confirmed = new Map<string, { hsnCode: string; gstRate: number }>();
+  nearestConfirmedCategory: NearestConfirmedMatch[] = [];
 
   async findConfirmedHsn(_businessId: string, canonicalName: string) {
     return this.confirmed.get(canonicalName) ?? null;
+  }
+
+  async findNearestConfirmedMatch(): Promise<NearestConfirmedMatch[]> {
+    return this.nearestConfirmedCategory;
   }
 }
 
@@ -137,11 +143,27 @@ class FakeReferenceDataRepository implements Partial<IReferenceDataRepository> {
   }
 }
 
+/** Empty by default — most tests don't care about category grounding, and (like the HSN
+ * "no candidates" case) an empty leaf list must skip the LLM call entirely, not just return
+ * nothing, so every test that doesn't opt in stays at exactly one generateJson call. */
+class FakeCategoriesService implements Partial<CategoriesService> {
+  leaves: { id: string; name: string; path: string }[] = [];
+
+  async getLeaves() {
+    return this.leaves;
+  }
+
+  async getPathMap() {
+    return new Map(this.leaves.map((l) => [l.id, l.path]));
+  }
+}
+
 function buildService() {
   const boqRepository = new FakeBoqRepository();
   const ratesRepository = new FakeRatesRepository();
   const itemsRepository = new FakeItemsRepository();
   const referenceDataRepository = new FakeReferenceDataRepository();
+  const categoriesService = new FakeCategoriesService();
   const settingsService = { get: vi.fn().mockResolvedValue(0.98) } as unknown as SettingsService;
   const service = new BoqEnrichmentService(
     boqRepository as unknown as IBoqRepository,
@@ -149,8 +171,16 @@ function buildService() {
     itemsRepository as unknown as IItemsRepository,
     referenceDataRepository as unknown as IReferenceDataRepository,
     settingsService,
+    categoriesService as unknown as CategoriesService,
   );
-  return { service, boqRepository, ratesRepository, itemsRepository, referenceDataRepository };
+  return {
+    service,
+    boqRepository,
+    ratesRepository,
+    itemsRepository,
+    referenceDataRepository,
+    categoriesService,
+  };
 }
 
 describe("BoqEnrichmentService", () => {
@@ -190,9 +220,6 @@ describe("BoqEnrichmentService", () => {
     expect(result?.aiRateSourceId).toBe("rate-1");
     // A measured near-exact match outranks anything the model claims about itself.
     expect(result?.aiConfidence).toBeGreaterThanOrEqual(0.95);
-    // Trade category comes from the LLM, never from HistoricalRate.category — that column is
-    // a cost-type (MATERIAL/LABOR), a different taxonomy entirely.
-    expect(result?.aiCategory).toBe("Electrical");
   });
 
   it("classifies with no rate when nothing in the rate history is close", async () => {
@@ -221,7 +248,6 @@ describe("BoqEnrichmentService", () => {
 
     const result = boqRepository.enrichment.get(item.id);
     expect(result?.normalizedName).toBe("Mystery Item");
-    expect(result?.aiCategory).toBe("Civil");
     expect(result?.aiSource).toBe("llm");
     // Nothing cleared AI_MATCH_THRESHOLD — the LLM classifies, it must not invent a rate.
     expect(result?.suggestedRate).toBeNull();
@@ -316,7 +342,6 @@ describe("BoqEnrichmentService", () => {
 
     const result = boqRepository.enrichment.get(item.id);
     expect(result?.aiSource).toBe("llm");
-    expect(result?.aiCategory).toBe("Electrical");
     expect(result?.suggestedRate).toBeNull();
     expect(result?.aiRateSourceId).toBeNull();
   });
@@ -568,5 +593,97 @@ describe("BoqEnrichmentService", () => {
     expect(result?.suggestedHsnCode).toBe("7307");
     // Only the classification call ran — the keyword match short-circuits the HSN pick call.
     expect(generateJsonMock).toHaveBeenCalledTimes(1);
+  });
+
+  describe("item category grounding", () => {
+    it("reuses a confirmed sibling's category when cosine+spec+unit all match, without a second LLM call", async () => {
+      const { service, boqRepository, categoriesService, itemsRepository } = buildService();
+      const item = makeItem("XLPE cable 4 core 16 sqmm");
+      boqRepository.items = [item];
+      categoriesService.leaves = [{ id: "cat-cable", name: "Cable", path: "Electrical > Cable" }];
+      itemsRepository.nearestConfirmedCategory = [
+        { id: "sib-1", categoryId: "cat-cable", canonicalName: "XLPE Cable 4C x16", unit: "m", similarity: 0.99 },
+      ];
+      embedMock.mockResolvedValueOnce([NEAR_CABLE_VECTOR]);
+      generateJsonMock.mockResolvedValueOnce({ normalizedName: "XLPE Cable 4C x16", confidence: 0.8 });
+
+      await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+      const result = boqRepository.enrichment.get(item.id);
+      expect(result?.aiCategory).toBe("Electrical");
+      expect(result?.aiSubcategory).toBe("Cable");
+      expect(generateJsonMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("falls back to the closed-vocabulary LLM, grounded against the real leaf list, when no sibling matches", async () => {
+      const { service, boqRepository, categoriesService } = buildService();
+      const item = makeItem("BEARING PRELOAD SPRING, SPRING STEEL 51CRV4");
+      boqRepository.items = [item];
+      categoriesService.leaves = [
+        { id: "cat-springs", name: "Springs", path: "Machinery > Springs" },
+        { id: "cat-fasteners", name: "Fasteners", path: "Machinery > Fasteners" },
+      ];
+      embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+      generateJsonMock
+        .mockResolvedValueOnce({ normalizedName: "Bearing Preload Spring", confidence: 0.8 })
+        .mockResolvedValueOnce({ categoryId: "cat-springs", confidence: 0.9 });
+
+      await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+      const result = boqRepository.enrichment.get(item.id);
+      expect(result?.aiCategory).toBe("Machinery");
+      expect(result?.aiSubcategory).toBe("Springs");
+      expect(generateJsonMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("rejects a categoryId the model invents that wasn't in the offered leaf list", async () => {
+      const { service, boqRepository, categoriesService } = buildService();
+      const item = makeItem("SOME ITEM WITH NO CLEAN CATEGORY");
+      boqRepository.items = [item];
+      categoriesService.leaves = [{ id: "cat-springs", name: "Springs", path: "Machinery > Springs" }];
+      embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+      generateJsonMock
+        .mockResolvedValueOnce({ normalizedName: "Some Item", confidence: 0.5 })
+        // The model hallucinates a category id that was never offered — must be rejected.
+        .mockResolvedValueOnce({ categoryId: "made-up-id", confidence: 0.9 });
+
+      await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+      const result = boqRepository.enrichment.get(item.id);
+      expect(result?.aiCategory).toBeNull();
+      expect(result?.aiSubcategory).toBeNull();
+    });
+
+    it("suggests no category, and skips the LLM entirely, when the business has no leaf categories configured", async () => {
+      const { service, boqRepository } = buildService();
+      const item = makeItem("XLPE cable 4 core 16 sqmm");
+      boqRepository.items = [item];
+      embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+      generateJsonMock.mockResolvedValueOnce({ normalizedName: "XLPE Cable 4C x16", confidence: 0.8 });
+
+      await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+      const result = boqRepository.enrichment.get(item.id);
+      expect(result?.aiCategory).toBeNull();
+      expect(result?.aiSubcategory).toBeNull();
+      expect(generateJsonMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves subcategory null for a top-level leaf with no parent in its path", async () => {
+      const { service, boqRepository, categoriesService } = buildService();
+      const item = makeItem("SOME GENERIC CIVIL ITEM");
+      boqRepository.items = [item];
+      categoriesService.leaves = [{ id: "cat-civil", name: "Civil", path: "Civil" }];
+      embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+      generateJsonMock
+        .mockResolvedValueOnce({ normalizedName: "Some Item", confidence: 0.5 })
+        .mockResolvedValueOnce({ categoryId: "cat-civil", confidence: 0.7 });
+
+      await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+      const result = boqRepository.enrichment.get(item.id);
+      expect(result?.aiCategory).toBe("Civil");
+      expect(result?.aiSubcategory).toBeNull();
+    });
   });
 });
