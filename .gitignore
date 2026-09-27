@@ -57,6 +57,12 @@ Notes.txt
 # graphify knowledge-graph cache (generated, can be large)
 graphify-out/
 
+# ML artifacts. Datasets, the lookup sheet and accuracy reports ARE tracked — they are text (or a
+# small xlsx), reviewable, and meant to be shared with clients. Model weights are not: they run to
+# ~90 MB+ per training run against a 16 MB repo, and the pipeline rebuilds them reproducibly.
+ml/models/
+ml/runs/*/model/
+
 # local Claude Code permission config
 .claude/settings.json
 
