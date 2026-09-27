@@ -17,7 +17,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  DeadlineBadge,
+  DeadlineProgress,
   EMPTY_VALUE,
   formatDate,
   formatDateTime,
@@ -159,15 +159,6 @@ export default function TenderDetailPage() {
               {TENDER_STATUS_LABELS[tender.status]}
             </Badge>
             <Badge variant={tenderPriorityBadgeVariant(tender.priority)}>{tender.priority}</Badge>
-            {tender.submissionDate && (
-              <span title={formatDateTime(tender.submissionDate)}>
-                <DeadlineBadge
-                  daysLeft={daysUntil(tender.submissionDate)}
-                  label={deadlineLabel(daysUntil(tender.submissionDate), isPastDue(tender.submissionDate))}
-                  pastDue={isPastDue(tender.submissionDate)}
-                />
-              </span>
-            )}
           </div>
           <p className="text-sm text-muted-foreground">
             {tender.tenderNumber} · {tender.client.name}
@@ -282,7 +273,16 @@ export default function TenderDetailPage() {
               </div>
               <div>
                 <p className="text-muted-foreground">Submission date</p>
-                <p>{formatDateTime(tender.submissionDate)}</p>
+                {tender.submissionDate ? (
+                  <DeadlineProgress
+                    dateText={formatDateTime(tender.submissionDate)}
+                    daysLeft={daysUntil(tender.submissionDate)}
+                    label={deadlineLabel(daysUntil(tender.submissionDate), isPastDue(tender.submissionDate))}
+                    pastDue={isPastDue(tender.submissionDate)}
+                  />
+                ) : (
+                  <p>{EMPTY_VALUE}</p>
+                )}
               </div>
               <div>
                 <p className="text-muted-foreground">Opening date</p>
