@@ -137,9 +137,15 @@ class FakeItemsRepository implements Partial<IItemsRepository> {
 
 class FakeReferenceDataRepository implements Partial<IReferenceDataRepository> {
   nearestHsn: HsnCandidate[] = [];
+  /** code -> GST rate, as curated in the lookup sheet. Absent means the sheet has no rate. */
+  gstRates = new Map<string, number>();
 
   async findNearestHsn(): Promise<HsnCandidate[]> {
     return this.nearestHsn;
+  }
+
+  async findGstRateByCode(code: string): Promise<number | null> {
+    return this.gstRates.get(code) ?? null;
   }
 }
 
@@ -147,7 +153,7 @@ class FakeReferenceDataRepository implements Partial<IReferenceDataRepository> {
  * "no candidates" case) an empty leaf list must skip the LLM call entirely, not just return
  * nothing, so every test that doesn't opt in stays at exactly one generateJson call. */
 class FakeCategoriesService implements Partial<CategoriesService> {
-  leaves: { id: string; name: string; path: string }[] = [];
+  leaves: { id: string; name: string; path: string; code: string | null }[] = [];
 
   async getLeaves() {
     return this.leaves;
@@ -390,25 +396,60 @@ describe("BoqEnrichmentService", () => {
     expect(boqRepository.enrichment.size).toBe(0);
   });
 
-  it("auto-fills gstRate directly from the LLM's guess, snapped to the nearest real slab (unchanged — only hsnCode is confirm-gated)", async () => {
-    const { service, boqRepository } = buildService();
-    const item = makeItem("XLPE cable 4 core 16 sqmm");
+  it("takes the GST rate from the matched HSN heading, not from the model", async () => {
+    const { service, boqRepository, referenceDataRepository } = buildService();
+    const item = makeItem("PORTLAND CEMENT OPC 43 GRADE 50KG BAG");
     boqRepository.items = [item];
+    referenceDataRepository.nearestHsn = [
+      { code: "2523", description: "PORTLAND CEMENT, ALUMINOUS CEMENT", similarity: 0.9 },
+    ];
+    referenceDataRepository.gstRates.set("2523", 5);
     embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
-    generateJsonMock.mockResolvedValueOnce({
-      normalizedName: "XLPE Cable 4C x16",
-      category: "Electrical",
-      subcategory: "Cable",
-      confidence: 0.8,
-      hsnCode: null,
-      gstRatePercent: 17.5, // not a real slab — must snap to 18
-    });
+    generateJsonMock
+      .mockResolvedValueOnce({ normalizedName: "OPC 43 Grade Cement", confidence: 0.8 })
+      .mockResolvedValueOnce({ hsnCode: "2523" });
 
     await service.enrichBoq(BOQ_ID, BUSINESS_ID);
 
     const result = boqRepository.enrichment.get(item.id);
-    expect(result?.suggestedGstRate).toBe(18);
-    expect(result?.gstRate).toBe(18);
+    expect(result?.suggestedGstRate).toBe(5);
+    expect(result?.gstRate).toBe(5);
+  });
+
+  it("leaves the GST rate unset when the lookup sheet has no rate for the matched heading", async () => {
+    // An invented tax rate that looks plausible is worse than an empty field, because nobody goes
+    // back to check it. The old code asked the model for a percentage here.
+    const { service, boqRepository, referenceDataRepository } = buildService();
+    const item = makeItem("PORTLAND CEMENT OPC 43 GRADE 50KG BAG");
+    boqRepository.items = [item];
+    referenceDataRepository.nearestHsn = [
+      { code: "2523", description: "PORTLAND CEMENT, ALUMINOUS CEMENT", similarity: 0.9 },
+    ];
+    // no rate seeded for 2523
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock
+      .mockResolvedValueOnce({ normalizedName: "OPC 43 Grade Cement", confidence: 0.8 })
+      .mockResolvedValueOnce({ hsnCode: "2523" });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    const result = boqRepository.enrichment.get(item.id);
+    expect(result?.suggestedGstRate).toBeNull();
+    expect(result).not.toHaveProperty("gstRate");
+  });
+
+  it("prefers a human-confirmed catalog rate over the sheet's rate for the same heading", async () => {
+    const { service, boqRepository, itemsRepository, referenceDataRepository } = buildService();
+    const item = makeItem("XLPE cable 4 core 16 sqmm");
+    boqRepository.items = [item];
+    itemsRepository.confirmed.set("XLPE cable 4 core 16 sqmm", { hsnCode: "8544", gstRate: 12 });
+    referenceDataRepository.gstRates.set("8544", 18);
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock.mockResolvedValueOnce({ normalizedName: "XLPE Cable 4C x16", confidence: 0.8 });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    expect(boqRepository.enrichment.get(item.id)?.gstRate).toBe(12);
   });
 
   it("suggests a fresh (non-catalog) HSN match but never auto-fills the real hsnCode field", async () => {
@@ -595,94 +636,114 @@ describe("BoqEnrichmentService", () => {
     expect(generateJsonMock).toHaveBeenCalledTimes(1);
   });
 
-  describe("item category grounding", () => {
-    it("reuses a confirmed sibling's category when cosine+spec+unit all match, without a second LLM call", async () => {
-      const { service, boqRepository, categoriesService, itemsRepository } = buildService();
-      const item = makeItem("XLPE cable 4 core 16 sqmm");
+
+  describe("item category from the tariff heading", () => {
+    // The taxonomy IS the tariff, so the resolved HSN code already names the category. There is no
+    // separate category classification to disagree with it.
+    const springLeaf = {
+      id: "cat-7320",
+      name: "Springs and leaves for springs",
+      path: "Articles of iron or steel > Springs and leaves for springs",
+      code: "7320",
+    };
+
+    it("derives category and subcategory from the matched HSN heading", async () => {
+      const { service, boqRepository, categoriesService, referenceDataRepository } = buildService();
+      const item = makeItem("WASHER TYPE : DISC SPRING MATERIAL : SPRING STEEL 51CRV4");
       boqRepository.items = [item];
-      categoriesService.leaves = [{ id: "cat-cable", name: "Cable", path: "Electrical > Cable" }];
-      itemsRepository.nearestConfirmedCategory = [
-        { id: "sib-1", categoryId: "cat-cable", canonicalName: "XLPE Cable 4C x16", unit: "m", similarity: 0.99 },
-      ];
-      embedMock.mockResolvedValueOnce([NEAR_CABLE_VECTOR]);
-      generateJsonMock.mockResolvedValueOnce({ normalizedName: "XLPE Cable 4C x16", confidence: 0.8 });
+      categoriesService.leaves = [springLeaf];
+      referenceDataRepository.gstRates.set("7320", 18);
+      embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+      // Only the naming call — the keyword rule resolves 7320 without an HSN pick, and the category
+      // now needs no LLM call of its own.
+      generateJsonMock.mockResolvedValueOnce({ normalizedName: "Disc Spring Washer", confidence: 0.8 });
 
       await service.enrichBoq(BOQ_ID, BUSINESS_ID);
 
       const result = boqRepository.enrichment.get(item.id);
-      expect(result?.aiCategory).toBe("Electrical");
-      expect(result?.aiSubcategory).toBe("Cable");
+      expect(result?.suggestedHsnCode).toBe("7320");
+      expect(result?.aiCategory).toBe("Articles of iron or steel");
+      expect(result?.aiSubcategory).toBe("Springs and leaves for springs");
       expect(generateJsonMock).toHaveBeenCalledTimes(1);
     });
 
-    it("falls back to the closed-vocabulary LLM, grounded against the real leaf list, when no sibling matches", async () => {
-      const { service, boqRepository, categoriesService } = buildService();
-      const item = makeItem("BEARING PRELOAD SPRING, SPRING STEEL 51CRV4");
+    it("keeps the category and the HSN code in step — they come from the same decision", async () => {
+      const { service, boqRepository, categoriesService, referenceDataRepository } = buildService();
+      const item = makeItem("SOCKET MATERIAL : MILD STEEL : GALVANIZED IS:1239 SIZE : 15MM");
       boqRepository.items = [item];
       categoriesService.leaves = [
-        { id: "cat-springs", name: "Springs", path: "Machinery > Springs" },
-        { id: "cat-fasteners", name: "Fasteners", path: "Machinery > Fasteners" },
+        springLeaf,
+        {
+          id: "cat-7307",
+          name: "Tube or pipe fittings",
+          path: "Articles of iron or steel > Tube or pipe fittings",
+          code: "7307",
+        },
+      ];
+      referenceDataRepository.gstRates.set("7307", 18);
+      embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+      generateJsonMock.mockResolvedValueOnce({ normalizedName: "MS Socket 15mm", confidence: 0.8 });
+
+      await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+      const result = boqRepository.enrichment.get(item.id);
+      expect(result?.suggestedHsnCode).toBe("7307");
+      expect(result?.aiSubcategory).toBe("Tube or pipe fittings");
+    });
+
+    it("suggests no category when no HSN code could be resolved", async () => {
+      const { service, boqRepository, categoriesService, referenceDataRepository } = buildService();
+      const item = makeItem("SOME ITEM WITH NO CLEAN HSN ANALOG");
+      boqRepository.items = [item];
+      categoriesService.leaves = [springLeaf];
+      referenceDataRepository.nearestHsn = []; // nothing to offer, so no code
+      embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+      generateJsonMock.mockResolvedValueOnce({ normalizedName: "Unusual Item", confidence: 0.5 });
+
+      await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+      const result = boqRepository.enrichment.get(item.id);
+      expect(result?.suggestedHsnCode).toBeNull();
+      expect(result?.aiCategory).toBeNull();
+      expect(result?.aiSubcategory).toBeNull();
+    });
+
+    it("suggests no category when the resolved code is not in the taxonomy", async () => {
+      // e.g. the sheet deactivated that chapter, so it is no longer a leaf anyone can be put in.
+      const { service, boqRepository, categoriesService, referenceDataRepository } = buildService();
+      const item = makeItem("PORTLAND CEMENT OPC 43 GRADE 50KG BAG");
+      boqRepository.items = [item];
+      categoriesService.leaves = [springLeaf]; // no 2523
+      referenceDataRepository.nearestHsn = [
+        { code: "2523", description: "PORTLAND CEMENT", similarity: 0.9 },
       ];
       embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
       generateJsonMock
-        .mockResolvedValueOnce({ normalizedName: "Bearing Preload Spring", confidence: 0.8 })
-        .mockResolvedValueOnce({ categoryId: "cat-springs", confidence: 0.9 });
+        .mockResolvedValueOnce({ normalizedName: "OPC 43 Grade Cement", confidence: 0.8 })
+        .mockResolvedValueOnce({ hsnCode: "2523" });
 
       await service.enrichBoq(BOQ_ID, BUSINESS_ID);
 
       const result = boqRepository.enrichment.get(item.id);
-      expect(result?.aiCategory).toBe("Machinery");
-      expect(result?.aiSubcategory).toBe("Springs");
-      expect(generateJsonMock).toHaveBeenCalledTimes(2);
-    });
-
-    it("rejects a categoryId the model invents that wasn't in the offered leaf list", async () => {
-      const { service, boqRepository, categoriesService } = buildService();
-      const item = makeItem("SOME ITEM WITH NO CLEAN CATEGORY");
-      boqRepository.items = [item];
-      categoriesService.leaves = [{ id: "cat-springs", name: "Springs", path: "Machinery > Springs" }];
-      embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
-      generateJsonMock
-        .mockResolvedValueOnce({ normalizedName: "Some Item", confidence: 0.5 })
-        // The model hallucinates a category id that was never offered — must be rejected.
-        .mockResolvedValueOnce({ categoryId: "made-up-id", confidence: 0.9 });
-
-      await service.enrichBoq(BOQ_ID, BUSINESS_ID);
-
-      const result = boqRepository.enrichment.get(item.id);
+      expect(result?.suggestedHsnCode).toBe("2523");
       expect(result?.aiCategory).toBeNull();
-      expect(result?.aiSubcategory).toBeNull();
-    });
-
-    it("suggests no category, and skips the LLM entirely, when the business has no leaf categories configured", async () => {
-      const { service, boqRepository } = buildService();
-      const item = makeItem("XLPE cable 4 core 16 sqmm");
-      boqRepository.items = [item];
-      embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
-      generateJsonMock.mockResolvedValueOnce({ normalizedName: "XLPE Cable 4C x16", confidence: 0.8 });
-
-      await service.enrichBoq(BOQ_ID, BUSINESS_ID);
-
-      const result = boqRepository.enrichment.get(item.id);
-      expect(result?.aiCategory).toBeNull();
-      expect(result?.aiSubcategory).toBeNull();
-      expect(generateJsonMock).toHaveBeenCalledTimes(1);
     });
 
     it("leaves subcategory null for a top-level leaf with no parent in its path", async () => {
-      const { service, boqRepository, categoriesService } = buildService();
-      const item = makeItem("SOME GENERIC CIVIL ITEM");
+      const { service, boqRepository, categoriesService, referenceDataRepository } = buildService();
+      const item = makeItem("SOCKET MATERIAL : MILD STEEL IS:1239 SIZE : 15MM");
       boqRepository.items = [item];
-      categoriesService.leaves = [{ id: "cat-civil", name: "Civil", path: "Civil" }];
+      categoriesService.leaves = [
+        { id: "cat-7307", name: "Tube or pipe fittings", path: "Tube or pipe fittings", code: "7307" },
+      ];
+      referenceDataRepository.gstRates.set("7307", 18);
       embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
-      generateJsonMock
-        .mockResolvedValueOnce({ normalizedName: "Some Item", confidence: 0.5 })
-        .mockResolvedValueOnce({ categoryId: "cat-civil", confidence: 0.7 });
+      generateJsonMock.mockResolvedValueOnce({ normalizedName: "MS Socket", confidence: 0.5 });
 
       await service.enrichBoq(BOQ_ID, BUSINESS_ID);
 
       const result = boqRepository.enrichment.get(item.id);
-      expect(result?.aiCategory).toBe("Civil");
+      expect(result?.aiCategory).toBe("Tube or pipe fittings");
       expect(result?.aiSubcategory).toBeNull();
     });
   });

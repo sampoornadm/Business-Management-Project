@@ -1,5 +1,3 @@
-import type { CategoryLeafDto } from "@bmp/types";
-
 import { env } from "../../config/env.js";
 import { ServiceUnavailableError } from "../../core/errors/HttpErrors.js";
 import { embed, generateJson } from "../../infra/llm/ollama.client.js";
@@ -7,12 +5,7 @@ import { logger } from "../../shared/logger/logger.js";
 import { round2 } from "../../shared/utils/math.js";
 import { sameSpec } from "../../shared/utils/spec-match.js";
 import type { CategoriesService } from "../categories/categories.service.js";
-import {
-  buildClassifyPrompt,
-  deriveCanonicalName,
-  parseClassification as parseCategoryClassification,
-  pickConfirmedMatch,
-} from "../items/items.helpers.js";
+import { deriveCanonicalName } from "../items/items.helpers.js";
 import type { IItemsRepository } from "../items/items.repository.js";
 import type {
   HistoricalRateMatch,
@@ -36,8 +29,10 @@ const HSN_CODE_LENGTH = 4;
 /** How many ANN-retrieved HSN headings the LLM is offered to pick from. */
 const HSN_CANDIDATE_LIMIT = 8;
 
-/** Mirrors items.service.ts's CLASSIFY_EXAMPLE_LIMIT — same ANN call shape, same window size. */
-const CATEGORY_EXAMPLE_LIMIT = 20;
+/** Tariff code -> "Chapter > Heading", so a resolved HSN code yields the category directly. */
+interface CategoryContext {
+  pathByCode: Map<string, string>;
+}
 
 /**
  * The LLM self-reports its own confidence, which is not calibrated against anything.
@@ -48,23 +43,15 @@ const CATEGORY_EXAMPLE_LIMIT = 20;
  */
 const LLM_CONFIDENCE_CEILING = 0.9;
 
-/**
- * Indian GST slabs. The LLM's own percentage guess is unreliable at the exact number (e.g.
- * "17.5%" isn't a real slab) — snapping to the nearest real slab is a cheap deterministic
- * guard on top of the guess, same spirit as sameSpec() gating a rate match.
- */
-const GST_SLABS = [0, 5, 12, 18, 28];
-
-function snapToGstSlab(value: number): number {
-  return GST_SLABS.reduce((closest, slab) =>
-    Math.abs(slab - value) < Math.abs(closest - value) ? slab : closest,
-  );
-}
+// GST rates are no longer guessed. They come from the resolved HSN heading, via the rates the user
+// curates in ml/data/hsn-gst-lookup.xlsx. The old code asked the model for a percentage and snapped
+// it to the nearest of [0, 5, 12, 18, 28] — those slabs stopped existing on 22 Sep 2025 (the 12%
+// slab merged into 18%, 28% became 40% for sin goods), so it was snapping to a table that was both
+// wrong and, being a guess, never authoritative in the first place.
 
 interface LlmClassification {
   normalizedName: string;
   confidence: number;
-  gstRatePercent: number | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -81,12 +68,8 @@ function parseClassification(raw: unknown): LlmClassification | null {
   const confidence = typeof raw.confidence === "number" && Number.isFinite(raw.confidence)
     ? Math.min(Math.max(raw.confidence, 0), 1)
     : 0.5;
-  const gstRatePercent =
-    typeof raw.gstRatePercent === "number" && Number.isFinite(raw.gstRatePercent)
-      ? snapToGstSlab(raw.gstRatePercent)
-      : null;
 
-  return { normalizedName, confidence, gstRatePercent };
+  return { normalizedName, confidence };
 }
 
 /**
@@ -119,8 +102,6 @@ function buildPrompt(description: string, unit: string | null, candidates: Histo
     "                    vendor being quoted this name doesn't need it. Never drop a real spec",
     "                    (size, grade, material, standard) even if it appears late in the sentence.",
     '  "confidence": your confidence in this naming, 0 to 1',
-    '  "gstRatePercent": the Indian GST rate percent for this item — one of 0, 5, 12, 18, 28 —',
-    "                     or null if unsure",
   ].join("\n");
 }
 
@@ -155,13 +136,13 @@ export class BoqEnrichmentService {
     description: string,
     unit: string | null,
     matches: HistoricalRateMatch[],
-    catalogHsn: { hsnCode: string; gstRate: number } | null,
+    catalogHsn: { hsnCode: string; gstRate: number | null } | null,
     hsnAlreadyConfirmed: boolean,
     vector: number[],
     businessId: string,
     itemId: string,
     canonicalName: string,
-    categoryContext: { leaves: CategoryLeafDto[]; pathMap: Map<string, string> },
+    categoryContext: CategoryContext,
   ): Promise<UpdateBoqItemEnrichmentData> {
     const best = matches[0];
     const matchThreshold = await this.settingsService.get<number>("AI_MATCH_THRESHOLD");
@@ -197,17 +178,15 @@ export class BoqEnrichmentService {
     const freshMatch = catalogHsn ? null : await this.matchHsnCode(description, unit, vector);
     const hsnCode = catalogHsn?.hsnCode ?? null;
     const suggestedHsnCode = catalogHsn?.hsnCode ?? freshMatch?.code ?? null;
-    const gstRate = catalogHsn?.gstRate ?? parsed.gstRatePercent;
 
-    const category = await this.classifyCategory(
-      canonicalName,
-      unit,
-      vector,
-      businessId,
-      itemId,
-      categoryContext,
-      matchThreshold,
-    );
+    // Rate order: a human-confirmed catalog rate, else the rate the user curates against this
+    // heading in the lookup sheet, else nothing. Never a model guess — an invented tax rate that
+    // looks plausible is worse than an empty field, because nobody goes back to check it.
+    const gstRate =
+      catalogHsn?.gstRate ??
+      (suggestedHsnCode ? await this.referenceDataRepository.findGstRateByCode(suggestedHsnCode) : null);
+
+    const category = this.categoryForHsnCode(suggestedHsnCode, categoryContext);
 
     return {
       normalizedName: matched ? matched.itemName : parsed.normalizedName,
@@ -285,42 +264,42 @@ export class BoqEnrichmentService {
    * they're different tables) — it's only meaningful for items.service.ts's own self-match
    * exclusion, kept for signature compatibility with the shared repository method.
    */
-  private async classifyCategory(
-    canonicalName: string,
-    unit: string | null,
-    vector: number[],
-    businessId: string,
-    itemId: string,
-    categoryContext: { leaves: CategoryLeafDto[]; pathMap: Map<string, string> },
-    matchThreshold: number,
-  ): Promise<{ category: string; subcategory: string | null } | null> {
-    const { leaves, pathMap } = categoryContext;
-    if (leaves.length === 0) return null;
+  /**
+   * Tariff code -> "Chapter > Heading", built once per BOQ. Loop-invariant, same reason
+   * embedPendingRates runs once up here rather than per item.
+   */
+  private async loadCategoryContext(): Promise<CategoryContext> {
+    const [leaves, pathMap] = await Promise.all([
+      this.categoriesService.getLeaves(),
+      this.categoriesService.getPathMap(),
+    ]);
 
-    const nearest = await this.itemsRepository.findNearestConfirmedMatch(
-      businessId,
-      itemId,
-      vector,
-      CATEGORY_EXAMPLE_LIMIT,
-    );
-
-    const sibling = pickConfirmedMatch({ canonicalName, unit }, nearest, matchThreshold);
-    let categoryId = sibling?.categoryId ?? null;
-
-    if (!categoryId) {
-      const examples = nearest
-        .map((row) => ({ name: row.canonicalName, path: pathMap.get(row.categoryId) ?? "" }))
-        .filter((e) => e.path);
-      const raw = await generateJson(
-        buildClassifyPrompt(canonicalName, unit, leaves, examples),
-        env.OLLAMA_ENRICHMENT_MODEL,
-      );
-      categoryId = parseCategoryClassification(raw, new Set(leaves.map((l) => l.id))).categoryId;
+    const pathByCode = new Map<string, string>();
+    for (const leaf of leaves) {
+      if (leaf.code) pathByCode.set(leaf.code, pathMap.get(leaf.id) ?? leaf.name);
     }
-    if (!categoryId) return null;
+    return { pathByCode };
+  }
 
-    const path = pathMap.get(categoryId);
+  /**
+   * The category IS the tariff heading, so it comes from the resolved HSN code rather than a second
+   * opinion. This is the point of deriving the taxonomy from CBIC: one decision now yields the
+   * category, the subcategory and the HSN code, and they cannot disagree with each other.
+   *
+   * It also retires a call that had become impossible. The previous path asked the LLM to choose
+   * from a closed list built by rendering every leaf id and path into the prompt — fine for the old
+   * 38-leaf trade tree, hopeless at 1,379 headings with UUIDs, where it answered "Wood and articles
+   * of wood > Railway or tramway sleepers of wood" for a spring steel washer.
+   */
+  private categoryForHsnCode(
+    hsnCode: string | null,
+    categoryContext: CategoryContext,
+  ): { category: string; subcategory: string | null } | null {
+    if (!hsnCode) return null;
+
+    const path = categoryContext.pathByCode.get(hsnCode);
     if (!path) return null;
+
     const parts = path.split(" > ");
     return { category: parts[0]!, subcategory: parts.length > 1 ? parts[parts.length - 1]! : null };
   }
@@ -338,10 +317,7 @@ export class BoqEnrichmentService {
     await this.embedPendingRates(businessId);
     // Category leaves/paths are the same for every item on this BOQ — fetched once, not per
     // item, same reason embedPendingRates runs once up here instead of inside the loop.
-    const [categoryLeaves, categoryPathMap] = await Promise.all([
-      this.categoriesService.getLeaves(),
-      this.categoriesService.getPathMap(),
-    ]);
+    const categoryContext = await this.loadCategoryContext();
     // Prefer normalizedName when this item was already enriched once (a re-run) — it's the
     // use-case-stripped, spec-only form, which is what should drive the historical-rate ANN
     // search. A first-time pass has no normalizedName yet (it's this call's own output, via
@@ -368,7 +344,7 @@ export class BoqEnrichmentService {
           businessId,
           item.id,
           canonicalName,
-          { leaves: categoryLeaves, pathMap: categoryPathMap },
+          categoryContext,
         );
         await this.boqRepository.updateItemEnrichment(item.id, enrichment);
         enriched += 1;

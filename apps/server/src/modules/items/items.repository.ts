@@ -89,7 +89,7 @@ export interface IItemsRepository {
   findBoqNames(ids: string[]): Promise<BoqNameRow[]>;
   findOrCreateItem(businessId: string, canonicalName: string, unit: string | null): Promise<{ id: string }>;
   linkRfqItems(itemId: string, rfqItemIds: string[]): Promise<void>;
-  findConfirmedHsn(businessId: string, canonicalName: string): Promise<{ hsnCode: string; gstRate: number } | null>;
+  findConfirmedHsn(businessId: string, canonicalName: string): Promise<{ hsnCode: string; gstRate: number | null } | null>;
   confirmItemHsn(
     businessId: string,
     canonicalName: string,
@@ -162,13 +162,16 @@ export class ItemsRepository implements IItemsRepository {
   async findConfirmedHsn(
     businessId: string,
     canonicalName: string,
-  ): Promise<{ hsnCode: string; gstRate: number } | null> {
+  ): Promise<{ hsnCode: string; gstRate: number | null } | null> {
     const item = await this.prisma.item.findUnique({
       where: { businessId_canonicalName: { businessId, canonicalName } },
       select: { hsnCode: true, gstRate: true, hsnCodeConfirmed: true },
     });
     if (!item?.hsnCodeConfirmed || item.hsnCode === null) return null;
-    return { hsnCode: item.hsnCode, gstRate: item.gstRate ?? 18 };
+    // A confirmed HSN code with no rate means exactly that. Defaulting it to 18 here made an
+    // absent rate indistinguishable from a human-confirmed 18%, so callers fall back to the
+    // lookup sheet instead.
+    return { hsnCode: item.hsnCode, gstRate: item.gstRate };
   }
 
   /**
