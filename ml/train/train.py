@@ -62,7 +62,7 @@ def train_loop(model: SentenceTransformer, pairs, args) -> tuple[float, float]:
     loss_fn = MultipleNegativesRankingLoss(model)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
-    batches_per_epoch = len(build_batches(pairs, args.batch_size, seed=0))
+    batches_per_epoch = len(build_batches(pairs, args.batch_size, seed=0, group_by_length=True))
     total_steps = max(1, batches_per_epoch * args.epochs)
     warmup = max(1, int(total_steps * 0.1))
 
@@ -82,7 +82,9 @@ def train_loop(model: SentenceTransformer, pairs, args) -> tuple[float, float]:
 
     for epoch in range(args.epochs):
         # Reshuffled each epoch, so a pair meets different negatives every time it is seen.
-        batches = build_batches(pairs, args.batch_size, seed=args.seed + epoch)
+        batches = build_batches(
+            pairs, args.batch_size, seed=args.seed + epoch, group_by_length=True
+        )
         running = 0.0
 
         for batch in batches:

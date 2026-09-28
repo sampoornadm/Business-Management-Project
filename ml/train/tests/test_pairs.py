@@ -82,3 +82,53 @@ def test_batching_is_deterministic_for_a_given_seed():
         examples += [ex(f"{heading}-a", heading), ex(f"{heading}-b", heading)]
     pairs = build_pairs(examples)
     assert build_batches(pairs, 5, seed=3) == build_batches(pairs, 5, seed=3)
+
+
+def padded_cost(batches) -> int:
+    """What the GPU actually pays: every row padded to the longest in its batch."""
+    return sum(len(b) * max(max(len(p.anchor), len(p.positive)) for p in b) for b in batches)
+
+
+def test_length_grouping_cuts_the_padding_the_gpu_pays_for():
+    # Every sequence in a batch is padded to the longest one in it, and attention cost grows with
+    # the square of that length. The corpus median is 20 tokens against a max of 829, so one long
+    # tariff row dragged into a batch of short trade terms makes that step cost as much as its
+    # longest member. Measured on the real corpus this was the difference between ~25 s and ~3 s
+    # per step, so the property under test is total padding, not per-batch tidiness.
+    examples = []
+    for i in range(40):
+        examples += [ex("s" * 10 + f"a{i}", f"70{i:02d}"), ex("s" * 12 + f"b{i}", f"70{i:02d}")]
+        examples += [ex("L" * 400 + f"a{i}", f"80{i:02d}"), ex("L" * 402 + f"b{i}", f"80{i:02d}")]
+
+    pairs = build_pairs(examples)
+    grouped = padded_cost(build_batches(pairs, batch_size=8, group_by_length=True))
+    ungrouped = padded_cost(build_batches(pairs, batch_size=8, group_by_length=False))
+
+    assert grouped < ungrouped * 0.75
+
+
+def test_length_grouping_does_not_throw_away_most_of_the_corpus():
+    # A heading's own texts tend to be similar lengths, so sorting by length pulls same-heading
+    # pairs next to each other — exactly the pairs that cannot share a batch. Left unhandled, the
+    # narrow windows drop them and an epoch silently trains on a fraction of the data.
+    examples = []
+    for i in range(60):
+        heading = f"73{i:02d}"
+        examples += [ex("x" * (20 + i), heading), ex("y" * (21 + i), heading), ex("z" * (22 + i), heading)]
+
+    pairs = build_pairs(examples)
+    grouped = build_batches(pairs, batch_size=8, group_by_length=True)
+    ungrouped = build_batches(pairs, batch_size=8, group_by_length=False)
+
+    assert sum(len(b) for b in grouped) >= 0.8 * sum(len(b) for b in ungrouped)
+
+
+def test_length_grouping_still_never_repeats_a_heading_in_a_batch():
+    examples = []
+    for i in range(30):
+        heading = f"73{i:02d}"
+        examples += [ex("x" * (i + 5), heading), ex("y" * (i + 5), heading), ex("z" * (i + 5), heading)]
+
+    for batch in build_batches(build_pairs(examples), batch_size=6, group_by_length=True):
+        headings = [pair.heading for pair in batch]
+        assert len(headings) == len(set(headings))
