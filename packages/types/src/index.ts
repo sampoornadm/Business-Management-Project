@@ -17,6 +17,7 @@ export * from "./permission.js";
 export * from "./project.js";
 export * from "./purchase-order.js";
 export * from "./rbac.js";
+export * from "./classification.js";
 export * from "./reference-data.js";
 export * from "./report.js";
 export * from "./saved-view.js";

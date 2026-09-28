@@ -2,9 +2,10 @@
 
 import type { SettingDto } from "@bmp/types";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Skeleton, Switch, useToast } from "@bmp/ui";
-import { RefreshCw, Upload } from "lucide-react";
+import { Brain, CheckCircle2, CircleAlert, Loader2, RefreshCw, Upload } from "lucide-react";
 import { useRef } from "react";
 
+import { useClassificationStatus, useRebuildClassifier } from "@/hooks/use-classification";
 import { useHsnSacStatus, useRefreshHsnSac, useUploadHsnSac } from "@/hooks/use-reference-data";
 import { useSettings, useUpdateSetting } from "@/hooks/use-settings";
 import { useAuthStore } from "@/lib/auth-store";
@@ -94,6 +95,121 @@ function HsnSacCard({ canManage }: { canManage: boolean }) {
   );
 }
 
+/** Reads as a sentence, because "reclassify" on its own does not tell anyone what is happening. */
+const REBUILD_STAGE_LABELS: Record<string, string> = {
+  queued: "Waiting to start",
+  taxonomy: "Rebuilding categories and GST rates from the sheet",
+  datasets: "Rebuilding the training data",
+  training: "Training the model",
+  index: "Building the lookup index",
+  export: "Preparing the model for the server",
+  deploy: "Checking it beats the current model",
+  reclassify: "Re-classifying draft BOQs",
+  done: "Finished",
+};
+
+function percent(value: number | null): string {
+  return value === null ? "—" : `${(value * 100).toFixed(1)}%`;
+}
+
+function ClassificationCard({ canManage }: { canManage: boolean }) {
+  const { toast } = useToast();
+  const statusQuery = useClassificationStatus();
+  const rebuild = useRebuildClassifier();
+
+  const run = statusQuery.data?.latestRun ?? null;
+  const inProgress = run?.status === "queued" || run?.status === "running";
+
+  async function handleRebuild() {
+    try {
+      await rebuild.mutateAsync();
+      toast({
+        title: "Rebuild started",
+        description: "Training takes a few minutes. This card updates as it goes.",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not start the rebuild",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Brain className="h-4 w-4" /> Item classification model
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Assigns HSN codes and item categories. Edit{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">ml/data/hsn-gst-lookup.xlsx</code> — especially
+          the <strong>trade_terms</strong> column, where you list the words your suppliers actually use for a
+          code — then press Update to rebuild and re-classify.
+        </p>
+
+        {statusQuery.isLoading ? (
+          <Skeleton className="h-16 w-full" />
+        ) : !statusQuery.data?.modelInstalled && !run ? (
+          <p className="text-sm text-muted-foreground">
+            No model is installed yet. Press Update to build one from the current sheet.
+          </p>
+        ) : run ? (
+          <div className="space-y-2 rounded-md border p-3 text-sm">
+            <div className="flex items-center gap-2">
+              {inProgress ? (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              ) : run.status === "succeeded" ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              ) : (
+                <CircleAlert className="h-4 w-4 text-amber-600" />
+              )}
+              <span className="font-medium">
+                {inProgress
+                  ? (REBUILD_STAGE_LABELS[run.stage] ?? run.stage)
+                  : run.status === "succeeded"
+                    ? "Up to date"
+                    : run.status === "skipped"
+                      ? "Rebuilt, but not used"
+                      : "Last rebuild failed"}
+              </span>
+            </div>
+
+            {run.message && <p className="text-muted-foreground">{run.message}</p>}
+
+            {run.evalAccuracy !== null && (
+              <p className="text-muted-foreground">
+                Scores {percent(run.evalAccuracy)} on the checked items
+                {run.baselineAccuracy !== null && ` (previous model: ${percent(run.baselineAccuracy)})`}
+                {run.trainedRows !== null && ` · trained on ${run.trainedRows.toLocaleString()} examples`}
+              </p>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              {new Date(run.startedAt).toLocaleString()}
+              {run.triggeredBy && ` · started by ${run.triggeredBy}`}
+            </p>
+          </div>
+        ) : null}
+
+        {canManage && (
+          <Button size="sm" onClick={() => void handleRebuild()} disabled={rebuild.isPending || inProgress}>
+            {inProgress ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            {inProgress ? "Rebuilding…" : "Update from sheet"}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function SettingControl({ setting, canManage }: { setting: SettingDto; canManage: boolean }) {
   const { toast } = useToast();
   const update = useUpdateSetting();
@@ -166,6 +282,8 @@ export default function SettingsPage() {
       </div>
 
       <HsnSacCard canManage={canManage} />
+
+      <ClassificationCard canManage={canManage} />
 
       {settingsQuery.isLoading ? (
         <Skeleton className="h-64 w-full" />
