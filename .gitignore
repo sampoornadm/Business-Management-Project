@@ -62,6 +62,11 @@ graphify-out/
 # ~90 MB+ per training run against a 16 MB repo, and the pipeline rebuilds them reproducibly.
 ml/models/
 ml/runs/*/model/
+ml/runs/*/checkpoints/
+# uv's virtualenv for the trainer: ~1 GB, rebuilt from pyproject.toml + uv.lock.
+ml/train/.venv/
+__pycache__/
+.pytest_cache/
 
 # local Claude Code permission config
 .claude/settings.json
