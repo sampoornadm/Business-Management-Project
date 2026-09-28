@@ -4,8 +4,11 @@ version = "0.1.0"
 description = "Trains the HSN heading classifier for the Business Management Platform"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    # Pinned to the majors the model was trained and saved under. sentence-transformers 5.x cannot
+    # load a 6.x-saved model at all ("No module named sentence_transformers.base.modules.normalize").
     "torch>=2.4",
-    "sentence-transformers>=3.0",
+    "sentence-transformers>=6.0,<7",
+    "transformers>=5.0,<6",
     "scikit-learn>=1.5",
     "numpy>=1.26",
     "datasets>=5.0.1",
@@ -14,10 +17,15 @@ dependencies = [
 
 [project.optional-dependencies]
 # Only needed for the ONNX export step, which runs after training succeeds.
+#
+# Deliberately NOT optimum/optimum-onnx: installing it resolves transformers back to 4.x and
+# sentence-transformers to 5.x, which then cannot load the model this project just trained. The
+# export is a plain torch.onnx.export of a standard BERT encoder, so optimum buys nothing here
+# except a dependency war.
 export = [
-    "optimum[exporters]>=1.20",
     "onnx>=1.16",
     "onnxruntime>=1.18",
+    "onnxscript>=0.7.2",
 ]
 
 [tool.uv]

@@ -125,13 +125,14 @@ dependencies = [
     { name = "scikit-learn" },
     { name = "sentence-transformers" },
     { name = "torch" },
+    { name = "transformers" },
 ]
 
 [package.optional-dependencies]
 export = [
     { name = "onnx" },
     { name = "onnxruntime" },
-    { name = "optimum" },
+    { name = "onnxscript" },
 ]
 
 [package.dev-dependencies]
@@ -146,10 +147,11 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26" },
     { name = "onnx", marker = "extra == 'export'", specifier = ">=1.16" },
     { name = "onnxruntime", marker = "extra == 'export'", specifier = ">=1.18" },
-    { name = "optimum", extras = ["exporters"], marker = "extra == 'export'", specifier = ">=1.20" },
+    { name = "onnxscript", marker = "extra == 'export'", specifier = ">=0.7.2" },
     { name = "scikit-learn", specifier = ">=1.5" },
-    { name = "sentence-transformers", specifier = ">=3.0" },
+    { name = "sentence-transformers", specifier = ">=6.0,<7" },
     { name = "torch", specifier = ">=2.4" },
+    { name = "transformers", specifier = ">=5.0,<6" },
 ]
 provides-extras = ["export"]
 
@@ -827,6 +829,22 @@ wheels = [
 ]
 
 [[package]]
+name = "onnx-ir"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ml-dtypes" },
+    { name = "numpy" },
+    { name = "onnx" },
+    { name = "sympy" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d6/c2/61194cec0dbc5622273c0ebd592d37cc1dca0d7f1a744f02edd45ac905a3/onnx_ir-1.0.0.tar.gz", hash = "sha256:9e261f25fde8da9612ae5cb43b3b374d5ff469c04af0363cad588b2bb000b812", size = 163121, upload-time = "2026-08-11T14:49:46.895Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/91/cd/6d1637172eb59c7b18ac90ed089d1f599a11fe0e63b4db2d017f3bb38a32/onnx_ir-1.0.0-py3-none-any.whl", hash = "sha256:e578f0d608d3062866b48223616eb2d10a6d6d01f8b8faac596129034f483cc7", size = 185849, upload-time = "2026-08-11T14:49:45.524Z" },
+]
+
+[[package]]
 name = "onnxruntime"
 version = "1.30.0"
 source = { registry = "https://pypi.org/simple" }
@@ -845,19 +863,20 @@ wheels = [
 ]
 
 [[package]]
-name = "optimum"
-version = "2.3.0"
+name = "onnxscript"
+version = "0.7.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "huggingface-hub" },
+    { name = "ml-dtypes" },
     { name = "numpy" },
+    { name = "onnx" },
+    { name = "onnx-ir" },
     { name = "packaging" },
-    { name = "torch" },
-    { name = "transformers" },
+    { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d9/76/e4ac0c4b398ed3fe2d41e0058002d276896b9a15a54be16889d8e0d3ee92/optimum-2.3.0.tar.gz", hash = "sha256:aa96ad535a5cec68d12c6372574125452284632fe13699633a61e8bbfb09c4df", size = 124929, upload-time = "2026-08-04T15:35:18.895Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/01/3e3fab8d643ca097ea4aa9e51246643699dfaaa0650589744fe44bc46651/onnxscript-0.7.2.tar.gz", hash = "sha256:2c664f6383d10f332a4d47b2876dcab16dba84909fe703656b19abc281fda165", size = 646719, upload-time = "2026-09-09T17:06:44.567Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8c/f9/a16609b4e4fc592653d9f2a0413689da686a94d0040f3a2fabfff5b5894c/optimum-2.3.0-py3-none-any.whl", hash = "sha256:3e9b217b4ab21fd4cf894a987002ee7d3626114e009592babf084c2f1a0f3b5f", size = 160922, upload-time = "2026-08-04T15:35:17.411Z" },
+    { url = "https://files.pythonhosted.org/packages/b9/3b/06260997cdc41138e58718588a6c87d0eb342bbe0dda8a6aae91d163c384/onnxscript-0.7.2-py3-none-any.whl", hash = "sha256:d0e7121c6a1eefd608058928e111cbdb76709f70d269ff0d07aee493bd1d13c9", size = 754215, upload-time = "2026-09-09T17:06:46.442Z" },
 ]
 
 [[package]]
