@@ -5,13 +5,13 @@ import { logger } from "../../shared/logger/logger.js";
 import { round2 } from "../../shared/utils/math.js";
 import { sameSpec } from "../../shared/utils/spec-match.js";
 import type { CategoriesService } from "../categories/categories.service.js";
+import type { IHsnClassifier } from "../classification/classification.service.js";
 import { deriveCanonicalName } from "../items/items.helpers.js";
 import type { IItemsRepository } from "../items/items.repository.js";
 import type {
   HistoricalRateMatch,
   IHistoricalRatesRepository,
 } from "../rates/rates.repository.js";
-import type { IHsnClassifier } from "../classification/classification.service.js";
 import { matchHsnByKeyword } from "../reference-data/hsn-keyword-rules.js";
 import { buildHsnMatchPrompt, parseHsnMatch } from "../reference-data/hsn-matcher.js";
 import type { IReferenceDataRepository } from "../reference-data/reference-data.repository.js";

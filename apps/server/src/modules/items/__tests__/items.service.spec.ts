@@ -9,6 +9,7 @@ vi.mock("../../../infra/llm/ollama.client.js", () => ({
 import { ConflictError, NotFoundError } from "../../../core/errors/HttpErrors.js";
 import type { AuditService } from "../../audit/audit.service.js";
 import type { CategoriesService } from "../../categories/categories.service.js";
+import type { IHsnClassifier } from "../../classification/classification.service.js";
 import type { RfqService } from "../../rfq/rfq.service.js";
 import type {
   BoqNameRow,
@@ -20,7 +21,6 @@ import type {
   NearestConfirmedMatch,
   UnlinkedRfqItem,
 } from "../items.repository.js";
-import type { IHsnClassifier } from "../../classification/classification.service.js";
 import { ItemsService } from "../items.service.js";
 
 const BUSINESS_ID = "business-1";
