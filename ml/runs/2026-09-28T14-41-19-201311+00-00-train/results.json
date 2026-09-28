@@ -1,0 +1,473 @@
+{
+  "model": "intfloat/multilingual-e5-small",
+  "epochs": 1,
+  "pairs": 7144,
+  "minutes": 3.43803125222524,
+  "frozen": {
+    "accuracy": 0.2894736842105263,
+    "top5": 0.4868421052631579
+  },
+  "finetuned": {
+    "accuracy": 0.5,
+    "top5": 0.5394736842105263
+  },
+  "beats_baseline": true,
+  "predictions": [
+    {
+      "description": "SLEEVE,3MM,FIBER GLASS MATERIAL: FIBER GLASS, COATING: SILICONE, BREAKDOWN VOLTAGE: 1.5 TO 4 KV, TEMPERATURE: -60 TO 180 DEG C, CLASS: H",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "SLEEVE,4MM,FIBER GLASS MATERIAL: FIBER GLASS, COATING: SILICONE, BREAKDOWN VOLTAGE: 1.5 TO 4 KV, TEMPERATURE: -60 TO 180 DEG C, CLASS: H",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "SILICONE COATED FIBERGLASS SLEEVE, BREAKDOWN VOLTAGE 1.5-4 KV, TEMP. -60 DEGREE C TO 180 DEGREE C, CLASS H, SIZE:5 MM",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "SLEEVE,10MM MATERIAL: FIBERGLASS, COATING: SILICONE, SIZE: 10 MM, BREAK DOWN VOLTAGE: 1.5 TO 4 KV, TEMPERATURE RANGE: -60 TO 180 DEG C, CLASS: H",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "SLEEVE,1MM,FIBER GLASS MATERIAL: FIBER GLASS, COATING: SILICONE, BREAKDOWN VOLTAGE: 1.5 TO 4 KV, TEMPERATURE RANGE: -60 TO 180 DEG C, CLASS: H",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "SLEEVE,2MM,FIBER GLASS MATERIAL: FIBER GLASS, COATING: SILICONE, BREAKDOWN VOLTAGE: 1.5 TO 4 KV, TEMPERATURE RANGE: -60 TO 180 DEG C, CLASS: H",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "SILICONE COATED FIBERGLASS SLEEVE, BREAKDOWN VOLTAGE 1.5-4 KV, TEMP. -60 DEGREE C TO 180 DEGREE C, CLASS H, SIZE:6 MM",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "SLEEVE,8MM,FIBER GLASS MATERIAL: FIBER GLASS, COATING: SILICONE, BREAKDOWN VOLTAGE: 1.5 TO 4 KV, TEMPERATURE RANGE: -60 TO 180 DEG C, CLASS: H",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "O-RING MATERIAL : FKM , SHORE HARDNESS : 80 AS PER ASTM D2240 DIAMETER, INNER : 42 MM SIZE: OD 58 MM, CORD DIAMETER: 8 MM, FOR AUTO COUPLING SYSTEM OF STEEL TEEMING LADLE OF BOF CONVERTER",
+      "expected": "7307",
+      "got": "7326",
+      "correct": false
+    },
+    {
+      "description": "CABLE TIE,250MM MATERIAL: PLASTIC / NYLON, LENGTH: 250 MM, FORM : OF SUPPLY: 100 PIECES PER PACKET",
+      "expected": "3926",
+      "got": "3926",
+      "correct": true
+    },
+    {
+      "description": "SELF LOCKING CABLE TIE,2.5X75MM MATERIAL: NYLON 6/6, COLOR: : ANY, LENGTH: 75 MM, WIDTH: 2.5 MM, TENSILE LENGTH: 8 KG",
+      "expected": "3926",
+      "got": "5607",
+      "correct": false
+    },
+    {
+      "description": "CABLE TIE,150MM MATERIAL: PLASTIC / NYLON, LENGTH: 150 MM, FORM : OF SUPPLY: 100 PIECES PER PACKET",
+      "expected": "3926",
+      "got": "3926",
+      "correct": true
+    },
+    {
+      "description": "SELF ADHESSIVE PVC INSULATING TAPE,GREEN SELF ADHESSIVE PVC : INSULATING TAPE, 1100V GRADE, 1.80CM (W) X 7.5M(L), THICKNESS 0.125MM\u00b10 .025MM, COLOUR-GREEN, IS NO:7809 AND ISI MARKED.",
+      "expected": "3919",
+      "got": "3919",
+      "correct": true
+    },
+    {
+      "description": "CABLE TIE,300MM MATERIAL: PLASTIC / NYLON, LENGTH: 300 MM, FORM : OF SUPPLY: 100 PIECES PER PACKET",
+      "expected": "3926",
+      "got": "3926",
+      "correct": true
+    },
+    {
+      "description": "CABLE TIE,500MM MATERIAL: PLASTIC / NYLON, LENGTH: 500 MM, FORM : OF SUPPLY: 100 PIECES PER PACKET",
+      "expected": "3926",
+      "got": "3926",
+      "correct": true
+    },
+    {
+      "description": "SLEEVE,4MM,FIBER GLASS MATERIAL: FIBER GLASS, COATING: : SILICONE, BREAKDOWN VOLTAGE: 1.5 TO 4 KV, TEMPERATURE: -60 TO 180 DEG C, CLA SS: H",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "SLEEVE,8MM,FIBER GLASS MATERIAL: FIBER GLASS, COATING: : SILICONE, BREAKDOWN VOLTAGE: 1.5 TO 4 KV, TEMPERATURE RANGE: -60 TO 180 DEG C, CLASS: H",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "SLEEVE,10MM MATERIAL: FIBERGLASS, COATING: SILICONE, SIZE: 10 : MM, BREAK DOWN VOLTAGE: 1.5 TO 4 KV, TEMPERATURE RANGE: -60 TO 180 DE G C, CLASS: H",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "CABLE TIE,200MM MATERIAL: PLASTIC / NYLON, LENGTH: 200 MM, FORM : OF SUPPLY: 100 PIECES PER PACKET",
+      "expected": "3926",
+      "got": "3926",
+      "correct": true
+    },
+    {
+      "description": "SELF ADHESSIVE PVC INSULATING TAPE,BLACK SELF ADHESSIVE PVC : INSULATING TAPE, 1100V GRADE, 1.80CM (W) X 7.5M(L), THICKNESS 0.125MM\u00b10 .025MM, COLOUR-BLACK. IS NO:7809 AND ISI MARKED.",
+      "expected": "3919",
+      "got": "3919",
+      "correct": true
+    },
+    {
+      "description": "SELF ADHESSIVE PVC INSULATING TAPE, BLUE SELF ADHESSIVE PVC : INSULATING TAPE, 1100V GRADE, 1.80CM (W) X 7.5M(L), THICKNESS 0.125MM\u00b10 .025MM, COLOUR-BLUE, IS NO:7809 AND ISI MARKED.",
+      "expected": "3919",
+      "got": "3919",
+      "correct": true
+    },
+    {
+      "description": "SELF ADHESSIVE PVC INSULATING TAPE SELF ADHESSIVE PVC : INSULATING TAPE, 1100V GRADE, 1.80CM (W) X 7.5M(L), THICKNESS 0.125MM\u00b10.025MM , COLOUR-YELLOW, IS NO:7809 AND ISI MARKED.",
+      "expected": "3919",
+      "got": "3919",
+      "correct": true
+    },
+    {
+      "description": "SELF ADHESSIVE PVC INSULATING TAPE, RED SELF ADHESSIVE PVC : INSULATING TAPE, 1100V GRADE, 1.80CM (W) X 7.5M(L), THICKNESS 0.125MM\u00b10. 025MM, COLOUR-RED, IS NO:7809 AND ISI MARKED",
+      "expected": "3919",
+      "got": "3919",
+      "correct": true
+    },
+    {
+      "description": "ALUMINIUM FOIL TAPE,2IN,30MICRON, TYPE: ACRYLIC ADHESIVE. OFFERED ITEM : SHALL COMPLY WITH IS 736, IS 8402, AND IS 12436, OR THEIR RECOGNIZED INTERNATIONAL EQUIVALENT STANDARDS OR BETTER .",
+      "expected": "3919",
+      "got": "7607",
+      "correct": false
+    },
+    {
+      "description": "PRECUT GASKET OF SIZE I.D.:-\u00d8278.O MM, O.D.\u00d8322.0 MM & THICKNESS : 3.0 MM. MADE FROM SYNTHETIC ARAMID FIBER BONDED WITH NBR AND NATURA L ELASTOMER WITH ANTI-STICK COATING TO WITHSTAND, MAXIMUM TEMPERATURE 400 DEG C, CONTINUOUS TEMPERATURE: 250 DEG C, PRESSURE 50 KG/C M2, SUITABLE FOR STEAM, WATER, AIR, GASES LINE, COLOUR: GREEN.",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "PRECUT GASKET OF SIZE I.D.:-\u00d863.O MM, O.D.\u00d891.0 MM & THICKNESS : 3.0 MM. MADE FROM SYNTHETIC ARAMID FIBER BONDED WITH NBR AND NATURAL ELASTOMER WITH ANTI-STICK COATING TO WITHSTAND, MAXIMUM TEMPERATURE 400 DEG C, CONTINUOUS TEMPERATURE: 250 DEG C, PRESSURE 50 KG/CM2 , SUITABLE FOR STEAM, WATER, AIR, GASES LINE, COLOUR: GREEN.",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "RECUT GASKET OF SIZE I.D.:-\u00d892.O MM, O.D.\u00d8126.0 MM & THICKNESS : 3.0 MM. MADE FROM SYNTHETIC ARAMID FIBER BONDED WITH NBR AND NATURAL ELASTOMER WITH ANTI-STICK COATING TO WITHSTAND, MAXIMUM TEMPERATURE 400 DEG C, CONTINUOUS TEMPERATURE: 250 DEG C, PRESSURE 50 KG/CM2 , SUITABLE FOR STEAM, WATER, AIR, GASES LINE, COLOUR: GREEN.",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "PRECUT GASKET OF SIZE I.D.:-\u00d8118.O MM, O.D.\u00d8156.0 MM & THICKNESS : 3.0 MM. MADE FROM SYNTHETIC ARAMID FIBER BONDED WITH NBR AND NATURA L ELASTOMER WITH ANTI-STICK COATING TO WITHSTAND, MAXIMUM TEMPERATURE 400 DEG C, CONTINUOUS TEMPERATURE: 250 DEG C, PRESSURE 50 KG/C M2, SUITABLE FOR STEAM, WATER, AIR, GASES LINE, COLOUR: GREEN.",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "PRECUT GASKET OF SIZE I.D.:-\u00d8145.O MM, O.D.\u00d8184.0 MM & THICKNESS : 3.0 MM. MADE FROM SYNTHETIC ARAMID FIBER BONDED WITH NBR AND NATURA L ELASTOMER WITH ANTI-STICK COATING TO WITHSTAND, MAXIMUM TEMPERATURE 400 DEG C, CONTINUOUS TEMPERATURE: 250 DEG C, PRESSURE 50 KG/C M2, SUITABLE FOR STEAM, WATER, AIR, GASES LINE, COLOUR: GREEN.",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "PRECUT GASKET OF SIZE I.D.:-\u00d8223.O MM, O.D.\u00d8268.0 MM & THICKNESS : 3.0 MM. MADE FROM SYNTHETIC ARAMID FIBER BONDED WITH NBR AND NATURA L ELASTOMER WITH ANTI-STICK COATING TO WITHSTAND, MAXIMUM TEMPERATURE 400 DEG C, CONTINUOUS TEMPERATURE: 250 DEG C, PRESSURE 50 KG/C M2, SUITABLE FOR STEAM, WATER, AIR, GASES LINE, COLOUR: GREEN.",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "PRECUT GASKET OF SIZE I.D.:-\u00d8329.O MM, O.D.\u00d8379.0 MM & THICKNESS : 3.0 MM. MADE FROM SYNTHETIC ARAMID FIBER BONDED WITH NBR AND NATURA L ELASTOMER WITH ANTI-STICK COATING TO WITHSTAND, MAXIMUM TEMPERATURE 400 DEG C, CONTINUOUS TEMPERATURE: 250 DEG C, PRESSURE 50 KG/C M2, SUITABLE FOR STEAM, WATER, AIR, GASES LINE, COLOUR: GREEN.",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "PRECUT GASKET OF SIZE I.D.:-\u00d8515.O MM, O.D.\u00d8582.0 MM & THICKNESS : 3.0 MM. MADE FROM SYNTHETIC ARAMID FIBER BONDED WITH NBR AND NATURA L ELASTOMER WITH ANTI-STICK COATING TO WITHSTAND, MAXIMUM TEMPERATURE 400 DEG C, CONTINUOUS TEMPERATURE: 250 DEG C, PRESSURE 50 KG/C M2, SUITABLE FOR STEAM, WATER, AIR, GASES LINE, COLOUR: GREEN.",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "PRECUT GASKET OF SIZE I.D.:-\u00d8618.O MM, O.D.\u00d8690.0 MM & THICKNESS : 3.0 MM. MADE FROM SYNTHETIC ARAMID FIBER BONDED WITH NBR AND NATURA L ELASTOMER WITH ANTI-STICK COATING TO WITHSTAND, MAXIMUM TEMPERATURE 400 DEG C, CONTINUOUS TEMPERATURE: 250 DEG C, PRESSURE 50 KG/C M2, SUITABLE FOR STEAM, WATER, AIR, GASES LINE, COLOUR: GREEN.",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "FLAT RING GASKET TYPE : NON-METALLIC : PRECUT MATERIAL : GRAPHITE OPERATING PRESSURE : 200 BAR OPERATING TEMPERATURE : 600 DEG C SIZE (ID X OD X THK) : 35 X 44 X 3 MM MADE FROM EXFOLIA TED GRAPHITE HAVING PURITY: 99.0% TO 99.9%",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "PRECUT GASKET OF SIZE I.D.:-\u00d8172.O MM, O.D.\u00d8214.0 MM & THICKNESS : 3.0 MM. MADE FROM SYNTHETIC ARAMID FIBER BONDED WITH NBR AND NATURA L ELASTOMER WITH ANTI-STICK COATING TO WITHSTAND, MAXIMUM TEMPERATURE 400 DEG C, CONTINUOUS TEMPERATURE: 250 DEG C, PRESSURE 50 KG/C M2, SUITABLE FOR STEAM, WATER, AIR, GASES LINE, COLOUR: GREEN.",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "PRECUT GASKET OF SIZE I.D.:-\u00d8412.O MM, O.D.\u00d8468.0 MM & THICKNESS : 3.0 MM. MADE FROM SYNTHETIC ARAMID FIBER BONDED WITH NBR AND NATURA L ELASTOMER WITH ANTI-STICK COATING TO WITHSTAND, MAXIMUM TEMPERATURE 400 DEG C, CONTINUOUS TEMPERATURE: 250 DEG C, PRESSURE 50 KG/C M2, SUITABLE FOR STEAM, WATER, AIR, GASES LINE, COLOUR: GREEN.",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "FLAT RING GASKET TYPE : NON-METALLIC : PRECUT MATERIAL : GRAPHITE OPERATING PRESSURE : 200 BAR OPERATING TEMPERATURE : 600 DEG C SIZE (ID X OD X THK) : 15 X 23 X 3 MM MADE FROM EXFOLIA TED GRAPHITE HAVING PURITY: 99.0% TO 99.9%",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "NIPPLE MATERIAL : MILD STEEL MATERIAL : SPEC : IS:1239,PART-II,1982 SIZE : 8MM BARREL HEXAGONAL NIPPLE,MEDIUM QUALITY",
+      "expected": "7307",
+      "got": "7508",
+      "correct": false
+    },
+    {
+      "description": "SOCKET MATERIAL : MILD STEEL : GALVANIZED MATERIAL SPEC : IS:1239,PART-II ,1969 SIZE : 2IN MEDIUM QUALITY",
+      "expected": "7307",
+      "got": "7326",
+      "correct": false
+    },
+    {
+      "description": "SOCKET MATERIAL : MILD STEEL MATERIAL : SPEC : IS:1239,PART-II,1969 SIZE : 15X10MM REDUCING SOCKET,STEAM,HEAVY QUALITY",
+      "expected": "7307",
+      "got": "7326",
+      "correct": false
+    },
+    {
+      "description": "SOCKET MATERIAL : MILD STEEL MATERIAL : SPEC : IS:1239,PART-II,1969 SIZE : 32X25MM REDUCING SOCKET,STEAM,HEAVY QUALITY",
+      "expected": "7307",
+      "got": "7217",
+      "correct": false
+    },
+    {
+      "description": "SOCKET MATERIAL : MILD STEEL MATERIAL : SPEC : IS:1239,PART-II,1969 SIZE : 20X15MM REDUCING SOCKET,STEAM,HEAVY QUALITY",
+      "expected": "7307",
+      "got": "7326",
+      "correct": false
+    },
+    {
+      "description": "SOCKET MATERIAL : MILD STEEL : GALVANIZED MATERIAL SPEC : IS:1239,PART-II ,1969 SIZE : 32X25MM REDUCING SOCKET,MEDIUM QUALITY",
+      "expected": "7307",
+      "got": "7217",
+      "correct": false
+    },
+    {
+      "description": "NIPPLE MATERIAL : MILD STEEL SIZE : : 1/4IN(8MM) BARREL PLAIN NIPPLE ,MEDIUM QUALITY",
+      "expected": "7307",
+      "got": "7502",
+      "correct": false
+    },
+    {
+      "description": "M.S.BARREL NIPPLE 15 MM X 60 MM (LENGTH MIN) X3.2 MM WALL : THICKNESS,THREAD LENGTH 18M,TESTED HEAVY QUALITY WITH CLEAN-CUT THREADS,AS PER IS:1239 PT.II/1992.THE ENDS SHALL BE MACHINED FLAT AND FREE CHIPS.THE FITTINGS WITH A STANDARD SOCKET AND WITHOUT APPLICATION O F LUBRICANT,SEALANT OR PACKING SHALL SHOW NO LEAKAGE WHEN TESTED AT 5 MPA HYDRAULIC PRESSURE.",
+      "expected": "7307",
+      "got": "7220",
+      "correct": false
+    },
+    {
+      "description": "M.S.BARREL NIPPLE 25 MM X75 MM (LENGHT MIN) X 4.0 MM WALL : THICKNESS.THREAD LENGHT 25MM,TESTED HEAVY QUALITY WITH CLEAN-CUT THREADS,A S PER IS:1239 PT.II/1992.THE ENDS SHALL BE MACHINED FLAT AND FREE FROM CHIPS.THE FITTINGS WITH A STANDARD SOCKET AND WITHOUT APPLICA TION OF LUBTICANT,SEALANT OR PACKING SHALL SHOW NO LEAKAGE WHEN TESTED AT 5 MPA HYDRAULIC PRESSURE.",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "TEE MATERIAL : MILD STEEL MATERIAL SPEC : : IS:1239,PART-II,1969 SERVICE : SATURATED STEAM WORKING PRESSURE : 17KGF/CM2 WORKING TEMPERATURE : 260DEG C SIZE : 32MM TEE FEMALE ,HEAVY QUALITY",
+      "expected": "7307",
+      "got": "5911",
+      "correct": false
+    },
+    {
+      "description": "NIPPLE MATERIAL : MILD STEEL MATERIAL : SPEC : IS:1239,PART-II,1982 SIZE : 20MM BARREL HEXAGONAL NIPPLE,MEDIUM QUALITY",
+      "expected": "7307",
+      "got": "7508",
+      "correct": false
+    },
+    {
+      "description": "ELBOW MATERIAL : MILD STEEL MATERIAL SPEC : : IS:1239,PART-II,1982 SERVICE : STEAM SIZE : 50X64MM MINIMUM IN LENGTH,HEAVY QUALITY",
+      "expected": "7307",
+      "got": "7326",
+      "correct": false
+    },
+    {
+      "description": "BEND MATERIAL : MILD STEEL MATERIAL SPEC : : IS:1239,PART-II,1982,TYPE-1 SERVICE : SATURATED STEAM WORKING PRESSURE : 17KGC/CM2 WORKING TEMPERATURE : 260DEG C SIZE : 80MM WITH SOCKET,MEDIUM QUALITY",
+      "expected": "7307",
+      "got": "7326",
+      "correct": false
+    },
+    {
+      "description": "ELBOW MATERIAL : MILD STEEL : GALVANIZED MATERIAL SPEC : IS:1239,PART-II ,1982 SIZE : 20X35MM LG",
+      "expected": "7307",
+      "got": "7326",
+      "correct": false
+    },
+    {
+      "description": "TEE MATERIAL : MILD STEEL MATERIAL SPEC : : IS:1239,PART-II,1969 SERVICE : SATURATED STEAM WORKING PRESSURE : 17KGF/CM2 WORKING TEMPERATURE : 260DEG C SIZE : 40MM TEE FEMALE",
+      "expected": "7307",
+      "got": "5911",
+      "correct": false
+    },
+    {
+      "description": "SOCKET MATERIAL : MILD STEEL MATERIAL : SPEC : IS:1239,PART-II,1969 SIZE : 65X50MM REDUCING SOCKET,STEAM,HEAVY QUALITY",
+      "expected": "7307",
+      "got": "7326",
+      "correct": false
+    },
+    {
+      "description": "SOCKET MATERIAL : MILD STEEL MATERIAL : SPEC : IS:1239,PART-II,1969 SIZE : 25X15MM REDUCING SOCKET,STEAM,HEAVY QUALITY",
+      "expected": "7307",
+      "got": "7217",
+      "correct": false
+    },
+    {
+      "description": "NIPPLE MATERIAL : MILD STEEL MATERIAL : SPEC : IS:1239,PART-II,1982 SIZE : 50MM LENGTH : 68MM MINIMUM BARREL HEXAGONAL NIPPLE,A/F OF HEXAGONAL 61.1MM MINIMUM,MEDIUM QUALITY",
+      "expected": "7307",
+      "got": "7502",
+      "correct": false
+    },
+    {
+      "description": "SOCKET MATERIAL : MILD STEEL MATERIAL : SPEC : IS:1239,PART-II,1969 SIZE : 50MM STEAM FOR HEAVY QUALITY",
+      "expected": "7307",
+      "got": "7326",
+      "correct": false
+    },
+    {
+      "description": "SOCKET MATERIAL : MILD STEEL MATERIAL : SPEC : IS:1239,PART-II,1969 SIZE : 20MM STEAM FOR HEAVY QUALITY",
+      "expected": "7307",
+      "got": "7326",
+      "correct": false
+    },
+    {
+      "description": "SOCKET MATERIAL : MILD STEEL : GALVANIZED MATERIAL SPEC : IS:1239,PART-II ,1969 SIZE : 15MM MEDIUM QUALITY",
+      "expected": "7307",
+      "got": "7210",
+      "correct": false
+    },
+    {
+      "description": "SOCKET MATERIAL : MILD STEEL MATERIAL : SPEC : IS:1239,PART-II,1969 SIZE : 25X20MM REDUCING SOCKET,STEAM,HEAVY QUALITY",
+      "expected": "7307",
+      "got": "7217",
+      "correct": false
+    },
+    {
+      "description": "SOCKET MATERIAL : MILD STEEL MATERIAL : SPEC : IS:1239,PART-II,1969 SIZE : 15MM FOR HEAVY QUALITY",
+      "expected": "7307",
+      "got": "7217",
+      "correct": false
+    },
+    {
+      "description": "NIPPLE BARREL M.S.GALVANISED PLAIN, SIZE:15MM X 51MM LONG MIN. : ,MEDIUM QQUALITY AS PER IS : 1989.",
+      "expected": "7307",
+      "got": "8482",
+      "correct": false
+    },
+    {
+      "description": "BEND MATERIAL : MILD STEEL MATERIAL SPEC : : IS:1239,PART-II,1982,TYPE-1 SERVICE : SATURATED STEAM ANGLE : 90DEG WORKING PRESSURE : 17KGF/CM2 WORKING TEMPERATURE : 260DEG C SIZE : 25MM MEDIUM QUALITY",
+      "expected": "7307",
+      "got": "7326",
+      "correct": false
+    },
+    {
+      "description": "TEE MATERIAL : MILD STEEL MATERIAL SPEC : : IS:1239,PART-II,1969 SERVICE : SATURATED STEAM WORKING PRESSURE : 17KGF/CM2 WORKING TEMPERATURE : 260DEG C SIZE : 25MM TEE FEMALE ,HEAVY QUALITY",
+      "expected": "7307",
+      "got": "5911",
+      "correct": false
+    },
+    {
+      "description": "SOCKET MATERIAL : MILD STEEL : GALVANIZED MATERIAL SPEC : IS:1239,PART-II ,1969 SIZE : 20MM MEDIUM QUALITY",
+      "expected": "7307",
+      "got": "7326",
+      "correct": false
+    },
+    {
+      "description": "BEND MATERIAL : MILD STEEL MATERIAL SPEC : : IS:1239,PART-II,1982,TYPE-1 SERVICE : SATURATED STEAM ANGLE : 90DEG WORKING PRESSURE : 17KGF/CM2 WORKING TEMPERATURE : 260DEG C SIZE : 20MM MEDIUM QUALITY",
+      "expected": "7307",
+      "got": "7326",
+      "correct": false
+    },
+    {
+      "description": "BEND MATERIAL : MILD STEEL SIZE : : 1/2IN(15MM) BEND M.S.WITH SOCKET 1/2\" (15 MM)",
+      "expected": "7307",
+      "got": "7217",
+      "correct": false
+    },
+    {
+      "description": "TEE MATERIAL : MILD STEEL : GALVANIZED MATERIAL SPEC : IS:1239,PART-II ,1969 SIZE : 15MM TEE FEMALE,MEDIUM QUALITY",
+      "expected": "7307",
+      "got": "6215",
+      "correct": false
+    },
+    {
+      "description": "NIPPLE MATERIAL : MILD STEEL MATERIAL : SPEC : IS:1239,PART-II,1982 SIZE : 15MM BARREL HEXAGONAL NIPPLE,MEDIUM QUALITY",
+      "expected": "7307",
+      "got": "7508",
+      "correct": false
+    },
+    {
+      "description": "\"BEARING PRELOAD SPRING, TYPE: K, NON SLOTTED / CUP SPRING, SIZE: 25.7 : X14.3 X 0.4, LENGTH: 0.9 MM, MATERIAL: SPRING STEEL, GRADE: 51 CRV4 ASPER DIN 17221, COATING: BLACK PHOSPHATE, AS PER ISO 9717.",
+      "expected": "7320",
+      "got": "7320",
+      "correct": true
+    },
+    {
+      "description": "WASHER TYPE : DISC SPRING MATERIAL : : SPRING STEEL MATERIAL SPEC : 51CRV4 COATING : BLACK PHOSPHATE DESIGN SPECIFICATION : DIN 17221 INNER DIA : 25.5 MM OUTER DIA : 70 MM THICKNESS : 2 MM LENGTH: 4.5 MM, COATING AS PER ISO 9717",
+      "expected": "7320",
+      "got": "8451",
+      "correct": false
+    },
+    {
+      "description": "WASHER TYPE : DISC SPRING MATERIAL : : SPRING STEEL MATERIAL SPEC : 51CRV4 COATING : BLACK PHOSPHATE DESIGN SPECIFICATION : DIN 17221 INNER DIA : 20.4 MM OUTER DIA : 40 MM THICKNESS : 1.5 MM LENGTH: 1.15 MM, COATING AS PER ISO 9717",
+      "expected": "7320",
+      "got": "8451",
+      "correct": false
+    },
+    {
+      "description": "WASHER TYPE : DISC SPRING MATERIAL : : SPRING STEEL MATERIAL SPEC : 51CRV4 COATING : BLACK PHOSPHATE DESIGN SPECIFICATION : DIN 17221 INNER DIA : 16.3 MM OUTER DIA : 31.5 MM THICKNESS : 1.25 MM LENGTH: 2.15 MM, COATING AS PER ISO 9717",
+      "expected": "7320",
+      "got": "8451",
+      "correct": false
+    },
+    {
+      "description": "\"BEARING PRELOAD SPRING, TYPE: K NON-SLOTTED, CUP SPRING SIZE: 41.6 X25. : 5 X 0.5; LO: 1.4 MM, MATERIAL: SPRING STEEL 5 1CRV4 AS PER DIN 17221, COATING: BLACK PHOSPHATIZED, COATING STANDARD: ISO 9717",
+      "expected": "7320",
+      "got": "7320",
+      "correct": true
+    },
+    {
+      "description": "\"BEARING PRELOAD SPRING, TYPE: K NON-SLOTTED, CUP SPRING SIZE: 34.6 X22. : 4 X 0.6; LO: 1.5 MM, MATERIAL: SPRING STEEL 5 1CRV4 AS PER DIN 17221, COATING: BLACK PHOSPHATIZED, COATING STANDARD: ISO 9717",
+      "expected": "7320",
+      "got": "7320",
+      "correct": true
+    },
+    {
+      "description": "WASHER TYPE : DISC SPRING MATERIAL : : SPRING STEEL MATERIAL SPEC : 51CRV4 COATING : BLACK PHOSPHATE DESIGN SPECIFICATION : DIN 17221 INNER DIA : 28.5 MM OUTER DIA : 56 MM THICKNESS : 2 MM LENGTH: 3.6 MM, COATING AS PER ISO 9717",
+      "expected": "7320",
+      "got": "8451",
+      "correct": false
+    },
+    {
+      "description": "WASHER TYPE : DISC SPRING MATERIAL : : SPRING STEEL MATERIAL SPEC : 51CRV4 COATING : BLACK PHOSPHATE DESIGN SPECIFICATION : DIN 17221 INNER DIA : 14.2 MM OUTER DIA : 28 MM THICKNESS : 1 MM LENGTH: 1.80 MM, COATING AS PER ISO 9717",
+      "expected": "7320",
+      "got": "8451",
+      "correct": false
+    }
+  ]
+}

@@ -28,6 +28,7 @@ from sentence_transformers.sentence_transformer.losses import MultipleNegativesR
 from bmp_hsn.data import REPO_ROOT, load_eval, load_examples
 from bmp_hsn.pairs import build_batches, build_pairs
 from bmp_hsn.scoring import build_prototypes, score
+from bmp_hsn.tokenize import tokenize_batch
 
 QUERY = "query: "
 PASSAGE = "passage: "
@@ -55,9 +56,11 @@ def train_loop(model: SentenceTransformer, pairs, args) -> tuple[float, float]:
     """Plain PyTorch loop over class-distinct batches.
 
     Not HuggingFace's Trainer on purpose: measured on this machine it ran ~20 s per step against
-    184 ms for this loop — a 100x gap on identical shapes, with MPS forward passes timed at 27 ms
-    per 32 texts either way. The bottleneck was the Trainer's own machinery, not Metal, and a
-    four-epoch run goes from eleven hours to about three minutes.
+    well under a second for this loop on identical shapes, with MPS forward passes timed at 27 ms
+    per 32 texts either way. The bottleneck was the Trainer's own machinery, not Metal.
+
+    Step cost here is dominated by sequence length, not by anything in this function — see the
+    note on --max-seq-length in main(). profile_step.py measures the phases when it regresses.
     """
     loss_fn = MultipleNegativesRankingLoss(model)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
@@ -82,9 +85,12 @@ def train_loop(model: SentenceTransformer, pairs, args) -> tuple[float, float]:
 
     for epoch in range(args.epochs):
         # Reshuffled each epoch, so a pair meets different negatives every time it is seen.
+        batched_at = time.time()
         batches = build_batches(
             pairs, args.batch_size, seed=args.seed + epoch, group_by_length=True
         )
+        print(f"  epoch {epoch + 1}: {len(batches)} batches in "
+              f"{time.time() - batched_at:.1f}s", flush=True)
         running = 0.0
 
         for batch in batches:
@@ -118,18 +124,26 @@ def train_loop(model: SentenceTransformer, pairs, args) -> tuple[float, float]:
 
 
 def to_device(model: SentenceTransformer, texts: list[str], device: str) -> dict:
-    features = model.tokenize(texts)
-    return {k: (v.to(device) if hasattr(v, "to") else v) for k, v in features.items()}
+    return tokenize_batch(model, texts, device)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="intfloat/multilingual-e5-small")
-    parser.add_argument("--epochs", type=int, default=4)
+    # One epoch, measured: real-item top-1 went 50.0% at 1 epoch, 30.3% at 2, 26.3% at 3, 23.7% at
+    # 4, against a 28.9% frozen baseline. Past one pass it overfits tariff register — 7,144 pairs
+    # are mostly tariff-against-tariff, and only 275 curated trade terms carry the language real
+    # purchase orders use. More epochs sharpen the wrong thing. See compare_runs.py.
+    parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--eval-batch-size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=2e-5)
-    parser.add_argument("--max-seq-length", type=int, default=128)
+    # 64 for training, 128 for inference. Training at 128 measured 42 s/step against 1.2 s at 64:
+    # a 64-pair batch of 128-token sequences needs roughly 3 GB of stored activations on a 16 GB
+    # machine and falls off a cliff. Inference runs under no_grad, stores none of that, and stays
+    # cheap — so item text keeps its full length where it actually matters.
+    parser.add_argument("--max-seq-length", type=int, default=64)
+    parser.add_argument("--eval-seq-length", type=int, default=128)
     parser.add_argument("--max-pairs-per-class", type=int, default=8)
     parser.add_argument("--device", default="mps")
     parser.add_argument("--seed", type=int, default=20260928)
@@ -146,7 +160,7 @@ def main() -> None:
     print(f"eval:   {len(evaluation)} real items\n")
 
     model = SentenceTransformer(args.model, device=args.device)
-    model.max_seq_length = args.max_seq_length
+    model.max_seq_length = args.eval_seq_length
 
     print("scoring the frozen model first, so the comparison is against this exact setup...")
     before, _ = evaluate(model, train_examples, evaluation, args.eval_batch_size)
@@ -157,7 +171,9 @@ def main() -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
 
     started = time.time()
+    model.max_seq_length = args.max_seq_length
     minutes, peak = train_loop(model, pairs, args)
+    model.max_seq_length = args.eval_seq_length
     print(f"\ntrained in {minutes:.1f} min, peak MPS allocation {peak:.1f} GB")
 
     after, classes = evaluate(model, train_examples, evaluation, args.eval_batch_size)
@@ -203,7 +219,8 @@ def write_report(
         f"Run: {datetime.now(timezone.utc).isoformat()}",
         f"Trained {args.epochs} epochs on {pair_count} pairs in {minutes:.1f} min on {args.device}, "
         f"peak MPS allocation {peak:.1f} GB.",
-        f"batch {args.batch_size}, lr {args.lr}, max_seq_len {args.max_seq_length}.",
+        f"batch {args.batch_size}, lr {args.lr}, max_seq_len {args.max_seq_length} "
+        f"(inference {args.eval_seq_length}).",
         "",
         "## Result against the real eval set",
         "",
