@@ -1,3 +1,5 @@
+import type { ClassificationRunDto, ClassificationStatusDto } from "@bmp/types";
+
 import { ConflictError } from "../../core/errors/HttpErrors.js";
 import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { classificationRebuildQueue } from "../../infra/queue/queues.js";
@@ -6,25 +8,7 @@ import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 import type { ClassificationRunRepository, ClassificationRunRow } from "./classification.repository.js";
 import type { ClassificationService } from "./classification.service.js";
 
-export interface ClassificationStatusDto {
-  modelInstalled: boolean;
-  latestRun: {
-    id: string;
-    stage: string;
-    status: string;
-    message: string | null;
-    trainedRows: number | null;
-    evalAccuracy: number | null;
-    evalTopK: number | null;
-    baselineAccuracy: number | null;
-    deployed: boolean;
-    startedAt: string;
-    finishedAt: string | null;
-    triggeredBy: string | null;
-  } | null;
-}
-
-function toDto(run: ClassificationRunRow): NonNullable<ClassificationStatusDto["latestRun"]> {
+function toDto(run: ClassificationRunRow): ClassificationRunDto {
   return {
     id: run.id,
     stage: run.stage,
