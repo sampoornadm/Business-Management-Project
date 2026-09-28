@@ -64,6 +64,8 @@ export interface TaxonomySyncResult {
 
 export interface IReferenceDataRepository {
   upsertHsnCodes(rows: UpsertCodeInput[]): Promise<{ created: number; updated: number }>;
+  /** The 6- and 8-digit rows the training corpus is built from. */
+  findTariffRows(): Promise<{ code: string; description: string; codeLength: number }[]>;
   upsertSacCodes(rows: UpsertCodeInput[]): Promise<{ created: number; updated: number }>;
   findUnembeddedHsnCodes(limit: number): Promise<HsnCodeRow[]>;
   setHsnEmbedding(code: string, embedding: number[]): Promise<void>;
@@ -120,6 +122,14 @@ export class ReferenceDataRepository implements IReferenceDataRepository {
       });
     }
     return { created: toCreate.length, updated: toUpdate.length };
+  }
+
+  findTariffRows(): Promise<{ code: string; description: string; codeLength: number }[]> {
+    return this.prisma.hsnCode.findMany({
+      where: { codeLength: { in: [6, 8] } },
+      select: { code: true, description: true, codeLength: true },
+      orderBy: { code: "asc" },
+    });
   }
 
   findUnembeddedHsnCodes(limit: number): Promise<HsnCodeRow[]> {

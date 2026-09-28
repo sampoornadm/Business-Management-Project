@@ -72,6 +72,18 @@ export class ClassificationService implements IHsnClassifier {
     }
   }
 
+  /**
+   * Drops the loaded model so the next call reads whatever is on disk now.
+   *
+   * The Settings rebuild swaps ml/models/current under a running process. Without this the server
+   * keeps serving the weights it loaded at boot and the rebuild silently appears to do nothing.
+   * Clearing the cached promise rather than reloading eagerly keeps the swap cheap: the cost is
+   * paid by whoever classifies next, not by the rebuild.
+   */
+  async reload(): Promise<void> {
+    this.loading = null;
+  }
+
   async classify(text: string): Promise<Classification> {
     const [result] = await this.classifyMany([text]);
     return result!;

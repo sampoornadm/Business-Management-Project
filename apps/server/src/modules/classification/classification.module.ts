@@ -1,5 +1,9 @@
 import { env } from "../../config/env.js";
+import { prisma } from "../../infra/prisma/client.js";
 
+import { ClassificationController } from "./classification.controller.js";
+import { ClassificationRunRepository } from "./classification.repository.js";
+import { createClassificationRouter } from "./classification.routes.js";
 import { ClassificationService } from "./classification.service.js";
 
 /**
@@ -16,3 +20,12 @@ export const classificationService = new ClassificationService({
   // effect without a restart. This value only matters for a direct call that skips that lookup.
   minConfidence: env.CLASSIFIER_MIN_CONFIDENCE,
 });
+
+export const classificationRunRepository = new ClassificationRunRepository(prisma);
+
+const classificationController = new ClassificationController(
+  classificationRunRepository,
+  classificationService,
+);
+
+export const classificationRouter = createClassificationRouter(classificationController);
