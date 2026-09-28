@@ -110,11 +110,11 @@ def quantize() -> Path:
     """int8 weights. The embedding table is 250k x 384 and dominates the file at fp32.
 
     Built, measured, and NOT shipped — the server loads fp32 (see classification.embedder.ts).
-    Dynamic int8 derives activation scales per batch, so a text's vector depends on what else was
-    in the batch with it: measured at cosine 0.985-0.990 between the same string alone and batched,
-    identically in Python and in Node. The median gap between the top two candidate headings is
-    0.0225, so that is enough to change an item's HSN code between two runs over the same data.
-    The 1.3 point of accuracy is the smaller objection; non-determinism is the disqualifying one.
+    Two objections, either of which is enough. It costs about 8 points of accuracy on the real
+    items (92.1% against 84.2%). And dynamic int8 derives activation scales per batch, so a text's
+    vector depends on what else was in the batch with it — measured at cosine 0.985-0.990 between
+    the same string alone and batched, identically in Python and in Node. That is enough to change
+    an item's HSN code between two runs over the same data, which is the disqualifying one.
     """
     from onnxruntime.quantization import QuantType, quantize_dynamic
 
@@ -138,7 +138,7 @@ def accuracy_through_onnx(model_file: Path) -> float:
     from sentence_transformers import SentenceTransformer
 
     from bmp_hsn.data import load_eval, load_examples
-    from bmp_hsn.scoring import build_prototypes, score
+    from bmp_hsn.scoring import score_nearest_text
 
     tokenizer = SentenceTransformer(str(MODEL_DIR), device="cpu").tokenizer
     session = ort.InferenceSession(str(model_file))
@@ -154,13 +154,13 @@ def accuracy_through_onnx(model_file: Path) -> float:
 
     train = load_examples("train")
     items = load_eval()
-    prototypes, classes = build_prototypes(
-        embed([e.text for e in train], "passage: "), [e.heading for e in train]
-    )
-    result = score(
+    # Scored the way the server scores, so this number is comparable with every other number in
+    # the project rather than being a third measurement of a fourth thing.
+    result = score_nearest_text(
         embed([i.description for i in items], "query: "),
-        prototypes,
-        classes,
+        embed([e.text for e in train], "passage: "),
+        [e.heading for e in train],
+        [e.source for e in train],
         [i.expected for i in items],
     )
     return result.accuracy

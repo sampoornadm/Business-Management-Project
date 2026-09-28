@@ -22,31 +22,40 @@ import { CLASSIFICATION_REBUILD_QUEUE_NAME } from "../queues.js";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../../..");
 
 /**
- * Runs the classifier rebuild started from the Settings page.
+ * Wires the rebuild's dependencies.
  *
- * The dependencies are wired here rather than inside ClassificationRebuildService so that service
- * does not import boq.module — boq.module already imports classification.module for the classifier
- * itself, and importing back would close a cycle that crashes at startup (the same trap
- * boq.module.ts documents for items/rfq).
+ * They are composed here rather than inside ClassificationRebuildService so that service does not
+ * import boq.module — boq.module already imports classification.module for the classifier itself,
+ * and importing back would close a startup cycle (the same trap boq.module.ts documents for
+ * items/rfq).
  *
- * Concurrency 1, deliberately: the trainer wants the whole GPU, and two of them would both be slow
- * and race for ml/models/current.
+ * Exported so the rebuild can also run without a queue: scripts/run-classifier-rebuild.ts uses it
+ * to exercise the real pipeline end to end, which is the only way to find out whether the Python
+ * steps, the sheet and the re-classification actually work together.
  */
-export function startClassificationRebuildWorker(): Worker {
-  const runRepository = new ClassificationRunRepository(prisma);
-
-  const service = new ClassificationRebuildService({
-    runRepository,
+export function createRebuildService(): ClassificationRebuildService {
+  return new ClassificationRebuildService({
+    runRepository: new ClassificationRunRepository(prisma),
     python: pythonRunner,
     importTaxonomy: async () => {
       const sheet = HsnTaxonomyImportService.resolveSheetPath(REPO_ROOT);
       const result = await hsnTaxonomyImportService.importFromSheet(sheet);
+      // Created counts, so zero on every rebuild after the first. The message the card shows
+      // uses the dataset's class count instead; these are here for the log.
       return { chapters: result.chaptersCreated, headings: result.headingsCreated };
     },
     buildDatasets: () => buildDatasets(REPO_ROOT, referenceDataRepository),
     reloadModel: () => classificationService.reload(),
     reclassify: () => reclassifyCurrentWork(),
   });
+}
+
+/**
+ * Concurrency 1, deliberately: the trainer wants the whole GPU, and two runs would both be slow and
+ * race for ml/models/current.
+ */
+export function startClassificationRebuildWorker(): Worker {
+  const service = createRebuildService();
 
   const worker = new Worker<{ runId: string; triggeredById: string | null }>(
     CLASSIFICATION_REBUILD_QUEUE_NAME,
@@ -72,10 +81,18 @@ export function startClassificationRebuildWorker(): Worker {
  * inventing a line count by counting rows separately would be a number nobody verified.
  */
 async function reclassifyCurrentWork(): Promise<{ items: number; boqItems: number }> {
-  const boqs = await prisma.boq.findMany({
-    where: { isCurrent: true, tender: { status: "DRAFT" } },
-    select: { id: true, businessId: true },
-  });
+  // Per business, because the Prisma client refuses a Boq read with no businessId in its where
+  // clause — the multi-tenant guard, and it is right to: a rebuild is global but the data is not.
+  const businesses = await prisma.business.findMany({ select: { id: true } });
+  const boqs: { id: string; businessId: string }[] = [];
+
+  for (const business of businesses) {
+    const found = await prisma.boq.findMany({
+      where: { businessId: business.id, isCurrent: true, tender: { status: "DRAFT" } },
+      select: { id: true, businessId: true },
+    });
+    boqs.push(...found);
+  }
 
   let boqItems = 0;
   for (const boq of boqs) {
