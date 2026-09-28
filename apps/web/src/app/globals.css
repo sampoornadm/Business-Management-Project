@@ -39,6 +39,14 @@
     --success: 142 60% 30%;
     --success-foreground: 210 40% 98%;
 
+    /* Deadline-countdown gradient (DeadlineBadge, @bmp/ui) — deliberately more saturated than
+       --success/--destructive. Those are tuned muted for a status Badge sitting quietly next to
+       plain text; a green-to-red mix between them reads as dull olive in the middle of the
+       range, which defeats the point of a countdown that's supposed to catch your eye. Same
+       hue anchors (142 green, 0 red), boosted saturation/lightness instead. */
+    --deadline-safe: 142 76% 36%;
+    --deadline-due: 0 84% 55%;
+
     /* AI-suggested / autosuggested content marker — deliberately outside the primary/signal/
        success semantic set (action / warning / positive-status) so it reads as "the app
        proposed this," not as any of those. Used by AiBadge (packages/ui). */
@@ -86,6 +94,9 @@
 
     --success: 142 50% 45%;
     --success-foreground: 222 47% 11%;
+
+    --deadline-safe: 142 65% 42%;
+    --deadline-due: 0 72% 58%;
 
     --ai: 262 65% 68%;
     --ai-foreground: 222 47% 11%;
