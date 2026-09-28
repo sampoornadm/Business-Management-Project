@@ -72,6 +72,7 @@ export interface IReferenceDataRepository {
   findLatestImport(dataset: string): Promise<ReferenceDataImportRow | null>;
   syncTaxonomy(nodes: TaxonomyNodeInput[]): Promise<TaxonomySyncResult>;
   setHsnGstRates(rows: { code: string; gstRate: number | null; source: string }[]): Promise<number>;
+  findGstRateByCode(code: string): Promise<number | null>;
 }
 
 export class ReferenceDataRepository implements IReferenceDataRepository {
@@ -271,6 +272,18 @@ export class ReferenceDataRepository implements IReferenceDataRepository {
     });
 
     return { chaptersCreated, headingsCreated, updated, legacyDeactivated: legacy.count };
+  }
+
+  /**
+   * The GST rate for a resolved HSN code. Null when the sheet carries no rate for it, which the
+   * caller must treat as "unknown" — inventing a rate is what this whole change exists to stop.
+   */
+  async findGstRateByCode(code: string): Promise<number | null> {
+    const row = await this.prisma.hsnCode.findUnique({
+      where: { code },
+      select: { gstRate: true },
+    });
+    return row?.gstRate ?? null;
   }
 
   /**
