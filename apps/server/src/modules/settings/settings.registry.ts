@@ -58,6 +58,12 @@ export const SETTING_DEFINITIONS: Record<SettingKey, SettingDefinition> = {
     label: "Minimum similarity to show a candidate to the model at all",
     group: "AI & Extraction",
   },
+  CLASSIFIER_MIN_CONFIDENCE: {
+    type: "number",
+    defaultValue: env.CLASSIFIER_MIN_CONFIDENCE,
+    label: "Minimum confidence before the HSN classifier suggests a code",
+    group: "AI & Extraction",
+  },
   DOCUMENT_MATCH_THRESHOLD: {
     type: "number",
     defaultValue: env.DOCUMENT_MATCH_THRESHOLD,

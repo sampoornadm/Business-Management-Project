@@ -20,6 +20,7 @@ import type {
   NearestConfirmedMatch,
   UnlinkedRfqItem,
 } from "../items.repository.js";
+import type { IHsnClassifier } from "../../classification/classification.service.js";
 import { ItemsService } from "../items.service.js";
 
 const BUSINESS_ID = "business-1";
@@ -132,6 +133,30 @@ function makeItem(overrides: {
   };
 }
 
+/** Stands in for the trained HSN classifier; off by default so each test states its path. */
+class FakeClassifier {
+  available = false;
+  result = {
+    headingCode: "7307" as string | null,
+    chapterCode: "73" as string | null,
+    similarity: 0.8,
+    margin: 0.2,
+    confidence: 0.6,
+    abstained: false,
+    alternatives: [] as [],
+  };
+  calls: string[] = [];
+
+  async isAvailable() {
+    return this.available;
+  }
+
+  async classify(text: string) {
+    this.calls.push(text);
+    return this.result;
+  }
+}
+
 describe("ItemsService.renameItem", () => {
   let repository: FakeItemsRepository;
   let service: ItemsService;
@@ -145,7 +170,13 @@ describe("ItemsService.renameItem", () => {
       getPathMap: vi.fn().mockResolvedValue(new Map<string, string>()),
     } as unknown as CategoriesService;
     const auditService = { log: vi.fn().mockResolvedValue(undefined) } as unknown as AuditService;
-    service = new ItemsService(repository, rfqService, categoriesService, auditService);
+    service = new ItemsService(
+      repository,
+      rfqService,
+      categoriesService,
+      auditService,
+      new FakeClassifier() as unknown as IHsnClassifier,
+    );
   });
 
   it("renames the item when the new name is free", async () => {
@@ -197,24 +228,37 @@ describe("ItemsService.renameItem", () => {
 
 const ACTOR_ID = "user-1";
 
+
 describe("ItemsService classification audit logging", () => {
   let repository: FakeItemsRepository;
   let auditLog: ReturnType<typeof vi.fn>;
   let service: ItemsService;
+  let classifier: FakeClassifier;
 
   beforeEach(() => {
     generateJsonMock.mockReset();
     repository = new FakeItemsRepository();
+    classifier = new FakeClassifier();
     const rfqService = {
       listItemPrices: vi.fn().mockResolvedValue({ items: [], totalItems: 0 }),
     } as unknown as RfqService;
     const categoriesService = {
-      getLeaves: vi.fn().mockResolvedValue([{ id: "cat-1", name: "Piping", path: "Plumbing > Piping" }]),
+      getLeaves: vi
+        .fn()
+        .mockResolvedValue([
+          { id: "cat-1", name: "Piping", path: "Plumbing > Piping", code: "7307" },
+        ]),
       getPathMap: vi.fn().mockResolvedValue(new Map([["cat-1", "Plumbing > Piping"]])),
     } as unknown as CategoriesService;
     auditLog = vi.fn().mockResolvedValue(undefined);
     const auditService = { log: auditLog } as unknown as AuditService;
-    service = new ItemsService(repository, rfqService, categoriesService, auditService);
+    service = new ItemsService(
+      repository,
+      rfqService,
+      categoriesService,
+      auditService,
+      classifier as unknown as IHsnClassifier,
+    );
   });
 
   it("logs a sibling-reuse decision without calling the LLM", async () => {
@@ -360,5 +404,109 @@ describe("ItemsService classification audit logging", () => {
     const result = await service.classifyItem("item-new", BUSINESS_ID, ACTOR_ID);
 
     expect(result.needsReview).toBe(false);
+  });
+
+  it("classifies with the trained model instead of listing every category in a prompt", async () => {
+    // buildClassifyPrompt renders every leaf id and path into the prompt. That was workable at the
+    // old 38-leaf trade tree and is not at 1,301 tariff headings with UUIDs, where it answered
+    // "Wood and articles of wood" for a spring steel washer.
+    classifier.available = true;
+    repository.items.set("item-new", makeItem({ id: "item-new", canonicalName: "MS Socket 15mm" }));
+    repository.itemForClassify = {
+      id: "item-new",
+      canonicalName: "MS Socket 15mm",
+      unit: "nos",
+      embedding: [0.1, 0.2],
+      embeddedAt: new Date(),
+    };
+    repository.nearestMatches = [];
+
+    const result = await service.classifyItem("item-new", BUSINESS_ID, ACTOR_ID);
+
+    expect(classifier.calls).toContain("MS Socket 15mm");
+    expect(generateJsonMock).not.toHaveBeenCalled();
+    expect(result.categoryId).toBe("cat-1");
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ path: "classifier", categoryId: "cat-1" }),
+      }),
+    );
+  });
+
+  it("suggests no category when the classifier abstains", async () => {
+    classifier.available = true;
+    classifier.result = {
+      headingCode: null,
+      chapterCode: null,
+      similarity: 0.3,
+      margin: 0.001,
+      confidence: 0.003,
+      abstained: true,
+      alternatives: [],
+    };
+    repository.items.set("item-new", makeItem({ id: "item-new", canonicalName: "Unrecognisable thing" }));
+    repository.itemForClassify = {
+      id: "item-new",
+      canonicalName: "Unrecognisable thing",
+      unit: "nos",
+      embedding: [0.1, 0.2],
+      embeddedAt: new Date(),
+    };
+    repository.nearestMatches = [];
+
+    const result = await service.classifyItem("item-new", BUSINESS_ID, ACTOR_ID);
+
+    expect(result.categoryId).toBeNull();
+    expect(generateJsonMock).not.toHaveBeenCalled();
+  });
+
+  it("suggests no category when the classifier picks a heading no category carries", async () => {
+    // The taxonomy and the model are rebuilt from the same sheet, so this should not happen — but
+    // inventing a category id, or reaching for the LLM, would both be worse than saying nothing.
+    classifier.available = true;
+    classifier.result = { ...classifier.result, headingCode: "9999", chapterCode: "99", abstained: false };
+    repository.items.set("item-new", makeItem({ id: "item-new", canonicalName: "Something odd" }));
+    repository.itemForClassify = {
+      id: "item-new",
+      canonicalName: "Something odd",
+      unit: "nos",
+      embedding: [0.1, 0.2],
+      embeddedAt: new Date(),
+    };
+    repository.nearestMatches = [];
+
+    const result = await service.classifyItem("item-new", BUSINESS_ID, ACTOR_ID);
+
+    expect(result.categoryId).toBeNull();
+    expect(generateJsonMock).not.toHaveBeenCalled();
+  });
+
+  it("still prefers a confirmed sibling over the classifier", async () => {
+    // Rung 1 is a human decision already made for this exact item; the model never overrides it.
+    classifier.available = true;
+    repository.items.set("item-new", makeItem({ id: "item-new", canonicalName: "FKM O-Ring 42x58x8" }));
+    repository.itemForClassify = {
+      id: "item-new",
+      canonicalName: "FKM O-Ring 42x58x8",
+      unit: "nos",
+      embedding: [0.1, 0.2],
+      embeddedAt: new Date(),
+    };
+    repository.nearestMatches = [
+      {
+        id: "item-sibling",
+        categoryId: "cat-1",
+        canonicalName: "FKM O-Ring 42x58x8",
+        unit: "nos",
+        similarity: 0.999,
+      },
+    ];
+
+    await service.classifyItem("item-new", BUSINESS_ID, ACTOR_ID);
+
+    expect(classifier.calls).toHaveLength(0);
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ path: "sibling_reuse" }) }),
+    );
   });
 });

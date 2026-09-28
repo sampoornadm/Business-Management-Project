@@ -16,6 +16,7 @@ import type {
 } from "../../rates/rates.repository.js";
 import type { HsnCandidate, IReferenceDataRepository } from "../../reference-data/reference-data.repository.js";
 import type { SettingsService } from "../../settings/settings.service.js";
+import type { IHsnClassifier } from "../../classification/classification.service.js";
 import { BoqEnrichmentService } from "../boq-enrichment.service.js";
 import type {
   BoqItemWithBreakdown,
@@ -164,13 +165,52 @@ class FakeCategoriesService implements Partial<CategoriesService> {
   }
 }
 
+/**
+ * Stands in for the trained HSN classifier. `available` false is the real fresh-clone case: the
+ * model is gitignored and rebuilt by ml/train, so the server has to work without it.
+ */
+class FakeClassifier {
+  /** Off by default so each test says which path it exercises; the classifier tests opt in. */
+  available = false;
+  result: {
+    headingCode: string | null;
+    chapterCode: string | null;
+    similarity: number;
+    margin: number;
+    confidence: number;
+    abstained: boolean;
+    alternatives: [];
+  } = {
+    headingCode: "7307",
+    chapterCode: "73",
+    similarity: 0.8,
+    margin: 0.2,
+    confidence: 0.6,
+    abstained: false,
+    alternatives: [],
+  };
+  calls: string[] = [];
+
+  async isAvailable() {
+    return this.available;
+  }
+
+  async classify(text: string) {
+    this.calls.push(text);
+    return this.result;
+  }
+}
+
 function buildService() {
   const boqRepository = new FakeBoqRepository();
   const ratesRepository = new FakeRatesRepository();
   const itemsRepository = new FakeItemsRepository();
   const referenceDataRepository = new FakeReferenceDataRepository();
   const categoriesService = new FakeCategoriesService();
-  const settingsService = { get: vi.fn().mockResolvedValue(0.98) } as unknown as SettingsService;
+  const classifier = new FakeClassifier();
+  const settingsService = {
+    get: vi.fn(async (key: string) => (key === "CLASSIFIER_MIN_CONFIDENCE" ? 0.05 : 0.98)),
+  } as unknown as SettingsService;
   const service = new BoqEnrichmentService(
     boqRepository as unknown as IBoqRepository,
     ratesRepository as unknown as IHistoricalRatesRepository,
@@ -178,6 +218,7 @@ function buildService() {
     referenceDataRepository as unknown as IReferenceDataRepository,
     settingsService,
     categoriesService as unknown as CategoriesService,
+    classifier as unknown as IHsnClassifier,
   );
   return {
     service,
@@ -186,6 +227,7 @@ function buildService() {
     itemsRepository,
     referenceDataRepository,
     categoriesService,
+    classifier,
   };
 }
 
@@ -746,5 +788,114 @@ describe("BoqEnrichmentService", () => {
       expect(result?.aiCategory).toBe("Tube or pipe fittings");
       expect(result?.aiSubcategory).toBeNull();
     });
+  });
+
+  it("takes the HSN code from the trained classifier, without asking the model to pick one", async () => {
+    // The whole point of stage 4. The old path retrieved candidates by embedding and had the LLM
+    // choose among them, which scored 0 correct out of 22 on real purchase-order lines.
+    const { service, boqRepository, classifier, referenceDataRepository } = buildService();
+    classifier.available = true;
+    const item = makeItem("SOCKET MATERIAL : MILD STEEL, IS:1239");
+    boqRepository.items = [item];
+    referenceDataRepository.nearestHsn = [
+      { code: "9999", description: "SOMETHING ELSE ENTIRELY", similarity: 0.9 },
+    ];
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock.mockResolvedValueOnce({
+      normalizedName: "MS Socket 15mm",
+      confidence: 0.8,
+      hsnCode: null,
+    });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    expect(classifier.calls).toContain("SOCKET MATERIAL : MILD STEEL, IS:1239");
+    expect(boqRepository.enrichment.get(item.id)?.suggestedHsnCode).toBe("7307");
+    // One call, for naming. The HSN pick is no longer the model's to make.
+    expect(generateJsonMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("suggests nothing when the classifier abstains, rather than falling back to a guess", async () => {
+    const { service, boqRepository, classifier, referenceDataRepository } = buildService();
+    classifier.available = true;
+    classifier.result = {
+      headingCode: null,
+      chapterCode: null,
+      similarity: 0.4,
+      margin: 0.001,
+      confidence: 0.004,
+      abstained: true,
+      alternatives: [],
+    };
+    const item = makeItem("SOMETHING NOBODY HAS CLASSIFIED BEFORE");
+    boqRepository.items = [item];
+    referenceDataRepository.nearestHsn = [
+      { code: "2523", description: "PORTLAND CEMENT", similarity: 0.9 },
+    ];
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock.mockResolvedValueOnce({ normalizedName: "Mystery", confidence: 0.5, hsnCode: null });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    const result = boqRepository.enrichment.get(item.id);
+    expect(result?.suggestedHsnCode).toBeNull();
+    expect(result?.aiCategory).toBeNull();
+  });
+
+  it("falls back to the old retrieval path when no trained model is installed", async () => {
+    // The model is gitignored and rebuilt by ml/train, so a fresh clone has none. Enrichment must
+    // still do what it did before rather than stop suggesting anything at all.
+    const { service, boqRepository, classifier, referenceDataRepository } = buildService();
+    classifier.available = false; // explicit: this test is about exactly this condition
+    const item = makeItem("PORTLAND CEMENT OPC 43 GRADE 50KG BAG");
+    boqRepository.items = [item];
+    referenceDataRepository.nearestHsn = [
+      { code: "2523", description: "PORTLAND CEMENT, ALUMINOUS CEMENT, SLAG CEMENT", similarity: 0.9 },
+    ];
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock
+      .mockResolvedValueOnce({ normalizedName: "OPC 43 Grade Cement", confidence: 0.8, hsnCode: null })
+      .mockResolvedValueOnce({ hsnCode: "2523" });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    expect(classifier.calls).toHaveLength(0);
+    expect(boqRepository.enrichment.get(item.id)?.suggestedHsnCode).toBe("2523");
+  });
+
+  it("derives the category from the classifier's heading, so the two can never disagree", async () => {
+    const { service, boqRepository, classifier, categoriesService } = buildService();
+    classifier.available = true;
+    categoriesService.leaves = [
+      {
+        id: randomUUID(),
+        name: "Springs and leaves for springs",
+        path: "Articles of iron or steel > Springs and leaves for springs",
+        code: "7320",
+      },
+    ];
+    classifier.result = {
+      headingCode: "7320",
+      chapterCode: "73",
+      similarity: 0.9,
+      margin: 0.3,
+      confidence: 0.7,
+      abstained: false,
+      alternatives: [],
+    };
+    const item = makeItem("WASHER TYPE : DISC SPRING, SPRING STEEL 51CRV4");
+    boqRepository.items = [item];
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock.mockResolvedValueOnce({
+      normalizedName: "Disc spring washer",
+      confidence: 0.8,
+      hsnCode: null,
+    });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    const result = boqRepository.enrichment.get(item.id);
+    expect(result?.suggestedHsnCode).toBe("7320");
+    expect(result?.aiCategory).toBe("Articles of iron or steel");
   });
 });

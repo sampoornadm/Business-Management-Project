@@ -1,3 +1,5 @@
+import type { IHsnClassifier } from "../classification/classification.service.js";
+
 import type {
   CategoryLeafDto,
   FilterCondition,
@@ -66,6 +68,7 @@ export class ItemsService {
     private readonly rfqService: RfqService,
     private readonly categoriesService: CategoriesService,
     private readonly auditService: AuditService,
+    private readonly classifier: IHsnClassifier,
   ) {}
 
   /**
@@ -344,6 +347,32 @@ export class ItemsService {
       return { categoryId: sibling.categoryId, confidence: sibling.confidence, needsReview: false };
     }
 
+    // Rung 2 is the trained classifier when one is installed. It replaces a prompt that rendered
+    // every leaf id and path inline: workable at the old 38-leaf trade tree, impossible at 1,301
+    // tariff headings with UUIDs, where it answered "Wood and articles of wood" for a spring steel
+    // washer. The heading it returns IS the category's code, so the mapping is a lookup.
+    if (await this.classifier.isAvailable()) {
+      const decision = await this.classifier.classify(item.canonicalName);
+      const leaf = decision.headingCode
+        ? context.leaves.find((candidate) => candidate.code === decision.headingCode)
+        : undefined;
+
+      await this.logClassification(actorId, item, {
+        path: "classifier",
+        categoryId: leaf?.id ?? null,
+        confidence: decision.confidence,
+        candidateCount: nearest.length,
+      });
+
+      // Abstained, or named a heading no category carries. Saying nothing beats inventing a
+      // category id, and beats falling back to the prompt this replaced.
+      return {
+        categoryId: leaf?.id ?? null,
+        confidence: leaf ? decision.confidence : 0,
+        needsReview: leaf !== undefined,
+      };
+    }
+
     // Nearest confirmed examples ground the LLM — the practical "learn from feedback" lever.
     const examples = nearest
       .map((row) => ({ name: row.canonicalName, path: context.pathMap.get(row.categoryId) ?? "" }))
@@ -380,6 +409,12 @@ export class ItemsService {
           confidence: number;
           matchedItemId: string;
           matchedCanonicalName: string;
+          candidateCount: number;
+        }
+      | {
+          path: "classifier";
+          categoryId: string | null;
+          confidence: number;
           candidateCount: number;
         }
       | {

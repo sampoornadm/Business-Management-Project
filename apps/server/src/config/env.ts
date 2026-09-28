@@ -69,6 +69,13 @@ const envSchema = z.object({
   // bge-m3: unrelated trades score 0.31-0.38, same-trade items 0.84+.
   AI_CONTEXT_FLOOR: z.coerce.number().min(0).max(1).default(0.75),
 
+  // Below this the HSN classifier suggests nothing rather than guessing. Calibrated, not chosen:
+  // against the 76 real labelled items, 0.05 answers 93.4% of them at 95.8% precision, while 0.13
+  // buys 98.1% precision for only 71.1% coverage. See ml/train/calibrate.py for the full curve,
+  // and re-run it after any retrain — the confidence scale is specific to a given model. Note the
+  // curve comes from items spanning 6 headings, all of which have curated trade terms.
+  CLASSIFIER_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.05),
+
   // Opt-in: watches a local folder tree and auto-imports dropped files as
   // tender documents. Off by default so this is a no-op on any machine that
   // doesn't run the worker on the same filesystem as the watched folder (see
