@@ -27,7 +27,7 @@ from sentence_transformers.sentence_transformer.losses import MultipleNegativesR
 
 from bmp_hsn.data import REPO_ROOT, load_eval, load_examples
 from bmp_hsn.pairs import build_batches, build_pairs
-from bmp_hsn.scoring import build_prototypes, score
+from bmp_hsn.scoring import score_nearest_text
 from bmp_hsn.tokenize import tokenize_batch
 
 QUERY = "query: "
@@ -45,11 +45,25 @@ def encode(model: SentenceTransformer, texts: list[str], prefix: str, batch_size
 
 
 def evaluate(model: SentenceTransformer, train_examples, items, batch_size: int):
-    """Prototype-cosine evaluation — the same thing the Node side will do at inference."""
+    """Scores exactly what the server does: nearest training text, weighted by its source.
+
+    Not class centroids. The deployed path is nearest-text with curated terms outranking tariff
+    prose, and measured on real items the two differ by around 40 points — so reporting centroids
+    here would put a number on the Settings card that nobody ever experiences, and would make the
+    rebuild's deploy-or-not gate compare against the wrong quantity.
+    """
     corpus = encode(model, [e.text for e in train_examples], PASSAGE, batch_size)
-    prototypes, classes = build_prototypes(corpus, [e.heading for e in train_examples])
     queries = encode(model, [i.description for i in items], QUERY, batch_size)
-    return score(queries, prototypes, classes, [i.expected for i in items]), classes
+    classes = sorted({e.heading for e in train_examples})
+
+    result = score_nearest_text(
+        queries,
+        corpus,
+        [e.heading for e in train_examples],
+        [e.source for e in train_examples],
+        [i.expected for i in items],
+    )
+    return result, classes
 
 
 def train_loop(model: SentenceTransformer, pairs, args) -> tuple[float, float]:
@@ -259,6 +273,9 @@ def write_report(
         json.dumps(
             {
                 "model": args.model,
+                # How the numbers were produced. Runs scored with the old class-centroid scheme are not
+                # comparable with these, and compare_runs.py filters on this rather than mixing them.
+                "scheme": "nearest-text+source-weights",
                 "epochs": args.epochs,
                 "pairs": pair_count,
                 "minutes": minutes,

@@ -54,7 +54,11 @@ def score(
     classes: list[str],
     expected: list[str],
 ) -> Scored:
-    similarity = normalise(query_vectors) @ prototypes.T
+    return score_matrix(normalise(query_vectors) @ prototypes.T, classes, expected)
+
+
+def score_matrix(similarity: np.ndarray, classes: list[str], expected: list[str]) -> Scored:
+    """Metrics from an already-computed per-class score matrix (rows = items, columns = classes)."""
     ranked = np.argsort(-similarity, axis=1)
 
     top1: list[str] = []
@@ -87,3 +91,38 @@ def score(
         margins=margins,
         correct=correct,
     )
+
+
+# Must match classification.scoring.ts#SOURCE_WEIGHTS, or the trainer reports an accuracy the
+# server never delivers and the rebuild gate compares against the wrong thing.
+SOURCE_WEIGHTS = {"lexicon": 1.0, "tariff": 0.85}
+
+
+def score_nearest_text(
+    query_vectors: np.ndarray,
+    corpus: np.ndarray,
+    headings: list[str],
+    sources: list[str],
+    expected: list[str],
+) -> Scored:
+    """Scores the way the deployed server does: nearest single text, weighted by where it came from.
+
+    This is the trainer's headline number precisely because it is what ships. Reporting the
+    class-centroid score instead understates the system by around 40 points, and the rebuild gate
+    compares against whatever this returns — a gate measuring something other than the deployed
+    behaviour is worse than no gate at all.
+
+    Mirrors classification.scoring.ts#classifyAgainst, including taking the best score per heading:
+    several texts of one heading scoring highly is agreement, not ambiguity.
+    """
+    weights = np.array([SOURCE_WEIGHTS.get(source, 1.0) for source in sources], dtype=np.float32)
+    similarity = (normalise(query_vectors) @ corpus.T) * weights
+
+    classes = sorted(set(headings))
+    index = {heading: i for i, heading in enumerate(classes)}
+    per_heading = np.full((similarity.shape[0], len(classes)), -2.0, dtype=np.float32)
+    for column, heading in enumerate(headings):
+        target = index[heading]
+        np.maximum(per_heading[:, target], similarity[:, column], out=per_heading[:, target])
+
+    return score_matrix(per_heading, classes, expected)

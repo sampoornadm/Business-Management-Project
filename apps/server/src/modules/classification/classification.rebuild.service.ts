@@ -145,8 +145,11 @@ export class ClassificationRebuildService {
         baselineAccuracy: baseline,
         trainedRows: datasets.examples,
         finishedAt: new Date(),
+        // datasets.headings, not taxonomy.headings: the taxonomy import reports what it CREATED,
+        // which is zero on every rebuild after the first. The dataset's count is the number of
+        // classes the model can actually predict, which is what the number is meant to convey.
         message:
-          `Deployed. ${taxonomy.headings} headings, ${datasets.examples} training examples, ` +
+          `Deployed. ${datasets.headings} headings, ${datasets.examples} training examples, ` +
           `${reclassified.boqItems} draft BOQs re-classified.`,
       });
       logger.info({ runId: run.id, accuracy, baseline }, "Classifier rebuild deployed");

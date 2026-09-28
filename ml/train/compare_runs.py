@@ -24,6 +24,10 @@ def load_runs() -> list[dict]:
     runs = []
     for results in sorted(RUNS.glob("*-train/results.json")):
         data = json.loads(results.read_text(encoding="utf-8"))
+        # Runs from before the server switched to nearest-text scoring measured a different thing
+        # entirely (centroids, ~40 points lower). Comparing across the two would be meaningless.
+        if data.get("scheme") != "nearest-text+source-weights":
+            continue
         data["path"] = results.parent.name
         runs.append(data)
     return runs
