@@ -24,6 +24,7 @@ export * from "./components/data-table";
 export * from "./components/avatar";
 export * from "./components/avatar-upload";
 export * from "./components/badge";
+export * from "./components/deadline-progress";
 export * from "./components/card";
 export * from "./components/document-upload";
 export * from "./components/dropdown-menu";

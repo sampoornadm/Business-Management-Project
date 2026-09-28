@@ -17,6 +17,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  DeadlineProgress,
   EMPTY_VALUE,
   formatDate,
   formatDateTime,
@@ -56,6 +57,7 @@ import {
 } from "@/hooks/use-tenders";
 import { useAuthStore } from "@/lib/auth-store";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
+import { daysUntil, deadlineLabel, isPastDue } from "@/lib/deadline";
 import { hasPermission } from "@/lib/permissions";
 import { tenderKindBadgeVariant, tenderPriorityBadgeVariant, tenderStatusBadgeVariant } from "@/lib/tender-status";
 import { buildTenderSteps, isOnHappyPath } from "@/lib/tender-stepper";
@@ -271,7 +273,16 @@ export default function TenderDetailPage() {
               </div>
               <div>
                 <p className="text-muted-foreground">Submission date</p>
-                <p>{formatDateTime(tender.submissionDate)}</p>
+                {tender.submissionDate ? (
+                  <DeadlineProgress
+                    dateText={formatDateTime(tender.submissionDate)}
+                    daysLeft={daysUntil(tender.submissionDate)}
+                    label={deadlineLabel(daysUntil(tender.submissionDate), isPastDue(tender.submissionDate))}
+                    pastDue={isPastDue(tender.submissionDate)}
+                  />
+                ) : (
+                  <p>{EMPTY_VALUE}</p>
+                )}
               </div>
               <div>
                 <p className="text-muted-foreground">Opening date</p>
