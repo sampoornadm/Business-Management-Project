@@ -74,18 +74,15 @@ def build_pairs(
     return pairs
 
 
-def build_batches(pairs: list[Pair], batch_size: int, seed: int = 20260928) -> list[list[Pair]]:
-    """Groups pairs into full batches in which every heading appears at most once.
+def _pack(pairs: list[Pair], batch_size: int) -> tuple[list[list[Pair]], list[Pair]]:
+    """Greedily fills batches from `pairs` in order, never repeating a heading within a batch.
 
-    Pairs that cannot be placed without repeating a heading are dropped rather than forced in; with
-    1,301 headings and 8 pairs each there is no shortage, and a clean negative is worth more than a
-    slightly larger epoch.
+    Returns the batches and whatever could not be placed, so a caller packing window by window can
+    carry the remainder forward instead of dropping it.
     """
-    rng = random.Random(seed)
     remaining = list(pairs)
-    rng.shuffle(remaining)
-
     batches: list[list[Pair]] = []
+
     while len(remaining) >= batch_size:
         batch: list[Pair] = []
         seen: set[str] = set()
@@ -103,4 +100,57 @@ def build_batches(pairs: list[Pair], batch_size: int, seed: int = 20260928) -> l
         batches.append(batch)
         remaining = leftover
 
+    return batches, remaining
+
+
+def build_batches(
+    pairs: list[Pair],
+    batch_size: int,
+    seed: int = 20260928,
+    group_by_length: bool = False,
+) -> list[list[Pair]]:
+    """Groups pairs into full batches in which every heading appears at most once.
+
+    Pairs that cannot be placed without repeating a heading are dropped rather than forced in; with
+    1,301 headings and several pairs each there is no shortage, and a clean negative is worth more
+    than a slightly larger epoch.
+
+    `group_by_length` additionally keeps each batch's texts a similar length. Every sequence in a
+    batch is padded to the longest one in it and attention cost grows with the square of that
+    length, so a single 829-token tariff row dragged into a batch of 20-token trade terms makes
+    that whole step cost as much as its longest member. Measured here, ungrouped batches ran at
+    ~25 s/step because essentially every batch contained something near the 128-token cap.
+    """
+    rng = random.Random(seed)
+
+    if not group_by_length:
+        shuffled = list(pairs)
+        rng.shuffle(shuffled)
+        return _pack(shuffled, batch_size)[0]
+
+    # Sort into length order, cut into narrow chunks, then shuffle within each chunk so the model
+    # still sees varied negatives rather than the same neighbours every epoch. Two batches wide is
+    # deliberate: at eight the shuffle mixes the long tail back in with the short texts and the
+    # padding saving disappears entirely.
+    ordered = sorted(pairs, key=lambda p: max(len(p.anchor), len(p.positive)))
+    window = batch_size * 2
+    batches: list[list[Pair]] = []
+
+    # Same-heading pairs tend to be the same length, so they sort next to each other — precisely
+    # the pairs that cannot share a batch. Carrying each window's remainder into the next keeps
+    # them in the epoch (at a slightly wider length spread) instead of silently discarding them.
+    carried: list[Pair] = []
+    for start in range(0, len(ordered), window):
+        chunk = carried + ordered[start : start + window]
+        rng.shuffle(chunk)
+        packed, carried = _pack(chunk, batch_size)
+        batches.extend(packed)
+
+    if carried:
+        rng.shuffle(carried)
+        batches.extend(_pack(carried, batch_size)[0])
+
+    # Batch order is shuffled too: left sorted, training would see every short batch before any
+    # long one, which biases the optimiser's late steps toward long text.
+    rng.shuffle(batches)
     return batches
