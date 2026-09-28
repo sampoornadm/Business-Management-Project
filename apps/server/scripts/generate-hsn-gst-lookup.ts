@@ -24,6 +24,7 @@ import { prisma } from "../src/infra/prisma/client.js";
 import {
   deriveDisplayName,
   disambiguateDisplayNames,
+  findOrphanHeadings,
   LOOKUP_SHEET_NAME,
   parseActiveFlag,
   parseGstRate,
@@ -114,7 +115,7 @@ async function readExistingEdits(filePath: string): Promise<Map<string, Partial<
 }
 
 async function buildRows(existing: Map<string, Partial<LookupRow>>): Promise<LookupRow[]> {
-  const [hsn, sac] = await Promise.all([
+  const [hsn, sac, hsnDeep, sacDeep] = await Promise.all([
     prisma.hsnCode.findMany({
       where: { codeLength: { in: [2, 4] } },
       select: { code: true, description: true, codeLength: true },
@@ -123,6 +124,15 @@ async function buildRows(existing: Map<string, Partial<LookupRow>>): Promise<Loo
       where: { codeLength: { in: [2, 4] } },
       select: { code: true, description: true, codeLength: true },
     }),
+    prisma.hsnCode.findMany({ where: { codeLength: { gt: 4 } }, select: { code: true, codeLength: true } }),
+    prisma.sacCode.findMany({ where: { codeLength: { gt: 4 } }, select: { code: true, codeLength: true } }),
+  ]);
+
+  // Per table: an HSN heading is only real if an HSN subheading sits under it, and the two
+  // numbering spaces must not vouch for each other. Pooled, every SAC heading would look orphaned.
+  const orphans = new Set([
+    ...findOrphanHeadings([...hsn, ...hsnDeep]),
+    ...findOrphanHeadings([...sac, ...sacDeep]),
   ]);
 
   const all = [...hsn, ...sac].sort((a, b) => a.code.localeCompare(b.code));
@@ -150,9 +160,11 @@ async function buildRows(existing: Map<string, Partial<LookupRow>>): Promise<Loo
       gst_rate: edit?.gst_rate ?? seeded.rate,
       rate_source: edit?.rate_source ?? seeded.source,
       effective_from: RATE_EFFECTIVE_FROM,
-      // INACTIVE_CODES wins over a stored value: these are unusable in the nomenclature itself
-      // (chapter 77 is reserved), not a preference the user gets to override.
-      active: INACTIVE_CODES.has(record.code) ? false : (edit?.active ?? true),
+      // INACTIVE_CODES and orphans win over a stored value: these are unusable in the nomenclature
+      // itself (chapter 77 is reserved; an orphan heading is a row that was never a heading), not a
+      // preference the user gets to override.
+      active:
+        INACTIVE_CODES.has(record.code) || orphans.has(record.code) ? false : (edit?.active ?? true),
       trade_terms: edit?.trade_terms ?? (TRADE_TERMS[record.code]?.join("; ") ?? ""),
     };
   });
@@ -198,6 +210,11 @@ async function writeSheet(rows: LookupRow[], outputPath: string): Promise<void> 
     "  gst_rate      — GST percent for this code.",
     "  rate_source   — where the rate came from. Set to 'manual' when you correct one.",
     "  active        — FALSE hides a chapter/heading you never buy from, without losing coverage.",
+    "                  Some rows arrive FALSE already: chapter 77 is reserved and unused, and 78",
+    "                  rows in CBIC's file look like headings but have no subheadings beneath them",
+    "                  (mostly subheading text that lost a leading zero and landed in the wrong",
+    "                  chapter — '3073' reads 'Mussels' but sits in chapter 30, pharmaceuticals).",
+    "                  Setting one back to TRUE will not stick; they are filtered on every rebuild.",
     "  trade_terms   — semicolon-separated real-world names for this code. THIS IS THE IMPORTANT ONE.",
     "",
     "WHY trade_terms MATTERS:",
@@ -244,8 +261,10 @@ async function main() {
   const chapters = rows.filter((r) => r.level === "chapter").length;
   const headings = rows.filter((r) => r.level === "heading").length;
   const withTerms = rows.filter((r) => r.trade_terms).length;
+  const inactive = rows.filter((r) => !r.active).length;
   console.warn(
-    `Wrote ${outputPath}\n  ${chapters} chapters, ${headings} headings, ${withTerms} rows with trade terms.`,
+    `Wrote ${outputPath}\n  ${chapters} chapters, ${headings} headings, ${withTerms} rows with trade terms.` +
+      `\n  ${inactive} rows marked inactive (reserved chapters + headings with no subheadings under them).`,
   );
 }
 
