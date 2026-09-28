@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveDisplayName,
   disambiguateDisplayNames,
+  findOrphanHeadings,
   parseActiveFlag,
   parseGstRate,
   parseTradeTerms,
@@ -163,5 +164,54 @@ describe("disambiguateDisplayNames", () => {
       { code: "1002", displayName: "OTHER" },
     ]);
     expect(result.get("1002")).toBe("OTHER (1002)");
+  });
+});
+
+describe("findOrphanHeadings", () => {
+  it("keeps a heading that has 6-digit descendants", () => {
+    const orphans = findOrphanHeadings([
+      { code: "07", codeLength: 2 },
+      { code: "0307", codeLength: 4 },
+      { code: "030731", codeLength: 6 },
+    ]);
+    expect(orphans.has("0307")).toBe(false);
+  });
+
+  it("flags a heading with no descendants at all", () => {
+    // Real CBIC data carries "3073" — a length-4 row whose text is subheading 030731's ("Mussels"),
+    // left behind when a leading zero was lost. Chapter 30 is pharmaceuticals and has no heading 73,
+    // so nothing sits under it. 78 such rows exist, and each is a class the classifier could predict.
+    const orphans = findOrphanHeadings([
+      { code: "30", codeLength: 2 },
+      { code: "3073", codeLength: 4 },
+      { code: "3001", codeLength: 4 },
+      { code: "300110", codeLength: 6 },
+    ]);
+    expect(orphans.has("3073")).toBe(true);
+    expect(orphans.has("3001")).toBe(false);
+  });
+
+  it("accepts an 8-digit descendant as proof a heading is real", () => {
+    const orphans = findOrphanHeadings([
+      { code: "7320", codeLength: 4 },
+      { code: "73201011", codeLength: 8 },
+    ]);
+    expect(orphans.has("7320")).toBe(false);
+  });
+
+  it("never flags a chapter, which has headings rather than 6-digit descendants", () => {
+    const orphans = findOrphanHeadings([{ code: "77", codeLength: 2 }]);
+    expect(orphans.size).toBe(0);
+  });
+
+  it("does not let a sibling heading's descendant rescue an orphan", () => {
+    // "7320" must not be kept alive by "73210011", which sits under heading 7321.
+    const orphans = findOrphanHeadings([
+      { code: "7320", codeLength: 4 },
+      { code: "7321", codeLength: 4 },
+      { code: "73210011", codeLength: 8 },
+    ]);
+    expect(orphans.has("7320")).toBe(true);
+    expect(orphans.has("7321")).toBe(false);
   });
 });

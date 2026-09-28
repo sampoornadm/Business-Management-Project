@@ -82,6 +82,61 @@ export const HEADING_RATES: Record<string, number> = {
 };
 
 /**
+ * Expert labels for the evaluation set, matched against a real item description.
+ *
+ * These exist because "confirmed in the app" turned out not to mean "correct". Of the 19 codes a
+ * human had confirmed, 11 were wrong — nylon cable ties carried 8534 (printed circuits), 4452 and
+ * 8537 (control panels); a fibreglass sleeve carried 3926; the same PVC insulating tape carried
+ * four different codes across four rows. They are old bad suggestions somebody clicked Apply on,
+ * and scoring the classifier against them would measure agreement with the bug it replaces.
+ *
+ * Each entry is a judgement call with its reasoning stated. They are a starting point for the user
+ * to correct in ml/data/eval/real-items.csv, not an authority.
+ */
+export const EVAL_LABELS: { pattern: RegExp; heading: string; why: string }[] = [
+  {
+    pattern: /\bcable\s*tie\b/i,
+    heading: "3926",
+    why: "Nylon/plastic tie is an article of plastics, not an electrical part.",
+  },
+  {
+    pattern: /self\s*adhes\w*\s+pvc\s+insulating\s+tape|insulating\s+tape/i,
+    heading: "3919",
+    why: "Self-adhesive plate/sheet/tape of plastics.",
+  },
+  {
+    pattern: /aluminium\s+foil\s+tape/i,
+    heading: "3919",
+    why: "Classified by the self-adhesive tape form, not the foil backing.",
+  },
+  {
+    pattern: /fib(er|re)\s*glass|glass\s*fib(er|re)/i,
+    heading: "7019",
+    why: "Glass fibres and articles thereof.",
+  },
+  {
+    pattern: /disc\s+spring|belleville|preload\s+spring|cup\s+spring/i,
+    heading: "7320",
+    why: "A load-bearing spring element, not a 7318 fastener washer.",
+  },
+  {
+    pattern: /\b(socket|nipple|elbow|bend|tee|union|coupling|reducer)\b[\s\S]*\b(mild\s+steel|m\.s\.|steel|galvanis|galvaniz|is\s*:?\s*1239)/i,
+    heading: "7307",
+    why: "Threaded steel pipe fitting.",
+  },
+  {
+    pattern: /\bo-?ring\b/i,
+    heading: "4016",
+    why: "Vulcanised rubber article.",
+  },
+  {
+    pattern: /\bgasket\b/i,
+    heading: "8484",
+    why: "Gaskets and similar joints.",
+  },
+];
+
+/**
  * Real-world trade vocabulary that does NOT appear in CBIC's tariff text, keyed by 4-digit heading.
  *
  * This is the seed of the lexicon the classifier trains on, and the reason the sheet has a

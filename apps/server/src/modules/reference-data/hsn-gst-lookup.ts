@@ -157,3 +157,30 @@ export function disambiguateDisplayNames(rows: { code: string; displayName: stri
 
   return result;
 }
+
+/**
+ * 4-digit codes that no 6- or 8-digit code sits under — rows that look like headings but are not.
+ *
+ * CBIC's sheet carries 78 of them. Most lost a leading zero somewhere upstream, so subheading text
+ * landed at heading level in the wrong chapter: "3073" carries 030731's description ("Mussels"),
+ * filed under chapter 30, pharmaceuticals. The rest are junk of other kinds — nine copies of a
+ * chapter header at 6705-6713, chapter 85's header at 8352, and a row reading "AKASH test".
+ *
+ * They matter because each is a class the classifier can predict and a row the category picker
+ * shows. Every real heading in the tariff has at least one subheading beneath it, so having no
+ * descendants is what separates the fabricated ones from the real ones; checked against the live
+ * data this flags all 78 and nothing else.
+ */
+export function findOrphanHeadings(codes: { code: string; codeLength: number }[]): Set<string> {
+  const parented = new Set<string>();
+  for (const row of codes) {
+    if (row.codeLength > 4) parented.add(row.code.slice(0, 4));
+  }
+
+  const orphans = new Set<string>();
+  for (const row of codes) {
+    if (row.codeLength === 4 && !parented.has(row.code)) orphans.add(row.code);
+  }
+
+  return orphans;
+}
