@@ -60,6 +60,19 @@ describeWithModel("ClassificationService (needs a built model + index)", () => {
     expect(result.headingCode).toBeNull();
   }, 180_000);
 
+  it("picks up a rebuilt model after reload(), without restarting the process", async () => {
+    // The Settings rebuild swaps ml/models/current under a running server. Without this the process
+    // would keep serving the model it loaded at boot and the rebuild would appear to do nothing.
+    const reloadable = new ClassificationService({ modelDir, minConfidence: 0 });
+    const before = await reloadable.classify("SOCKET MATERIAL : MILD STEEL, IS:1239");
+
+    await reloadable.reload();
+    const after = await reloadable.classify("SOCKET MATERIAL : MILD STEEL, IS:1239");
+
+    expect(after.headingCode).toBe(before.headingCode);
+    expect(after.similarity).toBeCloseTo(before.similarity, 6);
+  }, 180_000);
+
   it("loads the model once and reuses it across calls", async () => {
     const started = Date.now();
     await service.classify("GALVANISED STEEL ELBOW 25MM");

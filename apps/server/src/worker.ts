@@ -1,6 +1,7 @@
 import { env } from "./config/env.js";
 import { hsnSacRefreshQueue, tenderReminderQueue } from "./infra/queue/queues.js";
 import { startAiEnrichmentWorker } from "./infra/queue/workers/ai-enrichment.worker.js";
+import { startClassificationRebuildWorker } from "./infra/queue/workers/classification-rebuild.worker.js";
 import { startDocumentIndexingWorker } from "./infra/queue/workers/document-indexing.worker.js";
 import { startEmailWorker } from "./infra/queue/workers/email.worker.js";
 import { startHsnSacRefreshWorker } from "./infra/queue/workers/hsn-sac-refresh.worker.js";
@@ -12,6 +13,7 @@ import { logger } from "./shared/logger/logger.js";
 const emailWorker = startEmailWorker();
 const tenderReminderWorker = startTenderReminderWorker();
 const hsnSacRefreshWorker = startHsnSacRefreshWorker();
+const classificationRebuildWorker = startClassificationRebuildWorker();
 const localDocsWatcher = env.LOCAL_DOCS_SYNC_ENABLED
   ? await startLocalDocsWatcher(env.BUSINESSES_ROOT_DIR)
   : undefined;
@@ -47,7 +49,7 @@ await hsnSacRefreshQueue.add(
 );
 
 logger.info(
-  `Background worker process started (email queue, tender reminders${localDocsWatcher ? ", local docs sync" : ""}${incomingTendersWatcher ? ", incoming tenders ingestion" : ""}${aiEnrichmentWorker ? ", AI enrichment" : ""}${documentIndexingWorker ? ", document indexing" : ""})`,
+  `Background worker process started (email queue, tender reminders${localDocsWatcher ? ", local docs sync" : ""}${incomingTendersWatcher ? ", incoming tenders ingestion" : ""}${aiEnrichmentWorker ? ", AI enrichment" : ""}${documentIndexingWorker ? ", document indexing" : ""}, classifier rebuild)`,
 );
 
 async function shutdown(signal: string): Promise<void> {
@@ -56,6 +58,7 @@ async function shutdown(signal: string): Promise<void> {
     emailWorker.close(),
     tenderReminderWorker.close(),
     hsnSacRefreshWorker.close(),
+    classificationRebuildWorker.close(),
     localDocsWatcher?.close(),
     incomingTendersWatcher?.close(),
     aiEnrichmentWorker?.close(),

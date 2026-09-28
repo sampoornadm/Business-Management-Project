@@ -16,24 +16,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { prisma } from "../src/infra/prisma/client.js";
-import {
-  buildExamples,
-  splitExamples,
-  summarise,
-  type TrainingExample,
-} from "../src/modules/reference-data/hsn-dataset.builder.js";
-import { readLookupSheet } from "../src/modules/reference-data/hsn-gst-lookup.reader.js";
-import { HsnTaxonomyImportService } from "../src/modules/reference-data/hsn-taxonomy-import.service.js";
+import { buildDatasets } from "../src/modules/reference-data/hsn-dataset.writer.js";
+import { ReferenceDataRepository } from "../src/modules/reference-data/reference-data.repository.js";
 
 import { EVAL_LABELS } from "./hsn-gst-seed-data.js";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const GENERATED_DIR = path.join(REPO_ROOT, "ml/data/generated");
 const EVAL_DIR = path.join(REPO_ROOT, "ml/data/eval");
 
-function toJsonl(examples: TrainingExample[]): string {
-  return examples.map((e) => JSON.stringify(e)).join("\n") + "\n";
-}
+// Hand-wired, like import-hsn-sac.ts: importing reference-data.module.ts would pull in the
+// Redis-backed queues and the script would never exit.
+const referenceDataRepository = new ReferenceDataRepository(prisma);
 
 function csvCell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
@@ -100,26 +93,9 @@ async function buildEvalSet(): Promise<{
 }
 
 async function main() {
-  const sheetPath = HsnTaxonomyImportService.resolveSheetPath(REPO_ROOT);
-  const sheet = await readLookupSheet(sheetPath);
-
-  const tariff = await prisma.hsnCode.findMany({
-    where: { codeLength: { in: [6, 8] } },
-    select: { code: true, description: true, codeLength: true },
-    orderBy: { code: "asc" },
-  });
-
-  const { examples, conflicts } = buildExamples(sheet, tariff);
-  const { train, validation } = splitExamples(examples);
-  const stats = summarise(examples);
-
-  await mkdir(GENERATED_DIR, { recursive: true });
-  await writeFile(path.join(GENERATED_DIR, "train.jsonl"), toJsonl(train));
-  await writeFile(path.join(GENERATED_DIR, "validation.jsonl"), toJsonl(validation));
-  await writeFile(
-    path.join(GENERATED_DIR, "stats.json"),
-    JSON.stringify({ ...stats, train: train.length, validation: validation.length, conflicts }, null, 2) + "\n",
-  );
+  // The corpus itself is written by the same code the Settings rebuild runs, so the two cannot
+  // drift. This script adds the evaluation set, which the rebuild deliberately never regenerates.
+  const stats = await buildDatasets(REPO_ROOT, referenceDataRepository);
 
   const evalSet = await buildEvalSet();
   await mkdir(EVAL_DIR, { recursive: true });
@@ -127,14 +103,11 @@ async function main() {
 
   console.warn(
     [
-      `corpus:      ${stats.total} examples across ${stats.headings} headings, ${stats.chapters} chapters`,
-      `  by source: ${JSON.stringify(stats.bySource)}`,
-      `  curated:   ${stats.headingsWithLexicon} headings have trade terms`,
-      `  per class: min ${stats.minPerHeading}, median ${stats.medianPerHeading}`,
-      `split:       ${train.length} train / ${validation.length} validation`,
+      `corpus:      ${stats.examples} examples across ${stats.headings} headings, ${stats.chapters} chapters`,
+      `split:       ${stats.train} train / ${stats.validation} validation`,
       `eval set:    ${evalSet.total} distinct real items, ${evalSet.seeded} with a seeded expected label`,
       `             ${evalSet.appDisagrees} of those contradict the code confirmed in the app`,
-      conflicts.length > 0 ? `conflicts:   ${conflicts.length} (see stats.json)` : "conflicts:   none",
+      stats.conflicts > 0 ? `conflicts:   ${stats.conflicts} (see stats.json)` : "conflicts:   none",
     ].join("\n"),
   );
 }

@@ -8,9 +8,9 @@ import { billsRouter } from "../modules/bills/bills.module.js";
 import { boqItemsRouter, boqRouter } from "../modules/boq/boq.module.js";
 import { businessesRouter } from "../modules/businesses/businesses.module.js";
 import { categoriesRouter } from "../modules/categories/categories.module.js";
+import { classificationRouter } from "../modules/classification/classification.module.js";
 import { contactsRouter } from "../modules/contacts/contacts.module.js";
 import { documentGenerationRouter } from "../modules/document-generation/document-generation.module.js";
-import { itemsRouter } from "../modules/items/items.module.js";
 import {
   bankAccountsRouter,
   expensesRouter,
@@ -18,6 +18,7 @@ import {
   invoicesRouter,
   purchaseOrderPaymentsRouter,
 } from "../modules/finance/finance.module.js";
+import { itemsRouter } from "../modules/items/items.module.js";
 import { notificationsRouter } from "../modules/notifications/notifications.module.js";
 import { organizationsRouter } from "../modules/organizations/organizations.module.js";
 import { permissionsRouter } from "../modules/permissions/permissions.module.js";
@@ -59,6 +60,7 @@ v1Router.use("/tenders", boqRouter);
 v1Router.use("/boq-items", boqItemsRouter);
 v1Router.use("/rates", ratesRouter);
 v1Router.use("/reference-data", referenceDataRouter);
+v1Router.use("/classification", classificationRouter);
 v1Router.use("/vendors", vendorsRouter);
 v1Router.use("/categories", categoriesRouter);
 v1Router.use("/contacts", contactsRouter);

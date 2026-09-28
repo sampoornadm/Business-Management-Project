@@ -62,6 +62,7 @@ model User {
   createdExpenses        Expense[]              @relation("ExpenseCreatedBy")
   recordedPayments       Payment[]              @relation("PaymentRecordedBy")
   referenceDataImports   ReferenceDataImport[]  @relation("ReferenceDataImportTriggeredBy")
+  classificationRuns     ClassificationRun[]    @relation("ClassificationRunTriggeredBy")
   settingsUpdated        Setting[]              @relation("SettingUpdatedBy")
 
   createdAt DateTime @default(now())
@@ -725,6 +726,37 @@ model ReferenceDataImport {
 
   @@index([dataset, importedAt])
   @@map("reference_data_imports")
+}
+
+/// One run of the classifier rebuild: sheet -> taxonomy -> datasets -> training -> deploy.
+/// The UI polls this; there is no job-progress mechanism in this codebase, and ReferenceDataImport
+/// is the established precedent for "a row per run, read back by a status endpoint".
+model ClassificationRun {
+  id     String @id @default(uuid())
+  /// Which step it is on, so a stalled run says where it stalled rather than just "running".
+  stage  String
+  /// queued | running | succeeded | failed | skipped
+  status String
+  /// Human-readable detail for the card: what happened, or why it refused to deploy.
+  message String?
+
+  trainedRows      Int?
+  evalAccuracy     Float?
+  evalTopK         Float?
+  /// What the previous deployed model scored on the same items. A run that cannot beat this is
+  /// reported and discarded rather than shipped.
+  baselineAccuracy Float?
+  deployed         Boolean @default(false)
+  /// Relative path of the run's artifacts under ml/runs, so a result can be opened and shared.
+  runPath          String?
+
+  triggeredById String?
+  triggeredBy   User?     @relation("ClassificationRunTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+
+  @@index([startedAt])
+  @@map("classification_runs")
 }
 
 model Setting {
