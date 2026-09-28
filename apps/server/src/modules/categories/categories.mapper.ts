@@ -42,12 +42,20 @@ export function buildPathMap(rows: CategoryRow[]): Map<string, string> {
   return cache;
 }
 
-/** Leaf nodes (no children) with their full path — what item pickers and the AI choose from. */
+/**
+ * Leaf nodes (no children) with their full path — what item pickers and the AI choose from.
+ *
+ * Inactive nodes are excluded: the tariff taxonomy contains entries nothing can legitimately be
+ * classified as (chapter 77 is literally "Reserved for possible future use", and a business can
+ * switch off chapters it never buys from). They stay in the tree for the admin UI, but they must
+ * never be offered as a choice.
+ */
 export function flattenLeaves(rows: CategoryRow[]): CategoryLeafDto[] {
-  const parentIds = new Set(rows.map((r) => r.parentId).filter((id): id is string => Boolean(id)));
+  const active = rows.filter((r) => r.active);
+  const parentIds = new Set(active.map((r) => r.parentId).filter((id): id is string => Boolean(id)));
   const paths = buildPathMap(rows);
-  return rows
+  return active
     .filter((r) => !parentIds.has(r.id))
-    .map((r) => ({ id: r.id, name: r.name, path: paths.get(r.id) ?? r.name }))
+    .map((r) => ({ id: r.id, name: r.name, path: paths.get(r.id) ?? r.name, code: r.code ?? null }))
     .sort((a, b) => a.path.localeCompare(b.path));
 }

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@bmp/database";
 
 const categoryArgs = {
-  select: { id: true, parentId: true, name: true, sortOrder: true },
+  select: { id: true, parentId: true, name: true, sortOrder: true, code: true, active: true },
 } satisfies Prisma.CategoryDefaultArgs;
 
 export type CategoryRow = Prisma.CategoryGetPayload<typeof categoryArgs>;
