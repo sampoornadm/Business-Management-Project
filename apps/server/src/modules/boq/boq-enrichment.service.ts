@@ -11,6 +11,7 @@ import type {
   HistoricalRateMatch,
   IHistoricalRatesRepository,
 } from "../rates/rates.repository.js";
+import type { IHsnClassifier } from "../classification/classification.service.js";
 import { matchHsnByKeyword } from "../reference-data/hsn-keyword-rules.js";
 import { buildHsnMatchPrompt, parseHsnMatch } from "../reference-data/hsn-matcher.js";
 import type { IReferenceDataRepository } from "../reference-data/reference-data.repository.js";
@@ -113,6 +114,7 @@ export class BoqEnrichmentService {
     private readonly referenceDataRepository: IReferenceDataRepository,
     private readonly settingsService: SettingsService,
     private readonly categoriesService: CategoriesService,
+    private readonly classifier: IHsnClassifier,
   ) {}
 
   /**
@@ -226,8 +228,23 @@ export class BoqEnrichmentService {
     unit: string | null,
     vector: number[],
   ): Promise<{ code: string; description: string } | null> {
-    // Checked before the ANN/LLM path — cheaper, and a measured fix for phrasing that path gets
-    // wrong. See hsn-keyword-rules.ts for the grounding and the real mismatches it corrects.
+    // The trained classifier owns this decision when it is installed. It answers from the item text
+    // alone in one forward pass, where the path below needed an embedding lookup plus an LLM call
+    // and still scored 0 correct out of 22 on real purchase-order lines.
+    if (await this.classifier.isAvailable()) {
+      const minConfidence = await this.settingsService.get<number>("CLASSIFIER_MIN_CONFIDENCE");
+      const result = await this.classifier.classify(description);
+
+      // Abstention is an answer. Below the calibrated threshold the item is left unclassified
+      // rather than handed a guess — there is deliberately no second opinion to fall through to,
+      // because the thing it would fall through to is what this replaced.
+      if (result.abstained || !result.headingCode) return null;
+      if (result.confidence < minConfidence) return null;
+      return { code: result.headingCode, description: "" };
+    }
+
+    // No model installed — a fresh clone, or a deployment where ml/train has not run. Keep doing
+    // what the app did before rather than silently stopping: worse, but not nothing.
     const keywordMatch = matchHsnByKeyword(description);
     if (keywordMatch) return keywordMatch;
 

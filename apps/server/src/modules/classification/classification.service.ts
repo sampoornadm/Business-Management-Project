@@ -26,6 +26,14 @@ import {
  * vector index, and every call after that is arithmetic over memory.
  */
 
+/**
+ * The narrow surface enrichment depends on, so a test can substitute a fake without a 470 MB model.
+ */
+export interface IHsnClassifier {
+  isAvailable(): Promise<boolean>;
+  classify(text: string): Promise<Classification>;
+}
+
 export interface ClassificationServiceOptions {
   modelDir?: string;
   /**
@@ -44,7 +52,7 @@ interface IndexFile {
   vectors: string;
 }
 
-export class ClassificationService {
+export class ClassificationService implements IHsnClassifier {
   private readonly modelDir: string;
   private readonly minConfidence: number;
   private loading: Promise<{ embedder: Embedder; index: IndexEntry[] }> | null = null;
