@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ServiceUnavailableError } from "../../../core/errors/HttpErrors.js";
 import { cosineSimilarity } from "../../../shared/utils/math.js";
 import type { CategoriesService } from "../../categories/categories.service.js";
+import type { IHsnClassifier } from "../../classification/classification.service.js";
 import type { IItemsRepository, NearestConfirmedMatch } from "../../items/items.repository.js";
 import type {
   CreateHistoricalRateData,
@@ -16,7 +17,6 @@ import type {
 } from "../../rates/rates.repository.js";
 import type { HsnCandidate, IReferenceDataRepository } from "../../reference-data/reference-data.repository.js";
 import type { SettingsService } from "../../settings/settings.service.js";
-import type { IHsnClassifier } from "../../classification/classification.service.js";
 import { BoqEnrichmentService } from "../boq-enrichment.service.js";
 import type {
   BoqItemWithBreakdown,

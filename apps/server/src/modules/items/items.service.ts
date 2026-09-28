@@ -1,4 +1,3 @@
-import type { IHsnClassifier } from "../classification/classification.service.js";
 
 import type {
   CategoryLeafDto,
@@ -22,6 +21,7 @@ import { embed, generateJson } from "../../infra/llm/ollama.client.js";
 import { logger } from "../../shared/logger/logger.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { CategoriesService } from "../categories/categories.service.js";
+import type { IHsnClassifier } from "../classification/classification.service.js";
 import type { RfqService } from "../rfq/rfq.service.js";
 
 import {
