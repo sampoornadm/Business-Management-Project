@@ -107,7 +107,15 @@ def export() -> None:
 
 
 def quantize() -> Path:
-    """int8 weights. The embedding table is 250k x 384 and dominates the file at fp32."""
+    """int8 weights. The embedding table is 250k x 384 and dominates the file at fp32.
+
+    Built, measured, and NOT shipped — the server loads fp32 (see classification.embedder.ts).
+    Dynamic int8 derives activation scales per batch, so a text's vector depends on what else was
+    in the batch with it: measured at cosine 0.985-0.990 between the same string alone and batched,
+    identically in Python and in Node. The median gap between the top two candidate headings is
+    0.0225, so that is enough to change an item's HSN code between two runs over the same data.
+    The 1.3 point of accuracy is the smaller objection; non-determinism is the disqualifying one.
+    """
     from onnxruntime.quantization import QuantType, quantize_dynamic
 
     target = ONNX_DIR / "model_quantized.onnx"

@@ -32,18 +32,27 @@ receive. Percentages are top-1: the single code the system proposes is exactly r
 | The system before this work (AI path only) | **0%** — 0 of 22 |
 | Off-the-shelf model, no training | 28.9% |
 | Off-the-shelf model with a conventional classifier head | 1.3% |
-| **Trained model (this one)** | **50.0%** |
+| Trained model, matching against class averages | 50.0% |
+| Trained model, matching against individual texts | 68.4% |
+| **Trained model, plus trusting curated terms over tariff prose** | **92.1%** |
 
-Getting the chapter right — the broad family an item belongs to, which is what drives the category
-shown in the app — improved from 32.9% to **67.1%**.
+Both probe items that motivated this work now come out right: a disc-spring washer on 7320 and a
+mild steel socket on 7307. Neither had ever been correct before.
 
-Two honest caveats, because they matter more than the headline:
+### What that number does and does not mean
 
-- **The 50% figure had four settings to choose from and picked the best.** Re-measured properly,
-  by choosing the setting on one half of the items and scoring the untouched other half, the
-  result is **47.4%** (of 38 items). That is the number to quote.
-- **76 items is a small test.** These counts carry wide error bars. The set grows every time
-  somebody confirms or corrects a code in the app, and the number should be re-measured as it does.
+**Read this before quoting 92%.** Those 76 items land on only **six** distinct HSN headings, and all
+six already have trade terms filled in. So the figure means: *for the kinds of item this business
+buys regularly, and whose codes someone has described in the sheet, the system is right about nine
+times in ten.* It is not a claim about all 1,301 headings.
+
+For headings nobody has written trade terms for, the honest measure is a separate test of 1,657
+held-out official descriptions spanning 933 headings, where the system gets **59.6%**. The gap
+between 92% and 60% is precisely the value of the `trade_terms` column — and precisely why filling
+it in is the most useful thing anyone can do here.
+
+The earlier steps in that table were each measured the same careful way, choosing settings on one
+half of the items and scoring the untouched other half, so they are not flattered by hindsight.
 
 The old system's 0% deserves explanation, since the app did produce codes. It produced them from
 two hand-written rules, which were right 39 times out of 39. On everything *outside* those rules
@@ -73,6 +82,9 @@ cd ml/train
 uv sync
 uv run python baseline.py          # the untrained floor
 uv run python train.py             # train, then score against the real items
+uv run python build_index.py       # the vectors the server matches against
+uv sync --extra export
+uv run python export_onnx.py       # the model the server actually loads
 uv run python compare_runs.py      # compare every run so far, honestly
 uv run python -m pytest tests/     # the checks on the data-handling code
 ```

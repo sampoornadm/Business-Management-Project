@@ -23,6 +23,7 @@
     "@aws-sdk/s3-request-presigner": "^3.716.0",
     "@bmp/database": "workspace:*",
     "@bmp/types": "workspace:*",
+    "@huggingface/transformers": "^4.3.0",
     "bcrypt": "^5.1.1",
     "bullmq": "^5.34.3",
     "chokidar": "^5.0.0",
