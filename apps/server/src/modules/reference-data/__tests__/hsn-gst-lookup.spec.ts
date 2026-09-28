@@ -62,6 +62,14 @@ describe("deriveDisplayName", () => {
     expect(deriveDisplayName("   ")).toBe("");
   });
 
+  it("keeps the text when the whole description is one parenthetical", () => {
+    // Real chapter 77, which HS reserves for future use. Stripping the parenthetical leaves
+    // nothing, and a blank label fails the taxonomy import outright.
+    expect(deriveDisplayName("(Reserved for possible future use)")).toBe(
+      "Reserved for possible future use",
+    );
+  });
+
   it("collapses whitespace from multi-line cells", () => {
     expect(deriveDisplayName("IRON\n  AND   STEEL")).toBe("Iron and steel");
   });

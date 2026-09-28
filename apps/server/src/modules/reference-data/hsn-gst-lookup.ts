@@ -56,8 +56,17 @@ const BOUNDARIES = [";", " : ", ":", ", "];
  * open with a bare enumeration ("SCREWS, BOLTS, NUTS, ...").
  */
 export function deriveDisplayName(description: string, maxLength = DISPLAY_NAME_MAX): string {
-  const clean = description
+  const normalized = description.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+
+  // Chapter 77 is literally "(Reserved for possible future use)" — all parenthetical. Dropping the
+  // digression must not drop the whole label, so fall back to the text with the brackets removed.
+  const withoutAsides = normalized
     .replace(/\([^)]*\)/g, " ") // "INSULATED (INCLUDING ENAMELLED...) WIRE" -> "INSULATED WIRE"
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const clean = (withoutAsides || normalized.replace(/[()]/g, " "))
     .replace(/\s+/g, " ")
     .replace(/\s+([,;:])/g, "$1")
     .trim();

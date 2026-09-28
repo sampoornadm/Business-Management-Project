@@ -33,6 +33,7 @@ import {
 import {
   CHAPTER_RATES,
   HEADING_RATES,
+  INACTIVE_CODES,
   RATE_EFFECTIVE_FROM,
   TRADE_TERMS,
 } from "./hsn-gst-seed-data.js";
@@ -149,7 +150,9 @@ async function buildRows(existing: Map<string, Partial<LookupRow>>): Promise<Loo
       gst_rate: edit?.gst_rate ?? seeded.rate,
       rate_source: edit?.rate_source ?? seeded.source,
       effective_from: RATE_EFFECTIVE_FROM,
-      active: edit?.active ?? true,
+      // INACTIVE_CODES wins over a stored value: these are unusable in the nomenclature itself
+      // (chapter 77 is reserved), not a preference the user gets to override.
+      active: INACTIVE_CODES.has(record.code) ? false : (edit?.active ?? true),
       trade_terms: edit?.trade_terms ?? (TRADE_TERMS[record.code]?.join("; ") ?? ""),
     };
   });

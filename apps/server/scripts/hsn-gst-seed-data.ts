@@ -57,6 +57,16 @@ export const CHAPTER_RATES: Record<string, number> = {
 };
 
 /**
+ * Codes that exist in the tariff but must never be offered as a classification. They are written to
+ * the sheet with active = FALSE, and flattenLeaves drops inactive nodes from every picker.
+ */
+export const INACTIVE_CODES = new Set([
+  // HS reserves chapter 77 for future use; it has no headings, so without this it would surface as
+  // a selectable leaf reading "Reserved for possible future use".
+  "77",
+]);
+
+/**
  * Heading-level overrides where the chapter default is wrong. Deliberately short — every entry
  * here is one somebody has to keep correct, so only genuine exceptions belong.
  */

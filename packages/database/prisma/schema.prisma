@@ -686,6 +686,10 @@ model HsnCode {
   embedding       Float[]
   embeddedAt      DateTime?
   embeddingVector Unsupported("vector(1024)")?
+  /// GST percent, imported from ml/data/hsn-gst-lookup.xlsx. CBIC's HSN sheet carries no rates.
+  gstRate         Float?
+  /// Where the rate came from: "notification-9/2025", "chapter-default" or "manual".
+  gstRateSource   String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -1072,10 +1076,16 @@ model Item {
   @@map("items")
 }
 
-// Editable classification taxonomy. Self-referencing for tiers: top-level trades have
-// parentId = null, their subcategories point back at them. Two tiers today, a third needs
-// no migration. Global (not per-business) — trades are universal; scope by businessId later
-// if a business needs its own tree. Items reference a leaf (subcategory) node.
+// Classification taxonomy, derived from the official CBIC HSN/SAC tariff. Self-referencing for
+// tiers: chapters (2-digit) have parentId = null, headings (4-digit) point back at them. Global
+// (not per-business) — the tariff is national. Items reference a leaf (heading) node.
+//
+// `code` is the 2- or 4-digit tariff code and is the real identity: a heading's code IS its HSN
+// code, so classifying an item also yields its HSN. Rows are rebuilt from ml/data/hsn-gst-lookup.xlsx.
+//
+// Note there is deliberately no @@unique([parentId, name]): 15 heading descriptions repeat inside a
+// single chapter in the real CBIC data, so a name cannot identify a row. Nodes predating the tariff
+// taxonomy have a null code and are kept only while an Item still points at one.
 model Category {
   id       String     @id @default(uuid())
   parentId String?
@@ -1085,13 +1095,22 @@ model Category {
   name      String
   sortOrder Int    @default(0)
 
+  /// 2-digit chapter or 4-digit heading. Null only for pre-tariff legacy nodes.
+  code String? @unique
+  /// Verbatim CBIC text. `name` is the shortened, editable label shown in pickers.
+  officialDescription String?
+  /// GST percent for this code, from the lookup sheet.
+  gstRate Float?
+  /// False hides a chapter/heading the business never buys from, without losing coverage.
+  active Boolean @default(true)
+
   items Item[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([parentId, name])
   @@index([parentId])
+  @@index([active])
   @@map("categories")
 }
 
