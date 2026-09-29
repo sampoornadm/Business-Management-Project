@@ -10,7 +10,6 @@
   },
   "scripts": {
     "generate": "prisma generate",
-    "migrate:dev": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:reset": "prisma migrate reset",
     "seed": "tsx prisma/seed.ts",
@@ -19,7 +18,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "clean": "rm -rf generated dist .turbo"
+    "clean": "rm -rf generated dist .turbo",
+    "migrate:create": "prisma migrate dev --create-only"
   },
   "dependencies": {
     "@bmp/types": "workspace:*",

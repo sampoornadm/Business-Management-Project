@@ -2,25 +2,41 @@
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
   "envMode": "loose",
-  "globalDependencies": [".env"],
+  "globalDependencies": [
+    ".env"
+  ],
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "dist/**"
+      ]
     },
     "dev": {
       "cache": false,
       "persistent": true
     },
     "lint": {
-      "dependsOn": ["^build"]
+      "dependsOn": [
+        "^build"
+      ]
     },
     "typecheck": {
-      "dependsOn": ["^build"]
+      "dependsOn": [
+        "^build"
+      ]
     },
     "test": {
-      "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "coverage/**"
+      ]
     },
     "clean": {
       "cache": false
@@ -28,10 +44,13 @@
     "generate": {
       "cache": false
     },
-    "migrate:dev": {
+    "seed": {
       "cache": false
     },
-    "seed": {
+    "migrate:deploy": {
+      "cache": false
+    },
+    "migrate:create": {
       "cache": false
     }
   }
