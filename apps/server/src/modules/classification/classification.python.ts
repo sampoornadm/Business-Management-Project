@@ -35,7 +35,12 @@ export const pythonRunner: PythonRunner = {
     logger.info({ script, args }, "Starting classifier training step");
 
     try {
-      const { stdout, stderr } = await run("uv", ["run", "python", script, ...args], {
+      // --extra export, always. export_onnx.py needs onnx/onnxruntime/onnxscript, which live in
+      // that optional group; plain `uv run` installs only the default dependencies and the step
+      // dies with ModuleNotFoundError. It only bites on a checkout where nobody has run
+      // `uv sync --extra export` by hand, which is to say every machine except the one it was
+      // developed on — and only at the third stage, after the training has already been paid for.
+      const { stdout, stderr } = await run("uv", ["run", "--extra", "export", "python", script, ...args], {
         cwd: TRAINER_DIR,
         timeout: TIMEOUT_MS,
         // The trainer prints progress to stdout and warnings to stderr; a few MB of both is normal.
