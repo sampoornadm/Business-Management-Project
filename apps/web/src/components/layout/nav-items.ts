@@ -11,6 +11,7 @@ import {
   Landmark,
   Package,
   Receipt,
+  Settings,
   ShieldCheck,
   ShoppingCart,
   Truck,
@@ -46,4 +47,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Roles & Permissions", href: "/settings/roles", icon: ShieldCheck, permission: "roles:read" },
   { label: "Audit Log", href: "/settings/audit-log", icon: FileClock, permission: "audit:read" },
   { label: "Businesses", href: "/businesses", icon: Briefcase, permission: "businesses:read" },
+  // The page has existed since Phase 1 but nothing ever linked to it — reachable only by typing
+  // the URL, which also made the classifier rebuild button undiscoverable.
+  { label: "Settings", href: "/settings", icon: Settings, permission: "settings:read" },
 ];
