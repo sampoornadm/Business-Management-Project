@@ -66,7 +66,7 @@ docker-compose.yml
 cp .env.example .env       # adjust values if needed
 pnpm install
 docker compose up -d postgres redis minio minio-init mailhog
-pnpm db:migrate             # applies Prisma migrations
+pnpm db:migrate             # applies existing Prisma migrations (`migrate deploy`)
 pnpm db:seed                # creates roles, permissions, and one sample user per role
 pnpm dev                    # runs web (:3000), server (:4000), and the email worker
 ```
@@ -115,7 +115,7 @@ pnpm build           # build all apps/packages
 pnpm lint            # lint all workspaces
 pnpm typecheck       # typecheck all workspaces
 pnpm test            # run backend + frontend test suites
-pnpm db:migrate      # apply Prisma migrations (dev)
+pnpm db:migrate      # apply existing Prisma migrations (runs `migrate deploy`)
 pnpm db:seed         # seed roles/permissions/sample users
 ```
 
