@@ -36,4 +36,10 @@ main()
     console.error(err);
     process.exitCode = 1;
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+    // Explicit exit, because this pulls in boq.module, which pulls in the BullMQ queues, whose
+    // Redis connections hold the event loop open forever — the run finishes and the process does
+    // not. Same reason import-hsn-sac.ts hand-wires its repository instead of importing a module.
+    process.exit(process.exitCode ?? 0);
+  });
