@@ -93,6 +93,7 @@ export class ClassificationRebuildService {
     try {
       await enter("taxonomy");
       const taxonomy = await this.deps.importTaxonomy();
+      logger.info({ runId: run.id, ...taxonomy }, "Rebuilt the category tree from the sheet");
 
       await enter("datasets");
       const datasets = await this.deps.buildDatasets();
