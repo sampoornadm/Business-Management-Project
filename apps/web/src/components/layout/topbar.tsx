@@ -14,7 +14,7 @@ import {
   Skeleton,
   useToast,
 } from "@bmp/ui";
-import { LogOut, Menu, Settings, UserRound } from "lucide-react";
+import { LogOut, Menu, MonitorSmartphone, Settings, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment } from "react";
@@ -23,6 +23,7 @@ import { useLogout } from "@/hooks/use-auth";
 import { useSwitchBusiness } from "@/hooks/use-switch-business";
 import { useAuthStore } from "@/lib/auth-store";
 import { useBreadcrumbStore } from "@/lib/breadcrumb-store";
+import { hasPermission } from "@/lib/permissions";
 
 import { NotificationBell } from "./notification-bell";
 import { ThemeToggle } from "./theme-toggle";
@@ -94,6 +95,8 @@ export function Topbar({ onMenuClick }: TopbarProps) {
   const user = useAuthStore((state) => state.user);
   const activeBusinessId = useAuthStore((state) => state.activeBusinessId);
   const availableBusinesses = useAuthStore((state) => state.availableBusinesses);
+  // Gated so the entry never leads to the page's own "you don't have access" message.
+  const canReadSettings = hasPermission(user?.role.name, "settings:read");
   const logout = useLogout();
   const switchBusiness = useSwitchBusiness();
   const { toast } = useToast();
@@ -171,9 +174,16 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                 <UserRound className="mr-2 h-4 w-4" /> Profile
               </Link>
             </DropdownMenuItem>
+            {canReadSettings && (
+              <DropdownMenuItem asChild>
+                <Link href="/settings">
+                  <Settings className="mr-2 h-4 w-4" /> Settings
+                </Link>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem asChild>
               <Link href="/settings/sessions">
-                <Settings className="mr-2 h-4 w-4" /> Sessions
+                <MonitorSmartphone className="mr-2 h-4 w-4" /> Active sessions
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
