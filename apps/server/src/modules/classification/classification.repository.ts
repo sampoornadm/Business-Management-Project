@@ -77,6 +77,15 @@ export class ClassificationRunRepository implements IClassificationRunRepository
     return running !== null;
   }
 
+  /** The run Cancel acts on. */
+  async findInProgress(): Promise<{ id: string; stage: string } | null> {
+    return this.prisma.classificationRun.findFirst({
+      where: { status: { in: ["queued", "running"] } },
+      orderBy: { startedAt: "desc" },
+      select: { id: true, stage: true },
+    });
+  }
+
   /**
    * Marks runs whose worker died as failed, so one lost job cannot disable the button forever.
    *
