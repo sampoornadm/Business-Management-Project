@@ -181,8 +181,8 @@ function ClassificationCard({ canManage }: { canManage: boolean }) {
             No model is installed yet. Press Update to build one from the current sheet.
           </p>
         ) : run ? (
-          <div className="space-y-2 rounded-md border p-3 text-sm">
-            <div className="flex items-center gap-2">
+          <div className="min-w-0 space-y-2 overflow-hidden rounded-md border p-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
               {inProgress ? (
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               ) : run.status === "succeeded" ? (
@@ -199,9 +199,16 @@ function ClassificationCard({ canManage }: { canManage: boolean }) {
                       ? "Rebuilt, but not used"
                       : "Last rebuild failed"}
               </span>
+              {/* Live position within the stage — a step counter is what distinguishes a long
+                  training run from a hung one, which the stage label alone cannot. */}
+              {inProgress && run.message && (
+                <span className="break-words text-xs text-muted-foreground">· {run.message}</span>
+              )}
             </div>
 
-            {run.message && <p className="text-muted-foreground">{run.message}</p>}
+            {!inProgress && run.message && (
+              <p className="break-words text-muted-foreground">{run.message}</p>
+            )}
 
             {run.evalAccuracy !== null && (
               <p className="text-muted-foreground">

@@ -90,6 +90,22 @@ const MAX_NOTES_CHARS = 16_000;
 // over quickly instead of the whole extraction request stalling indefinitely.
 const NOTES_CLEANUP_TIMEOUT_MS = 45_000;
 
+/**
+ * Total wall-clock the notes cleanup may spend, across every section.
+ *
+ * A per-section timeout cannot bound this request, because Ollama runs requests one at a time: the
+ * per-section calls queue rather than overlap, so the cost is their SUM. A real SAIL document has
+ * two sections at ~22 s each and took 50 s end to end, and every proxy in front of this API gives
+ * up first — Next's dev rewrite returns a bare `Internal Server Error` at about 30 s, with no JSON
+ * and no requestId, and nginx defaults to 60. The upstream kept working and finished fine; nobody
+ * was listening.
+ *
+ * So the endpoint finishes inside a budget and degrades instead of overrunning: sections that do
+ * not fit keep their raw extracted text, which is exactly what the AI-off path returns anyway.
+ * 20 s leaves room for PDF extraction (~3 s) inside a 30 s ceiling.
+ */
+const NOTES_TOTAL_BUDGET_MS = 20_000;
+
 // Narrower per-section counterpart to NOTES_PROMPT, used when parseIiscoNoteSections has already
 // found and bounded a section deterministically — the model's job shrinks from "find every
 // section yourself across the whole document AND copy it verbatim" (which a real document showed
@@ -247,13 +263,28 @@ export function cleanupNotes(markdown: string): string {
   return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+export interface TenderExtractionOptions {
+  /** Total wall-clock the AI notes cleanup may spend across ALL sections. */
+  notesBudgetMs?: number;
+}
+
+/** The section as it reads without the model — also what the AI-off path returns. */
+function rawSectionText(section: ExtractedSection): string {
+  return `## ${section.heading}\n${section.text.replace(/\s+/g, " ").trim()}`;
+}
+
 export class TenderExtractionService {
+  private readonly notesBudgetMs: number;
+
   constructor(
     private readonly organizationsRepository: IOrganizationsRepository,
     private readonly generateJson: GenerateJsonFn,
     private readonly extractText: ExtractTextFn,
     private readonly generateText: GenerateTextFn,
-  ) {}
+    options: TenderExtractionOptions = {},
+  ) {
+    this.notesBudgetMs = options.notesBudgetMs ?? NOTES_TOTAL_BUDGET_MS;
+  }
 
   private async matchClient(
     clientName: string,
@@ -317,9 +348,26 @@ export class TenderExtractionService {
     // Promise.all preserves input-array order in its result regardless of resolution order, and
     // `sections` is already in fixed document order — no manual reassembly/sorting needed to keep
     // the final notes text in the right order even though the calls race each other.
-    const cleanedParts = await Promise.all(
-      sections.map((section) => this.cleanSection(section, warnings, aiNotesEnabled)),
-    );
+    // Sequential, not Promise.all: Ollama serialises anyway, so racing them only hid the fact
+    // that the total was the sum — and a deadline cannot stop work that has all been started.
+    const deadline = Date.now() + this.notesBudgetMs;
+    const cleanedParts: string[] = [];
+    let ranOutOfTime = false;
+
+    for (const section of sections) {
+      if (Date.now() >= deadline) {
+        ranOutOfTime = true;
+        cleanedParts.push(rawSectionText(section));
+        continue;
+      }
+      cleanedParts.push(await this.cleanSection(section, warnings, aiNotesEnabled));
+    }
+
+    if (ranOutOfTime) {
+      warnings.push(
+        "AI notes cleanup ran out of time — the remaining sections use the raw extracted text.",
+      );
+    }
     return cleanupNotes(cleanedParts.join("\n\n")) || undefined;
   }
 
@@ -328,7 +376,7 @@ export class TenderExtractionService {
     warnings: string[],
     aiNotesEnabled: boolean,
   ): Promise<string> {
-    const raw = `## ${section.heading}\n${section.text.replace(/\s+/g, " ").trim()}`;
+    const raw = rawSectionText(section);
     if (!aiNotesEnabled) return raw;
     try {
       const cleaned = stripCodeFence(

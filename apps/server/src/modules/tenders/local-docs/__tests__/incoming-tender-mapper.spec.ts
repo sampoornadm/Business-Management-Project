@@ -1,6 +1,6 @@
+import type { TenderExtractionFields } from "@bmp/types";
 import { describe, expect, it } from "vitest";
 
-import type { TenderExtractionFields } from "@bmp/types";
 
 import { buildDraftTenderData } from "../incoming-tender-mapper.js";
 

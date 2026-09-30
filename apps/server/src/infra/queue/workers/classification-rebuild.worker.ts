@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { Worker } from "bullmq";
 
 import { boqEnrichmentService } from "../../../modules/boq/boq.module.js";
+import { summariseTrainerError } from "../../../modules/classification/classification.errors.js";
 import { classificationService } from "../../../modules/classification/classification.module.js";
 import { pythonRunner } from "../../../modules/classification/classification.python.js";
 import { ClassificationRebuildService } from "../../../modules/classification/classification.rebuild.service.js";
@@ -86,7 +87,7 @@ export function startClassificationRebuildWorker(): Worker {
     const runId = job?.data?.runId;
     if (runId) {
       void runRepository
-        .failRun(runId, `Rebuild stopped: ${err.message}. Nothing was deployed.`)
+        .failRun(runId, `Rebuild stopped: ${summariseTrainerError(err.message)} Nothing was deployed.`)
         .catch((updateErr) => logger.error({ runId, err: updateErr }, "Could not record the failure"));
     }
   });

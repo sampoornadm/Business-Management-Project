@@ -7,6 +7,7 @@ import { redis } from "../../infra/redis/client.js";
 import { logger } from "../../shared/logger/logger.js";
 
 import { TrainerRegistry } from "./classification.cancel.js";
+import { parseProgressLine } from "./classification.progress.js";
 import type { PythonRunner } from "./classification.rebuild.service.js";
 
 /**
@@ -38,7 +39,11 @@ const TIMEOUT_MS = 30 * 60 * 1000;
  * no-op, and can still serve the model that was trained elsewhere.
  */
 export const pythonRunner: PythonRunner = {
-  async run(script: string, args: string[] = []): Promise<{ stdout: string }> {
+  async run(
+    script: string,
+    args: string[] = [],
+    onProgress?: (label: string) => void,
+  ): Promise<{ stdout: string }> {
     const started = Date.now();
     logger.info({ script, args }, "Starting classifier training step");
 
@@ -60,6 +65,21 @@ export const pythonRunner: PythonRunner = {
       // python child with it, since uv runs it in its own process group.
       const pid = pending.child.pid;
       if (pid) await trainerRegistry.remember(pid);
+
+      // Read stdout as it arrives rather than only at exit. execFile still buffers the whole thing
+      // for the return value; this is purely so a step that takes minutes can say where it is.
+      if (onProgress) {
+        let carry = "";
+        pending.child.stdout?.on("data", (chunk: Buffer) => {
+          const lines = (carry + chunk.toString()).split("\n");
+          // The last element is whatever arrived without a newline yet.
+          carry = lines.pop() ?? "";
+          for (const line of lines) {
+            const progress = parseProgressLine(line);
+            if (progress) onProgress(progress.label);
+          }
+        });
+      }
 
       const { stdout, stderr } = await pending;
       await trainerRegistry.forget();

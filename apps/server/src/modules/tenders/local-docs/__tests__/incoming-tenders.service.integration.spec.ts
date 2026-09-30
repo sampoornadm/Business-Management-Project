@@ -6,9 +6,9 @@ import path from "node:path";
 import { prisma } from "@bmp/database";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { organizationsRepository } from "../../../organizations/organizations.module.js";
 import type { ExtractTextFn, GenerateJsonFn } from "../../tender-extraction.service.js";
 import { TenderExtractionService } from "../../tender-extraction.service.js";
-import { organizationsRepository } from "../../../organizations/organizations.module.js";
 import { processIncomingTenderFile } from "../incoming-tenders.service.js";
 
 // Real text shape from the actual `pdftotext` CLI's output for the SAIL/IISCO
