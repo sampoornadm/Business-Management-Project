@@ -557,3 +557,93 @@ Acceptance Note (GRN) and auto generated mail shall be sent for the same.
     });
   });
 });
+
+// Two recognised sections, which is what the real SAIL/IISCO documents produce. Each one costs a
+// separate LLM call, and Ollama runs them one after another.
+const TWO_SECTION_DOC = [
+  "Notice Inviting Tender (NIT) :",
+  "RFx Terms & Condition 1. THE RATES QUOTED SHOULD BE F.O.R. DESTINATION BASIS.",
+  "Instructions to Tenderers (ITT) :",
+  "Tenderer is required to submit his tender in the prescribed form annexed to this document.",
+].join("\n");
+
+describe("TenderExtractionService notes budget", () => {
+  const organizationsRepository = { findAllForMatching: async () => [] } as never;
+  const generateJson = async () => ({});
+  const extractText = async () => TWO_SECTION_DOC;
+
+  it("stops calling the LLM once the notes budget is spent, and still returns notes", async () => {
+    // Ollama serialises requests, so per-section cleanup costs add up rather than overlapping, and
+    // a document with several sections pushed this endpoint past 50 seconds. Anything proxying the
+    // API gives up well before that — Next's dev rewrite returns a bare 500 at about 30 seconds,
+    // and nginx defaults to 60 — so the request has to finish inside a budget rather than taking
+    // however long the model happens to want.
+    let calls = 0;
+    const slowGenerateText = async () => {
+      calls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      return "cleaned";
+    };
+
+    const service = new TenderExtractionService(
+      organizationsRepository,
+      generateJson,
+      extractText,
+      slowGenerateText,
+      { notesBudgetMs: 30 },
+    );
+
+    const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf", {
+      aiNotesEnabled: true,
+    });
+
+    // The first call is allowed to start and overrun; the second must not be attempted.
+    expect(calls).toBe(1);
+    expect(result.warnings.join(" ")).toMatch(/time|budget|raw/i);
+    // Degraded, not failed — the raw section text is what AI-off returns anyway.
+    expect(result.fields.notes).toBeTruthy();
+  });
+
+  it("cleans every section when there is time to spare", async () => {
+    let calls = 0;
+    const fastGenerateText = async () => {
+      calls += 1;
+      return "cleaned";
+    };
+
+    const service = new TenderExtractionService(
+      organizationsRepository,
+      generateJson,
+      extractText,
+      fastGenerateText,
+      { notesBudgetMs: 60_000 },
+    );
+
+    const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf", {
+      aiNotesEnabled: true,
+    });
+
+    expect(calls).toBe(2);
+    expect(result.warnings.join(" ")).not.toMatch(/budget/i);
+  });
+
+  it("does not spend the budget at all when AI notes are switched off", async () => {
+    let calls = 0;
+    const service = new TenderExtractionService(
+      organizationsRepository,
+      generateJson,
+      extractText,
+      async () => {
+        calls += 1;
+        return "cleaned";
+      },
+      { notesBudgetMs: 60_000 },
+    );
+
+    await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf", {
+      aiNotesEnabled: false,
+    });
+
+    expect(calls).toBe(0);
+  });
+});

@@ -1,5 +1,7 @@
 import { logger } from "../../shared/logger/logger.js";
 
+import { summariseTrainerError } from "./classification.errors.js";
+
 /**
  * Rebuilds the classifier from the lookup sheet: taxonomy, datasets, training, deploy, re-classify.
  *
@@ -41,7 +43,12 @@ export interface IClassificationRunRepository {
 
 /** Shells out to the Python trainer — same pattern as pdftotext in shared/utils/pdf-text.ts. */
 export interface PythonRunner {
-  run(script: string, args?: string[]): Promise<{ stdout: string }>;
+  run(
+    script: string,
+    args?: string[],
+    /** Called as the trainer prints, so a multi-minute step can show where it has got to. */
+    onProgress?: (label: string) => void,
+  ): Promise<{ stdout: string }>;
 }
 
 export interface RebuildDeps {
@@ -99,11 +106,19 @@ export class ClassificationRebuildService {
       const datasets = await this.deps.buildDatasets();
 
       await enter("training");
-      const training = await python.run("train.py");
+      // Progress goes onto the row as it arrives. Training is minutes of silence otherwise, and
+      // silence reads exactly like a hang — which is how a dead run went unnoticed for hours.
+      const training = await python.run("train.py", [], (label) => {
+        void runRepository
+          .update(run.id, { message: label })
+          .catch(() => undefined); // a dropped progress update must never fail the run itself
+      });
       const { accuracy, topK } = parseTrainingOutput(training.stdout);
 
       await enter("index");
-      await python.run("build_index.py");
+      await python.run("build_index.py", [], (label) => {
+        void runRepository.update(run.id, { message: label }).catch(() => undefined);
+      });
 
       await enter("export");
       await python.run("export_onnx.py");
@@ -162,7 +177,9 @@ export class ClassificationRebuildService {
         stage,
         status: "failed",
         finishedAt: new Date(),
-        message: err instanceof Error ? err.message : String(err),
+        // Summarised, not raw: execFile's message is the command line plus the whole of stderr,
+        // which rendered as a wall of progress bars and warnings that buried the real error.
+        message: summariseTrainerError(err instanceof Error ? err.message : String(err)),
       });
       logger.error({ runId: run.id, stage, err }, "Classifier rebuild failed");
       throw err;
