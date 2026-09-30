@@ -224,9 +224,15 @@ def main() -> None:
     verification.update({"accuracy_fp32": fp32, "accuracy_int8": int8})
     (ONNX_DIR / "verification.json").write_text(json.dumps(verification, indent=2) + "\n", encoding="utf-8")
 
-    # A couple of points is quantisation noise on 76 items; a collapse means int8 broke something.
-    if int8 < fp32 - 0.05:
-        sys.exit(f"int8 costs too much accuracy ({int8:.1%} vs {fp32:.1%}). Ship fp32 instead.")
+    # Informational, NOT a gate. The server loads fp32 (see classification.embedder.ts), so int8
+    # being worse is the expected finding rather than a failure — and aborting here used to kill the
+    # whole rebuild after the training had already been paid for and every artifact written, over a
+    # build nothing loads. What does gate is verify() above: fp32 must match the PyTorch model.
+    if int8 < fp32 - 0.02:
+        print(
+            f"\nnote: int8 is {100 * (fp32 - int8):.1f} points worse than fp32 "
+            f"({int8:.1%} vs {fp32:.1%}). Not a problem — fp32 is what ships.",
+        )
 
     write_parity_fixture()
 
