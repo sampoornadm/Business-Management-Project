@@ -4,6 +4,7 @@ import type {
   ClassificationRunRecord,
   IClassificationRunRepository,
 } from "./classification.rebuild.service.js";
+import { abandonMessageFor, STALE_AFTER_MS } from "./classification.recovery.js";
 
 export interface ClassificationRunRow {
   id: string;
@@ -74,5 +75,40 @@ export class ClassificationRunRepository implements IClassificationRunRepository
       select: { id: true },
     });
     return running !== null;
+  }
+
+  /**
+   * Marks runs whose worker died as failed, so one lost job cannot disable the button forever.
+   *
+   * Only rows older than STALE_AFTER_MS are touched, so a live run is never reclaimed out from
+   * under itself. Called on worker boot and before the in-progress check.
+   */
+  async failAbandonedRuns(): Promise<number> {
+    const cutoff = new Date(Date.now() - STALE_AFTER_MS);
+    const abandoned = await this.prisma.classificationRun.findMany({
+      where: { status: { in: ["queued", "running"] }, startedAt: { lt: cutoff } },
+      select: { id: true, stage: true },
+    });
+
+    for (const run of abandoned) {
+      await this.prisma.classificationRun.update({
+        where: { id: run.id },
+        data: { status: "failed", finishedAt: new Date(), message: abandonMessageFor(run.stage) },
+      });
+    }
+    return abandoned.length;
+  }
+
+  /**
+   * Marks one run failed, for the queue's own failed handler.
+   *
+   * That handler sees what the service's catch block cannot: a stalled job, and a job whose process
+   * was killed. Scoped to unfinished rows so it never overwrites a real result.
+   */
+  async failRun(id: string, message: string): Promise<void> {
+    await this.prisma.classificationRun.updateMany({
+      where: { id, status: { in: ["queued", "running"] } },
+      data: { status: "failed", finishedAt: new Date(), message },
+    });
   }
 }

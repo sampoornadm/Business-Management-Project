@@ -56,6 +56,19 @@ export function createRebuildService(): ClassificationRebuildService {
  */
 export function startClassificationRebuildWorker(): Worker {
   const service = createRebuildService();
+  const runRepository = new ClassificationRunRepository(prisma);
+
+  // A run is only marked failed by the service's catch block, which needs the error to be thrown.
+  // It is not, when the process is killed — `tsx watch` restarting on a file change is enough, and
+  // in development that happens constantly. The row then sits at "running" forever and
+  // hasRunInProgress() refuses every later attempt, so one lost job disables the button for good.
+  // Reclaiming on boot is what makes that recoverable without touching the database by hand.
+  void runRepository
+    .failAbandonedRuns()
+    .then((count) => {
+      if (count > 0) logger.warn({ count }, "Marked abandoned classifier rebuilds as failed");
+    })
+    .catch((err) => logger.error({ err }, "Could not reclaim abandoned classifier rebuilds"));
 
   const worker = new Worker<{ runId: string; triggeredById: string | null }>(
     CLASSIFICATION_REBUILD_QUEUE_NAME,
@@ -67,6 +80,15 @@ export function startClassificationRebuildWorker(): Worker {
 
   worker.on("failed", (job, err) => {
     logger.error({ jobId: job?.id, err }, "Classifier rebuild job failed");
+    // The second net, and the one that catches a stall: BullMQ reports the job dead even when the
+    // process that owned it never got to record anything. updateMany is scoped to unfinished rows,
+    // so this cannot overwrite a run that actually completed.
+    const runId = job?.data?.runId;
+    if (runId) {
+      void runRepository
+        .failRun(runId, `Rebuild stopped: ${err.message}. Nothing was deployed.`)
+        .catch((updateErr) => logger.error({ runId, err: updateErr }, "Could not record the failure"));
+    }
   });
   return worker;
 }

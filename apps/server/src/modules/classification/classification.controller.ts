@@ -45,6 +45,9 @@ export class ClassificationController {
   });
 
   rebuild = asyncHandler(async (req, res) => {
+    // Reclaim anything long dead first, or a single lost job would refuse every later attempt.
+    await this.runRepository.failAbandonedRuns();
+
     // One at a time. The trainer wants the whole GPU, and two runs would also race for
     // ml/models/current — so refuse here rather than let the queue serialise them silently.
     if (await this.runRepository.hasRunInProgress()) {
