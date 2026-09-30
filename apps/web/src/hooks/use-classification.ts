@@ -42,3 +42,18 @@ export function useRebuildClassifier() {
     },
   });
 }
+
+export function useCancelRebuild() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await apiClient.post<ApiResponse<{ runId: string; trainerStopped: boolean }>>(
+        "/classification/rebuild/cancel",
+      );
+      return unwrap(response.data);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: STATUS_KEY });
+    },
+  });
+}

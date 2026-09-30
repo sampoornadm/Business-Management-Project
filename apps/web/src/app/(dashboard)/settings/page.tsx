@@ -2,10 +2,14 @@
 
 import type { SettingDto } from "@bmp/types";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Skeleton, Switch, useToast } from "@bmp/ui";
-import { Brain, CheckCircle2, CircleAlert, Loader2, RefreshCw, Upload } from "lucide-react";
+import { Brain, CheckCircle2, CircleAlert, Loader2, RefreshCw, Upload, XCircle } from "lucide-react";
 import { useRef } from "react";
 
-import { useClassificationStatus, useRebuildClassifier } from "@/hooks/use-classification";
+import {
+  useCancelRebuild,
+  useClassificationStatus,
+  useRebuildClassifier,
+} from "@/hooks/use-classification";
 import { useHsnSacStatus, useRefreshHsnSac, useUploadHsnSac } from "@/hooks/use-reference-data";
 import { useSettings, useUpdateSetting } from "@/hooks/use-settings";
 import { useAuthStore } from "@/lib/auth-store";
@@ -116,6 +120,7 @@ function ClassificationCard({ canManage }: { canManage: boolean }) {
   const { toast } = useToast();
   const statusQuery = useClassificationStatus();
   const rebuild = useRebuildClassifier();
+  const cancel = useCancelRebuild();
 
   const run = statusQuery.data?.latestRun ?? null;
   const inProgress = run?.status === "queued" || run?.status === "running";
@@ -125,12 +130,30 @@ function ClassificationCard({ canManage }: { canManage: boolean }) {
       await rebuild.mutateAsync();
       toast({
         title: "Rebuild started",
-        description: "Training takes a few minutes. This card updates as it goes.",
+        description: "Training takes about ten minutes. This card updates as it goes.",
       });
     } catch (error) {
       toast({
         variant: "destructive",
         title: "Could not start the rebuild",
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  async function handleCancel() {
+    try {
+      const result = await cancel.mutateAsync();
+      toast({
+        title: "Rebuild cancelled",
+        description: result.trainerStopped
+          ? "The trainer was stopped. Nothing was deployed."
+          : "Nothing was deployed. The trainer had already stopped.",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not cancel the rebuild",
         description: error instanceof Error ? error.message : "Please try again.",
       });
     }
@@ -196,15 +219,39 @@ function ClassificationCard({ canManage }: { canManage: boolean }) {
         ) : null}
 
         {canManage && (
-          <Button size="sm" onClick={() => void handleRebuild()} disabled={rebuild.isPending || inProgress}>
-            {inProgress ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-2 h-4 w-4" />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              onClick={() => void handleRebuild()}
+              disabled={rebuild.isPending || inProgress}
+            >
+              {inProgress ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              {inProgress ? "Rebuilding…" : "Update from sheet"}
+            </Button>
+            {inProgress && (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => void handleCancel()}
+                disabled={cancel.isPending}
+              >
+                <XCircle className="mr-2 h-4 w-4" /> Cancel
+              </Button>
             )}
-            {inProgress ? "Rebuilding…" : "Update from sheet"}
-          </Button>
+          </div>
         )}
+
+        <p className="text-xs text-muted-foreground">
+          Training code: <code className="rounded bg-muted px-1 py-0.5">ml/train/</code> · datasets and
+          results: <code className="rounded bg-muted px-1 py-0.5">ml/data/</code>,{" "}
+          <code className="rounded bg-muted px-1 py-0.5">ml/runs/</code> · the model itself:{" "}
+          <code className="rounded bg-muted px-1 py-0.5">ml/models/current/</code> (rebuilt, not kept in
+          version control). See <code className="rounded bg-muted px-1 py-0.5">ml/README.md</code>.
+        </p>
       </CardContent>
     </Card>
   );

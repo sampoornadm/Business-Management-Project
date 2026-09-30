@@ -41,5 +41,26 @@ export function createClassificationRouter(controller: ClassificationController)
     controller.rebuild,
   );
 
+  /**
+   * @openapi
+   * /classification/rebuild/cancel:
+   *   post:
+   *     tags: [Classification]
+   *     summary: Stop a rebuild that is in flight
+   *     description: >
+   *       Kills the trainer, drains the queue so a restarted worker does not resume it, and marks
+   *       the run cancelled. Nothing is deployed, so the model already in use is unchanged.
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       200: { description: Cancelled }
+   *       404: { description: No rebuild is running }
+   */
+  router.post(
+    "/rebuild/cancel",
+    authenticateMiddleware,
+    requirePermission("settings:manage"),
+    controller.cancel,
+  );
+
   return router;
 }
