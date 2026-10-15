@@ -31,10 +31,10 @@ import {
 } from "@bmp/ui";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { TenderForm, toCreateTenderInput, type TenderFormValues } from "@/components/tenders/tender-form";
-import { useCreateTender, useExtractTenderFromDocument } from "@/hooks/use-tenders";
+import { useCreateTender, useExtractTenderFromDocument, useTenderNotesJob } from "@/hooks/use-tenders";
 import { apiClient } from "@/lib/axios";
 
 // TENDER_TYPES/TENDER_CATEGORIES are curated suggestions, but tender-form.tsx
@@ -138,18 +138,35 @@ export default function NewTenderPage() {
   const [extractedFile, setExtractedFile] = useState<File>();
   const [isCommittingItems, setIsCommittingItems] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
-  // Dev-env stopgap: only the recognized SAIL/IISCO template gets the deterministic-first
-  // per-section notes pipeline (see tender-notes-sections.parser.ts) — for that template,
-  // turning this off skips the LLM cleanup pass entirely (near-instant, regex-only). Every
-  // other document keeps going through the LLM regardless of this toggle, same as before.
+  const [notesJobId, setNotesJobId] = useState<string>();
+  // Only the recognized SAIL/IISCO template gets the deterministic-first per-section notes
+  // pipeline (see tender-notes-sections.parser.ts) — for that template, turning this off skips
+  // the LLM cleanup pass entirely (regex-only). Every other document keeps going through the LLM
+  // regardless of this toggle, same as before. Either way the form fills immediately now; the
+  // cleanup only decides whether a polished version of Terms & Notes arrives afterwards.
   const [aiNotesEnabled, setAiNotesEnabled] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Terms & Notes are cleaned up by the LLM in the background — the extract response already
+  // carried the raw text, so the form is usable the whole time and this just swaps in the better
+  // version when it lands. Applied through a prop rather than a remount so it cannot discard
+  // whatever the user has typed in the meantime (see TenderForm's notesOverride).
+  const notesJob = useTenderNotesJob(notesJobId);
+  const cleanedNotes = notesJob.data?.status === "ready" ? notesJob.data.notes : undefined;
+
+  useEffect(() => {
+    if (notesJob.data?.status !== "ready") return;
+    setNotesJobId(undefined);
+    const jobWarnings = notesJob.data.warnings;
+    if (jobWarnings.length > 0) setHint((prev) => [prev, ...jobWarnings].filter(Boolean).join(" "));
+  }, [notesJob.data]);
 
   async function handleFileSelected(file: File) {
     setHint(undefined);
     try {
       const result = await extract.mutateAsync({ file, aiNotesEnabled });
       setDefaultValues(toFormDefaults(result));
+      setNotesJobId(result.notesJobId);
       setExtractedItems(result.items);
       setExtractedFile(file);
       // Bumping the key forces TenderForm (and its react-hook-form instance)
@@ -170,7 +187,9 @@ export default function NewTenderPage() {
 
       toast({
         title: "Fields extracted from document",
-        description: "Review the pre-filled form before creating the tender.",
+        description: result.notesJobId
+          ? "Review the pre-filled form — Terms & Notes are still being tidied up in the background."
+          : "Review the pre-filled form before creating the tender.",
       });
     } catch (error) {
       toast({
@@ -279,7 +298,7 @@ export default function NewTenderPage() {
         <CardContent className="space-y-3 pt-6">
           <p className="text-sm font-medium">Auto-fill from a tender document (optional)</p>
           <p className="text-sm text-muted-foreground">
-            Upload a bid invitation / NIT (PDF or Word) to pre-fill the form below using a local AI model.
+            Upload a bid invitation / NIT / terms sheet / quotation form (PDF, Word or Excel) to pre-fill the form below using a local AI model.
             Nothing is saved until you review and submit.
           </p>
           <label className="flex items-center gap-2 text-sm">
@@ -316,14 +335,14 @@ export default function NewTenderPage() {
               </div>
             ) : (
               <p className="text-sm">
-                Drag and drop a PDF or Word file here, or{" "}
+                Drag and drop a PDF, Word or Excel file here, or{" "}
                 <span className="font-medium text-primary underline underline-offset-2">choose a file</span>
               </p>
             )}
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.docx"
+              accept=".pdf,.docx,.xlsx"
               disabled={extract.isPending}
               onClick={(e) => e.stopPropagation()}
               onChange={(e) => {
@@ -383,6 +402,7 @@ export default function NewTenderPage() {
         isSubmitting={createTender.isPending || isCommittingItems}
         submitLabel="Create tender"
         suggestedClientName={suggestedClientName}
+        notesOverride={cleanedNotes}
       />
     </div>
   );

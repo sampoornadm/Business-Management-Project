@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ServiceUnavailableError } from "../../../core/errors/HttpErrors.js";
 import type { PaginationParams } from "../../../core/interfaces/pagination.js";
@@ -399,6 +399,23 @@ describe("TenderExtractionService", () => {
     ).rejects.toBeInstanceOf(ServiceUnavailableError);
   });
 
+  /**
+   * Drains the background notes-cleanup job the extract call kicks off, and returns it.
+   *
+   * The extract response deliberately does NOT wait for the LLM — it returns the raw notes and a
+   * job id to poll (a single real section takes ~30s, longer than any proxy holds a request open),
+   * so a test that asserts on cleaned output has to wait for the job the same way the client does.
+   */
+  async function drainNotesJob(service: TenderExtractionService, jobId: string | undefined) {
+    expect(jobId).toBeDefined();
+    for (let i = 0; i < 500; i += 1) {
+      const job = service.getNotesJob(jobId!);
+      if (job?.status === "ready") return job;
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+    throw new Error("notes cleanup job never reported ready");
+  }
+
   describe("section-split notes extraction (IISCO/SAIL template)", () => {
     // No "TE No:" anchor, so parseIiscoHeaderFields returns null and header fields fall back to
     // the generic LLM path — irrelevant to these tests, which are only about the notes path.
@@ -439,7 +456,8 @@ Acceptance Note (GRN) and auto generated mail shall be sent for the same.
         generateText,
       );
 
-      await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
+      const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
+      await drainNotesJob(service, result.notesJobId);
 
       expect(prompts).toHaveLength(4);
       expect(new Set(prompts).size).toBe(4);
@@ -463,7 +481,8 @@ Acceptance Note (GRN) and auto generated mail shall be sent for the same.
         generateText,
       );
 
-      await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
+      const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
+      await drainNotesJob(service, result.notesJobId);
 
       expect(timeouts).toHaveLength(4);
       for (const timeoutMs of timeouts) {
@@ -492,9 +511,13 @@ Acceptance Note (GRN) and auto generated mail shall be sent for the same.
       );
 
       const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
+      const job = await drainNotesJob(service, result.notesJobId);
 
       const headingOrder = ["RFQ Description", "Notice Inviting Tender (NIT)", "Instructions to Tenderers (ITT)", "Note"];
-      const positions = headingOrder.map((heading) => result.fields.notes!.indexOf(`## ${heading}`));
+      // Asserted against the cleaned text, not the raw passthrough — raw notes carry the headings
+      // in document order no matter what, so they would pass this trivially.
+      for (const heading of headingOrder) expect(job.notes).toContain(`cleaned ${heading}`);
+      const positions = headingOrder.map((heading) => job.notes!.indexOf(`## ${heading}`));
       expect(positions.every((p) => p >= 0)).toBe(true);
       expect(positions).toEqual([...positions].sort((a, b) => a - b));
     });
@@ -517,17 +540,20 @@ Acceptance Note (GRN) and auto generated mail shall be sent for the same.
       );
 
       const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf");
+      const job = await drainNotesJob(service, result.notesJobId);
 
       // The failed section still appears, via its raw (un-AI-cleaned) text — not dropped.
-      expect(result.fields.notes).toContain("## Notice Inviting Tender (NIT)");
-      expect(result.fields.notes).toContain("THE RATES QUOTED SHOULD BE F.O.R. DESTINATION BASIS");
+      expect(job.notes).toContain("## Notice Inviting Tender (NIT)");
+      expect(job.notes).toContain("THE RATES QUOTED SHOULD BE F.O.R. DESTINATION BASIS");
       // The other three sections were cleaned normally.
-      expect(result.fields.notes).toContain("cleaned RFQ Description");
-      expect(result.fields.notes).toContain("cleaned Instructions to Tenderers (ITT)");
-      expect(result.fields.notes).toContain("cleaned Note");
-      expect(result.warnings).toEqual([
-        'AI notes extraction was unavailable for "Notice Inviting Tender (NIT)" — used the raw extracted text.',
+      expect(job.notes).toContain("cleaned RFQ Description");
+      expect(job.notes).toContain("cleaned Instructions to Tenderers (ITT)");
+      expect(job.notes).toContain("cleaned Note");
+      // The job carries its own warnings — the extract response was already sent by then.
+      expect(job.warnings).toEqual([
+        'AI notes cleanup was unavailable for "Notice Inviting Tender (NIT)" — used the raw extracted text.',
       ]);
+      expect(result.warnings).toEqual([]);
     });
 
     it("skips the LLM entirely and returns deterministic raw section text when aiNotesEnabled is explicitly false", async () => {
@@ -572,16 +598,62 @@ describe("TenderExtractionService notes budget", () => {
   const generateJson = async () => ({});
   const extractText = async () => TWO_SECTION_DOC;
 
+  async function drainJob(service: TenderExtractionService, jobId: string | undefined) {
+    expect(jobId).toBeDefined();
+    for (let i = 0; i < 500; i += 1) {
+      const job = service.getNotesJob(jobId!);
+      if (job?.status === "ready") return job;
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+    throw new Error("notes cleanup job never reported ready");
+  }
+
+  it("returns raw notes immediately instead of waiting for the LLM", async () => {
+    // The whole point of the background job: a single real section takes ~30s against the local
+    // model, and every proxy in front of this API gives up first — Next's dev rewrite returns a
+    // bare `Internal Server Error` at about 30s with no JSON and no requestId, while the server
+    // happily finishes a request nobody is listening to any more. So the response must not be
+    // coupled to the LLM's pace at all.
+    let released: () => void = () => {};
+    const blocked = new Promise<void>((resolve) => {
+      released = resolve;
+    });
+    const service = new TenderExtractionService(
+      organizationsRepository,
+      generateJson,
+      extractText,
+      async () => {
+        await blocked;
+        return "cleaned";
+      },
+      { notesBudgetMs: 60_000 },
+    );
+
+    const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf", {
+      aiNotesEnabled: true,
+    });
+
+    // Resolved while the LLM call is still hanging.
+    expect(result.notesJobId).toBeDefined();
+    expect(service.getNotesJob(result.notesJobId!)?.status).toBe("pending");
+    // Usable straight away: the raw section text, which is what the AI-off path returns anyway.
+    expect(result.fields.notes).toContain("Instructions to Tenderers (ITT)");
+
+    released();
+    await drainJob(service, result.notesJobId);
+  });
+
   it("stops calling the LLM once the notes budget is spent, and still returns notes", async () => {
-    // Ollama serialises requests, so per-section cleanup costs add up rather than overlapping, and
-    // a document with several sections pushed this endpoint past 50 seconds. Anything proxying the
-    // API gives up well before that — Next's dev rewrite returns a bare 500 at about 30 seconds,
-    // and nginx defaults to 60 — so the request has to finish inside a budget rather than taking
-    // however long the model happens to want.
+    // The budget no longer has an HTTP deadline to meet, but it still has to stop a wedged job
+    // from pinning Ollama indefinitely — and it bounds the whole job, not just when the next call
+    // may START: the first call gets the remaining budget as its own timeout.
     let calls = 0;
-    const slowGenerateText = async () => {
+    // Honours the timeout it is given, like the real Ollama client's AbortSignal.timeout does —
+    // a fake that ignores it cannot catch an unbounded call.
+    const slowGenerateText = async (_prompt: string, options?: { timeoutMs?: number }) => {
       calls += 1;
-      await new Promise((resolve) => setTimeout(resolve, 40));
+      await new Promise((resolve) => setTimeout(resolve, Math.min(200, options?.timeoutMs ?? 200)));
+      if ((options?.timeoutMs ?? Infinity) < 200) throw new Error("aborted");
       return "cleaned";
     };
 
@@ -593,15 +665,17 @@ describe("TenderExtractionService notes budget", () => {
       { notesBudgetMs: 30 },
     );
 
+    const startedAt = Date.now();
     const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf", {
       aiNotesEnabled: true,
     });
+    const job = await drainJob(service, result.notesJobId);
 
-    // The first call is allowed to start and overrun; the second must not be attempted.
+    expect(Date.now() - startedAt).toBeLessThan(150);
     expect(calls).toBe(1);
-    expect(result.warnings.join(" ")).toMatch(/time|budget|raw/i);
+    expect(job.warnings.join(" ")).toMatch(/time|budget|raw/i);
     // Degraded, not failed — the raw section text is what AI-off returns anyway.
-    expect(result.fields.notes).toBeTruthy();
+    expect(job.notes).toBeTruthy();
   });
 
   it("cleans every section when there is time to spare", async () => {
@@ -622,9 +696,10 @@ describe("TenderExtractionService notes budget", () => {
     const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf", {
       aiNotesEnabled: true,
     });
+    const job = await drainJob(service, result.notesJobId);
 
     expect(calls).toBe(2);
-    expect(result.warnings.join(" ")).not.toMatch(/budget/i);
+    expect(job.warnings.join(" ")).not.toMatch(/budget|time/i);
   });
 
   it("does not spend the budget at all when AI notes are switched off", async () => {
@@ -640,10 +715,37 @@ describe("TenderExtractionService notes budget", () => {
       { notesBudgetMs: 60_000 },
     );
 
-    await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf", {
+    const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf", {
       aiNotesEnabled: false,
     });
 
+    // No job to poll, and nothing running behind it.
+    expect(result.notesJobId).toBeUndefined();
+    expect(result.fields.notes).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 20));
     expect(calls).toBe(0);
+  });
+
+  it("expires a finished job so the store cannot grow without bound", async () => {
+    const service = new TenderExtractionService(
+      organizationsRepository,
+      generateJson,
+      extractText,
+      async () => "cleaned",
+      { notesBudgetMs: 60_000 },
+    );
+
+    const result = await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf", {
+      aiNotesEnabled: true,
+    });
+    await drainJob(service, result.notesJobId);
+
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(Date.now() + 11 * 60_000);
+      expect(service.getNotesJob(result.notesJobId!)).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

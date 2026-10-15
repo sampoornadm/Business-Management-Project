@@ -6,6 +6,7 @@ import PizZip from "pizzip";
 
 import { env } from "../../config/env.js";
 import { NotFoundError } from "../../core/errors/HttpErrors.js";
+import { convertDocxToPdf } from "../../shared/utils/docx-pdf.js";
 import { expandHome } from "../tenders/local-docs/folder-naming.js";
 import type { ITendersRepository } from "../tenders/tenders.repository.js";
 
@@ -77,9 +78,17 @@ export function formatDate(date: Date): string {
   return `${day}-${month}-${date.getFullYear()}`;
 }
 
+export type UndertakingFormat = "docx" | "pdf";
+
+const UNDERTAKING_MIME_TYPES: Record<UndertakingFormat, string> = {
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  pdf: "application/pdf",
+};
+
 export interface GeneratedUndertaking {
   buffer: Buffer;
   filename: string;
+  mimeType: string;
   tenderId: string;
   tenderNumber: string;
   tenderTitle: string;
@@ -90,6 +99,7 @@ export async function generateUndertaking(
   tendersRepository: Pick<ITendersRepository, "findForDocumentGeneration">,
   tenderId: string,
   businessId: string,
+  format: UndertakingFormat = "pdf",
 ): Promise<GeneratedUndertaking> {
   const tender = await tendersRepository.findForDocumentGeneration(tenderId, businessId);
   if (!tender) throw new NotFoundError("Tender not found");
@@ -116,11 +126,15 @@ export async function generateUndertaking(
     generatedDate,
   };
 
-  const buffer = fillDocxTemplate(templateBuffer, data);
+  const docx = fillDocxTemplate(templateBuffer, data);
+  // The PDF is the same .docx run through LibreOffice rather than a pdfkit redraw, so the
+  // letterhead and the business's own legal wording stay byte-for-byte what the template says.
+  const buffer = format === "pdf" ? await convertDocxToPdf(docx) : docx;
 
   return {
     buffer,
-    filename: `Undertaking-${tender.tenderNumber}-${generatedDate}.docx`,
+    filename: `Undertaking-${tender.tenderNumber}-${generatedDate}.${format}`,
+    mimeType: UNDERTAKING_MIME_TYPES[format],
     tenderId,
     tenderNumber: tender.tenderNumber,
     tenderTitle: tender.title,

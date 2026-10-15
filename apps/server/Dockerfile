@@ -36,7 +36,10 @@ COPY --from=build /app/apps/server/src ./apps/server/src
 COPY --from=build /app/apps/server/templates ./apps/server/templates
 COPY --from=build /app/apps/server/package.json ./apps/server/package.json
 COPY --from=build /app/apps/server/node_modules ./apps/server/node_modules
-RUN apk add --no-cache poppler-utils
+# poppler-utils: pdftotext (shared/utils/pdf-text.ts). libreoffice-writer + fonts: docx -> pdf
+# (shared/utils/docx-pdf.ts); without the font packages Writer renders the letterhead's text as
+# blank boxes instead of failing, so they are not optional.
+RUN apk add --no-cache poppler-utils libreoffice-writer font-noto ttf-dejavu ttf-liberation
 USER bmp
 EXPOSE 4000
 # @bmp/database (like @bmp/types/@bmp/ui) is an intentionally unbuilt raw-TS workspace package —

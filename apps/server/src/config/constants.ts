@@ -41,6 +41,7 @@ export const TENDER_EXTRACTION_UPLOAD_LIMITS = {
   ALLOWED_MIME_TYPES: [
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ] as const,
 };
 

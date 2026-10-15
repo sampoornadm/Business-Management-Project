@@ -31,6 +31,7 @@ import {
   type IndiaState,
 } from "@bmp/ui";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -162,6 +163,10 @@ export interface TenderFormProps {
    *  generates it). Not part of the form's own values; the edit page never passes this, so
    *  editing an existing tender is unaffected. */
   kind?: TenderKind;
+  /** Terms & Notes that finished being cleaned up after the form was already mounted (the AI pass
+   *  runs as a background job — see useTenderNotesJob). Set through a prop rather than a remount
+   *  so the rest of the user's in-progress edits survive. */
+  notesOverride?: string;
 }
 
 export function TenderForm({
@@ -171,6 +176,7 @@ export function TenderForm({
   submitLabel = "Save",
   suggestedClientName,
   kind = "TENDER",
+  notesOverride,
 }: TenderFormProps) {
   const organizationsQuery = useOrganizations({ pageSize: 100 });
 
@@ -179,6 +185,11 @@ export function TenderForm({
     defaultValues: { ...DEFAULT_VALUES, ...defaultValues },
   });
   const watchedState = form.watch("state");
+
+  useEffect(() => {
+    // Only when it actually arrives — an undefined override must never blank the field.
+    if (notesOverride !== undefined) form.setValue("notes", notesOverride);
+  }, [notesOverride, form]);
 
   return (
     <Form {...form}>

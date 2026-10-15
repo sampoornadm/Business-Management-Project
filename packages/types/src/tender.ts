@@ -259,7 +259,8 @@ export interface TenderExtractionFields {
 }
 
 export interface ExtractedTenderItem {
-  itemCode: string;
+  /** Absent for the formats that carry no material code (Word "TnC" item tables, most quotation forms). */
+  itemCode?: string;
   description: string;
   quantity?: number;
   unit?: string;
@@ -270,6 +271,20 @@ export interface TenderExtractionResultDto {
   items: ExtractedTenderItem[];
   suggestedClientId?: string;
   suggestedClientName?: string;
+  warnings: string[];
+  /**
+   * Present when AI Terms & Notes cleanup is running in the background. `fields.notes` already
+   * holds the raw extracted text and is usable as-is; poll
+   * `GET /tenders/extract/notes/{notesJobId}` until `status` is `"ready"` to swap in the cleaned
+   * version. Absent when AI notes cleanup is off or the document has no notes.
+   */
+  notesJobId?: string;
+}
+
+export interface TenderNotesJobDto {
+  status: "pending" | "ready";
+  /** Cleaned notes markdown. Undefined while pending, and when cleanup produced nothing usable. */
+  notes?: string;
   warnings: string[];
 }
 

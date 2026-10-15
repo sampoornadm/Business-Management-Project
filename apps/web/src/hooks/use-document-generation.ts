@@ -2,16 +2,20 @@
 
 import { apiClient } from "@/lib/axios";
 
-export async function downloadUndertaking(tenderId: string, tenderNumber: string): Promise<void> {
+export async function downloadUndertaking(
+  tenderId: string,
+  tenderNumber: string,
+  format: "pdf" | "docx" = "pdf",
+): Promise<void> {
   const response = await apiClient.post<Blob>(
-    `/tenders/${tenderId}/documents/undertaking`,
+    `/tenders/${tenderId}/documents/undertaking?format=${format}`,
     undefined,
     { responseType: "blob" },
   );
   const url = window.URL.createObjectURL(response.data);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `Undertaking-${tenderNumber}.docx`;
+  link.download = `Undertaking-${tenderNumber}.${format}`;
   document.body.appendChild(link);
   link.click();
   link.remove();

@@ -22,6 +22,7 @@ import { buildDraftTenderData } from "./incoming-tender-mapper.js";
 const EXTENSION_TO_MIME_TYPE: Record<string, string> = {
   ".pdf": "application/pdf",
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 };
 
 async function moveToSubfolder(

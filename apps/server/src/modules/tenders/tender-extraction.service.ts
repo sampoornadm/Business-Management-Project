@@ -1,4 +1,6 @@
-import type { TenderExtractionFields, TenderExtractionResultDto } from "@bmp/types";
+import { randomUUID } from "node:crypto";
+
+import type { TenderExtractionFields, TenderExtractionResultDto, TenderNotesJobDto } from "@bmp/types";
 import { z } from "zod";
 
 import { env } from "../../config/env.js";
@@ -10,6 +12,7 @@ import { parseIiscoRfqItems } from "./tender-item.parser.js";
 import type { ExtractedSection } from "./tender-notes-sections.parser.js";
 import { parseIiscoNoteSections } from "./tender-notes-sections.parser.js";
 import { parseTenderNotes } from "./tender-notes.parser.js";
+import { parseTabularItems } from "./tender-table-items.parser.js";
 
 export type GenerateJsonFn = (prompt: string) => Promise<unknown>;
 export type GenerateTextFn = (prompt: string, options?: { timeoutMs?: number }) => Promise<string>;
@@ -93,18 +96,23 @@ const NOTES_CLEANUP_TIMEOUT_MS = 45_000;
 /**
  * Total wall-clock the notes cleanup may spend, across every section.
  *
- * A per-section timeout cannot bound this request, because Ollama runs requests one at a time: the
- * per-section calls queue rather than overlap, so the cost is their SUM. A real SAIL document has
- * two sections at ~22 s each and took 50 s end to end, and every proxy in front of this API gives
- * up first — Next's dev rewrite returns a bare `Internal Server Error` at about 30 s, with no JSON
- * and no requestId, and nginx defaults to 60. The upstream kept working and finished fine; nobody
- * was listening.
+ * A per-section timeout cannot bound the job on its own, because Ollama runs requests one at a
+ * time: the per-section calls queue rather than overlap, so the cost is their SUM.
  *
- * So the endpoint finishes inside a budget and degrades instead of overrunning: sections that do
- * not fit keep their raw extracted text, which is exactly what the AI-off path returns anyway.
- * 20 s leaves room for PDF extraction (~3 s) inside a 30 s ceiling.
+ * This no longer has to fit inside an HTTP request — the cleanup runs in the background and the
+ * client polls for it (see startNotesCleanup) — so the budget is only here to stop a wedged job
+ * pinning Ollama indefinitely. Sections that do not fit keep their raw extracted text, which is
+ * exactly what the AI-off path returns anyway.
  */
-const NOTES_TOTAL_BUDGET_MS = 20_000;
+const NOTES_TOTAL_BUDGET_MS = 120_000;
+
+/** How long a finished notes job stays readable before it is swept. Generous: the client polls
+ *  within seconds, and each job holds one short string. */
+const NOTES_JOB_TTL_MS = 10 * 60_000;
+
+interface NotesJob extends TenderNotesJobDto {
+  expiresAt: number;
+}
 
 // Narrower per-section counterpart to NOTES_PROMPT, used when parseIiscoNoteSections has already
 // found and bounded a section deterministically — the model's job shrinks from "find every
@@ -275,6 +283,7 @@ function rawSectionText(section: ExtractedSection): string {
 
 export class TenderExtractionService {
   private readonly notesBudgetMs: number;
+  private readonly notesJobs = new Map<string, NotesJob>();
 
   constructor(
     private readonly organizationsRepository: IOrganizationsRepository,
@@ -300,54 +309,104 @@ export class TenderExtractionService {
   }
 
   /**
-   * Terms & Notes extraction is independent of the header-field path above: header fields for the
-   * recognized template are deterministic (and return early), but notes should be captured either
-   * way.
+   * Notes as they read with no LLM involved — returned immediately by extractFromDocument, and
+   * also exactly what the AI-off path returns. Any AI cleanup then runs in the background and
+   * replaces this (see startNotesCleanup).
    *
-   * For the recognized IISCO/SAIL template, sections (RFQ Description/NIT/ITT/Note) are first
-   * sliced out deterministically by regex (parseIiscoNoteSections, against layout-mode text — see
-   * tender-notes-sections.parser.ts), then each is cleaned up by the LLM independently and in
-   * parallel — a real document showed the LLM doesn't reliably follow a "find every section
-   * yourself across the whole document AND copy it verbatim" instruction in one shot (it
-   * paraphrased into a summary instead, even with the relevant section well within its prompt
-   * budget); giving it one already-bounded, already-labeled section at a time is a much narrower,
-   * more reliable job. Falls back to today's whole-document single-call path (LLM by default,
-   * regex when the flag is off or the LLM is unusable) for any other template.
+   * For the recognized IISCO/SAIL template, sections (RFQ Description/NIT/ITT/Note) are sliced out
+   * deterministically by regex (parseIiscoNoteSections, against layout-mode text — see
+   * tender-notes-sections.parser.ts); every other template falls back to parseTenderNotes over the
+   * whole document.
    */
-  private async extractNotes(
+  private rawNotes(
     text: string,
     layoutText: string,
-    warnings: string[],
-    aiNotesEnabled: boolean | undefined,
-  ): Promise<string | undefined> {
+  ): { notes?: string; sections?: ExtractedSection[] } {
     const sections = parseIiscoNoteSections(layoutText);
-    if (sections) return this.extractNotesFromSections(sections, warnings, aiNotesEnabled ?? env.TENDER_NOTES_AI_ENABLED);
-
-    let notes: string | undefined;
-    if (env.TENDER_NOTES_AI_ENABLED) {
-      try {
-        notes = stripCodeFence(
-          await this.generateText(`${NOTES_PROMPT}${text.slice(0, MAX_NOTES_CHARS)}\n"""`, {
-            timeoutMs: NOTES_CLEANUP_TIMEOUT_MS,
-          }),
-        );
-      } catch {
-        warnings.push("AI notes extraction was unavailable — used a basic parser for Terms & Notes.");
-      }
+    if (sections) {
+      return { notes: cleanupNotes(sections.map(rawSectionText).join("\n\n")) || undefined, sections };
     }
-    if (!notes) notes = parseTenderNotes(text) ?? undefined;
-    if (!notes) return undefined;
-    return cleanupNotes(notes) || undefined;
+    const parsed = parseTenderNotes(text);
+    return { notes: parsed ? cleanupNotes(parsed) || undefined : undefined };
   }
 
-  private async extractNotesFromSections(
+  /**
+   * Kicks the LLM cleanup off in the background and returns a job id to poll.
+   *
+   * Deliberately NOT awaited by the request: a real SAIL document's ITT section alone takes ~30 s
+   * against llama3.1:8b, and every proxy in front of this API gives up first — Next's dev rewrite
+   * returns a bare `Internal Server Error` at about 30 s, with no JSON and no requestId, and nginx
+   * defaults to 60. The upstream kept working and finished fine; nobody was listening. So the
+   * extract response carries the raw notes straight away and the client swaps in the cleaned
+   * version when this job reports ready.
+   */
+  // ponytail: in-process Map, so polling must reach the same process that started the job — fine
+  // for the single server container this deploys as. Move the job to Redis if the API ever runs
+  // more than one replica.
+  private startNotesCleanup(text: string, sections: ExtractedSection[] | undefined): string {
+    this.sweepNotesJobs();
+    const jobId = randomUUID();
+    this.notesJobs.set(jobId, {
+      status: "pending",
+      warnings: [],
+      expiresAt: Date.now() + NOTES_JOB_TTL_MS,
+    });
+    void this.runNotesCleanup(jobId, text, sections);
+    return jobId;
+  }
+
+  private async runNotesCleanup(
+    jobId: string,
+    text: string,
+    sections: ExtractedSection[] | undefined,
+  ): Promise<void> {
+    const warnings: string[] = [];
+    let notes: string | undefined;
+    try {
+      notes = sections
+        ? await this.cleanSections(sections, warnings)
+        : cleanupNotes(
+            stripCodeFence(
+              await this.generateText(`${NOTES_PROMPT}${text.slice(0, MAX_NOTES_CHARS)}\n"""`, {
+                timeoutMs: NOTES_CLEANUP_TIMEOUT_MS,
+              }),
+            ),
+          ) || undefined;
+    } catch {
+      warnings.push("AI notes cleanup was unavailable — Terms & Notes below are the raw extracted text.");
+    }
+
+    const job = this.notesJobs.get(jobId);
+    // Already swept (TTL) — the client gave up long ago; nothing to report to.
+    if (!job) return;
+    this.notesJobs.set(jobId, { ...job, status: "ready", notes, warnings });
+  }
+
+  /** Poll target for a background notes cleanup. Undefined once the job has expired. */
+  getNotesJob(jobId: string): TenderNotesJobDto | undefined {
+    this.sweepNotesJobs();
+    const job = this.notesJobs.get(jobId);
+    return job && { status: job.status, notes: job.notes, warnings: job.warnings };
+  }
+
+  private sweepNotesJobs(): void {
+    const now = Date.now();
+    for (const [id, job] of this.notesJobs) {
+      if (job.expiresAt <= now) this.notesJobs.delete(id);
+    }
+  }
+
+  /**
+   * Each section is cleaned up by the LLM independently and in document order — a real document
+   * showed the LLM doesn't reliably follow a "find every section yourself across the whole
+   * document AND copy it verbatim" instruction in one shot (it paraphrased into a summary instead,
+   * even with the relevant section well within its prompt budget); giving it one already-bounded,
+   * already-labeled section at a time is a much narrower, more reliable job.
+   */
+  private async cleanSections(
     sections: ExtractedSection[],
     warnings: string[],
-    aiNotesEnabled: boolean,
   ): Promise<string | undefined> {
-    // Promise.all preserves input-array order in its result regardless of resolution order, and
-    // `sections` is already in fixed document order — no manual reassembly/sorting needed to keep
-    // the final notes text in the right order even though the calls race each other.
     // Sequential, not Promise.all: Ollama serialises anyway, so racing them only hid the fact
     // that the total was the sum — and a deadline cannot stop work that has all been started.
     const deadline = Date.now() + this.notesBudgetMs;
@@ -355,12 +414,15 @@ export class TenderExtractionService {
     let ranOutOfTime = false;
 
     for (const section of sections) {
-      if (Date.now() >= deadline) {
+      // The remaining budget IS the call's timeout — checking the deadline only before starting
+      // leaves the call itself unbounded, so one slow section overruns the whole budget.
+      const remainingMs = Math.min(deadline - Date.now(), NOTES_CLEANUP_TIMEOUT_MS);
+      if (remainingMs <= 0) {
         ranOutOfTime = true;
         cleanedParts.push(rawSectionText(section));
         continue;
       }
-      cleanedParts.push(await this.cleanSection(section, warnings, aiNotesEnabled));
+      cleanedParts.push(await this.cleanSection(section, warnings, remainingMs));
     }
 
     if (ranOutOfTime) {
@@ -374,17 +436,16 @@ export class TenderExtractionService {
   private async cleanSection(
     section: ExtractedSection,
     warnings: string[],
-    aiNotesEnabled: boolean,
+    timeoutMs: number,
   ): Promise<string> {
     const raw = rawSectionText(section);
-    if (!aiNotesEnabled) return raw;
     try {
       const cleaned = stripCodeFence(
-        await this.generateText(buildSectionCleanupPrompt(section), { timeoutMs: NOTES_CLEANUP_TIMEOUT_MS }),
+        await this.generateText(buildSectionCleanupPrompt(section), { timeoutMs }),
       );
       return cleaned || raw;
     } catch {
-      warnings.push(`AI notes extraction was unavailable for "${section.heading}" — used the raw extracted text.`);
+      warnings.push(`AI notes cleanup was unavailable for "${section.heading}" — used the raw extracted text.`);
       return raw;
     }
   }
@@ -412,9 +473,26 @@ export class TenderExtractionService {
     // layout-mode text is also what parseIiscoNoteSections (in extractNotes
     // below) requires, for the same reason.
     const itemsText = await this.extractText(buffer, mimeType, { layout: true });
-    const items = parseIiscoRfqItems(itemsText);
+    let items = parseIiscoRfqItems(itemsText);
 
-    const notes = await this.extractNotes(text, itemsText, warnings, options.aiNotesEnabled);
+    // Fallback for every other client's format (Word "TnC" sheets, supplier quotation-response
+    // workbooks): those arrive as real table markup, so their rows come back with genuine cell
+    // separators and can be mapped deterministically — see tender-table-items.parser.ts. Left off
+    // the PDF path on purpose: `-layout` text has no reliable cell boundary, so column-guessing
+    // there manufactures junk rows instead of finding real ones.
+    if (items.length === 0 && mimeType !== "application/pdf") {
+      items = parseTabularItems(itemsText);
+    }
+
+    // Notes come back raw and instantly; any LLM cleanup is a background job the client polls for
+    // (fields.notes is usable as-is meanwhile). The per-request toggle governs the recognized
+    // template only — every other document follows the server setting, as before.
+    const { notes, sections } = this.rawNotes(text, itemsText);
+    const aiNotes = sections
+      ? (options.aiNotesEnabled ?? env.TENDER_NOTES_AI_ENABLED)
+      : env.TENDER_NOTES_AI_ENABLED;
+    const notesJobId =
+      aiNotes && (sections?.length || notes) ? this.startNotesCleanup(text, sections) : undefined;
 
     // Header fields for the recognized IISCO/SAIL template are also parsed
     // deterministically — tenderNumber is the DB's @unique key, so it gets
@@ -432,6 +510,7 @@ export class TenderExtractionService {
         suggestedClientId: clientMatch?.suggestedClientId,
         suggestedClientName: clientMatch?.suggestedClientName,
         warnings,
+        notesJobId,
       };
     }
 
@@ -439,7 +518,7 @@ export class TenderExtractionService {
     const parsed = extractionSchema.safeParse(raw);
     if (!parsed.success) {
       warnings.push("The model's response did not match the expected format — no fields were extracted.");
-      return { fields: { notes }, items, warnings };
+      return { fields: { notes }, items, warnings, notesJobId };
     }
 
     const data = parsed.data;
@@ -471,6 +550,7 @@ export class TenderExtractionService {
       suggestedClientId: clientMatch?.suggestedClientId,
       suggestedClientName: clientMatch?.suggestedClientName,
       warnings,
+      notesJobId,
     };
   }
 }

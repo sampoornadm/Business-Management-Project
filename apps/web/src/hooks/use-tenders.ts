@@ -14,6 +14,7 @@ import type {
   TenderDto,
   TenderExtractionResultDto,
   TenderListItemDto,
+  TenderNotesJobDto,
   TenderStatusHistoryEntryDto,
   UpdateTenderCompetitorInput,
   UpdateTenderInput,
@@ -66,6 +67,30 @@ export function useExtractTenderFromDocument() {
       );
       return unwrap(response.data);
     },
+  });
+}
+
+/**
+ * Polls the background AI cleanup of a document's Terms & Notes, started by the extract call.
+ *
+ * The extract response already carries usable raw notes; a single section can take ~30s against
+ * the local model, which is longer than the proxies in front of the API hold a request open, so
+ * the cleaned version arrives separately. Stops polling as soon as the job reports ready.
+ */
+export function useTenderNotesJob(jobId: string | undefined) {
+  return useQuery({
+    queryKey: ["tender-notes-job", jobId],
+    enabled: Boolean(jobId),
+    queryFn: async () => {
+      const response = await apiClient.get<ApiResponse<TenderNotesJobDto>>(
+        `/tenders/extract/notes/${jobId}`,
+      );
+      return unwrap(response.data);
+    },
+    refetchInterval: (query) => (query.state.data?.status === "ready" ? false : 2000),
+    // A cleanup that outlives the page is simply abandoned — nothing is persisted either way.
+    retry: false,
+    gcTime: 0,
   });
 }
 

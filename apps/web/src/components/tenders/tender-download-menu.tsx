@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
   useToast,
 } from "@bmp/ui";
+import { useQueryClient } from "@tanstack/react-query";
 import { Download, Loader2 } from "lucide-react";
 import { useState } from "react";
 
@@ -28,12 +29,21 @@ export function TenderDownloadMenu({
   iconOnly?: boolean;
 }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [pending, setPending] = useState(false);
+
+  // The server saves every generated undertaking/quotation as a tender Attachment, so the
+  // Documents tab (and its checklist) must refetch or the new file only appears after a reload.
+  function refreshTenderDocuments() {
+    void queryClient.invalidateQueries({ queryKey: ["tenders", tenderId, "documents"] });
+    void queryClient.invalidateQueries({ queryKey: ["tenders", tenderId, "document-checklist"] });
+  }
 
   async function handle(action: () => Promise<void>) {
     setPending(true);
     try {
       await action();
+      refreshTenderDocuments();
     } catch (error) {
       toast({
         variant: "destructive",
@@ -58,9 +68,17 @@ export function TenderDownloadMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => void handle(() => downloadUndertaking(tenderId, tenderNumber))}>
-          Undertaking
-        </DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>Undertaking</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem onClick={() => void handle(() => downloadUndertaking(tenderId, tenderNumber, "pdf"))}>
+              PDF
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => void handle(() => downloadUndertaking(tenderId, tenderNumber, "docx"))}>
+              Word (.docx)
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>Quotation</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>

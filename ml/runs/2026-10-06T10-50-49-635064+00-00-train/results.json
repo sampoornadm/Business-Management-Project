@@ -1,0 +1,474 @@
+{
+  "model": "intfloat/multilingual-e5-small",
+  "scheme": "nearest-text+source-weights",
+  "epochs": 1,
+  "pairs": 7105,
+  "minutes": 1.3790396213531495,
+  "frozen": {
+    "accuracy": 0.868421052631579,
+    "top5": 0.9868421052631579
+  },
+  "finetuned": {
+    "accuracy": 0.9342105263157895,
+    "top5": 0.9868421052631579
+  },
+  "beats_baseline": true,
+  "predictions": [
+    {
+      "description": "sleeve 3mm fiber glass material fiber glass coating silicone breakdown voltage 1 5 to 4 kv temperature 60 to 180 deg c class h",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "sleeve 4mm fiber glass material fiber glass coating silicone breakdown voltage 1 5 to 4 kv temperature 60 to 180 deg c class h",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "silicone coated fiberglass sleeve breakdown voltage 1 5 4 kv temp 60 degree c to 180 degree c class h size 5 mm",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "sleeve 10mm material fiberglass coating silicone size 10 mm break down voltage 1 5 to 4 kv temperature range 60 to 180 deg c class h",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "sleeve 1mm fiber glass material fiber glass coating silicone breakdown voltage 1 5 to 4 kv temperature range 60 to 180 deg c class h",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "sleeve 2mm fiber glass material fiber glass coating silicone breakdown voltage 1 5 to 4 kv temperature range 60 to 180 deg c class h",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "silicone coated fiberglass sleeve breakdown voltage 1 5 4 kv temp 60 degree c to 180 degree c class h size 6 mm",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "sleeve 8mm fiber glass material fiber glass coating silicone breakdown voltage 1 5 to 4 kv temperature range 60 to 180 deg c class h",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "o ring material fkm shore hardness 80 as per astm d2240 diameter inner 42 mm size od 58 mm cord diameter 8 mm for auto coupling system of steel teeming ladle of bof converter",
+      "expected": "7307",
+      "got": "7312",
+      "correct": false
+    },
+    {
+      "description": "cable tie 250mm material plastic nylon length 250 mm form of supply 100 pieces per packet",
+      "expected": "3926",
+      "got": "3926",
+      "correct": true
+    },
+    {
+      "description": "self locking cable tie 2 5x75mm material nylon 6 6 color any length 75 mm width 2 5 mm tensile length 8 kg",
+      "expected": "3926",
+      "got": "3926",
+      "correct": true
+    },
+    {
+      "description": "cable tie 150mm material plastic nylon length 150 mm form of supply 100 pieces per packet",
+      "expected": "3926",
+      "got": "3926",
+      "correct": true
+    },
+    {
+      "description": "self adhessive pvc insulating tape green self adhessive pvc insulating tape 1100v grade 1 80cm w x 7 5m l thickness 0 125mm\u00b10 025mm colour green is no 7809 and isi marked",
+      "expected": "3919",
+      "got": "3919",
+      "correct": true
+    },
+    {
+      "description": "cable tie 300mm material plastic nylon length 300 mm form of supply 100 pieces per packet",
+      "expected": "3926",
+      "got": "3926",
+      "correct": true
+    },
+    {
+      "description": "cable tie 500mm material plastic nylon length 500 mm form of supply 100 pieces per packet",
+      "expected": "3926",
+      "got": "3926",
+      "correct": true
+    },
+    {
+      "description": "sleeve 4mm fiber glass material fiber glass coating silicone breakdown voltage 1 5 to 4 kv temperature 60 to 180 deg c cla ss h",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "sleeve 8mm fiber glass material fiber glass coating silicone breakdown voltage 1 5 to 4 kv temperature range 60 to 180 deg c class h",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "sleeve 10mm material fiberglass coating silicone size 10 mm break down voltage 1 5 to 4 kv temperature range 60 to 180 de g c class h",
+      "expected": "7019",
+      "got": "7019",
+      "correct": true
+    },
+    {
+      "description": "cable tie 200mm material plastic nylon length 200 mm form of supply 100 pieces per packet",
+      "expected": "3926",
+      "got": "3926",
+      "correct": true
+    },
+    {
+      "description": "self adhessive pvc insulating tape black self adhessive pvc insulating tape 1100v grade 1 80cm w x 7 5m l thickness 0 125mm\u00b10 025mm colour black is no 7809 and isi marked",
+      "expected": "3919",
+      "got": "3919",
+      "correct": true
+    },
+    {
+      "description": "self adhessive pvc insulating tape blue self adhessive pvc insulating tape 1100v grade 1 80cm w x 7 5m l thickness 0 125mm\u00b10 025mm colour blue is no 7809 and isi marked",
+      "expected": "3919",
+      "got": "3919",
+      "correct": true
+    },
+    {
+      "description": "self adhessive pvc insulating tape self adhessive pvc insulating tape 1100v grade 1 80cm w x 7 5m l thickness 0 125mm\u00b10 025mm colour yellow is no 7809 and isi marked",
+      "expected": "3919",
+      "got": "3919",
+      "correct": true
+    },
+    {
+      "description": "self adhessive pvc insulating tape red self adhessive pvc insulating tape 1100v grade 1 80cm w x 7 5m l thickness 0 125mm\u00b10 025mm colour red is no 7809 and isi marked",
+      "expected": "3919",
+      "got": "3919",
+      "correct": true
+    },
+    {
+      "description": "aluminium foil tape 2in 30micron type acrylic adhesive offered item shall comply with is 736 is 8402 and is 12436 or their recognized international equivalent standards or better",
+      "expected": "3919",
+      "got": "3919",
+      "correct": true
+    },
+    {
+      "description": "precut gasket of size i d \u00f8278 o mm o d \u00f8322 0 mm thickness 3 0 mm made from synthetic aramid fiber bonded with nbr and natura l elastomer with anti stick coating to withstand maximum temperature 400 deg c continuous temperature 250 deg c pressure 50 kg c m2 suitable for steam water air gases line colour green",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "precut gasket of size i d \u00f863 o mm o d \u00f891 0 mm thickness 3 0 mm made from synthetic aramid fiber bonded with nbr and natural elastomer with anti stick coating to withstand maximum temperature 400 deg c continuous temperature 250 deg c pressure 50 kg cm2 suitable for steam water air gases line colour green",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "recut gasket of size i d \u00f892 o mm o d \u00f8126 0 mm thickness 3 0 mm made from synthetic aramid fiber bonded with nbr and natural elastomer with anti stick coating to withstand maximum temperature 400 deg c continuous temperature 250 deg c pressure 50 kg cm2 suitable for steam water air gases line colour green",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "precut gasket of size i d \u00f8118 o mm o d \u00f8156 0 mm thickness 3 0 mm made from synthetic aramid fiber bonded with nbr and natura l elastomer with anti stick coating to withstand maximum temperature 400 deg c continuous temperature 250 deg c pressure 50 kg c m2 suitable for steam water air gases line colour green",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "precut gasket of size i d \u00f8145 o mm o d \u00f8184 0 mm thickness 3 0 mm made from synthetic aramid fiber bonded with nbr and natura l elastomer with anti stick coating to withstand maximum temperature 400 deg c continuous temperature 250 deg c pressure 50 kg c m2 suitable for steam water air gases line colour green",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "precut gasket of size i d \u00f8223 o mm o d \u00f8268 0 mm thickness 3 0 mm made from synthetic aramid fiber bonded with nbr and natura l elastomer with anti stick coating to withstand maximum temperature 400 deg c continuous temperature 250 deg c pressure 50 kg c m2 suitable for steam water air gases line colour green",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "precut gasket of size i d \u00f8329 o mm o d \u00f8379 0 mm thickness 3 0 mm made from synthetic aramid fiber bonded with nbr and natura l elastomer with anti stick coating to withstand maximum temperature 400 deg c continuous temperature 250 deg c pressure 50 kg c m2 suitable for steam water air gases line colour green",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "precut gasket of size i d \u00f8515 o mm o d \u00f8582 0 mm thickness 3 0 mm made from synthetic aramid fiber bonded with nbr and natura l elastomer with anti stick coating to withstand maximum temperature 400 deg c continuous temperature 250 deg c pressure 50 kg c m2 suitable for steam water air gases line colour green",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "precut gasket of size i d \u00f8618 o mm o d \u00f8690 0 mm thickness 3 0 mm made from synthetic aramid fiber bonded with nbr and natura l elastomer with anti stick coating to withstand maximum temperature 400 deg c continuous temperature 250 deg c pressure 50 kg c m2 suitable for steam water air gases line colour green",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "flat ring gasket type non metallic precut material graphite operating pressure 200 bar operating temperature 600 deg c size id x od x thk 35 x 44 x 3 mm made from exfolia ted graphite having purity 99 0% to 99 9%",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "precut gasket of size i d \u00f8172 o mm o d \u00f8214 0 mm thickness 3 0 mm made from synthetic aramid fiber bonded with nbr and natura l elastomer with anti stick coating to withstand maximum temperature 400 deg c continuous temperature 250 deg c pressure 50 kg c m2 suitable for steam water air gases line colour green",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "precut gasket of size i d \u00f8412 o mm o d \u00f8468 0 mm thickness 3 0 mm made from synthetic aramid fiber bonded with nbr and natura l elastomer with anti stick coating to withstand maximum temperature 400 deg c continuous temperature 250 deg c pressure 50 kg c m2 suitable for steam water air gases line colour green",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "flat ring gasket type non metallic precut material graphite operating pressure 200 bar operating temperature 600 deg c size id x od x thk 15 x 23 x 3 mm made from exfolia ted graphite having purity 99 0% to 99 9%",
+      "expected": "8484",
+      "got": "8484",
+      "correct": true
+    },
+    {
+      "description": "nipple material mild steel material spec is 1239 part ii 1982 size 8mm barrel hexagonal nipple medium quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "socket material mild steel galvanized material spec is 1239 part ii 1969 size 2in medium quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "socket material mild steel material spec is 1239 part ii 1969 size 15x10mm reducing socket steam heavy quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "socket material mild steel material spec is 1239 part ii 1969 size 32x25mm reducing socket steam heavy quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "socket material mild steel material spec is 1239 part ii 1969 size 20x15mm reducing socket steam heavy quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "socket material mild steel galvanized material spec is 1239 part ii 1969 size 32x25mm reducing socket medium quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "nipple material mild steel size 1 4in 8mm barrel plain nipple medium quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "m s barrel nipple 15 mm x 60 mm length min x3 2 mm wall thickness thread length 18m tested heavy quality with clean cut threads as per is 1239 pt ii 1992 the ends shall be machined flat and free chips the fittings with a standard socket and without application o f lubricant sealant or packing shall show no leakage when tested at 5 mpa hydraulic pressure",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "m s barrel nipple 25 mm x75 mm lenght min x 4 0 mm wall thickness thread lenght 25mm tested heavy quality with clean cut threads a s per is 1239 pt ii 1992 the ends shall be machined flat and free from chips the fittings with a standard socket and without applica tion of lubticant sealant or packing shall show no leakage when tested at 5 mpa hydraulic pressure",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "tee material mild steel material spec is 1239 part ii 1969 service saturated steam working pressure 17kgf cm2 working temperature 260deg c size 32mm tee female heavy quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "nipple material mild steel material spec is 1239 part ii 1982 size 20mm barrel hexagonal nipple medium quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "elbow material mild steel material spec is 1239 part ii 1982 service steam size 50x64mm minimum in length heavy quality",
+      "expected": "7307",
+      "got": "7308",
+      "correct": false
+    },
+    {
+      "description": "bend material mild steel material spec is 1239 part ii 1982 type 1 service saturated steam working pressure 17kgc cm2 working temperature 260deg c size 80mm with socket medium quality",
+      "expected": "7307",
+      "got": "7308",
+      "correct": false
+    },
+    {
+      "description": "elbow material mild steel galvanized material spec is 1239 part ii 1982 size 20x35mm lg",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "tee material mild steel material spec is 1239 part ii 1969 service saturated steam working pressure 17kgf cm2 working temperature 260deg c size 40mm tee female",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "socket material mild steel material spec is 1239 part ii 1969 size 65x50mm reducing socket steam heavy quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "socket material mild steel material spec is 1239 part ii 1969 size 25x15mm reducing socket steam heavy quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "nipple material mild steel material spec is 1239 part ii 1982 size 50mm length 68mm minimum barrel hexagonal nipple a f of hexagonal 61 1mm minimum medium quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "socket material mild steel material spec is 1239 part ii 1969 size 50mm steam for heavy quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "socket material mild steel material spec is 1239 part ii 1969 size 20mm steam for heavy quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "socket material mild steel galvanized material spec is 1239 part ii 1969 size 15mm medium quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "socket material mild steel material spec is 1239 part ii 1969 size 25x20mm reducing socket steam heavy quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "socket material mild steel material spec is 1239 part ii 1969 size 15mm for heavy quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "nipple barrel m s galvanised plain size 15mm x 51mm long min medium qquality as per is 1989",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "bend material mild steel material spec is 1239 part ii 1982 type 1 service saturated steam angle 90deg working pressure 17kgf cm2 working temperature 260deg c size 25mm medium quality",
+      "expected": "7307",
+      "got": "7308",
+      "correct": false
+    },
+    {
+      "description": "tee material mild steel material spec is 1239 part ii 1969 service saturated steam working pressure 17kgf cm2 working temperature 260deg c size 25mm tee female heavy quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "socket material mild steel galvanized material spec is 1239 part ii 1969 size 20mm medium quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "bend material mild steel material spec is 1239 part ii 1982 type 1 service saturated steam angle 90deg working pressure 17kgf cm2 working temperature 260deg c size 20mm medium quality",
+      "expected": "7307",
+      "got": "7308",
+      "correct": false
+    },
+    {
+      "description": "bend material mild steel size 1 2in 15mm bend m s with socket 1 2 15 mm",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "tee material mild steel galvanized material spec is 1239 part ii 1969 size 15mm tee female medium quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "nipple material mild steel material spec is 1239 part ii 1982 size 15mm barrel hexagonal nipple medium quality",
+      "expected": "7307",
+      "got": "7307",
+      "correct": true
+    },
+    {
+      "description": "bearing preload spring type k non slotted cup spring size 25 7 x14 3 x 0 4 length 0 9 mm material spring steel grade 51 crv4 asper din 17221 coating black phosphate as per iso 9717",
+      "expected": "7320",
+      "got": "7320",
+      "correct": true
+    },
+    {
+      "description": "washer type disc spring material spring steel material spec 51crv4 coating black phosphate design specification din 17221 inner dia 25 5 mm outer dia 70 mm thickness 2 mm length 4 5 mm coating as per iso 9717",
+      "expected": "7320",
+      "got": "7320",
+      "correct": true
+    },
+    {
+      "description": "washer type disc spring material spring steel material spec 51crv4 coating black phosphate design specification din 17221 inner dia 20 4 mm outer dia 40 mm thickness 1 5 mm length 1 15 mm coating as per iso 9717",
+      "expected": "7320",
+      "got": "7320",
+      "correct": true
+    },
+    {
+      "description": "washer type disc spring material spring steel material spec 51crv4 coating black phosphate design specification din 17221 inner dia 16 3 mm outer dia 31 5 mm thickness 1 25 mm length 2 15 mm coating as per iso 9717",
+      "expected": "7320",
+      "got": "7320",
+      "correct": true
+    },
+    {
+      "description": "bearing preload spring type k non slotted cup spring size 41 6 x25 5 x 0 5 lo 1 4 mm material spring steel 5 1crv4 as per din 17221 coating black phosphatized coating standard iso 9717",
+      "expected": "7320",
+      "got": "7320",
+      "correct": true
+    },
+    {
+      "description": "bearing preload spring type k non slotted cup spring size 34 6 x22 4 x 0 6 lo 1 5 mm material spring steel 5 1crv4 as per din 17221 coating black phosphatized coating standard iso 9717",
+      "expected": "7320",
+      "got": "7320",
+      "correct": true
+    },
+    {
+      "description": "washer type disc spring material spring steel material spec 51crv4 coating black phosphate design specification din 17221 inner dia 28 5 mm outer dia 56 mm thickness 2 mm length 3 6 mm coating as per iso 9717",
+      "expected": "7320",
+      "got": "7320",
+      "correct": true
+    },
+    {
+      "description": "washer type disc spring material spring steel material spec 51crv4 coating black phosphate design specification din 17221 inner dia 14 2 mm outer dia 28 mm thickness 1 mm length 1 80 mm coating as per iso 9717",
+      "expected": "7320",
+      "got": "7320",
+      "correct": true
+    }
+  ]
+}

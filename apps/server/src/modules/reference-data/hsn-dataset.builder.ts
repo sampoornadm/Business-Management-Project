@@ -1,3 +1,5 @@
+import { sha256 } from "../../shared/utils/hash.js";
+
 import type { LookupRow } from "./hsn-gst-lookup.js";
 
 /**
@@ -186,6 +188,10 @@ export function summarise(examples: TrainingExample[]): {
   };
 }
 
+function textRank(text: string): string {
+  return sha256(text);
+}
+
 /**
  * Stratified split, per heading, so every heading is represented in train even when it has a
  * single example. Validation only gets a heading that has enough examples to spare one.
@@ -205,9 +211,11 @@ export function splitExamples(
   const validation: TrainingExample[] = [];
 
   for (const list of byHeading.values()) {
-    // Deterministic: sorted by text, so a rebuild produces the same split and metrics stay
-    // comparable across runs.
-    const sorted = [...list].sort((a, b) => a.text.localeCompare(b.text));
+    // Deterministic but not alphabetical. Sorting by text and taking a prefix as the holdout would
+    // make the validation set the alphabetically-first tariff rows of every heading, so it would
+    // measure the start of the alphabet rather than the heading. Ordering by a hash of the text
+    // gives a stable, unbiased permutation: a rebuild still produces the same split.
+    const sorted = [...list].sort((a, b) => textRank(a.text).localeCompare(textRank(b.text)));
     const holdOut = sorted.length < 4 ? 0 : Math.max(1, Math.round(sorted.length * validationFraction));
     // Prefer holding out tariff text: lexicon terms are the scarce, high-signal examples.
     const candidates = sorted.filter((e) => e.source === "tariff").slice(0, holdOut);

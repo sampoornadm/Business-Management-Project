@@ -1,4 +1,4 @@
-import { BadRequestError } from "../../core/errors/HttpErrors.js";
+import { BadRequestError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 import { resolvePagination } from "../../shared/utils/pagination.js";
@@ -84,6 +84,12 @@ export class TendersController {
       { aiNotesEnabled },
     );
     sendSuccess(res, result, "Fields extracted from document");
+  });
+
+  getNotesJob = asyncHandler(async (req, res) => {
+    const job = this.tenderExtractionService.getNotesJob(req.params.jobId!);
+    if (!job) throw new NotFoundError("Notes cleanup job not found or expired");
+    sendSuccess(res, job, "Notes cleanup status");
   });
 
   create = asyncHandler(async (req, res) => {

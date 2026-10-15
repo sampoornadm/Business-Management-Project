@@ -9,6 +9,7 @@ import {
   resolveModelDir,
   type Embedder,
 } from "./classification.embedder.js";
+import { normaliseText } from "./classification.text.js";
 import {
   classifyAgainst,
   type Classification,
@@ -93,7 +94,8 @@ export class ClassificationService implements IHsnClassifier {
     if (texts.length === 0) return [];
 
     const { embedder, index } = await this.load();
-    const vectors = await embedder.embed(texts.map((text) => QUERY_PREFIX + text));
+    // Same normalisation the trainer applied to the corpus; see classification.text.ts.
+    const vectors = await embedder.embed(texts.map((text) => QUERY_PREFIX + normaliseText(text)));
 
     return vectors.map((vector) =>
       classifyAgainst(vector, index, { minConfidence: this.minConfidence }),

@@ -26,14 +26,16 @@ from datetime import datetime, timezone
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from bmp_hsn.data import REPO_ROOT, load_examples
+from bmp_hsn.data import REPO_ROOT, load_examples, shuffled
 
 MODEL_DIR = REPO_ROOT / "ml" / "models" / "current"
+# Same seed as train.py, so the index holds the corpus in the order the model was trained on.
+SEED = 20260928
 PASSAGE = "passage: "
 
 
 def main() -> None:
-    examples = load_examples("train")
+    examples = shuffled(load_examples("train"), SEED)
     model = SentenceTransformer(str(MODEL_DIR), device="mps")
     model.max_seq_length = 128
 

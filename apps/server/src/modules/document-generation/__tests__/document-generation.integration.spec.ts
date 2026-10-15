@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -11,6 +12,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { createApp } from "../../../app.js";
 import { env } from "../../../config/env.js";
 import { createIntegrationTestUser, cleanupIntegrationTestUser, type IntegrationTestUser } from "../../../shared/test-utils/integration-auth.js";
+
+const HAS_LIBREOFFICE = spawnSync("soffice", ["--version"]).status === 0;
 
 function buildTestDocxBuffer(bodyText: string): Buffer {
   const zip = new PizZip();
@@ -124,7 +127,7 @@ describe("POST /tenders/:id/documents/undertaking (integration)", () => {
     );
 
     const response = await request(app)
-      .post(`/api/v1/tenders/${tenderId}/documents/undertaking`)
+      .post(`/api/v1/tenders/${tenderId}/documents/undertaking?format=docx`)
       .set("Authorization", `Bearer ${testUser.accessToken}`)
       // supertest always buffers (superagent's `_buffer` ends up `true`, never
       // `undefined`), which short-circuits superagent's content-type sniffing
@@ -141,6 +144,27 @@ describe("POST /tenders/:id/documents/undertaking (integration)", () => {
     const documentXml = resultZip.file("word/document.xml")!.asText();
     expect(documentXml).toContain("Integration Client Org");
   });
+
+  // Skipped where LibreOffice isn't installed (CI runners don't ship it) — the unit test covers
+  // the "default format is pdf" wiring with the converter mocked; this one proves the real
+  // soffice shell-out produces an actual PDF from a real template.
+  it.skipIf(!HAS_LIBREOFFICE)("defaults to a real pdf conversion", async () => {
+    const businessTemplatesDir = path.join(templatesDir, businessCode, "templates");
+    await mkdir(businessTemplatesDir, { recursive: true });
+    await writeFile(
+      path.join(businessTemplatesDir, "undertaking.docx"),
+      buildTestDocxBuffer("Tender {{tenderNumber}} for {{clientOrganizationName}}."),
+    );
+
+    const response = await request(app)
+      .post(`/api/v1/tenders/${tenderId}/documents/undertaking`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`)
+      .responseType("blob");
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toBe("application/pdf");
+    expect((response.body as Buffer).subarray(0, 5).toString()).toBe("%PDF-");
+  }, 180_000);
 
   it("returns 404 with a clear message when the template file is missing", async () => {
     const response = await request(app)

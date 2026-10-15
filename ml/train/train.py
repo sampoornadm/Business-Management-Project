@@ -25,7 +25,7 @@ import torch
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.sentence_transformer.losses import MultipleNegativesRankingLoss
 
-from bmp_hsn.data import REPO_ROOT, load_eval, load_examples
+from bmp_hsn.data import REPO_ROOT, load_eval, load_examples, shuffled
 from bmp_hsn.pairs import build_batches, build_pairs
 from bmp_hsn.scoring import score_nearest_text
 from bmp_hsn.tokenize import tokenize_batch
@@ -165,7 +165,9 @@ def main() -> None:
 
     torch.manual_seed(args.seed)
 
-    train_examples = load_examples("train")
+    # Seeded shuffle before anything takes a prefix. The corpus arrives sorted by heading and text,
+    # so without this the per-class cap and the batch windows would favour the alphabet.
+    train_examples = shuffled(load_examples("train"), args.seed)
     evaluation = load_eval()
     pairs = build_pairs(train_examples, max_per_class=args.max_pairs_per_class)
 
