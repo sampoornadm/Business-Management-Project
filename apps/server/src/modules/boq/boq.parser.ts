@@ -1,8 +1,8 @@
 import type { BoqColumnField, BoqParsePreviewRow } from "@bmp/types";
-import ExcelJS from "exceljs";
 
 import { BadRequestError } from "../../core/errors/HttpErrors.js";
 import { extractPdfText } from "../../shared/utils/pdf-text.js";
+import { cellToPrimitive, loadWorkbook, pickDataWorksheet } from "../../shared/utils/xlsx.js";
 
 export interface ParsedBoqFile {
   columns: string[];
@@ -38,23 +38,9 @@ function guessMapping(headers: string[]): Partial<Record<BoqColumnField, string>
   return mapping;
 }
 
-function cellToPrimitive(value: ExcelJS.CellValue): string | number | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "number" || typeof value === "string") return value;
-  if (typeof value === "boolean") return String(value);
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === "object") {
-    if ("result" in value) return cellToPrimitive(value.result ?? null);
-    if ("text" in value) return String(value.text);
-    if ("richText" in value) return value.richText.map((fragment) => fragment.text).join("");
-  }
-  return String(value);
-}
-
 async function parseExcelBuffer(buffer: Buffer): Promise<ParsedBoqFile> {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
-  const worksheet = workbook.worksheets[0];
+  const workbook = await loadWorkbook(buffer);
+  const worksheet = pickDataWorksheet(workbook);
   if (!worksheet) throw new BadRequestError("The uploaded workbook has no worksheets");
 
   const headers: string[] = [];

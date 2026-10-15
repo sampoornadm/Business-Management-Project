@@ -132,3 +132,13 @@ def test_length_grouping_still_never_repeats_a_heading_in_a_batch():
     for batch in build_batches(build_pairs(examples), batch_size=6, group_by_length=True):
         headings = [pair.heading for pair in batch]
         assert len(headings) == len(set(headings))
+
+
+def test_every_curated_term_gets_trained_not_just_the_first_alphabetically():
+    # Regression: the per-class cap used to be a prefix of the term-by-term product, so with 20
+    # curated terms and a cap of 8, all eight pairs used the first term and the other 19 never trained.
+    terms = [ex(f"term{chr(97 + i)}", "7307", source="lexicon") for i in range(20)]
+    official = [ex(f"tariff {i}", "7307") for i in range(10)]
+    pairs = build_pairs(terms + official, max_per_class=8)
+    anchors = {p.anchor for p in pairs}
+    assert len(anchors) == 8

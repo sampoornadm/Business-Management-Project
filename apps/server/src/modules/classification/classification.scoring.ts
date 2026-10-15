@@ -114,7 +114,9 @@ export function classifyAgainst(
       chapterCode: headingCode.slice(0, 2),
       similarity,
     }))
-    .sort((a, b) => b.similarity - a.similarity);
+    // Ties broken by heading code, not by the order the index happens to hold them in. The index is
+    // a corpus listing, so insertion order is an accident of how the sheet was written.
+    .sort((a, b) => b.similarity - a.similarity || a.headingCode.localeCompare(b.headingCode));
 
   const best = ranked[0]!;
   const runnerUp = ranked[1];

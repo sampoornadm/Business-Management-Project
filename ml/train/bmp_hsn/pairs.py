@@ -50,13 +50,21 @@ def build_pairs(
         curated = [e for e in group if e.source == "lexicon"]
         official = [e for e in group if e.source != "lexicon"]
 
-        # Cross-register first: every curated term against every official phrasing of its class.
-        candidates = [
-            Pair(term.text, other.text, heading)
-            for term in curated
-            for other in official
-            if term.text != other.text
-        ]
+        # Cross-register first, interleaved by trade term. Taking a plain prefix of the term-by-term
+        # product would spend the whole per-class cap on the first curated term alone, so every
+        # other term of the heading would never be trained on. Each term gets its own shuffled list
+        # of official partners, then the terms are dealt out one pair at a time.
+        by_term: list[list[Pair]] = []
+        for term in curated:
+            partners = [
+                Pair(term.text, other.text, heading)
+                for other in official
+                if term.text != other.text
+            ]
+            rng.shuffle(partners)
+            by_term.append(partners)
+        rng.shuffle(by_term)
+        candidates = _deal(by_term)
 
         # Then same-register pairs, so classes with no curated vocabulary still train.
         same_register = [
@@ -72,6 +80,21 @@ def build_pairs(
 
     rng.shuffle(pairs)
     return pairs
+
+
+def _deal(lists: list[list[Pair]]) -> list[Pair]:
+    """Round-robin across lists: one from each in turn, until every list is empty."""
+    out: list[Pair] = []
+    depth = 0
+    while True:
+        dealt = False
+        for items in lists:
+            if depth < len(items):
+                out.append(items[depth])
+                dealt = True
+        if not dealt:
+            return out
+        depth += 1
 
 
 def _pack(pairs: list[Pair], batch_size: int) -> tuple[list[list[Pair]], list[Pair]]:

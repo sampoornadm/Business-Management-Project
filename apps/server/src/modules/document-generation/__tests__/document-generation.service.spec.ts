@@ -6,6 +6,7 @@ import PizZip from "pizzip";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../../config/env.js", () => ({ env: { BUSINESSES_ROOT_DIR: "" } }));
+vi.mock("../../../shared/utils/docx-pdf.js", () => ({ convertDocxToPdf: vi.fn() }));
 
 describe("getTemplateStatus", () => {
   let tempDir: string;
@@ -145,13 +146,49 @@ describe("generateUndertaking", () => {
     };
 
     const { generateUndertaking } = await import("../document-generation.service.js");
-    const result = await generateUndertaking(fakeTendersRepository, "tender-1", "business-1");
+    const result = await generateUndertaking(fakeTendersRepository, "tender-1", "business-1", "docx");
 
     const resultZip = new PizZip(result.buffer);
     const documentXml = resultZip.file("word/document.xml")!.asText();
     expect(documentXml).toContain("Dear Acme Corp, re: TEN-001 - Road Widening, from Archie Udyog (GST 27AAAAA0000A1Z5).");
     expect(fakeTendersRepository.findForDocumentGeneration).toHaveBeenCalledWith("tender-1", "business-1");
     expect(result.filename).toMatch(/^Undertaking-TEN-001-\d{2}-\d{2}-\d{4}\.docx$/);
+    expect(result.mimeType).toBe(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+  });
+
+  // The default matters: the download menu's primary action asks for a PDF, and a regression to
+  // "docx by default" would silently hand GeM/SAIL submissions the wrong file type.
+  it("defaults to pdf, converting the filled docx through LibreOffice", async () => {
+    const templatesDir = path.join(tempDir, "ARCHIE", "templates");
+    await mkdir(templatesDir, { recursive: true });
+    await writeFile(
+      path.join(templatesDir, "undertaking.docx"),
+      buildTestDocxBuffer("re: {{tenderNumber}}"),
+    );
+    const { convertDocxToPdf } = await import("../../../shared/utils/docx-pdf.js");
+    vi.mocked(convertDocxToPdf).mockResolvedValue(Buffer.from("%PDF-1.7 fake"));
+
+    const fakeTendersRepository = {
+      findForDocumentGeneration: vi.fn().mockResolvedValue({
+        tenderNumber: "TEN-001",
+        title: "Road Widening",
+        department: null,
+        business: { code: "ARCHIE", name: "Archie Udyog", address: null, gstNumber: null, panNumber: null },
+        client: { name: "Acme Corp", address: null },
+      }),
+    };
+
+    const { generateUndertaking } = await import("../document-generation.service.js");
+    const result = await generateUndertaking(fakeTendersRepository, "tender-1", "business-1");
+
+    expect(result.buffer.toString()).toBe("%PDF-1.7 fake");
+    expect(result.mimeType).toBe("application/pdf");
+    expect(result.filename).toMatch(/\.pdf$/);
+    // What it handed LibreOffice must be the *filled* template, not the raw one.
+    const sentDocx = vi.mocked(convertDocxToPdf).mock.calls[0]![0];
+    expect(new PizZip(sentDocx).file("word/document.xml")!.asText()).toContain("re: TEN-001");
   });
 
   it("throws NotFoundError when the tender doesn't exist for that business", async () => {
@@ -160,7 +197,7 @@ describe("generateUndertaking", () => {
     };
     const { generateUndertaking } = await import("../document-generation.service.js");
 
-    await expect(generateUndertaking(fakeTendersRepository, "missing", "business-1")).rejects.toThrow(
+    await expect(generateUndertaking(fakeTendersRepository, "missing", "business-1", "docx")).rejects.toThrow(
       "Tender not found",
     );
   });
@@ -177,7 +214,7 @@ describe("generateUndertaking", () => {
     };
     const { generateUndertaking } = await import("../document-generation.service.js");
 
-    await expect(generateUndertaking(fakeTendersRepository, "tender-1", "business-1")).rejects.toThrow(
+    await expect(generateUndertaking(fakeTendersRepository, "tender-1", "business-1", "docx")).rejects.toThrow(
       /template not found/i,
     );
   });

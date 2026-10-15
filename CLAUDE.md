@@ -126,6 +126,16 @@ receiving status.
   poppler` locally, `apk add poppler-utils` in `apps/server/Dockerfile`'s runner stage (already
   done). If PDF content search / BOQ PDF upload / tender-extraction-from-PDF suddenly all return
   empty text, check `pdftotext` is on `PATH` before suspecting the code.
+- Undertaking PDFs are the generated .docx run through LibreOffice (`shared/utils/docx-pdf.ts`
+  shells out to `soffice --headless --convert-to pdf`), not a pdfkit redraw like the quotation/RFR
+  PDFs — the undertaking's legal text and letterhead live in each business's own
+  `templates/undertaking.docx`, so redrawing it in code would fork it from its source. Needs
+  LibreOffice wherever the server runs: `brew install --cask libreoffice` locally, `libreoffice-writer`
+  plus the font packages in `apps/server/Dockerfile` (without fonts Writer renders boxes instead of
+  erroring). Every call passes its own `-env:UserInstallation=` throwaway profile — with the shared
+  default one, conversion fails outright while a desktop LibreOffice is open and concurrent requests
+  fight over the profile lock. GitHub Actions does **not** install it; the real-conversion
+  integration test is `it.skipIf(!HAS_LIBREOFFICE)` and simply skips there.
 - Prisma's schema DSL can't express either `CREATE EXTENSION` or an index on an
   `Unsupported("vector(1024)")` column, so it sees the pgvector migration's three
   `*_embeddingVector_hnsw_idx` HNSW indexes as **undeclared drift**. Running plain `prisma migrate
@@ -244,6 +254,27 @@ receiving status.
   joined). If a template edit needs one paragraph per array item, put `{{#tag}}` alone in its own
   paragraph, the per-item content in the next paragraph, `{{/tag}}` alone in a final paragraph — and
   test for *separation* (e.g. a literal joined-substring must NOT appear), not just presence.
+- `mammoth.extractRawText` puts every table **cell** on its own line, destroying row boundaries —
+  a real "TnC" Word tender came out as 60-odd orphan lines with no way to tell which description
+  belonged to which quantity. `tender-extraction.parser.ts#extractDocxText` therefore goes through
+  `convertToHtml` and rebuilds each `<tr>` onto one line with a **tab** between cells
+  (`TABLE_CELL_SEPARATOR`), matching the one-row-per-line shape `pdftotext -layout` already gives
+  the PDF path, so one downstream parser handles both. Two traps there: convert `<td>`s **before**
+  turning `</p>` into newlines (a `<p>` inside a cell otherwise splits the row again), and pass
+  `convertImage` — mammoth's default inlines every picture as a base64 data URI, which turned a
+  410 KB document into megabytes of prompt noise. Downstream, never `.trim()` a table line before
+  splitting it: a leading empty cell is significant, and trimming eats the leading tabs and shifts
+  every column left relative to the header row.
+- exceljs expands a data-validation's `sqref` into one property per cell **address**. Supplier
+  quotation workbooks apply list/decimal validations to whole columns (`sqref="A2:A1048576"`, 21 of
+  them in a real file ≈ 22M properties), so `workbook.xlsx.load()` dies with `RangeError: Too many
+  properties to enumerate` before any sheet is readable — every xlsx path (BOQ upload, tender
+  extraction) 500s on the file. Nothing here reads validations, so load through
+  `shared/utils/xlsx.ts#loadWorkbook`, which passes `ignoreNodes: ["dataValidations"]`. That file
+  also owns `pickDataWorksheet`: `worksheets[0]` is **not** the data sheet in those workbooks (eight
+  hidden/veryHidden template sheets plus a one-column "Instructions" sheet come first), so it takes
+  the first *visible* sheet with >= 2 header cells and >= 2 rows — identity for an ordinary
+  single-sheet BOQ.
 - A git worktree (`git worktree add`) does **not** carry gitignored files like `.env`/`.env.test`
   from the main checkout — a fresh worktree's `apps/server` test run fails almost every file at
   collection time with `Invalid environment configuration: DATABASE_URL: Required...` (etc.) until

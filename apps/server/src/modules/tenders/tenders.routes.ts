@@ -71,7 +71,7 @@ export function createTendersRouter(controller: TendersController): Router {
    * /tenders/extract:
    *   post:
    *     tags: [Tenders]
-   *     summary: Extract tender fields from an uploaded document (PDF/DOCX) via a local LLM — preview only, nothing is persisted
+   *     summary: Extract tender fields from an uploaded document (PDF/DOCX/XLSX) via a local LLM — preview only, nothing is persisted
    *     security: [{ bearerAuth: [] }]
    *     requestBody:
    *       content:
@@ -98,6 +98,34 @@ export function createTendersRouter(controller: TendersController): Router {
     uploadForExtraction,
     validate(extractTenderDocumentSchema),
     controller.extractFromDocument,
+  );
+
+  /**
+   * @openapi
+   * /tenders/extract/notes/{jobId}:
+   *   get:
+   *     tags: [Tenders]
+   *     summary: Poll the background AI cleanup of a document's Terms & Notes, started by POST /tenders/extract
+   *     description: >
+   *       The extract response returns the raw notes immediately and, when AI cleanup applies, a
+   *       notesJobId. Poll this until status is "ready", then replace the notes field with the
+   *       cleaned text. A single section can take ~30s against a local model, which is longer than
+   *       the proxies in front of this API will hold a request open.
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: jobId
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200: { description: Job status, with the cleaned notes once ready }
+   *       404: { description: Unknown or expired job }
+   */
+  router.get(
+    "/extract/notes/:jobId",
+    authenticateMiddleware,
+    requirePermission("tenders:create"),
+    controller.getNotesJob,
   );
 
   /**

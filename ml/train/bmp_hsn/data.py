@@ -8,8 +8,14 @@ from __future__ import annotations
 
 import csv
 import json
+import random
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeVar
+
+from bmp_hsn.text import normalise_text
+
+T = TypeVar("T")
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 GENERATED = REPO_ROOT / "ml" / "data" / "generated"
@@ -43,7 +49,7 @@ def load_examples(name: str) -> list[Example]:
             raw = json.loads(line)
             rows.append(
                 Example(
-                    text=raw["text"],
+                    text=normalise_text(raw["text"]),
                     heading=raw["heading"],
                     chapter=raw["chapter"],
                     source=raw["source"],
@@ -63,12 +69,24 @@ def load_eval() -> list[EvalItem]:
                 continue
             items.append(
                 EvalItem(
-                    description=(row.get("description") or "").strip(),
+                    description=normalise_text(row.get("description") or ""),
                     expected=expected,
                     app_confirmed=(row.get("app_confirmed") or "").strip(),
                 )
             )
     return items
+
+
+def shuffled(items: list[T], seed: int) -> list[T]:
+    """A seeded permutation, so the order the corpus arrives in can never reach the model.
+
+    The JSONL is written grouped by heading and, within a heading, alphabetically. Anything that
+    takes a prefix of a list (a per-class cap, a window, a first-N slice) would otherwise keep
+    whatever sorted to the front, and the model would learn the alphabet rather than the tariff.
+    """
+    out = list(items)
+    random.Random(seed).shuffle(out)
+    return out
 
 
 def texts_by_heading(examples: list[Example]) -> dict[str, list[str]]:

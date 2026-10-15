@@ -59,7 +59,9 @@ def score(
 
 def score_matrix(similarity: np.ndarray, classes: list[str], expected: list[str]) -> Scored:
     """Metrics from an already-computed per-class score matrix (rows = items, columns = classes)."""
-    ranked = np.argsort(-similarity, axis=1)
+    # Stable, so an exact tie resolves to the lower column, i.e. the alphabetically first heading.
+    # The default sort is not stable and would break ties by whatever order it happens to leave them.
+    ranked = np.argsort(-similarity, axis=1, kind="stable")
 
     top1: list[str] = []
     margins: list[float] = []

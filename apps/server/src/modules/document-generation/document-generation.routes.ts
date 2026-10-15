@@ -13,16 +13,20 @@ export function createDocumentGenerationRouter(controller: DocumentGenerationCon
    * /tenders/{id}/documents/undertaking:
    *   post:
    *     tags: [Document Generation]
-   *     summary: Generate a filled Undertaking .docx for a tender
+   *     summary: Generate a filled Undertaking (pdf or docx) for a tender
    *     security: [{ bearerAuth: [] }]
    *     parameters:
    *       - in: path
    *         name: id
    *         required: true
    *         schema: { type: string }
+   *       - in: query
+   *         name: format
+   *         schema: { type: string, enum: [pdf, docx], default: pdf }
    *     responses:
-   *       200: { description: Generated .docx file }
+   *       200: { description: Generated document }
    *       404: { description: Tender not found, or the template file is missing }
+   *       503: { description: LibreOffice unavailable (pdf only) }
    */
   router.post(
     "/:id/documents/undertaking",

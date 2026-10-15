@@ -4,10 +4,11 @@ import type { IBoqRepository } from "../boq/boq.repository.js";
 import { saveGeneratedTenderDocument } from "../tenders/local-docs/generated-documents.js";
 import type { ITendersRepository } from "../tenders/tenders.repository.js";
 
-import { generateUndertaking } from "./document-generation.service.js";
+import { generateUndertaking, type UndertakingFormat } from "./document-generation.service.js";
 import { generateQuotation, type QuotationFormat } from "./quotation-document.js";
 
 const QUOTATION_FORMATS: QuotationFormat[] = ["docx", "csv", "pdf"];
+const UNDERTAKING_FORMATS: UndertakingFormat[] = ["docx", "pdf"];
 
 export class DocumentGenerationController {
   constructor(
@@ -16,7 +17,17 @@ export class DocumentGenerationController {
   ) {}
 
   generateUndertaking = asyncHandler(async (req, res) => {
-    const result = await generateUndertaking(this.tendersRepository, req.params.id!, req.user!.businessId);
+    const format = (req.query.format as string | undefined) ?? "pdf";
+    if (!UNDERTAKING_FORMATS.includes(format as UndertakingFormat)) {
+      throw new BadRequestError("format must be one of: docx, pdf");
+    }
+
+    const result = await generateUndertaking(
+      this.tendersRepository,
+      req.params.id!,
+      req.user!.businessId,
+      format as UndertakingFormat,
+    );
 
     await saveGeneratedTenderDocument({
       tenderId: result.tenderId,
@@ -26,14 +37,11 @@ export class DocumentGenerationController {
       documentType: "UNDERTAKING",
       filename: result.filename,
       buffer: result.buffer,
-      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      mimeType: result.mimeType,
       uploadedById: req.user!.id,
     });
 
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    );
+    res.setHeader("Content-Type", result.mimeType);
     res.setHeader("Content-Disposition", `attachment; filename="${result.filename}"`);
     res.send(result.buffer);
   });
