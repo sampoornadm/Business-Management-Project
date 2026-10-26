@@ -156,6 +156,8 @@ model Business {
   bills           Bill[]
   notifications   Notification[]
   savedViews      SavedView[]
+  portalBids      PortalBid[]
+  portalProfiles  PortalProfile[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -525,6 +527,8 @@ model Tender {
   submissionDate      DateTime?
   openingDate         DateTime?
   validityPeriodDays  Int?
+  // Days after PO receipt that we promise delivery in (what the portal bid form asks for).
+  deliveryPeriodDays  Int            @default(120)
   status              TenderStatus   @default(DRAFT)
   statusChangedAt     DateTime       @default(now())
   priority            TenderPriority @default(MEDIUM)
@@ -560,6 +564,7 @@ model Tender {
   competitors    TenderCompetitor[]
   tags           TenderTag[]
   pinnedNotes    TenderPinnedNote[]
+  portalBids     PortalBid[]
   boqs           Boq[]
   rfqs           Rfq[]
   purchaseOrders PurchaseOrder[]
@@ -849,6 +854,9 @@ model BoqItem {
   // AuditLog alongside its rejected counterpart, same "suggest, never silently clobber" pattern
   // as categoryConfirmed on Item. Cleared by an explicit rejection.
   rateSourceConfirmed Boolean @default(false)
+
+  // Per-unit weight in kg; consignment weight on portal bid forms is Σ quantity × unitWeightKg.
+  unitWeightKg Float?
 
   rateBreakdown BoqItemRateBreakdown?
 
@@ -1647,4 +1655,47 @@ model Payment {
   @@index([entityType, entityId])
   @@index([bankAccountId])
   @@map("payments")
+}
+
+enum PortalBidStatus {
+  SAVED
+  SUBMITTED
+  OPENED
+}
+
+// One row per (tender, portal): the portal's own response number is our bid reference, since
+// the buyer's price-opening mail carries only that number, not our tender number.
+model PortalBid {
+  id                 String          @id @default(uuid())
+  businessId         String
+  business           Business        @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  tenderId           String
+  tender             Tender          @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  portalCode         String
+  responseNumber     String
+  status             PortalBidStatus @default(SAVED)
+  submissionDeadline DateTime?
+  totalValue         Float?
+  lastFilledAt       DateTime?
+  lastFillSummary    Json?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@unique([portalCode, responseNumber])
+  @@unique([tenderId, portalCode])
+  @@map("portal_bids")
+}
+
+// Answers that are the same for every bid a business makes on one portal (declarations,
+// "NA" fields, incoterms, ...), keyed by the question catalog's `key`.
+model PortalProfile {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  portalCode String
+  answers    Json
+  updatedAt  DateTime @updatedAt
+
+  @@unique([businessId, portalCode])
+  @@map("portal_profiles")
 }
