@@ -159,6 +159,12 @@ export default function TenderDetailPage() {
               {TENDER_STATUS_LABELS[tender.status]}
             </Badge>
             <Badge variant={tenderPriorityBadgeVariant(tender.priority)}>{tender.priority}</Badge>
+            {tender.deliveryPeriodNeedsReview && (
+              <Badge variant="warning">
+                Check delivery period: tender asks {tender.tenderDeliveryDays} days, we offer{" "}
+                {tender.deliveryPeriodDays}
+              </Badge>
+            )}
           </div>
           <p className="text-sm text-muted-foreground">
             {tender.tenderNumber} · {tender.client.name}

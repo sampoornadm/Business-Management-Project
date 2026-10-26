@@ -190,6 +190,10 @@ export interface TenderDto extends TenderListItemDto {
   validityPeriodDays: number | null;
   /** Days after PO receipt that we promise delivery in (default 120). */
   deliveryPeriodDays: number;
+  /** Delivery period the tender's notes ask for, in days; null when they state none. Derived on read. */
+  tenderDeliveryDays: number | null;
+  /** True when the notes ask for a shorter delivery than `deliveryPeriodDays` — user should check. */
+  deliveryPeriodNeedsReview: boolean;
   statusChangedAt: string;
   description: string | null;
   remarks: string | null;
