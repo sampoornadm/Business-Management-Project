@@ -20,7 +20,7 @@ export interface ConditionRow {
   conditions: Record<string, string>;
 }
 
-const collapse = (text: string) => text.replace(/[\s ]+/g, " ").trim();
+const collapse = (text: string) => text.replace(/[\s\u00a0]+/g, " ").trim();
 const KEY_DELAY_MS = 30;
 
 /**
@@ -122,7 +122,7 @@ export class PortalSession {
 
   private async controlId(label: string): Promise<string> {
     const id = await this.page.evaluate((wanted) => {
-      const normalise = (text: string) => text.replace(/[\s ]+/g, " ").trim();
+      const normalise = (text: string) => text.replace(/[\s\u00a0]+/g, " ").trim();
       for (const el of Array.from(document.querySelectorAll('label[ct="L"]'))) {
         if (normalise(el.textContent ?? "") === wanted) return el.getAttribute("f");
       }
