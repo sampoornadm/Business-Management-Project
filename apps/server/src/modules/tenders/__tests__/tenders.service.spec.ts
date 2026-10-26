@@ -418,6 +418,36 @@ describe("TendersService", () => {
     await expect(service.delete(created.id, actorId, ctx)).rejects.toThrow(ConflictError);
   });
 
+  describe("delivery period review flag", () => {
+    async function dtoWith(notes: string | null, deliveryPeriodDays = 120) {
+      const created = await service.create(baseInput, ctx);
+      tendersRepository.tenders.set(created.id, {
+        ...tendersRepository.tenders.get(created.id)!,
+        notes,
+        deliveryPeriodDays,
+      });
+      return service.getById(created.id, BUSINESS_ID);
+    }
+
+    it("flags a tender whose notes ask for a shorter delivery than we offer", async () => {
+      const dto = await dtoWith("Delivery within 90 days of PO.");
+      expect(dto.deliveryPeriodDays).toBe(120);
+      expect(dto.tenderDeliveryDays).toBe(90);
+      expect(dto.deliveryPeriodNeedsReview).toBe(true);
+    });
+
+    it("does not flag a tender that states no delivery period", async () => {
+      const dto = await dtoWith("EMD is mandatory.");
+      expect(dto.tenderDeliveryDays).toBeNull();
+      expect(dto.deliveryPeriodNeedsReview).toBe(false);
+    });
+
+    it("does not flag when the tender allows at least as long as we offer", async () => {
+      const dto = await dtoWith("Delivery within 150 days of PO.");
+      expect(dto.deliveryPeriodNeedsReview).toBe(false);
+    });
+  });
+
   it("deletes a tender in Draft status", async () => {
     const created = await service.create(baseInput, ctx);
     await service.delete(created.id, actorId, ctx);
