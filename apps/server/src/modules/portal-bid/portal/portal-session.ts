@@ -20,6 +20,7 @@ export interface ConditionRow {
   conditions: Record<string, string>;
 }
 
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const collapse = (text: string) => text.replace(/[\s\u00a0]+/g, " ").trim();
 const KEY_DELAY_MS = 30;
 const CLICK_TIMEOUT_MS = 5000;
@@ -130,12 +131,30 @@ export class PortalSession {
         if ((await this.readField(label)) !== value) throw new Error(`radio did not take ${value}: ${label}`);
         return;
       }
-      await this.typeInto(id, value);
-      // A combo box silently drops text it does not offer, and the portal can lose a commit it
-      // re-renders over; reading back is how both show.
-      if ((await this.readField(label)) !== value) {
-        throw new Error(widget === "combo" ? `value not offered: ${value}` : `field did not keep "${value}": ${label}`);
+      if (widget === "combo") {
+        // A combo box is a read-only field with a list behind its arrow: pick the entry, never type.
+        await this.frame.locator(`#${id}-btn`).click({ timeout: CLICK_TIMEOUT_MS });
+        const entry = this.frame
+          .locator('[ct="LIB_I"]')
+          .filter({ hasText: new RegExp(`^\\s*${escapeRegExp(value)}\\s*$`) })
+          .filter({ visible: true })
+          .first();
+        const listed = await entry
+          .waitFor({ state: "visible", timeout: CLICK_TIMEOUT_MS })
+          .then(() => true)
+          .catch(() => false);
+        if (!listed) {
+          await this.page.keyboard.press("Escape");
+          throw new Error(`value not offered: ${value}`);
+        }
+        await entry.click({ timeout: CLICK_TIMEOUT_MS });
+        await this.settle();
+        if ((await this.readField(label)) !== value) throw new Error(`value not offered: ${value}`);
+        return;
       }
+      await this.typeInto(id, value);
+      // The portal can lose a commit it re-renders over; reading back is how that shows.
+      if ((await this.readField(label)) !== value) throw new Error(`field did not keep "${value}": ${label}`);
     });
     if (options?.comment !== undefined) {
       await this.withFreshControl(label, async (id) => {
