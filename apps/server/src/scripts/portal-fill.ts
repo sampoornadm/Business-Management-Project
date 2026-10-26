@@ -30,7 +30,9 @@ async function main(): Promise<number> {
   const tender = await tendersRepository.findByTenderNumber(values.tender, business.id);
   if (!tender) throw new Error(`No tender ${values.tender} in business ${business.code}`);
 
-  const payload = await bidPayloadService.buildPayload(tender.id, business.id, "SAIL_ISP");
+  const payload = await bidPayloadService.buildPayload(tender.id, business.id, "SAIL_ISP", {
+    includeItems: !values["questions-only"],
+  });
   console.log(`\nQuestions (${payload.answers.length}):`);
   for (const a of payload.answers) {
     console.log(`  [${a.source.padEnd(8)}] ${a.label.slice(0, 70)} = ${a.value}${a.comment ? `  (comment: ${a.comment})` : ""}`);

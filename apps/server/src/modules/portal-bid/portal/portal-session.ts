@@ -35,9 +35,18 @@ export class PortalSession {
   static async attach(cdpUrl: string): Promise<PortalSession> {
     const browser = await chromium.connectOverCDP(cdpUrl);
     const pages = browser.contexts().flatMap((context) => context.pages());
-    const page = pages.find((candidate) => /sailisp\.co\.in/.test(candidate.url()));
-    if (!page) throw new Error(`No SAIL ISP tab is open in the Chrome at ${cdpUrl}`);
-    return new PortalSession(page);
+    const portalPages = pages.filter((candidate) => /sailisp\.co\.in/.test(candidate.url()));
+    if (portalPages.length === 0) throw new Error(`No SAIL ISP tab is open in the Chrome at ${cdpUrl}`);
+    // Several portal tabs can be open at once; drive the one showing an RFx response.
+    for (const candidate of portalPages) {
+      const session = new PortalSession(candidate);
+      if (await session.isResponsePage().catch(() => false)) return session;
+    }
+    throw new Error("None of the SAIL ISP tabs is showing an RFx response; open the response first");
+  }
+
+  async isResponsePage(): Promise<boolean> {
+    return (await this.controlIds("RFx Number")).length > 0;
   }
 
   async readHeader(): Promise<PortalHeader> {
