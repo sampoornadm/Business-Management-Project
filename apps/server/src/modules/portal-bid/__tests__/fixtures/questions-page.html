@@ -22,7 +22,14 @@
 </tr>
 <tr>
   <td><label ct="L" f="WD110"><span class="lsLabel__text">Dispatch Mode</span></label></td>
-  <td><input id="WD110" ct="CB" type="text" value="ROAD" data-offered="ROAD,RAIL"></td>
+  <td>
+    <input id="WD110" ct="CB" type="text" value="ROAD" readonly>
+    <span id="WD110-btn" onclick="document.getElementById('WD110-list').style.display='block'">v</span>
+    <div id="WD110-list" ct="LIB_P" style="display:none">
+      <div ct="LIB_I" onclick="document.getElementById('WD110').value=this.textContent;document.getElementById('WD110-list').style.display='none'">ROAD</div>
+      <div ct="LIB_I" onclick="document.getElementById('WD110').value=this.textContent;document.getElementById('WD110-list').style.display='none'">RAIL</div>
+    </div>
+  </td>
   <td><input id="WD111" ct="I" type="text"></td>
 </tr>
 <tr>
@@ -55,9 +62,6 @@
   document.querySelectorAll('[ct="R_standards"]').forEach((r) => r.addEventListener('click', () => {
     r.closest('table').querySelectorAll('[ct="R_standards"]').forEach((o) => { o.className = 'lsRadioButton--unchecked'; });
     r.className = 'lsRadioButton--checked';
-  }));
-  document.querySelectorAll('input[data-offered]').forEach((i) => i.addEventListener('blur', () => {
-    if (!i.dataset.offered.split(',').includes(i.value)) i.value = '';
   }));
 </script>
 </body></html>
