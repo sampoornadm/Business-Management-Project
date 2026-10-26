@@ -218,7 +218,8 @@ export class PortalSession {
   private commentId(controlId: string): Promise<string | null> {
     return this.run((id) => {
       const row = document.getElementById(id)?.closest("tr");
-      const inputs = Array.from(row?.querySelectorAll('input[ct="I"]') ?? []).filter((input) => input.id !== id);
+      // Comment cells are plain (ct="I") or suggest (ct="CBS") inputs; any text input but the reply.
+      const inputs = Array.from(row?.querySelectorAll("input, textarea") ?? []).filter((input) => input.id !== id);
       return inputs.length > 0 ? inputs[inputs.length - 1]!.id : null;
     }, controlId);
   }
