@@ -22,7 +22,7 @@ describe("SAIL_ISP_QUESTIONS", () => {
 
   it("stores labels with single plain spaces so one normaliser matches the live page", () => {
     for (const label of labels) {
-      expect(label).not.toMatch(/ | {2}/);
+      expect(label).not.toMatch(/\u00a0| {2}/);
       expect(label).toBe(label.trim());
     }
   });
