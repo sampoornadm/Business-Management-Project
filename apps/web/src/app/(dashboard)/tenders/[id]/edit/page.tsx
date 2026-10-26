@@ -71,6 +71,7 @@ export default function EditTenderPage() {
           submissionDate: toDateTimeInputValue(tender.submissionDate),
           openingDate: toDateInputValue(tender.openingDate),
           validityPeriodDays: tender.validityPeriodDays != null ? String(tender.validityPeriodDays) : "",
+          deliveryPeriodDays: String(tender.deliveryPeriodDays),
           priority: tender.priority,
           notes: tender.notes ?? "",
           dealingOfficerName: tender.dealingOfficerName ?? "",

@@ -93,6 +93,7 @@ export function toTenderDto(entity: TenderDetail): TenderDto {
     submissionDate: entity.submissionDate ? entity.submissionDate.toISOString() : null,
     openingDate: entity.openingDate ? entity.openingDate.toISOString() : null,
     validityPeriodDays: entity.validityPeriodDays,
+    deliveryPeriodDays: entity.deliveryPeriodDays,
     statusChangedAt: entity.statusChangedAt.toISOString(),
     description: entity.description,
     remarks: entity.remarks,
