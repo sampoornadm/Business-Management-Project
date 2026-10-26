@@ -16,12 +16,13 @@ const { values } = parseArgs({
     cdp: { type: "string", default: "http://127.0.0.1:9222" },
     "dry-run": { type: "boolean", default: false },
     yes: { type: "boolean", default: false },
+    "questions-only": { type: "boolean", default: false },
   },
 });
 
 async function main(): Promise<number> {
   if (!values.tender || !values.business) {
-    console.error("usage: portal:fill --tender <tender number> --business <business code> [--dry-run] [--yes] [--cdp <url>]");
+    console.error("usage: portal:fill --tender <tender number> --business <business code> [--dry-run] [--yes] [--questions-only] [--cdp <url>]");
     return 2;
   }
   const business = await prisma.business.findUnique({ where: { code: values.business } });
@@ -49,6 +50,7 @@ async function main(): Promise<number> {
       businessId: business.id,
       tenderId: tender.id,
       dryRun: values["dry-run"]!,
+      questionsOnly: values["questions-only"]!,
       confirm: async (_warnings, header) => {
         if (values.yes) return true;
         const rl = createInterface({ input: process.stdin, output: process.stdout });
