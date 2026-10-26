@@ -77,8 +77,15 @@ export class PortalSession {
 
   async openTab(name: PortalTab): Promise<void> {
     if (!TABS.includes(name)) throw new Error(`"${name}" is not an allowed tab`);
-    // The page also carries hidden accessibility copies of tab names; only a visible one is a tab.
-    await this.frame.getByText(name, { exact: true }).filter({ visible: true }).first().click({ timeout: 10_000 });
+    // A tab is a Web Dynpro HCNP item whose text includes a hidden "text helper" copy of its own
+    // label ("QuestionsQuestions"), so an exact text match misses it and hits the hidden copy.
+    const label = new RegExp(`^\\s*${name}\\s*(?:${name})?\\s*$`);
+    await this.frame
+      .locator('[ct="HCNPI_standards"], [ct="HCNPMI_standards"]')
+      .filter({ hasText: label })
+      .filter({ visible: true })
+      .first()
+      .click({ timeout: 10_000 });
     await this.settle();
   }
 
