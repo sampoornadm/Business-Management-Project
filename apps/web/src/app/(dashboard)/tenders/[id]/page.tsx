@@ -160,7 +160,7 @@ export default function TenderDetailPage() {
             </Badge>
             <Badge variant={tenderPriorityBadgeVariant(tender.priority)}>{tender.priority}</Badge>
             {tender.deliveryPeriodNeedsReview && (
-              <Badge variant="warning">
+              <Badge variant="signal">
                 Check delivery period: tender asks {tender.tenderDeliveryDays} days, we offer{" "}
                 {tender.deliveryPeriodDays}
               </Badge>
