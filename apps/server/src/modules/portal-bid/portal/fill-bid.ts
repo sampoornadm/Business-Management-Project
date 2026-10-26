@@ -23,6 +23,8 @@ export interface FillBidInput {
   businessId: string;
   tenderId: string;
   dryRun: boolean;
+  /** Fill the Questions page only; leave item prices and the total untouched. */
+  questionsOnly?: boolean;
   /** Called once with the payload's warnings before anything is typed; false aborts the run. */
   confirm: (warnings: string[], header: PortalHeader) => Promise<boolean>;
 }
@@ -92,7 +94,7 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
     const { missing, ambiguous } = await session.checkLabels(payload.answers.map((a) => a.label));
     for (const label of missing) skipped.push(`label not found: ${label}`);
     for (const label of ambiguous) skipped.push(`label ambiguous: ${label}`);
-    await checkItems();
+    if (!input.questionsOnly) await checkItems();
     return { filled, skipped, mismatches, responseNumber: header.responseNumber };
   }
   if (!(await input.confirm(payload.warnings, header))) throw new Error("Aborted by user");
@@ -131,42 +133,46 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
     }
   }
 
-  // Items / Conditions
-  const pricedItems = await checkItems();
-  for (const item of pricedItems) {
-    const amounts: Array<[string, number]> = [
-      [PRICE, item.rate],
-      [CGST, item.cgstPct],
-      [SGST, item.sgstPct],
-      [IGST, item.igstPct],
-    ];
-    for (const [type, amount] of amounts) {
-      try {
-        await session.writeCondition(item.itemCode, type, String(amount));
-        filled += 1;
-      } catch (error) {
-        // Keep going: the read-back, the stored bid and the audit entry must still happen so the
-        // user knows what state the form is in.
-        mismatches.push(`Item ${item.itemCode} ${type}: ${messageOf(error)}`);
+  let portalTotal: number | null = null;
+  if (!input.questionsOnly) {
+    // Items / Conditions
+    const pricedItems = await checkItems();
+    for (const item of pricedItems) {
+      const amounts: Array<[string, number]> = [
+        [PRICE, item.rate],
+        [CGST, item.cgstPct],
+        [SGST, item.sgstPct],
+        [IGST, item.igstPct],
+      ];
+      for (const [type, amount] of amounts) {
+        try {
+          await session.writeCondition(item.itemCode, type, String(amount));
+          filled += 1;
+        } catch (error) {
+          // Keep going: the read-back, the stored bid and the audit entry must still happen so the
+          // user knows what state the form is in.
+          mismatches.push(`Item ${item.itemCode} ${type}: ${messageOf(error)}`);
+        }
       }
     }
-  }
-  const after = new Map((await session.readConditionRows()).map((row) => [row.itemCode, row.conditions]));
-  for (const item of pricedItems) {
-    const shown = after.get(item.itemCode) ?? {};
-    for (const [type, amount] of [[PRICE, item.rate], [CGST, item.cgstPct], [SGST, item.sgstPct], [IGST, item.igstPct]] as const) {
-      if (parsePortalAmount(shown[type] ?? null) !== amount) {
-        mismatches.push(`Item ${item.itemCode} ${type}: expected ${amount}, portal shows "${shown[type] ?? ""}"`);
+    const after = new Map((await session.readConditionRows()).map((row) => [row.itemCode, row.conditions]));
+    for (const item of pricedItems) {
+      const shown = after.get(item.itemCode) ?? {};
+      for (const [type, amount] of [[PRICE, item.rate], [CGST, item.cgstPct], [SGST, item.sgstPct], [IGST, item.igstPct]] as const) {
+        if (parsePortalAmount(shown[type] ?? null) !== amount) {
+          mismatches.push(`Item ${item.itemCode} ${type}: expected ${amount}, portal shows "${shown[type] ?? ""}"`);
+        }
       }
     }
-  }
 
-  const finalHeader = await session.readHeader();
-  const portalTotal = parsePortalAmount(finalHeader.totalValue);
-  if (portalTotal !== payload.expectedTotal) {
-    mismatches.push(
-      `Total Value: expected ${payload.expectedTotal}, portal shows ${finalHeader.totalValue ?? "nothing"} (press Calculate Value on the Items tab if it has not refreshed)`,
-    );
+    const finalHeader = await session.readHeader();
+    portalTotal = parsePortalAmount(finalHeader.totalValue);
+    if (portalTotal !== payload.expectedTotal) {
+      mismatches.push(
+        `Total Value: expected ${payload.expectedTotal}, portal shows ${finalHeader.totalValue ?? "nothing"} (press Calculate Value on the Items tab if it has not refreshed)`,
+      );
+    }
+
   }
 
   const summary = { filled, skipped, mismatches, warnings: payload.warnings };

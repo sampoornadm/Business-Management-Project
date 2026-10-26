@@ -238,6 +238,13 @@ describe("fillBid", () => {
     expect(result.skipped).toContain(GSTIN_LABEL);
   });
 
+  it("fills only the Questions page when asked, leaving prices and the total alone", async () => {
+    session.header.totalValue = "10.00 INR";
+    const result = await run({ questionsOnly: true });
+    expect(result).toMatchObject({ filled: 3, skipped: [], mismatches: [] });
+    expect(session.conditions.get("71802001600160")!.Price).toBe("0.00");
+  });
+
   it("stores the response number and audits the run", async () => {
     await run();
     expect(upsertFromFill).toHaveBeenCalledWith(
