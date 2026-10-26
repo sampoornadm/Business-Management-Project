@@ -10,6 +10,7 @@ export interface IPortalSession {
   openTab(name: PortalTab): Promise<void>;
   readField(label: string): Promise<string>;
   readComment(label: string): Promise<string>;
+  checkLabels(labels: string[]): Promise<{ missing: string[]; ambiguous: string[] }>;
   writeField(label: string, value: string, widget: Widget, options?: { comment?: string }): Promise<void>;
   readConditionRows(): Promise<ConditionRow[]>;
   writeCondition(itemCode: string, conditionType: string, amount: string): Promise<void>;
@@ -23,7 +24,7 @@ export interface FillBidInput {
   tenderId: string;
   dryRun: boolean;
   /** Called once with the payload's warnings before anything is typed; false aborts the run. */
-  confirm: (warnings: string[]) => Promise<boolean>;
+  confirm: (warnings: string[], header: PortalHeader) => Promise<boolean>;
 }
 
 export interface FillBidResult {
@@ -72,8 +73,36 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
   if (header.rfxNumber !== input.tenderNumber) {
     throw new Error(`This portal response is for RFx ${header.rfxNumber}, not ${input.tenderNumber}`);
   }
-  if (dryRun) return { filled, skipped, mismatches, responseNumber: header.responseNumber };
-  if (!(await input.confirm(payload.warnings))) throw new Error("Aborted by user");
+
+  async function checkItems(): Promise<BidPayload["items"]> {
+    await session.openTab("Conditions");
+    const portalCodes = new Set((await session.readConditionRows()).map((row) => row.itemCode));
+    const bidCodes = new Set(payload.items.map((item) => item.itemCode));
+    for (const code of portalCodes) if (!bidCodes.has(code)) skipped.push(`portal item ${code} has no BOQ item`);
+    return payload.items.filter((item) => {
+      if (portalCodes.has(item.itemCode)) return true;
+      skipped.push(`item ${item.itemCode} is not on the portal`);
+      return false;
+    });
+  }
+
+  if (dryRun) {
+    // Read-only, but it still proves every label and item can be found before a live run.
+    await session.openTab("Questions");
+    const { missing, ambiguous } = await session.checkLabels(payload.answers.map((a) => a.label));
+    for (const label of missing) skipped.push(`label not found: ${label}`);
+    for (const label of ambiguous) skipped.push(`label ambiguous: ${label}`);
+    await checkItems();
+    return { filled, skipped, mismatches, responseNumber: header.responseNumber };
+  }
+  if (!(await input.confirm(payload.warnings, header))) throw new Error("Aborted by user");
+  // The prompt can sit open while the user clicks around the portal: re-check what is open now.
+  const current = await session.readHeader();
+  if (current.rfxNumber !== header.rfxNumber || current.responseNumber !== header.responseNumber) {
+    throw new Error(
+      `The open portal response changed while waiting (was ${header.responseNumber} / RFx ${header.rfxNumber}, now ${current.responseNumber} / RFx ${current.rfxNumber})`,
+    );
+  }
 
   // Questions
   await session.openTab("Questions");
@@ -87,7 +116,7 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
       filled += 1;
     } catch (error) {
       const message = messageOf(error);
-      if (message.startsWith("label not found")) skipped.push(answer.label);
+      if (message.startsWith("label not found") || message.startsWith("label ambiguous")) skipped.push(answer.label);
       else mismatches.push(`${answer.label}: ${message}`);
     }
   }
@@ -103,15 +132,7 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
   }
 
   // Items / Conditions
-  await session.openTab("Conditions");
-  const portalCodes = new Set((await session.readConditionRows()).map((row) => row.itemCode));
-  const bidCodes = new Set(payload.items.map((item) => item.itemCode));
-  for (const code of portalCodes) if (!bidCodes.has(code)) skipped.push(`portal item ${code} has no BOQ item`);
-  const pricedItems = payload.items.filter((item) => {
-    if (portalCodes.has(item.itemCode)) return true;
-    skipped.push(`item ${item.itemCode} is not on the portal`);
-    return false;
-  });
+  const pricedItems = await checkItems();
   for (const item of pricedItems) {
     const amounts: Array<[string, number]> = [
       [PRICE, item.rate],
@@ -120,15 +141,21 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
       [IGST, item.igstPct],
     ];
     for (const [type, amount] of amounts) {
-      await session.writeCondition(item.itemCode, type, String(amount));
-      filled += 1;
+      try {
+        await session.writeCondition(item.itemCode, type, String(amount));
+        filled += 1;
+      } catch (error) {
+        // Keep going: the read-back, the stored bid and the audit entry must still happen so the
+        // user knows what state the form is in.
+        mismatches.push(`Item ${item.itemCode} ${type}: ${messageOf(error)}`);
+      }
     }
   }
   const after = new Map((await session.readConditionRows()).map((row) => [row.itemCode, row.conditions]));
   for (const item of pricedItems) {
     const shown = after.get(item.itemCode) ?? {};
     for (const [type, amount] of [[PRICE, item.rate], [CGST, item.cgstPct], [SGST, item.sgstPct], [IGST, item.igstPct]] as const) {
-      if (Number(shown[type]) !== amount) {
+      if (parsePortalAmount(shown[type] ?? null) !== amount) {
         mismatches.push(`Item ${item.itemCode} ${type}: expected ${amount}, portal shows "${shown[type] ?? ""}"`);
       }
     }

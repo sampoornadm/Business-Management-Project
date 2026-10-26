@@ -63,6 +63,11 @@ export class BidPayloadService {
 
     const hsn = joinHsnCodes(priceable);
     if (!hsn) warnings.push("No HSN code on any BOQ item: the HSN question is left untouched");
+    else {
+      for (const i of priceable.filter((candidate) => !candidate.hsnCode?.trim())) {
+        warnings.push(`Item "${i.itemCode ?? i.description}" has no HSN code, so it is missing from the HSN list`);
+      }
+    }
     const weight = consignmentWeight(priceable);
     if (weight.text === null) {
       warnings.push(`Consignment weight not filled: ${weight.missing} item(s) have no unit weight`);

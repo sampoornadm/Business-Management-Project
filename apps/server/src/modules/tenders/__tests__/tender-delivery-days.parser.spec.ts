@@ -34,6 +34,14 @@ describe("parseDeliveryDaysFromNotes", () => {
     ).toBe(30);
   });
 
+  it("reads a number written out in brackets after the digits", () => {
+    expect(parseDeliveryDaysFromNotes("Delivery within 30 (thirty) days from PO")).toBe(30);
+  });
+
+  it("keeps a delivery clause that shares a line with a payment clause", () => {
+    expect(parseDeliveryDaysFromNotes("Delivery: 4 weeks from PO, Payment: 100% within 30 days")).toBe(28);
+  });
+
   it("does not split a decimal number into two sentences", () => {
     expect(parseDeliveryDaysFromNotes("Delivery within 1.5 months of order")).toBe(45);
   });

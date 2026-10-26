@@ -120,16 +120,35 @@ export class PortalSession {
     await this.typeInto(cell.id, amount);
   }
 
-  private async controlId(label: string): Promise<string> {
-    const id = await this.page.evaluate((wanted) => {
+  /** Read-only: which of `labels` are absent from the page, and which match more than one control. */
+  async checkLabels(labels: string[]): Promise<{ missing: string[]; ambiguous: string[] }> {
+    const missing: string[] = [];
+    const ambiguous: string[] = [];
+    for (const label of labels) {
+      const ids = await this.controlIds(label);
+      if (ids.length === 0) missing.push(label);
+      else if (ids.length > 1) ambiguous.push(label);
+    }
+    return { missing, ambiguous };
+  }
+
+  private controlIds(label: string): Promise<string[]> {
+    return this.page.evaluate((wanted) => {
       const normalise = (text: string) => text.replace(/[\s\u00a0]+/g, " ").trim();
-      for (const el of Array.from(document.querySelectorAll('label[ct="L"]'))) {
-        if (normalise(el.textContent ?? "") === wanted) return el.getAttribute("f");
-      }
-      return null;
+      return Array.from(document.querySelectorAll('label[ct="L"]'))
+        .filter((el) => normalise(el.textContent ?? "") === wanted)
+        .map((el) => el.getAttribute("f"))
+        .filter((id): id is string => Boolean(id));
     }, collapse(label));
-    if (!id) throw new Error(`label not found: ${label}`);
-    return id;
+  }
+
+  // A generic label ("Address", "Email") can occur twice on a page; typing into the first match
+  // would leave the real question empty while the read-back (same lookup) still agrees.
+  private async controlId(label: string): Promise<string> {
+    const ids = await this.controlIds(label);
+    if (ids.length === 0) throw new Error(`label not found: ${label}`);
+    if (ids.length > 1) throw new Error(`label ambiguous: ${label}`);
+    return ids[0]!;
   }
 
   private commentId(controlId: string): Promise<string | null> {
