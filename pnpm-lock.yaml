@@ -110,6 +110,9 @@ importers:
       pizzip:
         specifier: ^3.1.7
         version: 3.2.0
+      playwright-core:
+        specifier: 1.61.1
+        version: 1.61.1
       prom-client:
         specifier: ^15.1.3
         version: 15.1.3
