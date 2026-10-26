@@ -1,0 +1,122 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { chromium, type Browser, type Page } from "playwright-core";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+
+import { PortalSession } from "../portal/portal-session.js";
+
+const dir = dirname(fileURLToPath(import.meta.url));
+const fixture = (name: string) => readFileSync(join(dir, "fixtures", name), "utf8");
+
+let browser: Browser;
+let page: Page;
+
+beforeAll(async () => {
+  browser = await chromium.launch();
+});
+afterAll(async () => {
+  await browser.close();
+});
+
+describe("PortalSession on the Questions page", () => {
+  let session: PortalSession;
+
+  beforeEach(async () => {
+    page = await browser.newPage();
+    await page.setContent(fixture("questions-page.html"));
+    session = new PortalSession(page);
+  });
+
+  it("reads the header, including the response number", async () => {
+    expect(await session.readHeader()).toEqual({
+      responseNumber: "8100095724",
+      rfxNumber: "1400014359",
+      deadline: "27.10.2026 15:00:00 INDIA",
+      totalValue: "14,200.00 INR",
+    });
+  });
+
+  it("reads a field by its label text", async () => {
+    expect(await session.readField("Enter GSTIN/ ARN")).toBe("19AAAAA0000A1Z5");
+  });
+
+  it("throws a clear error for a label that is not on the page", async () => {
+    await expect(session.readField("Nope")).rejects.toThrow("label not found: Nope");
+  });
+
+  it("writes a text field and reads it back", async () => {
+    await session.writeField("Enter GSTIN/ ARN", "19ZZZZZ9999Z9Z9", "text");
+    expect(await session.readField("Enter GSTIN/ ARN")).toBe("19ZZZZZ9999Z9Z9");
+  });
+
+  it("matches a label that contains a non-breaking space", async () => {
+    await session.writeField("Techno commercial offer validity from date of tender opening", "Yes", "radio");
+    expect(await session.readField("Techno commercial offer validity from date of tender opening")).toBe("Yes");
+  });
+
+  it("switches a radio group and reads the checked option", async () => {
+    const label = "Are you registered for GSTIN ? (N.B: Vendors who are not registered are case of Reverse Charge and ISP has to pay GST to GOVT.)";
+    expect(await session.readField(label)).toBe("Yes");
+    await session.writeField(label, "No", "radio");
+    expect(await session.readField(label)).toBe("No");
+  });
+
+  it("writes and reads the Comment cell of a row", async () => {
+    const label = "Techno commercial offer validity from date of tender opening";
+    await session.writeField(label, "Yes", "radio", { comment: "20 days" });
+    expect(await session.readComment(label)).toBe("20 days");
+  });
+
+  it("accepts an offered combo-box value", async () => {
+    await session.writeField("Dispatch Mode", "RAIL", "combo");
+    expect(await session.readField("Dispatch Mode")).toBe("RAIL");
+  });
+
+  it("fails when a combo-box does not offer the value", async () => {
+    await expect(session.writeField("Dispatch Mode", "AIR", "combo")).rejects.toThrow("value not offered: AIR");
+  });
+
+  it("opens an allowed tab and refuses anything else", async () => {
+    await session.openTab("Items");
+    expect(await page.locator("#shown").textContent()).toBe("Items");
+    await expect(session.openTab("Save" as never)).rejects.toThrow("not an allowed tab");
+    expect(await page.locator("#shown").textContent()).toBe("Items");
+  });
+});
+
+describe("PortalSession on the Conditions grid", () => {
+  let session: PortalSession;
+
+  beforeEach(async () => {
+    page = await browser.newPage();
+    await page.setContent(fixture("conditions-grid.html"));
+    session = new PortalSession(page);
+  });
+
+  it("groups condition amounts under each item's product id", async () => {
+    const rows = await session.readConditionRows();
+    expect(rows.map((r) => r.itemCode)).toEqual(["71802001600160", "5550001"]);
+    expect(rows[0]!.conditions).toMatchObject({
+      Price: "17.75",
+      "CGST (Ded-ITC) %": "9.00",
+      "SGST (Ded-ITC) %": "9.00",
+      "IGST (Ded-ITC) %": "0.00",
+    });
+  });
+
+  it("writes a condition amount for the right item only", async () => {
+    await session.writeCondition("5550001", "Price", "12.5");
+    const rows = await session.readConditionRows();
+    expect(rows[1]!.conditions.Price).toBe("12.5");
+    expect(rows[0]!.conditions.Price).toBe("17.75");
+  });
+
+  it("fails when the item or condition is not on the grid", async () => {
+    await expect(session.writeCondition("9999", "Price", "1")).rejects.toThrow("item not found: 9999");
+    await expect(session.writeCondition("5550001", "Freight Charge %", "1")).rejects.toThrow(
+      "condition not found: Freight Charge %",
+    );
+  });
+});

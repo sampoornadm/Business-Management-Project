@@ -1,0 +1,63 @@
+<!doctype html>
+<html><body>
+<!-- Modeled on the Web Dynpro DOM captured from srm.sailisp.co.in: labels point at their
+     control through the f attribute, radios are R_standards spans, and a row can carry a
+     free-text Comment input. Ids are arbitrary here; the driver must never rely on them. -->
+<table><tr>
+  <td><span><label ct="L" f="WD50"><span class="lsLabel__text">Number</span></label></span></td>
+  <td><span id="WD50" ct="TV">8100095724</span></td>
+  <td><label ct="L" f="WD52"><span class="lsLabel__text">RFx Number</span></label></td>
+  <td><span id="WD52" ct="TV">1400014359</span></td>
+  <td><label ct="L" f="WD54"><span class="lsLabel__text">Total Value</span></label></td>
+  <td><span id="WD54" ct="TV">14,200.00 INR</span></td>
+  <td><label ct="L" f="WD56"><span class="lsLabel__text">Submission Deadline</span></label></td>
+  <td><span id="WD56" ct="TV">27.10.2026 15:00:00 INDIA</span></td>
+</tr></table>
+
+<table>
+<tr>
+  <td><label ct="L" f="WD100"><span class="lsLabel__text">Enter GSTIN/ ARN</span></label></td>
+  <td><input id="WD100" ct="I" type="text" value="19AAAAA0000A1Z5"></td>
+  <td><input id="WD101" ct="I" type="text"></td>
+</tr>
+<tr>
+  <td><label ct="L" f="WD110"><span class="lsLabel__text">Dispatch Mode</span></label></td>
+  <td><input id="WD110" ct="CB" type="text" value="ROAD" data-offered="ROAD,RAIL"></td>
+  <td><input id="WD111" ct="I" type="text"></td>
+</tr>
+<tr>
+  <td><label ct="L" f="WD120"><span class="lsLabel__text">Are you registered for GSTIN ? (N.B: Vendors who are not registered are case of Reverse Charge and ISP has to pay GST to GOVT.)</span></label></td>
+  <td>
+    <table id="WD120" ct="RG"><tbody><tr>
+      <td><span ct="R_standards" id="WD121" class="lsRadioButton--checked"><span id="WD121-txt">Yes</span></span></td>
+      <td><span ct="R_standards" id="WD122" class="lsRadioButton--unchecked"><span id="WD122-txt">No</span></span></td>
+    </tr></tbody></table>
+  </td>
+  <td><input id="WD123" ct="I" type="text"></td>
+</tr>
+<tr>
+  <td><label ct="L" f="WD130"><span class="lsLabel__text">Techno commercial&nbsp; offer validity from date of tender opening</span></label></td>
+  <td>
+    <table id="WD130" ct="RG"><tbody><tr>
+      <td><span ct="R_standards" id="WD131" class="lsRadioButton--unchecked"><span>Yes</span></span></td>
+      <td><span ct="R_standards" id="WD132" class="lsRadioButton--unchecked"><span>No</span></span></td>
+    </tr></tbody></table>
+  </td>
+  <td><input id="WD133" ct="I" type="text"></td>
+</tr>
+</table>
+
+<div><span id="tab-items" onclick="document.getElementById('shown').textContent='Items'">Items</span>
+<span id="tab-save" onclick="document.getElementById('shown').textContent='SAVED'">Save</span>
+<span id="shown"></span></div>
+
+<script>
+  document.querySelectorAll('[ct="R_standards"]').forEach((r) => r.addEventListener('click', () => {
+    r.closest('table').querySelectorAll('[ct="R_standards"]').forEach((o) => { o.className = 'lsRadioButton--unchecked'; });
+    r.className = 'lsRadioButton--checked';
+  }));
+  document.querySelectorAll('input[data-offered]').forEach((i) => i.addEventListener('blur', () => {
+    if (!i.dataset.offered.split(',').includes(i.value)) i.value = '';
+  }));
+</script>
+</body></html>
