@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-import { chromium, type Page } from "playwright-core";
+import { chromium, type Frame, type Page } from "playwright-core";
 
 import type { Widget } from "../portal-bid.types.js";
 
@@ -30,19 +30,35 @@ const KEY_DELAY_MS = 30;
  * field on the keystroke / blur round trip, never on a scripted `.value =`.
  */
 export class PortalSession {
-  constructor(private readonly page: Page) {}
+  /**
+   * `frame` is the document holding the Web Dynpro app. Under /irj/portal that is an iframe, not
+   * the top document, so every lookup and locator goes through it; only keystrokes and load-state
+   * waits belong to the page.
+   */
+  constructor(
+    private readonly page: Page,
+    private readonly frame: Frame = page.mainFrame(),
+  ) {}
 
   static async attach(cdpUrl: string): Promise<PortalSession> {
     const browser = await chromium.connectOverCDP(cdpUrl);
     const pages = browser.contexts().flatMap((context) => context.pages());
     const portalPages = pages.filter((candidate) => /sailisp\.co\.in/.test(candidate.url()));
     if (portalPages.length === 0) throw new Error(`No SAIL ISP tab is open in the Chrome at ${cdpUrl}`);
-    // Several portal tabs can be open at once; drive the one showing an RFx response.
-    for (const candidate of portalPages) {
-      const session = new PortalSession(candidate);
-      if (await session.isResponsePage().catch(() => false)) return session;
+    const session = await PortalSession.findIn(portalPages);
+    if (!session) throw new Error("None of the SAIL ISP tabs is showing an RFx response; open the response first");
+    return session;
+  }
+
+  /** The first frame, in any of `pages`, that shows an RFx response header; null if none does. */
+  static async findIn(pages: Page[]): Promise<PortalSession | null> {
+    for (const page of pages) {
+      for (const frame of page.frames()) {
+        const session = new PortalSession(page, frame);
+        if (await session.isResponsePage().catch(() => false)) return session;
+      }
     }
-    throw new Error("None of the SAIL ISP tabs is showing an RFx response; open the response first");
+    return null;
   }
 
   async isResponsePage(): Promise<boolean> {
@@ -61,13 +77,13 @@ export class PortalSession {
 
   async openTab(name: PortalTab): Promise<void> {
     if (!TABS.includes(name)) throw new Error(`"${name}" is not an allowed tab`);
-    await this.page.getByText(name, { exact: true }).first().click();
+    await this.frame.getByText(name, { exact: true }).first().click();
     await this.settle();
   }
 
   async readField(label: string): Promise<string> {
     const id = await this.controlId(label);
-    const value = await this.page.evaluate((controlId) => {
+    const value = await this.frame.evaluate((controlId) => {
       const el = document.getElementById(controlId);
       if (!el) return null;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.value;
@@ -87,7 +103,7 @@ export class PortalSession {
   async readComment(label: string): Promise<string> {
     const id = await this.controlId(label);
     const commentId = await this.commentId(id);
-    return commentId ? this.page.locator(`#${commentId}`).inputValue() : "";
+    return commentId ? this.frame.locator(`#${commentId}`).inputValue() : "";
   }
 
   async writeField(label: string, value: string, widget: Widget, options?: { comment?: string }): Promise<void> {
@@ -142,7 +158,7 @@ export class PortalSession {
   }
 
   private controlIds(label: string): Promise<string[]> {
-    return this.page.evaluate((wanted) => {
+    return this.frame.evaluate((wanted) => {
       const normalise = (text: string) => text.replace(/[\s\u00a0]+/g, " ").trim();
       return Array.from(document.querySelectorAll('label[ct="L"]'))
         .filter((el) => normalise(el.textContent ?? "") === wanted)
@@ -161,7 +177,7 @@ export class PortalSession {
   }
 
   private commentId(controlId: string): Promise<string | null> {
-    return this.page.evaluate((id) => {
+    return this.frame.evaluate((id) => {
       const row = document.getElementById(id)?.closest("tr");
       const inputs = Array.from(row?.querySelectorAll('input[ct="I"]') ?? []).filter((input) => input.id !== id);
       return inputs.length > 0 ? inputs[inputs.length - 1]!.id : null;
@@ -169,7 +185,7 @@ export class PortalSession {
   }
 
   private conditionIndex(): Promise<Array<{ itemCode: string; conditions: Record<string, { id: string; value: string }> }>> {
-    return this.page.evaluate(() => {
+    return this.frame.evaluate(() => {
       type Group = { itemCode: string; conditions: Record<string, { id: string; value: string }> };
       const groups: Group[] = [];
       let current: Group | null = null;
@@ -194,7 +210,7 @@ export class PortalSession {
   }
 
   private async typeInto(id: string, value: string): Promise<void> {
-    await this.page.locator(`#${id}`).click();
+    await this.frame.locator(`#${id}`).click();
     await this.page.keyboard.press("ControlOrMeta+A");
     await this.page.keyboard.type(value, { delay: KEY_DELAY_MS });
     await this.page.keyboard.press("Tab");

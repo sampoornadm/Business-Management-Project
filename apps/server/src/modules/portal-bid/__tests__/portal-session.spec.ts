@@ -112,6 +112,29 @@ describe("PortalSession on the Questions page", () => {
   });
 });
 
+describe("PortalSession inside the portal's iframe", () => {
+  // The real portal wraps the Web Dynpro app in an iframe under /irj/portal.
+  const wrap = (inner: string) =>
+    `<p>portal chrome</p><iframe id="wd" srcdoc="${inner.replace(/&/g, "&amp;").replace(/"/g, "&quot;")}"></iframe>`;
+
+  it("finds the frame that shows an RFx response and drives it", async () => {
+    page = await browser.newPage();
+    await page.setContent(wrap(fixture("questions-page.html")));
+    await (await (await page.locator("#wd").elementHandle())!.contentFrame())!.waitForLoadState();
+    const found = await PortalSession.findIn([page]);
+    expect(found).not.toBeNull();
+    expect((await found!.readHeader()).responseNumber).toBe("8100095724");
+    await found!.writeField("Enter GSTIN/ ARN", "19ZZZZZ9999Z9Z9", "text");
+    expect(await found!.readField("Enter GSTIN/ ARN")).toBe("19ZZZZZ9999Z9Z9");
+  });
+
+  it("returns null when no tab shows an RFx response", async () => {
+    page = await browser.newPage();
+    await page.setContent("<p>portal home</p>");
+    expect(await PortalSession.findIn([page])).toBeNull();
+  });
+});
+
 describe("PortalSession on the Conditions grid", () => {
   let session: PortalSession;
 
