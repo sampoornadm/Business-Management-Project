@@ -250,8 +250,9 @@ describe("fillBid", () => {
   });
 
   it("saves once at the end when asked and every field matched", async () => {
-    await run({ save: true });
+    const result = await run({ save: true });
     expect(session.saves).toBe(1);
+    expect(result.saved).toBe(true);
   });
 
   it("does not save a form with mismatches, a dry run, or when not asked", async () => {
