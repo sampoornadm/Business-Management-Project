@@ -77,13 +77,14 @@ export class PortalSession {
 
   async openTab(name: PortalTab): Promise<void> {
     if (!TABS.includes(name)) throw new Error(`"${name}" is not an allowed tab`);
-    await this.frame.getByText(name, { exact: true }).first().click();
+    // The page also carries hidden accessibility copies of tab names; only a visible one is a tab.
+    await this.frame.getByText(name, { exact: true }).filter({ visible: true }).first().click({ timeout: 10_000 });
     await this.settle();
   }
 
   async readField(label: string): Promise<string> {
     const id = await this.controlId(label);
-    const value = await this.frame.evaluate((controlId) => {
+    const value = await this.run((controlId) => {
       const el = document.getElementById(controlId);
       if (!el) return null;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.value;
@@ -158,7 +159,7 @@ export class PortalSession {
   }
 
   private controlIds(label: string): Promise<string[]> {
-    return this.frame.evaluate((wanted) => {
+    return this.run((wanted) => {
       const normalise = (text: string) => text.replace(/[\s\u00a0]+/g, " ").trim();
       return Array.from(document.querySelectorAll('label[ct="L"]'))
         .filter((el) => normalise(el.textContent ?? "") === wanted)
@@ -177,7 +178,7 @@ export class PortalSession {
   }
 
   private commentId(controlId: string): Promise<string | null> {
-    return this.frame.evaluate((id) => {
+    return this.run((id) => {
       const row = document.getElementById(id)?.closest("tr");
       const inputs = Array.from(row?.querySelectorAll('input[ct="I"]') ?? []).filter((input) => input.id !== id);
       return inputs.length > 0 ? inputs[inputs.length - 1]!.id : null;
@@ -185,7 +186,7 @@ export class PortalSession {
   }
 
   private conditionIndex(): Promise<Array<{ itemCode: string; conditions: Record<string, { id: string; value: string }> }>> {
-    return this.frame.evaluate(() => {
+    return this.run(() => {
       type Group = { itemCode: string; conditions: Record<string, { id: string; value: string }> };
       const groups: Group[] = [];
       let current: Group | null = null;
@@ -219,6 +220,13 @@ export class PortalSession {
 
   // Each keystroke and each commit is a server round trip; wait for the page to go quiet. A
   // portal that never idles must not hang the run, so a timeout is not an error here.
+  // In-page code is compiled by tsx/esbuild, which wraps named functions in a `__name()` helper
+  // that does not exist inside the portal's page; without this shim every lookup throws there.
+  private async run<R, A = undefined>(fn: (arg: A) => R, arg?: A): Promise<Awaited<R>> {
+    await this.frame.evaluate("globalThis.__name = globalThis.__name || ((target) => target)");
+    return this.frame.evaluate(fn as never, arg as never) as Promise<Awaited<R>>;
+  }
+
   private async settle(): Promise<void> {
     await this.page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => undefined);
   }

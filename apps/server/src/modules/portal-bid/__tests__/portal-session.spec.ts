@@ -44,6 +44,13 @@ describe("PortalSession on the Questions page", () => {
     expect(await session.isResponsePage()).toBe(false);
   });
 
+  it("defines tsx's __name helper in the page before running in-page code", async () => {
+    // tsx/esbuild wraps named functions in __name(); evaluated in the page it is undefined.
+    expect(await page.evaluate(() => typeof (globalThis as { __name?: unknown }).__name)).toBe("undefined");
+    await session.readField("Enter GSTIN/ ARN");
+    expect(await page.evaluate(() => typeof (globalThis as { __name?: unknown }).__name)).toBe("function");
+  });
+
   it("reads a field by its label text", async () => {
     expect(await session.readField("Enter GSTIN/ ARN")).toBe("19AAAAA0000A1Z5");
   });
