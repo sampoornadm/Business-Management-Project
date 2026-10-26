@@ -175,6 +175,24 @@ describe("BidPayloadService.buildPayload", () => {
     expect(payload.warnings.some((w) => w.includes("tender asks 90 days"))).toBe(true);
   });
 
+  it("builds a questions-only payload without GSTINs, prices or a BOQ", async () => {
+    delete profiles.answers.billingGstin;
+    business.gstNumber = null;
+    const payload = await service().buildPayload(TENDER_ID, BUSINESS_ID, "SAIL_ISP", { includeItems: false });
+    expect(payload.items).toEqual([]);
+    expect(payload.expectedTotal).toBe(0);
+    // HSN and weight are Questions-page answers, so they still come from the BOQ.
+    expect(answer(payload, "hsnCode")).toMatchObject({ value: "4016" });
+    expect(answer(payload, "consignmentWeight")).toMatchObject({ value: "50 Kg" });
+  });
+
+  it("warns instead of failing when a questions-only run finds no BOQ", async () => {
+    hasBoq = false;
+    const payload = await service().buildPayload(TENDER_ID, BUSINESS_ID, "SAIL_ISP", { includeItems: false });
+    expect(answer(payload, "hsnCode")).toBeUndefined();
+    expect(payload.warnings.some((w) => w.includes("no current BOQ"))).toBe(true);
+  });
+
   it("refuses to split GST without a billing-party GSTIN", async () => {
     delete profiles.answers.billingGstin;
     await expect(build()).rejects.toThrow(/billing/i);

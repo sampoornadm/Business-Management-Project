@@ -38,6 +38,12 @@ describe("PortalSession on the Questions page", () => {
     });
   });
 
+  it("recognises a response page by its RFx header", async () => {
+    expect(await session.isResponsePage()).toBe(true);
+    await page.setContent("<p>portal home</p>");
+    expect(await session.isResponsePage()).toBe(false);
+  });
+
   it("reads a field by its label text", async () => {
     expect(await session.readField("Enter GSTIN/ ARN")).toBe("19AAAAA0000A1Z5");
   });
