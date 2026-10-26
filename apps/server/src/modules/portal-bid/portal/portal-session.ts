@@ -22,6 +22,8 @@ export interface ConditionRow {
 
 const collapse = (text: string) => text.replace(/[\s\u00a0]+/g, " ").trim();
 const KEY_DELAY_MS = 30;
+const CLICK_TIMEOUT_MS = 5000;
+const ATTEMPTS = 3;
 
 /**
  * Drives one SAIL ISP (SAP Web Dynpro) tab in a Chrome the user already logged in to. Control ids
@@ -115,25 +117,35 @@ export class PortalSession {
   }
 
   async writeField(label: string, value: string, widget: Widget, options?: { comment?: string }): Promise<void> {
-    const id = await this.controlId(label);
-    if (widget === "radio") {
-      if (value !== "Yes" && value !== "No") throw new Error(`radio answer must be Yes or No, got "${value}"`);
-      await this.page
-        .locator(`#${id} [ct="R_standards"]`)
-        .filter({ hasText: new RegExp(`^\\s*${value}\\s*$`) })
-        .click();
-      await this.settle();
-    } else {
-      await this.typeInto(id, value);
-      // A combo box silently drops text it does not offer; reading back is how that shows.
-      if (widget === "combo" && (await this.readField(label)) !== value) {
-        throw new Error(`value not offered: ${value}`);
-      }
+    if (widget === "radio" && value !== "Yes" && value !== "No") {
+      throw new Error(`radio answer must be Yes or No, got "${value}"`);
     }
+    await this.withFreshControl(label, async (id) => {
+      if (widget === "radio") {
+        await this.frame
+          .locator(`#${id} [ct="R_standards"]`)
+          .filter({ hasText: new RegExp(`^\\s*${value}\\s*$`) })
+          .click({ timeout: CLICK_TIMEOUT_MS });
+        await this.settle();
+        if ((await this.readField(label)) !== value) throw new Error(`radio did not take ${value}: ${label}`);
+        return;
+      }
+      await this.typeInto(id, value);
+      // A combo box silently drops text it does not offer, and the portal can lose a commit it
+      // re-renders over; reading back is how both show.
+      if ((await this.readField(label)) !== value) {
+        throw new Error(widget === "combo" ? `value not offered: ${value}` : `field did not keep "${value}": ${label}`);
+      }
+    });
     if (options?.comment !== undefined) {
-      const commentId = await this.commentId(id);
-      if (!commentId) throw new Error(`no comment cell on the row of: ${label}`);
-      await this.typeInto(commentId, options.comment);
+      await this.withFreshControl(label, async (id) => {
+        const commentId = await this.commentId(id);
+        if (!commentId) throw new Error(`no comment cell on the row of: ${label}`);
+        await this.typeInto(commentId, options.comment!);
+        if ((await this.readComment(label)) !== options.comment) {
+          throw new Error(`comment did not keep "${options.comment}": ${label}`);
+        }
+      });
     }
   }
 
@@ -218,7 +230,7 @@ export class PortalSession {
   }
 
   private async typeInto(id: string, value: string): Promise<void> {
-    await this.frame.locator(`#${id}`).click();
+    await this.frame.locator(`#${id}`).click({ timeout: CLICK_TIMEOUT_MS });
     await this.page.keyboard.press("ControlOrMeta+A");
     await this.page.keyboard.type(value, { delay: KEY_DELAY_MS });
     await this.page.keyboard.press("Tab");
@@ -227,6 +239,35 @@ export class PortalSession {
 
   // Each keystroke and each commit is a server round trip; wait for the page to go quiet. A
   // portal that never idles must not hang the run, so a timeout is not an error here.
+  // The portal re-renders after each round trip and hands out new control ids, so an id resolved
+  // a moment ago can be gone by the time it is used. Resolve fresh, act, and retry on failure.
+  private async withFreshControl<T>(label: string, action: (id: string) => Promise<T>): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
+      try {
+        await this.quiet();
+        return await action(await this.controlId(label));
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : "";
+        if (message.startsWith("label not found") || message.startsWith("label ambiguous")) throw error;
+      }
+    }
+    throw lastError;
+  }
+
+  /** Resolves once the page's DOM has stopped changing for a moment (capped at 5 s). */
+  private quiet(): Promise<unknown> {
+    return this.frame.evaluate(`new Promise((resolve) => {
+      let timer;
+      const done = () => { observer.disconnect(); resolve(true); };
+      const observer = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(done, 300); });
+      observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true });
+      timer = setTimeout(done, 300);
+      setTimeout(done, 5000);
+    })`);
+  }
+
   // In-page code is compiled by tsx/esbuild, which wraps named functions in a `__name()` helper
   // that does not exist inside the portal's page; without this shim every lookup throws there.
   private async run<R, A = undefined>(fn: (arg: A) => R, arg?: A): Promise<Awaited<R>> {
@@ -236,5 +277,6 @@ export class PortalSession {
 
   private async settle(): Promise<void> {
     await this.page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => undefined);
+    await this.quiet();
   }
 }

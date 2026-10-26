@@ -119,6 +119,33 @@ describe("PortalSession on the Questions page", () => {
   });
 });
 
+describe("PortalSession when the portal re-renders under it", () => {
+  let session: PortalSession;
+
+  beforeEach(async () => {
+    page = await browser.newPage();
+    await page.setContent(fixture("flaky-page.html"));
+    session = new PortalSession(page);
+  });
+
+  it("retries a text field whose first commit was lost", async () => {
+    await session.writeField("Place of Dispatch", "Kolkata", "text");
+    expect(await session.readField("Place of Dispatch")).toBe("Kolkata");
+  });
+
+  it("re-resolves a radio group whose ids changed after the click", async () => {
+    await session.writeField("Are you registered for GSTIN ?", "Yes", "radio");
+    expect(await session.readField("Are you registered for GSTIN ?")).toBe("Yes");
+  });
+
+  it("gives up with a clear error when a value never sticks", async () => {
+    await page.evaluate(() => {
+      document.querySelector("input")!.addEventListener("blur", (e) => ((e.target as HTMLInputElement).value = ""));
+    });
+    await expect(session.writeField("Place of Dispatch", "Kolkata", "text")).rejects.toThrow(/did not keep/);
+  });
+});
+
 describe("PortalSession inside the portal's iframe", () => {
   // The real portal wraps the Web Dynpro app in an iframe under /irj/portal.
   const wrap = (inner: string) =>
