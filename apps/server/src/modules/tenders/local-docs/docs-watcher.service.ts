@@ -44,6 +44,7 @@ export async function getSystemUserId(): Promise<string> {
 // declared.
 function guessDeclaredMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".csv") return "text/csv";
   return ext === ".txt" || ext === ".md" ? "text/plain" : "application/octet-stream";
 }
 
@@ -155,6 +156,9 @@ export async function startLocalDocsWatcher(rootDirRaw: string): Promise<FSWatch
 
   const watcher = chokidar.watch(rootDir, {
     ignoreInitial: false,
+    // Dotfiles (.DS_Store, ._* AppleDouble, .~lock.* LibreOffice locks) are OS/editor
+    // litter, never tender documents.
+    ignored: (filePath) => path.basename(filePath).startsWith("."),
     awaitWriteFinish: { stabilityThreshold: 1500, pollInterval: 200 },
     depth: 5,
   });
