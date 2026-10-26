@@ -83,6 +83,7 @@ function tenderFormSchema(requireTenderNumber: boolean) {
     submissionDate: z.string().optional(),
     openingDate: z.string().optional(),
     validityPeriodDays: optionalNumericString,
+    deliveryPeriodDays: optionalNumericString,
     priority: z.enum(TENDER_PRIORITIES),
     notes: z.string().optional(),
     dealingOfficerName: z.string().optional(),
@@ -117,6 +118,7 @@ export function toCreateTenderInput(values: TenderFormValues): CreateTenderInput
     tenderFee: toOptionalNumber(values.tenderFee),
     documentFee: toOptionalNumber(values.documentFee),
     validityPeriodDays: toOptionalNumber(values.validityPeriodDays),
+    deliveryPeriodDays: toOptionalNumber(values.deliveryPeriodDays),
     notes: values.notes || undefined,
     submissionDate: values.submissionDate || undefined,
     openingDate: values.openingDate || undefined,
@@ -145,6 +147,7 @@ const DEFAULT_VALUES: TenderFormValues = {
   submissionDate: "",
   openingDate: "",
   validityPeriodDays: "",
+  deliveryPeriodDays: "120",
   priority: "MEDIUM",
   notes: "",
   dealingOfficerName: "",
@@ -577,6 +580,19 @@ export function TenderForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Validity (days)</FormLabel>
+                  <FormControl>
+                    <Input type="number" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="deliveryPeriodDays"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Delivery period (days after PO)</FormLabel>
                   <FormControl>
                     <Input type="number" {...field} />
                   </FormControl>

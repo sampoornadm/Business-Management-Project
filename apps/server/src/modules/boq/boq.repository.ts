@@ -52,6 +52,7 @@ export interface UpdateBoqItemData {
   gstRate?: number;
   hsnCode?: string | null;
   hsnCodeConfirmed?: boolean;
+  unitWeightKg?: number | null;
   remarks?: string | null;
   sortOrder?: number;
 }

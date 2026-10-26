@@ -188,6 +188,8 @@ export interface TenderDto extends TenderListItemDto {
   documentFee: number | null;
   openingDate: string | null;
   validityPeriodDays: number | null;
+  /** Days after PO receipt that we promise delivery in (default 120). */
+  deliveryPeriodDays: number;
   statusChangedAt: string;
   description: string | null;
   remarks: string | null;
@@ -223,6 +225,7 @@ export interface CreateTenderInput {
   submissionDate?: string;
   openingDate?: string;
   validityPeriodDays?: number;
+  deliveryPeriodDays?: number;
   priority?: TenderPriority;
   kind?: TenderKind;
   description?: string;
@@ -250,6 +253,7 @@ export interface TenderExtractionFields {
   submissionDate?: string;
   openingDate?: string;
   validityPeriodDays?: number;
+  deliveryPeriodDays?: number;
   description?: string;
   remarks?: string;
   notes?: string;

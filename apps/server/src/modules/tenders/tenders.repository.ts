@@ -72,6 +72,7 @@ export interface CreateTenderData {
   submissionDate?: Date | null;
   openingDate?: Date | null;
   validityPeriodDays?: number | null;
+  deliveryPeriodDays?: number;
   priority?: TenderPriority;
   kind?: TenderKind;
   convertedFromId?: string | null;

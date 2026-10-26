@@ -51,6 +51,7 @@ export const updateBoqItemSchema = z
     rate: z.number().nonnegative().optional(),
     gstRate: gstRateField.optional(),
     hsnCode: hsnCodeField.optional(),
+    unitWeightKg: z.number().positive().nullable().optional(),
     remarks: z.string().max(1000).optional(),
     sortOrder: z.number().int().optional(),
   })
