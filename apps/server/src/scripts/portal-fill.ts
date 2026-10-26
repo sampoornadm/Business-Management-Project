@@ -17,12 +17,13 @@ const { values } = parseArgs({
     "dry-run": { type: "boolean", default: false },
     yes: { type: "boolean", default: false },
     "questions-only": { type: "boolean", default: false },
+    save: { type: "boolean", default: false },
   },
 });
 
 async function main(): Promise<number> {
   if (!values.tender || !values.business) {
-    console.error("usage: portal:fill --tender <tender number> --business <business code> [--dry-run] [--yes] [--questions-only] [--cdp <url>]");
+    console.error("usage: portal:fill --tender <tender number> --business <business code> [--dry-run] [--yes] [--questions-only] [--save] [--cdp <url>]");
     return 2;
   }
   const business = await prisma.business.findUnique({ where: { code: values.business } });
@@ -53,6 +54,7 @@ async function main(): Promise<number> {
       tenderId: tender.id,
       dryRun: values["dry-run"]!,
       questionsOnly: values["questions-only"]!,
+      save: values.save!,
       confirm: async (_warnings, header) => {
         if (values.yes) return true;
         const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -69,7 +71,9 @@ async function main(): Promise<number> {
   console.log(`\nResponse ${result.responseNumber}: ${values["dry-run"] ? "dry run, nothing typed" : `${result.filled} fields filled`}`);
   for (const s of result.skipped) console.log(`  skipped: ${s}`);
   for (const m of result.mismatches) console.log(`  MISMATCH: ${m}`);
-  if (!values["dry-run"]) console.log("Review the portal, then Save/Submit it yourself.");
+  if (!values["dry-run"]) {
+    console.log(result.saved ? "Saved." : "Not saved.", "Submit it yourself once you have reviewed it.");
+  }
   return result.skipped.length > 0 || result.mismatches.length > 0 ? 1 : 0;
 }
 

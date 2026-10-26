@@ -26,11 +26,15 @@ class FakeSession implements IPortalSession {
   groupThousands = false;
   corruptedLabels = new Set<string>();
   writes = 0;
+  saves = 0;
 
   async readHeader() {
     return { ...this.header };
   }
   async openTab() {}
+  async save() {
+    this.saves += 1;
+  }
   async readField(label: string) {
     if (this.corruptedLabels.has(label)) return "SOMETHING ELSE";
     return this.fields.get(label) ?? "";
@@ -243,6 +247,21 @@ describe("fillBid", () => {
     const result = await run({ questionsOnly: true });
     expect(result).toMatchObject({ filled: 3, skipped: [], mismatches: [] });
     expect(session.conditions.get("71802001600160")!.Price).toBe("0.00");
+  });
+
+  it("saves once at the end when asked and every field matched", async () => {
+    await run({ save: true });
+    expect(session.saves).toBe(1);
+  });
+
+  it("does not save a form with mismatches, a dry run, or when not asked", async () => {
+    session.corruptedLabels.add(PAN_LABEL);
+    await run({ save: true });
+    expect(session.saves).toBe(0);
+    session.corruptedLabels.clear();
+    await run({ save: true, dryRun: true });
+    await run({});
+    expect(session.saves).toBe(0);
   });
 
   it("stores the response number and audits the run", async () => {

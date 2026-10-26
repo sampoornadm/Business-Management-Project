@@ -10,6 +10,7 @@ export interface IPortalSession {
   openTab(name: PortalTab): Promise<void>;
   readField(label: string): Promise<string>;
   readComment(label: string): Promise<string>;
+  save(): Promise<void>;
   checkLabels(labels: string[]): Promise<{ missing: string[]; ambiguous: string[] }>;
   writeField(label: string, value: string, widget: Widget, options?: { comment?: string }): Promise<void>;
   readConditionRows(): Promise<ConditionRow[]>;
@@ -25,6 +26,8 @@ export interface FillBidInput {
   dryRun: boolean;
   /** Fill the Questions page only; leave item prices and the total untouched. */
   questionsOnly?: boolean;
+  /** Press the portal's Save once at the end, only when nothing mismatched. */
+  save?: boolean;
   /** Called once with the payload's warnings before anything is typed; false aborts the run. */
   confirm: (warnings: string[], header: PortalHeader) => Promise<boolean>;
 }
@@ -34,6 +37,7 @@ export interface FillBidResult {
   skipped: string[];
   mismatches: string[];
   responseNumber: string;
+  saved: boolean;
 }
 
 interface FillBidDeps {
@@ -95,7 +99,7 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
     for (const label of missing) skipped.push(`label not found: ${label}`);
     for (const label of ambiguous) skipped.push(`label ambiguous: ${label}`);
     if (!input.questionsOnly) await checkItems();
-    return { filled, skipped, mismatches, responseNumber: header.responseNumber };
+    return { filled, skipped, mismatches, responseNumber: header.responseNumber, saved: false };
   }
   if (!(await input.confirm(payload.warnings, header))) throw new Error("Aborted by user");
   // The prompt can sit open while the user clicks around the portal: re-check what is open now.
@@ -175,7 +179,13 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
 
   }
 
-  const summary = { filled, skipped, mismatches, warnings: payload.warnings };
+  let saved = false;
+  if (input.save && mismatches.length === 0) {
+    await session.save();
+    saved = true;
+  }
+
+  const summary = { filled, skipped, mismatches, warnings: payload.warnings, saved };
   await deps.portalBids.upsertFromFill({
     businessId: input.businessId,
     tenderId: input.tenderId,
@@ -193,5 +203,5 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
     metadata: { responseNumber: header.responseNumber, source: "cli", ...summary },
   });
 
-  return { filled, skipped, mismatches, responseNumber: header.responseNumber };
+  return { filled, skipped, mismatches, responseNumber: header.responseNumber, saved: false };
 }

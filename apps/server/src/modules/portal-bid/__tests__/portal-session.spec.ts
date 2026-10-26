@@ -111,11 +111,38 @@ describe("PortalSession on the Questions page", () => {
     expect(await page.locator("#A1").inputValue()).toBe("keep");
   });
 
+  it("clicks the toolbar Save button and nothing else", async () => {
+    await session.save();
+    expect(await page.locator("#shown").textContent()).toBe("SAVED");
+  });
+
+  it("refuses to save when it cannot find exactly one Save button", async () => {
+    await page.evaluate(() => document.getElementById("tb-save")!.remove());
+    await expect(session.save()).rejects.toThrow("expected one Save button");
+    expect(await page.locator("#shown").textContent()).not.toBe("SUBMITTED");
+  });
+
   it("opens an allowed tab and refuses anything else", async () => {
     await session.openTab("Items");
     expect(await page.locator("#shown").textContent()).toBe("Items");
     await expect(session.openTab("Save" as never)).rejects.toThrow("not an allowed tab");
     expect(await page.locator("#shown").textContent()).toBe("Items");
+  });
+});
+
+describe("PortalSession speed", () => {
+  it("does not wait for a connection the portal keeps open forever", async () => {
+    page = await browser.newPage();
+    await page.route("http://portal.test/page", (route) =>
+      route.fulfill({ contentType: "text/html", body: `${fixture("questions-page.html")}<script>fetch("/poll")</script>` }),
+    );
+    await page.route("http://portal.test/poll", () => undefined); // never answered
+    await page.goto("http://portal.test/page", { waitUntil: "domcontentloaded" });
+    const session = new PortalSession(page);
+    const started = Date.now();
+    await session.writeField("Enter GSTIN/ ARN", "19ZZZZZ9999Z9Z9", "text");
+    await session.writeField("Dispatch Mode", "RAIL", "combo");
+    expect(Date.now() - started).toBeLessThan(3000);
   });
 });
 

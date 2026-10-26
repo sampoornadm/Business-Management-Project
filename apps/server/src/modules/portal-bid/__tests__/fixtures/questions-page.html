@@ -56,7 +56,9 @@
 
 <div><span style="display:none">Items</span><span ct="HCNPI_standards" id="tab-items" onclick="document.getElementById('shown').textContent='Items'"><span>Items</span><div style="visibility:hidden">Items</div></span>
 <span id="tab-save" onclick="document.getElementById('shown').textContent='SAVED'">Save</span>
-<span id="shown"></span></div>
+<span id="shown"></span>
+<div role="button" id="tb-save" onclick="document.getElementById('shown').textContent='SAVED'">Save</div>
+<div role="button" id="tb-submit" onclick="document.getElementById('shown').textContent='SUBMITTED'">Submit</div></div>
 
 <script>
   document.querySelectorAll('[ct="R_standards"]').forEach((r) => r.addEventListener('click', () => {
