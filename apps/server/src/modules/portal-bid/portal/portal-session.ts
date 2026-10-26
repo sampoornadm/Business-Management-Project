@@ -3,8 +3,9 @@ import { chromium, type Frame, type Page } from "playwright-core";
 
 import type { Widget } from "../portal-bid.types.js";
 
-// The only tabs this driver will ever open. Save, Check and Submit live in the portal's toolbar,
-// not here, and nothing in this file clicks them: the user reviews and saves.
+// The only tabs this driver will ever open. Check and Submit live in the portal's toolbar and
+// nothing in this file clicks them. The one toolbar button it can press is Save, and only through
+// `save()`, which a caller must ask for explicitly.
 const TABS = ["Questions", "Items", "Conditions"] as const;
 export type PortalTab = (typeof TABS)[number];
 
@@ -22,7 +23,9 @@ export interface ConditionRow {
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const collapse = (text: string) => text.replace(/[\s\u00a0]+/g, " ").trim();
-const KEY_DELAY_MS = 30;
+const KEY_DELAY_MS = 8;
+const DOM_QUIET_MS = 150;
+const QUIET_CAP_MS = 3000;
 const CLICK_TIMEOUT_MS = 5000;
 const ATTEMPTS = 3;
 
@@ -41,7 +44,22 @@ export class PortalSession {
   constructor(
     private readonly page: Page,
     private readonly frame: Frame = page.mainFrame(),
-  ) {}
+  ) {
+    // Count only the portal's own action POSTs: it also keeps other connections open for good,
+    // which is why waiting for "network idle" always ran into its timeout.
+    const isAction = (request: { method(): string; url(): string }) =>
+      request.method() === "POST" && request.url().includes("/webdynpro/");
+    page.on("request", (request) => {
+      if (isAction(request)) this.inFlight += 1;
+    });
+    const done = (request: { method(): string; url(): string }) => {
+      if (isAction(request)) this.inFlight = Math.max(0, this.inFlight - 1);
+    };
+    page.on("requestfinished", done);
+    page.on("requestfailed", done);
+  }
+
+  private inFlight = 0;
 
   static async attach(cdpUrl: string): Promise<PortalSession> {
     const browser = await chromium.connectOverCDP(cdpUrl);
@@ -168,6 +186,15 @@ export class PortalSession {
     }
   }
 
+  /** Presses the toolbar's Save button once (never Check or Submit). Throws unless exactly one exists. */
+  async save(): Promise<void> {
+    const button = this.frame.getByRole("button", { name: "Save", exact: true });
+    const count = await button.count();
+    if (count !== 1) throw new Error(`expected one Save button, found ${count}`);
+    await button.click({ timeout: CLICK_TIMEOUT_MS });
+    await this.settle();
+  }
+
   async readConditionRows(): Promise<ConditionRow[]> {
     const index = await this.conditionIndex();
     return index.map(({ itemCode, conditions }) => ({
@@ -276,16 +303,25 @@ export class PortalSession {
     throw lastError;
   }
 
-  /** Resolves once the page's DOM has stopped changing for a moment (capped at 5 s). */
-  private quiet(): Promise<unknown> {
-    return this.frame.evaluate(`new Promise((resolve) => {
-      let timer;
-      const done = () => { observer.disconnect(); resolve(true); };
-      const observer = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(done, 300); });
-      observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true });
-      timer = setTimeout(done, 300);
-      setTimeout(done, 5000);
-    })`);
+  /** Resolves once no portal action is in flight and the DOM has been still for a moment (3 s cap). */
+  private async quiet(): Promise<void> {
+    const deadline = Date.now() + QUIET_CAP_MS;
+    while (Date.now() < deadline) {
+      if (this.inFlight > 0) {
+        await this.page.waitForTimeout(40);
+        continue;
+      }
+      await this.frame.evaluate(`new Promise((resolve) => {
+        let timer;
+        const done = () => { observer.disconnect(); resolve(true); };
+        const observer = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(done, ${DOM_QUIET_MS}); });
+        observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true });
+        timer = setTimeout(done, ${DOM_QUIET_MS});
+        setTimeout(done, 1000);
+      })`);
+      // A request can start while the DOM settles; only a calm moment on both counts is done.
+      if (this.inFlight === 0) return;
+    }
   }
 
   // In-page code is compiled by tsx/esbuild, which wraps named functions in a `__name()` helper
@@ -296,7 +332,6 @@ export class PortalSession {
   }
 
   private async settle(): Promise<void> {
-    await this.page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => undefined);
     await this.quiet();
   }
 }
