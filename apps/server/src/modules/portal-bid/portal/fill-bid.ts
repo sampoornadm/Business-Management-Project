@@ -203,5 +203,5 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
     metadata: { responseNumber: header.responseNumber, source: "cli", ...summary },
   });
 
-  return { filled, skipped, mismatches, responseNumber: header.responseNumber, saved: false };
+  return { filled, skipped, mismatches, responseNumber: header.responseNumber, saved };
 }
