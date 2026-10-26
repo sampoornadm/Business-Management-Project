@@ -188,7 +188,8 @@ export class PortalSession {
 
   /** Presses the toolbar's Save button once (never Check or Submit). Throws unless exactly one exists. */
   async save(): Promise<void> {
-    const button = this.frame.getByRole("button", { name: "Save", exact: true });
+    // The toolbar button is a Web Dynpro `ct="B"` titled "Save Document"; Check and Submit have other titles.
+    const button = this.frame.locator('[ct="B"][title="Save Document"]');
     const count = await button.count();
     if (count !== 1) throw new Error(`expected one Save button, found ${count}`);
     await button.click({ timeout: CLICK_TIMEOUT_MS });
