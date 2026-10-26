@@ -78,6 +78,26 @@ describe("PortalSession on the Questions page", () => {
     await expect(session.writeField("Dispatch Mode", "AIR", "combo")).rejects.toThrow("value not offered: AIR");
   });
 
+  it("refuses a label that matches more than one control", async () => {
+    await page.setContent(`
+      <label ct="L" f="A1"><span>Address</span></label><input id="A1" ct="I">
+      <label ct="L" f="A2"><span>Address</span></label><input id="A2" ct="I">`);
+    await expect(session.writeField("Address", "x", "text")).rejects.toThrow("label ambiguous: Address");
+    await expect(session.readField("Address")).rejects.toThrow("label ambiguous: Address");
+  });
+
+  it("reports missing and ambiguous labels without touching the page", async () => {
+    await page.setContent(`
+      <label ct="L" f="A1"><span>Address</span></label><input id="A1" ct="I" value="keep">
+      <label ct="L" f="A2"><span>Address</span></label><input id="A2" ct="I">
+      <label ct="L" f="B1"><span>Email</span></label><input id="B1" ct="I">`);
+    expect(await session.checkLabels(["Email", "Address", "Nope"])).toEqual({
+      missing: ["Nope"],
+      ambiguous: ["Address"],
+    });
+    expect(await page.locator("#A1").inputValue()).toBe("keep");
+  });
+
   it("opens an allowed tab and refuses anything else", async () => {
     await session.openTab("Items");
     expect(await page.locator("#shown").textContent()).toBe("Items");

@@ -141,6 +141,13 @@ describe("BidPayloadService.buildPayload", () => {
     expect(payload.warnings.some((w) => w.includes("HSN"))).toBe(true);
   });
 
+  it("names the items missing an HSN code when only some have one", async () => {
+    items = [item(), item({ id: "i2", itemCode: "5550001", hsnCode: null })];
+    const payload = await build();
+    expect(answer(payload, "hsnCode")).toMatchObject({ value: "4016" });
+    expect(payload.warnings.some((w) => w.includes("5550001") && w.includes("HSN"))).toBe(true);
+  });
+
   it("skips weight with a warning when an item has no unit weight", async () => {
     items = [item({ unitWeightKg: null })];
     const payload = await build();

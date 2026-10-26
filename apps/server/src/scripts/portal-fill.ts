@@ -49,10 +49,12 @@ async function main(): Promise<number> {
       businessId: business.id,
       tenderId: tender.id,
       dryRun: values["dry-run"]!,
-      confirm: async () => {
+      confirm: async (_warnings, header) => {
         if (values.yes) return true;
         const rl = createInterface({ input: process.stdin, output: process.stdout });
-        const answer = await rl.question("\nType into the open portal response? [y/N] ");
+        const answer = await rl.question(
+          `\nType into portal response ${header.responseNumber} (RFx ${header.rfxNumber})? [y/N] `,
+        );
         rl.close();
         return answer.trim().toLowerCase() === "y";
       },

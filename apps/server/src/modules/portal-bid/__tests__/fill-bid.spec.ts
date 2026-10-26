@@ -20,11 +20,15 @@ class FakeSession implements IPortalSession {
     ["71802001600160", { Price: "0.00", "CGST (Ded-ITC) %": "0.00", "SGST (Ded-ITC) %": "0.00", "IGST (Ded-ITC) %": "0.00" }],
   ]);
   missingLabels = new Set<string>();
+  ambiguousLabels = new Set<string>();
+  failConditions = new Set<string>();
+  blankTypes = new Set<string>();
+  groupThousands = false;
   corruptedLabels = new Set<string>();
   writes = 0;
 
   async readHeader() {
-    return this.header;
+    return { ...this.header };
   }
   async openTab() {}
   async readField(label: string) {
@@ -40,10 +44,24 @@ class FakeSession implements IPortalSession {
     this.fields.set(label, value);
     if (options?.comment !== undefined) this.comments.set(label, options.comment);
   }
+  async checkLabels(labels: string[]) {
+    return {
+      missing: labels.filter((l) => this.missingLabels.has(l)),
+      ambiguous: labels.filter((l) => this.ambiguousLabels.has(l)),
+    };
+  }
   async readConditionRows() {
-    return [...this.conditions].map(([itemCode, conditions]) => ({ itemCode, conditions }));
+    const show = (type: string, value: string) => {
+      if (this.blankTypes.has(type)) return "";
+      return this.groupThousands && value !== "" ? Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : value;
+    };
+    return [...this.conditions].map(([itemCode, conditions]) => ({
+      itemCode,
+      conditions: Object.fromEntries(Object.entries(conditions).map(([t, v]) => [t, show(t, v)])),
+    }));
   }
   async writeCondition(itemCode: string, type: string, amount: string) {
+    if (this.failConditions.has(type)) throw new Error(`condition not found: ${type}`);
     this.writes += 1;
     this.conditions.get(itemCode)![type] = amount;
   }
@@ -161,6 +179,63 @@ describe("fillBid", () => {
     session.header.totalValue = "10.00 INR";
     const result = await run();
     expect(result.mismatches.some((m) => m.includes("Total Value"))).toBe(true);
+  });
+
+  it("reports a condition it could not write, still reads back, stores and audits", async () => {
+    session.failConditions.add("IGST (Ded-ITC) %");
+    const result = await run();
+    expect(result.mismatches.some((m) => m.includes("IGST (Ded-ITC) %"))).toBe(true);
+    expect(upsertFromFill).toHaveBeenCalled();
+    expect(auditLog).toHaveBeenCalled();
+  });
+
+  it("accepts amounts the portal shows with thousands separators", async () => {
+    session.groupThousands = true;
+    const big = { ...payload, items: [{ ...payload.items[0]!, rate: 1250 }], expectedTotal: 1_000_000 };
+    session.header.totalValue = "1,000,000.00 INR";
+    const result = await run({ payload: big });
+    expect(result.mismatches).toEqual([]);
+  });
+
+  it("treats a blank cell as a mismatch even when 0 was expected", async () => {
+    session.blankTypes.add("IGST (Ded-ITC) %");
+    const result = await run();
+    expect(result.mismatches.some((m) => m.includes("IGST (Ded-ITC) %"))).toBe(true);
+  });
+
+  it("aborts when another response was opened while waiting for confirmation", async () => {
+    await expect(
+      run({
+        confirm: async () => {
+          session.header.rfxNumber = "1400099999";
+          return true;
+        },
+      }),
+    ).rejects.toThrow(/changed/);
+    expect(session.writes).toBe(0);
+  });
+
+  it("checks every label and item on a dry run without typing", async () => {
+    session.missingLabels.add(PAN_LABEL);
+    session.ambiguousLabels.add(GSTIN_LABEL);
+    session.conditions.delete("71802001600160");
+    const result = await run({ dryRun: true });
+    expect(session.writes).toBe(0);
+    expect(result.skipped).toEqual(
+      expect.arrayContaining([
+        `label not found: ${PAN_LABEL}`,
+        `label ambiguous: ${GSTIN_LABEL}`,
+        "item 71802001600160 is not on the portal",
+      ]),
+    );
+  });
+
+  it("treats an ambiguous label as skipped, not typed", async () => {
+    session.writeField = async (label: string) => {
+      if (label === GSTIN_LABEL) throw new Error(`label ambiguous: ${label}`);
+    };
+    const result = await run();
+    expect(result.skipped).toContain(GSTIN_LABEL);
   });
 
   it("stores the response number and audits the run", async () => {
