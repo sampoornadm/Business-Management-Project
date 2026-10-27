@@ -32,6 +32,7 @@ export const PERMISSION_KEYS = [
   "tenders:delete",
   "tenders:assign",
   "tenders:change_status",
+  "tenders:revert_status",
   "tenders:generate_document",
   "organizations:create",
   "organizations:read",
