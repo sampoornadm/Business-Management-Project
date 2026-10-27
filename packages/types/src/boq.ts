@@ -45,6 +45,8 @@ export interface BoqItemDto {
   gstRate: number;
   /** HSN (tax classification) code, estimator-owned — set by typing it or applying the AI suggestion. */
   hsnCode: string | null;
+  /** Per-unit weight in kg; feeds the consignment weight on portal bid forms. */
+  unitWeightKg: number | null;
   remarks: string | null;
   sortOrder: number;
   rateBreakdown: BoqItemRateBreakdownDto | null;
@@ -168,6 +170,7 @@ export interface UpdateBoqItemInput {
   gstRate?: number;
   /** Empty string clears it back to unconfirmed; a non-empty value confirms + propagates. */
   hsnCode?: string;
+  unitWeightKg?: number | null;
   remarks?: string;
   sortOrder?: number;
 }
