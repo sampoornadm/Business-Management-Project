@@ -26,6 +26,8 @@
     const [amount, type] = tr.querySelectorAll('input');
     amount.id = 'c-' + item.code + '-' + k; amount.value = item.values[k];
     amount.addEventListener('input', () => { item.values[k] = amount.value; });
+    // Committing a value makes the live grid re-expand every node.
+    amount.addEventListener('change', () => { items.forEach((i) => expanded.add(i.code)); setTimeout(render, 30); });
     type.value = CONDITIONS[k];
     return tr;
   }
