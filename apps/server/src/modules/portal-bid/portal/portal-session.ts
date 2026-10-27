@@ -208,20 +208,67 @@ export class PortalSession {
     await this.settle();
   }
 
+  /**
+   * Every item on the Conditions grid with its condition amounts. The grid only renders a window of
+   * rows (about 100, so ~8 expanded items), so it collapses everything and opens one item at a time.
+   */
   async readConditionRows(): Promise<ConditionRow[]> {
-    const index = await this.conditionIndex();
-    return index.map(({ itemCode, conditions }) => ({
-      itemCode,
-      conditions: Object.fromEntries(Object.entries(conditions).map(([type, cell]) => [type, cell.value])),
-    }));
+    await this.collapseAll();
+    const codes = (await this.conditionIndex()).map((row) => row.itemCode);
+    const rows: ConditionRow[] = [];
+    for (const itemCode of codes) {
+      await this.setNode(itemCode, "Expand");
+      const item = (await this.conditionIndex()).find((row) => row.itemCode === itemCode);
+      rows.push({
+        itemCode,
+        conditions: Object.fromEntries(Object.entries(item?.conditions ?? {}).map(([type, cell]) => [type, cell.value])),
+      });
+      await this.setNode(itemCode, "Collapse");
+    }
+    return rows;
   }
 
   async writeCondition(itemCode: string, conditionType: string, amount: string): Promise<void> {
+    await this.focusItem(itemCode);
     const item = (await this.conditionIndex()).find((row) => row.itemCode === itemCode);
     if (!item) throw new Error(`item not found: ${itemCode}`);
     const cell = item.conditions[conditionType];
     if (!cell) throw new Error(`condition not found: ${conditionType}`);
     await this.typeInto(cell.id, amount);
+  }
+
+  // The one item currently opened by writeCondition (everything else is collapsed).
+  private expandedItem: string | null = null;
+
+  private async focusItem(itemCode: string): Promise<void> {
+    if (this.expandedItem === itemCode) return;
+    if (this.expandedItem === null) await this.collapseAll();
+    else await this.setNode(this.expandedItem, "Collapse");
+    await this.setNode(itemCode, "Expand");
+    this.expandedItem = itemCode;
+  }
+
+  private async collapseAll(): Promise<void> {
+    const link = this.frame.locator('a[ct="LN"]').filter({ hasText: /^\s*Collapse All\s*$/ }).filter({ visible: true });
+    if ((await link.count()) === 0) throw new Error("Collapse All link not found on the Conditions grid");
+    await link.first().click({ timeout: CLICK_TIMEOUT_MS });
+    await this.settle();
+    this.expandedItem = null;
+  }
+
+  /** Opens or closes an item's node; a no-op when the node is already in that state or absent. */
+  private async setNode(itemCode: string, state: "Expand" | "Collapse"): Promise<void> {
+    const toggle = this.frame
+      .locator('td[cc="1"]')
+      .filter({
+        has: this.frame.locator('[ct="TV"]', {
+          hasText: new RegExp(`^\\s*Item\\s+\\d+\\s*-\\s*${escapeRegExp(itemCode)}\\b`),
+        }),
+      })
+      .locator(`[title="${state} Node"]`);
+    if ((await toggle.count()) === 0) return;
+    await toggle.first().click({ timeout: CLICK_TIMEOUT_MS });
+    await this.settle();
   }
 
   /** Read-only: which of `labels` are absent from the page, and which match more than one control. */
