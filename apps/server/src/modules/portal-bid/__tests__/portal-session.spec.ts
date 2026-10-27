@@ -235,13 +235,14 @@ describe("PortalSession on the Conditions grid", () => {
     expect(rows[1]!.conditions.Price).toBe("0.00");
   });
 
-  it("writes several conditions of one item in a row", async () => {
-    await session.writeCondition("5550001", "Price", "3");
-    await session.writeCondition("5550001", "CGST (Ded-ITC) %", "9");
+  it("writes several conditions of one item even though every edit re-expands the grid", async () => {
     await session.writeCondition("6660002", "Price", "4");
+    await session.writeCondition("6660002", "CGST (Ded-ITC) %", "9");
+    await session.writeCondition("6660002", "SGST (Ded-ITC) %", "9");
+    await session.writeCondition("5550001", "Price", "3");
     const rows = await session.readConditionRows();
-    expect(rows[1]!.conditions).toMatchObject({ Price: "3", "CGST (Ded-ITC) %": "9" });
-    expect(rows[2]!.conditions.Price).toBe("4");
+    expect(rows[2]!.conditions).toMatchObject({ Price: "4", "CGST (Ded-ITC) %": "9", "SGST (Ded-ITC) %": "9" });
+    expect(rows[1]!.conditions.Price).toBe("3");
   });
 
   it("fails when the item or condition is not on the grid", async () => {

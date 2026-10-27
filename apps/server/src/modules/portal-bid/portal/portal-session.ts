@@ -229,23 +229,19 @@ export class PortalSession {
   }
 
   async writeCondition(itemCode: string, conditionType: string, amount: string): Promise<void> {
-    await this.focusItem(itemCode);
-    const item = (await this.conditionIndex()).find((row) => row.itemCode === itemCode);
+    const find = async () => (await this.conditionIndex()).find((row) => row.itemCode === itemCode);
+    let item = await find();
+    // The grid renders a window of rows and re-expands every node after each edit, so never trust
+    // what was open a moment ago: when the cell is not in view, collapse all and open just this item.
+    if (!item?.conditions[conditionType]) {
+      await this.collapseAll();
+      await this.setNode(itemCode, "Expand");
+      item = await find();
+    }
     if (!item) throw new Error(`item not found: ${itemCode}`);
     const cell = item.conditions[conditionType];
     if (!cell) throw new Error(`condition not found: ${conditionType}`);
     await this.typeInto(cell.id, amount);
-  }
-
-  // The one item currently opened by writeCondition (everything else is collapsed).
-  private expandedItem: string | null = null;
-
-  private async focusItem(itemCode: string): Promise<void> {
-    if (this.expandedItem === itemCode) return;
-    if (this.expandedItem === null) await this.collapseAll();
-    else await this.setNode(this.expandedItem, "Collapse");
-    await this.setNode(itemCode, "Expand");
-    this.expandedItem = itemCode;
   }
 
   private async collapseAll(): Promise<void> {
@@ -253,7 +249,6 @@ export class PortalSession {
     if ((await link.count()) === 0) throw new Error("Collapse All link not found on the Conditions grid");
     await link.first().click({ timeout: CLICK_TIMEOUT_MS });
     await this.settle();
-    this.expandedItem = null;
   }
 
   /** Opens or closes an item's node; a no-op when the node is already in that state or absent. */
