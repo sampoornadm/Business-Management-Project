@@ -1,6 +1,6 @@
 "use client";
 
-import { TENDER_KIND_LABELS, TENDER_STATUS_LABELS } from "@bmp/types";
+import { TENDER_KIND_LABELS } from "@bmp/types";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +22,6 @@ import {
   formatDate,
   formatDateTime,
   Skeleton,
-  Stepper,
   Tabs,
   TabsContent,
   TabsList,
@@ -37,7 +36,6 @@ import { useState } from "react";
 import { ConvertToProjectDialog } from "@/components/projects/convert-to-project-dialog";
 import { LinkedBudgetaryQuotationCard } from "@/components/tenders/linked-budgetary-quotation-card";
 import { PinnedTenderNotes } from "@/components/tenders/pinned-tender-notes";
-import { StatusChangeDialog } from "@/components/tenders/status-change-dialog";
 import { TenderAssigneesTab } from "@/components/tenders/tender-assignees-tab";
 import { TenderCompetitorsTab } from "@/components/tenders/tender-competitors-tab";
 import { TenderDocumentsTab } from "@/components/tenders/tender-documents-tab";
@@ -45,10 +43,10 @@ import { TenderDownloadMenu } from "@/components/tenders/tender-download-menu";
 import { TenderHistoryTab } from "@/components/tenders/tender-history-tab";
 import { TenderItemsTab } from "@/components/tenders/tender-items-tab";
 import { TenderNotesView } from "@/components/tenders/tender-notes-view";
+import { TenderStatusTracker } from "@/components/tenders/tender-status-tracker";
 import { TenderTagsCard } from "@/components/tenders/tender-tags-card";
 import { useTags } from "@/hooks/use-tags";
 import {
-  useChangeTenderStatus,
   useDeleteTender,
   usePinTenderNote,
   useSetTenderTags,
@@ -59,8 +57,7 @@ import { useAuthStore } from "@/lib/auth-store";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { daysUntil, deadlineLabel, isPastDue } from "@/lib/deadline";
 import { hasPermission } from "@/lib/permissions";
-import { tenderKindBadgeVariant, tenderPriorityBadgeVariant, tenderStatusBadgeVariant } from "@/lib/tender-status";
-import { buildTenderSteps, isOnHappyPath } from "@/lib/tender-stepper";
+import { tenderKindBadgeVariant, tenderPriorityBadgeVariant } from "@/lib/tender-status";
 
 export default function TenderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -73,7 +70,6 @@ export default function TenderDetailPage() {
   const tenderQuery = useTender(params.id);
   const tagsQuery = useTags();
   useBreadcrumbLabel(params.id, tenderQuery.data?.title);
-  const changeStatus = useChangeTenderStatus(params.id);
   const deleteTender = useDeleteTender();
   const setTags = useSetTenderTags(params.id);
   const pinNote = usePinTenderNote(params.id);
@@ -83,24 +79,12 @@ export default function TenderDetailPage() {
   const canUpdate = hasPermission(roleName, "tenders:update");
   const canDelete = hasPermission(roleName, "tenders:delete");
   const canChangeStatus = hasPermission(roleName, "tenders:change_status");
+  const canRevertStatus = hasPermission(roleName, "tenders:revert_status");
   const canViewBoq = hasPermission(roleName, "boq:read");
   const canCreateProject = hasPermission(roleName, "projects:create");
   const canCreateBill = hasPermission(roleName, "bills:create");
   const canViewBills = hasPermission(roleName, "bills:read");
   const canGenerateDocument = hasPermission(roleName, "tenders:generate_document");
-
-  async function handleStatusChange(values: Parameters<typeof changeStatus.mutateAsync>[0]) {
-    try {
-      await changeStatus.mutateAsync(values);
-      toast({ title: "Status updated" });
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Could not change status",
-        description: error instanceof Error ? error.message : "Please try again.",
-      });
-    }
-  }
 
   async function handleDelete() {
     try {
@@ -155,14 +139,19 @@ export default function TenderDetailPage() {
             {tender.kind === "BUDGETARY" && (
               <Badge variant={tenderKindBadgeVariant(tender.kind)}>{TENDER_KIND_LABELS.BUDGETARY}</Badge>
             )}
-            <Badge variant={tenderStatusBadgeVariant(tender.status)}>
-              {TENDER_STATUS_LABELS[tender.status]}
-            </Badge>
             <Badge variant={tenderPriorityBadgeVariant(tender.priority)}>{tender.priority}</Badge>
           </div>
           <p className="text-sm text-muted-foreground">
             {tender.tenderNumber} · {tender.client.name}
           </p>
+          <div className="mt-3">
+            <TenderStatusTracker
+              tender={tender}
+              canChange={canChangeStatus}
+              canRevert={canRevertStatus}
+              canViewBoq={canViewBoq}
+            />
+          </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           {canCreateProject && tender.status === "WON" && (
@@ -181,9 +170,6 @@ export default function TenderDetailPage() {
                 <ScrollText className="mr-2 h-4 w-4" /> View Bills
               </Link>
             </Button>
-          )}
-          {canChangeStatus && (
-            <StatusChangeDialog currentStatus={tender.status} onSubmit={handleStatusChange} />
           )}
           {canGenerateDocument && <TenderDownloadMenu tenderId={tender.id} tenderNumber={tender.tenderNumber} />}
           {canUpdate && (
@@ -222,14 +208,6 @@ export default function TenderDetailPage() {
           convertedFrom={tender.convertedFrom}
         />
       )}
-
-      {isOnHappyPath(tender.status) ? (
-        <Card>
-          <CardContent className="pt-6">
-            <Stepper steps={buildTenderSteps(tender.status)} />
-          </CardContent>
-        </Card>
-      ) : null}
 
       <Tabs defaultValue={initialTab}>
         <TabsList>

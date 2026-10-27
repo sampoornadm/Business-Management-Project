@@ -26,6 +26,13 @@ export const TENDER_STATUS_TRANSITIONS: Record<TenderStatus, TenderStatus[]> = {
 
 export const TENDER_TERMINAL_STATUSES: TenderStatus[] = ["WON", "LOST", "CANCELLED"];
 
+const TENDER_STATUS_STAGE: Record<TenderStatus, number> = { DRAFT: 0, SUBMITTED: 1, WON: 2, LOST: 2, CANCELLED: 2 };
+
+/** A move to an earlier stage (un-submitting, reopening a result) — needs tenders:revert_status. */
+export function isTenderStatusReversal(from: TenderStatus, to: TenderStatus): boolean {
+  return TENDER_STATUS_STAGE[to] < TENDER_STATUS_STAGE[from];
+}
+
 export const TENDER_KINDS = ["TENDER", "BUDGETARY"] as const;
 export type TenderKind = (typeof TENDER_KINDS)[number];
 

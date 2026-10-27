@@ -1,18 +1,6 @@
-import { TENDER_STATUS_LABELS, type TenderStatus } from "@bmp/types";
-import type { StepperStep } from "@bmp/ui";
+import { isTenderStatusReversal, TENDER_STATUS_TRANSITIONS, type TenderStatus } from "@bmp/types";
 
-/** The linear "happy path" a tender follows if it isn't lost/cancelled. */
-export const TENDER_HAPPY_PATH: TenderStatus[] = ["DRAFT", "SUBMITTED", "WON"];
-
-export function isOnHappyPath(status: TenderStatus): boolean {
-  return TENDER_HAPPY_PATH.includes(status);
-}
-
-export function buildTenderSteps(currentStatus: TenderStatus): StepperStep[] {
-  const currentIndex = TENDER_HAPPY_PATH.indexOf(currentStatus);
-  return TENDER_HAPPY_PATH.map((status, index) => ({
-    key: status,
-    label: TENDER_STATUS_LABELS[status],
-    state: index < currentIndex ? "complete" : index === currentIndex ? "current" : "upcoming",
-  }));
+/** Whether clicking the earlier `target` stage's circle is a legal admin move back from `current`. */
+export function canRevertTo(current: TenderStatus, target: TenderStatus): boolean {
+  return isTenderStatusReversal(current, target) && TENDER_STATUS_TRANSITIONS[current].includes(target);
 }

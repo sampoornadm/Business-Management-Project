@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 
+import type { AuditLogDto } from "@bmp/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BadRequestError, ConflictError, NotFoundError } from "../../../core/errors/HttpErrors.js";
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../../core/errors/HttpErrors.js";
 import type { EmailService } from "../../../infra/mailer/email.service.js";
 import type { AttachmentsService } from "../../attachments/attachments.service.js";
 import type { AuditService } from "../../audit/audit.service.js";
@@ -301,9 +302,10 @@ describe("TendersService", () => {
   let notificationsService: NotificationsService;
   let emailService: EmailService;
   let attachmentsService: { listByEntity: ReturnType<typeof vi.fn> };
+  let hasPermission: ReturnType<typeof vi.fn>;
   let service: TendersService;
   const actorId = randomUUID();
-  const ctx = { businessId: BUSINESS_ID };
+  const ctx = { businessId: BUSINESS_ID, roleId: randomUUID() };
 
   const baseInput: Omit<CreateTenderData, "businessId"> = {
     tenderNumber: "TND-0001",
@@ -321,7 +323,24 @@ describe("TendersService", () => {
 
   beforeEach(() => {
     tendersRepository = new FakeTendersRepository();
-    auditService = { log: vi.fn().mockResolvedValue(undefined) } as unknown as AuditService;
+    // Stateful enough for the status-undo check: list() returns the newest log() entry.
+    const auditLogs: AuditLogDto[] = [];
+    auditService = {
+      log: vi.fn(async (entry: { actorId?: string; action: string; metadata?: Record<string, unknown> }) => {
+        auditLogs.unshift({
+          id: randomUUID(),
+          actor: entry.actorId ? { id: entry.actorId, firstName: "", lastName: "", email: "" } : null,
+          action: entry.action,
+          entityType: null,
+          entityId: null,
+          metadata: entry.metadata ?? null,
+          ipAddress: null,
+          createdAt: new Date().toISOString(),
+        });
+      }),
+      list: vi.fn(async () => ({ items: auditLogs.slice(0, 1), page: 1, pageSize: 1, totalItems: auditLogs.length, totalPages: 1 })),
+    } as unknown as AuditService;
+    hasPermission = vi.fn().mockResolvedValue(true);
     notificationsService = {
       create: vi.fn().mockResolvedValue(undefined),
       createMany: vi.fn().mockResolvedValue(undefined),
@@ -341,6 +360,7 @@ describe("TendersService", () => {
       attachmentsService as unknown as AttachmentsService,
       notificationsService,
       emailService,
+      hasPermission,
     );
   });
 
@@ -387,6 +407,55 @@ describe("TendersService", () => {
     await service.changeStatus(created.id, { status: "CANCELLED" }, actorId, ctx);
     const reopened = await service.changeStatus(created.id, { status: "DRAFT" }, actorId, ctx);
     expect(reopened.status).toBe("DRAFT");
+  });
+
+  it("rejects moving a tender back a stage without tenders:revert_status", async () => {
+    const created = await service.create(baseInput, ctx);
+    await service.changeStatus(created.id, { status: "SUBMITTED" }, randomUUID(), ctx);
+    hasPermission.mockResolvedValue(false);
+    await expect(
+      service.changeStatus(created.id, { status: "DRAFT" }, actorId, ctx),
+    ).rejects.toThrow(ForbiddenError);
+    expect(hasPermission).toHaveBeenCalledWith(ctx.roleId, "tenders:revert_status");
+  });
+
+  it("lets a non-admin undo their own status change right after making it", async () => {
+    hasPermission.mockResolvedValue(false);
+    const created = await service.create(baseInput, ctx);
+    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    await service.changeStatus(created.id, { status: "WON" }, actorId, ctx);
+    const undone = await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    expect(undone.status).toBe("SUBMITTED");
+  });
+
+  it("stops a non-admin undoing their own status change once the undo window has passed", async () => {
+    hasPermission.mockResolvedValue(false);
+    const created = await service.create(baseInput, ctx);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+      vi.setSystemTime(Date.now() + 5 * 60_000);
+      await expect(
+        service.changeStatus(created.id, { status: "DRAFT" }, actorId, ctx),
+      ).rejects.toThrow(ForbiddenError);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears the recorded result when a WON tender is reopened", async () => {
+    const created = await service.create(baseInput, ctx);
+    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    await service.changeStatus(
+      created.id,
+      { status: "WON", winnerName: "Us", winningBidAmount: 4_850_000 },
+      actorId,
+      ctx,
+    );
+    const reopened = await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    expect(reopened.winnerName).toBeNull();
+    expect(reopened.winningBidAmount).toBeNull();
+    expect(reopened.lossReason).toBeNull();
   });
 
   it("rejects a direct terminal-to-terminal jump even after reopen support is added", async () => {

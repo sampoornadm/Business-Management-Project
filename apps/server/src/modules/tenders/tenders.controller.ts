@@ -126,6 +126,7 @@ export class TendersController {
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"],
       businessId: req.user!.businessId,
+      roleId: req.user!.roleId,
     });
     sendSuccess(res, tender, "Tender status updated");
   });

@@ -1,5 +1,7 @@
 import {
   TENDER_STATUS_TRANSITIONS,
+  TENDER_TERMINAL_STATUSES,
+  isTenderStatusReversal,
   type AttachmentDto,
   type PaginatedResult,
   type TenderDashboardStatsDto,
@@ -12,7 +14,7 @@ import {
 
 import { EXPORT_MAX_ROWS, GENERIC_UPLOAD_LIMITS } from "../../config/constants.js";
 import { env } from "../../config/env.js";
-import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import { buildPaginatedResult, type PaginationParams } from "../../core/interfaces/pagination.js";
 import type { ScopedRequestContext } from "../../core/interfaces/request-context.js";
 import type { EmailService } from "../../infra/mailer/email.service.js";
@@ -42,6 +44,10 @@ import type {
   ChangeTenderStatusBody,
 } from "./tenders.validation.js";
 
+// How long a non-admin may reverse their own status change (the UI's "Undo" toast). Longer than
+// the toast itself so a slow network doesn't turn a timely Undo into a 403.
+const STATUS_UNDO_WINDOW_MS = 30_000;
+
 export class TendersService {
   constructor(
     private readonly tendersRepository: ITendersRepository,
@@ -53,6 +59,7 @@ export class TendersService {
     private readonly attachmentsService: AttachmentsService,
     private readonly notificationsService: NotificationsService,
     private readonly emailService: EmailService,
+    private readonly hasPermission: (roleId: string, permissionKey: string) => Promise<boolean>,
   ) {}
 
   async listTenders(
@@ -213,7 +220,7 @@ export class TendersService {
     id: string,
     input: ChangeTenderStatusBody,
     actorId: string,
-    context: ScopedRequestContext,
+    context: ScopedRequestContext & { roleId: string },
   ): Promise<TenderDto> {
     const tender = await this.assertTenderExists(id, context.businessId);
     // Captured before the repository call: the repository may return the
@@ -226,13 +233,22 @@ export class TendersService {
         `Cannot transition from ${previousStatus} to ${input.status}. Allowed: ${allowedNext.join(", ") || "none"}`,
       );
     }
+    if (
+      isTenderStatusReversal(previousStatus, input.status) &&
+      !(await this.hasPermission(context.roleId, "tenders:revert_status")) &&
+      !(await this.isOwnRecentStatusChange(id, actorId, input.status, previousStatus))
+    ) {
+      throw new ForbiddenError("Only an admin can move a tender back to an earlier stage");
+    }
 
+    // Leaving a result (reopen/undo) clears it, so a later Won/Lost never inherits stale fields.
+    const keepsResult = TENDER_TERMINAL_STATUSES.includes(input.status);
     const updated = await this.tendersRepository.updateStatus(id, {
       status: input.status,
       statusChangedAt: new Date(),
-      winnerName: input.winnerName,
-      winningBidAmount: input.winningBidAmount,
-      lossReason: input.lossReason,
+      winnerName: keepsResult ? input.winnerName : null,
+      winningBidAmount: keepsResult ? input.winningBidAmount : null,
+      lossReason: keepsResult ? input.lossReason : null,
     });
 
     await this.auditService.log({
@@ -262,6 +278,28 @@ export class TendersService {
     }
 
     return toTenderDto(updated);
+  }
+
+  /** True when the tender's latest status change was this actor's own from→to, made moments ago. */
+  private async isOwnRecentStatusChange(
+    id: string,
+    actorId: string,
+    from: TenderStatus,
+    to: TenderStatus,
+  ): Promise<boolean> {
+    const {
+      items: [latest],
+    } = await this.auditService.list(
+      { page: 1, pageSize: 1 },
+      { entityType: "Tender", entityId: id, action: "TENDER_STATUS_CHANGED" },
+    );
+    const metadata = (latest?.metadata ?? {}) as { from?: TenderStatus; to?: TenderStatus };
+    return (
+      latest?.actor?.id === actorId &&
+      metadata.from === from &&
+      metadata.to === to &&
+      Date.now() - new Date(latest.createdAt).getTime() <= STATUS_UNDO_WINDOW_MS
+    );
   }
 
   async getStatusHistory(

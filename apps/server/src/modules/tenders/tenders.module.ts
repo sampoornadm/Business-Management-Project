@@ -1,6 +1,7 @@
 import { generateJson, generateText as ollamaGenerateText } from "../../infra/llm/ollama.client.js";
 import { EmailService } from "../../infra/mailer/email.service.js";
 import { prisma } from "../../infra/prisma/client.js";
+import { roleHasPermission } from "../../shared/middleware/requirePermission.middleware.js";
 import { attachmentsService } from "../attachments/attachments.module.js";
 import { auditService } from "../audit/audit.module.js";
 import { businessesRepository } from "../businesses/businesses.module.js";
@@ -31,6 +32,7 @@ export const tendersService = new TendersService(
   attachmentsService,
   notificationsService,
   emailService,
+  roleHasPermission,
 );
 // Adapts ollama.client's (prompt, model?, options?) to the service's own narrower (prompt,
 // options?) — the service never picks a model (always the env default), only ever a timeout.
