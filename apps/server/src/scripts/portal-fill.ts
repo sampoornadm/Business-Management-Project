@@ -19,12 +19,13 @@ const { values } = parseArgs({
     "questions-only": { type: "boolean", default: false },
     save: { type: "boolean", default: false },
     only: { type: "string" },
+    "items-only": { type: "boolean", default: false },
   },
 });
 
 async function main(): Promise<number> {
   if (!values.tender || !values.business) {
-    console.error("usage: portal:fill --tender <tender number> --business <business code> [--dry-run] [--yes] [--questions-only] [--save] [--only key,key] [--cdp <url>]");
+    console.error("usage: portal:fill --tender <tender number> --business <business code> [--dry-run] [--yes] [--questions-only] [--save] [--only key,key] [--items-only] [--cdp <url>]");
     return 2;
   }
   const business = await prisma.business.findUnique({ where: { code: values.business } });
@@ -60,6 +61,7 @@ async function main(): Promise<number> {
       tenderId: tender.id,
       dryRun: values["dry-run"]!,
       questionsOnly: values["questions-only"]!,
+      itemsOnly: values["items-only"]!,
       save: values.save!,
       confirm: async (_warnings, header) => {
         if (values.yes) return true;

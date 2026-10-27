@@ -26,6 +26,8 @@ export interface FillBidInput {
   dryRun: boolean;
   /** Fill the Questions page only; leave item prices and the total untouched. */
   questionsOnly?: boolean;
+  /** Fill the item prices only; leave every question alone. */
+  itemsOnly?: boolean;
   /** Press the portal's Save once at the end, only when nothing mismatched. */
   save?: boolean;
   /** Called once with the payload's warnings before anything is typed; false aborts the run. */
@@ -94,10 +96,12 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
 
   if (dryRun) {
     // Read-only, but it still proves every label and item can be found before a live run.
-    await session.openTab("Questions");
-    const { missing, ambiguous } = await session.checkLabels(payload.answers.map((a) => a.label));
-    for (const label of missing) skipped.push(`label not found: ${label}`);
-    for (const label of ambiguous) skipped.push(`label ambiguous: ${label}`);
+    if (!input.itemsOnly) {
+      await session.openTab("Questions");
+      const { missing, ambiguous } = await session.checkLabels(payload.answers.map((a) => a.label));
+      for (const label of missing) skipped.push(`label not found: ${label}`);
+      for (const label of ambiguous) skipped.push(`label ambiguous: ${label}`);
+    }
     if (!input.questionsOnly) await checkItems();
     return { filled, skipped, mismatches, responseNumber: header.responseNumber, saved: false };
   }
@@ -110,31 +114,34 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
     );
   }
 
-  // Questions
-  await session.openTab("Questions");
-  const written = [];
-  for (const answer of payload.answers) {
-    try {
-      await session.writeField(answer.label, answer.value, answer.widget, {
-        ...(answer.comment !== undefined ? { comment: answer.comment } : {}),
-      });
-      written.push(answer);
-      filled += 1;
-    } catch (error) {
-      const message = messageOf(error);
-      if (message.startsWith("label not found") || message.startsWith("label ambiguous")) skipped.push(answer.label);
-      else mismatches.push(`${answer.label}: ${message}`);
-    }
-  }
-  for (const answer of written) {
-    const got = await session.readField(answer.label);
-    if (got !== answer.value) mismatches.push(`${answer.label}: expected "${answer.value}", portal shows "${got}"`);
-    if (answer.comment !== undefined) {
-      const comment = await session.readComment(answer.label);
-      if (comment !== answer.comment) {
-        mismatches.push(`${answer.label} (comment): expected "${answer.comment}", portal shows "${comment}"`);
+  if (!input.itemsOnly) {
+    // Questions
+    await session.openTab("Questions");
+    const written = [];
+    for (const answer of payload.answers) {
+      try {
+        await session.writeField(answer.label, answer.value, answer.widget, {
+          ...(answer.comment !== undefined ? { comment: answer.comment } : {}),
+        });
+        written.push(answer);
+        filled += 1;
+      } catch (error) {
+        const message = messageOf(error);
+        if (message.startsWith("label not found") || message.startsWith("label ambiguous")) skipped.push(answer.label);
+        else mismatches.push(`${answer.label}: ${message}`);
       }
     }
+    for (const answer of written) {
+      const got = await session.readField(answer.label);
+      if (got !== answer.value) mismatches.push(`${answer.label}: expected "${answer.value}", portal shows "${got}"`);
+      if (answer.comment !== undefined) {
+        const comment = await session.readComment(answer.label);
+        if (comment !== answer.comment) {
+          mismatches.push(`${answer.label} (comment): expected "${answer.comment}", portal shows "${comment}"`);
+        }
+      }
+    }
+
   }
 
   let portalTotal: number | null = null;
