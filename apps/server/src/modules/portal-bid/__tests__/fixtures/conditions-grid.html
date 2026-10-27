@@ -13,6 +13,7 @@
   ];
   const expanded = new Set(items.map((i) => i.code));
   const WINDOW = 9;
+  const LATENCY = 450; // the live portal re-renders a moment after the page looks quiet
   function nodeRow(text, toggle, onclick) {
     const tr = document.createElement('tr');
     tr.innerHTML = '<td cc="1"><span style="display:inline-block;width:12px;height:12px" ' + (toggle ? 'title="' + toggle + '"' : '') + '></span><span ct="TV"></span></td><td cc="3"></td><td cc="11"></td>';
@@ -27,7 +28,7 @@
     amount.id = 'c-' + item.code + '-' + k; amount.value = item.values[k];
     amount.addEventListener('input', () => { item.values[k] = amount.value; });
     // Committing a value makes the live grid re-expand every node.
-    amount.addEventListener('change', () => { items.forEach((i) => expanded.add(i.code)); setTimeout(render, 30); });
+    amount.addEventListener('change', () => { items.forEach((i) => expanded.add(i.code)); setTimeout(render, LATENCY); });
     type.value = CONDITIONS[k];
     return tr;
   }
@@ -35,13 +36,13 @@
     const rows = [nodeRow('Header', null, null)];
     for (const item of items) {
       const open = expanded.has(item.code);
-      rows.push(nodeRow(item.title, open ? 'Collapse Node' : 'Expand Node', () => { open ? expanded.delete(item.code) : expanded.add(item.code); render(); }));
+      rows.push(nodeRow(item.title, open ? 'Collapse Node' : 'Expand Node', () => { open ? expanded.delete(item.code) : expanded.add(item.code); setTimeout(render, LATENCY); }));
       if (open) CONDITIONS.forEach((_, k) => rows.push(condRow(item, k)));
     }
     const body = document.getElementById('body');
     body.replaceChildren(...rows.slice(0, WINDOW));
   }
-  document.getElementById('collapse-all').addEventListener('click', () => { expanded.clear(); render(); });
+  document.getElementById('collapse-all').addEventListener('click', () => { expanded.clear(); setTimeout(render, LATENCY); });
   render();
 </script>
 </body></html>
