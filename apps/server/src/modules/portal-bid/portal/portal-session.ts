@@ -21,6 +21,8 @@ export interface ConditionRow {
   conditions: Record<string, string>;
 }
 
+type ConditionItem = { itemCode: string; conditions: Record<string, { id: string; value: string }> };
+const hasConditions = (item: ConditionItem | undefined) => Object.keys(item?.conditions ?? {}).length > 0;
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const collapse = (text: string) => text.replace(/[\s\u00a0]+/g, " ").trim();
 const KEY_DELAY_MS = 8;
@@ -214,34 +216,50 @@ export class PortalSession {
    */
   async readConditionRows(): Promise<ConditionRow[]> {
     await this.collapseAll();
-    const codes = (await this.conditionIndex()).map((row) => row.itemCode);
+    const collapsed = await this.pollItems((items) => items.length > 0 && items.every((i) => !hasConditions(i)));
     const rows: ConditionRow[] = [];
-    for (const itemCode of codes) {
+    for (const { itemCode } of collapsed) {
       await this.setNode(itemCode, "Expand");
-      const item = (await this.conditionIndex()).find((row) => row.itemCode === itemCode);
+      const items = await this.pollItems((all) => hasConditions(all.find((i) => i.itemCode === itemCode)));
+      const item = items.find((i) => i.itemCode === itemCode);
       rows.push({
         itemCode,
         conditions: Object.fromEntries(Object.entries(item?.conditions ?? {}).map(([type, cell]) => [type, cell.value])),
       });
       await this.setNode(itemCode, "Collapse");
+      await this.pollItems((all) => !hasConditions(all.find((i) => i.itemCode === itemCode)));
     }
     return rows;
   }
 
   async writeCondition(itemCode: string, conditionType: string, amount: string): Promise<void> {
-    const find = async () => (await this.conditionIndex()).find((row) => row.itemCode === itemCode);
-    let item = await find();
-    // The grid renders a window of rows and re-expands every node after each edit, so never trust
-    // what was open a moment ago: when the cell is not in view, collapse all and open just this item.
-    if (!item?.conditions[conditionType]) {
+    const hasCell = (items: ConditionItem[]) => Boolean(items.find((i) => i.itemCode === itemCode)?.conditions[conditionType]);
+    // A previous edit may still be re-rendering the grid; give it a moment before moving anything.
+    let items = await this.pollItems(hasCell, 1500);
+    // The grid renders a window of rows and re-expands every node after each edit, so when the cell
+    // is not in view, collapse all and open just this item.
+    if (!hasCell(items)) {
       await this.collapseAll();
+      await this.pollItems((all) => all.length > 0 && all.every((i) => !hasConditions(i)));
       await this.setNode(itemCode, "Expand");
-      item = await find();
+      items = await this.pollItems(hasCell);
     }
+    const item = items.find((row) => row.itemCode === itemCode);
     if (!item) throw new Error(`item not found: ${itemCode}`);
     const cell = item.conditions[conditionType];
     if (!cell) throw new Error(`condition not found: ${conditionType}`);
     await this.typeInto(cell.id, amount);
+  }
+
+  /** Re-reads the grid until `done` holds or the timeout passes; returns the last reading. */
+  private async pollItems(done: (items: ConditionItem[]) => boolean, timeoutMs = 5000): Promise<ConditionItem[]> {
+    const deadline = Date.now() + timeoutMs;
+    let items = await this.conditionIndex();
+    while (!done(items) && Date.now() < deadline) {
+      await this.page.waitForTimeout(120);
+      items = await this.conditionIndex();
+    }
+    return items;
   }
 
   private async collapseAll(): Promise<void> {
@@ -306,7 +324,7 @@ export class PortalSession {
     }, controlId);
   }
 
-  private conditionIndex(): Promise<Array<{ itemCode: string; conditions: Record<string, { id: string; value: string }> }>> {
+  private conditionIndex(): Promise<ConditionItem[]> {
     return this.run(() => {
       type Group = { itemCode: string; conditions: Record<string, { id: string; value: string }> };
       const groups: Group[] = [];
