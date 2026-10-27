@@ -17,6 +17,7 @@
     "db:generate": "dotenv -e .env -- pnpm --filter @bmp/database generate",
     "portal:fill": "dotenv -e .env -- pnpm --filter @bmp/server exec tsx src/scripts/portal-fill.ts",
     "portal:profile:import": "dotenv -e .env -- pnpm --filter @bmp/server exec tsx src/scripts/portal-profile-import.ts",
+    "portal:action": "dotenv -e .env -- pnpm --filter @bmp/server exec tsx src/scripts/portal-action.ts",
     "db:migrate": "dotenv -e .env -- pnpm --filter @bmp/database migrate:deploy",
     "db:migrate:create": "dotenv -e .env -- pnpm --filter @bmp/database migrate:create",
     "db:seed": "dotenv -e .env -- pnpm --filter @bmp/database seed",
