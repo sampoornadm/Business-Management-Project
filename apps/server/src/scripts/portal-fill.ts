@@ -18,12 +18,13 @@ const { values } = parseArgs({
     yes: { type: "boolean", default: false },
     "questions-only": { type: "boolean", default: false },
     save: { type: "boolean", default: false },
+    only: { type: "string" },
   },
 });
 
 async function main(): Promise<number> {
   if (!values.tender || !values.business) {
-    console.error("usage: portal:fill --tender <tender number> --business <business code> [--dry-run] [--yes] [--questions-only] [--save] [--cdp <url>]");
+    console.error("usage: portal:fill --tender <tender number> --business <business code> [--dry-run] [--yes] [--questions-only] [--save] [--only key,key] [--cdp <url>]");
     return 2;
   }
   const business = await prisma.business.findUnique({ where: { code: values.business } });
@@ -34,6 +35,11 @@ async function main(): Promise<number> {
   const payload = await bidPayloadService.buildPayload(tender.id, business.id, "SAIL_ISP", {
     includeItems: !values["questions-only"],
   });
+  if (values.only) {
+    // Limit the run to some catalog keys, e.g. --only hsnCode,consignmentWeight.
+    const wanted = new Set(values.only.split(",").map((key) => key.trim()));
+    payload.answers = payload.answers.filter((answer) => wanted.has(answer.key));
+  }
   console.log(`\nQuestions (${payload.answers.length}):`);
   for (const a of payload.answers) {
     console.log(`  [${a.source.padEnd(8)}] ${a.label.slice(0, 70)} = ${a.value}${a.comment ? `  (comment: ${a.comment})` : ""}`);
