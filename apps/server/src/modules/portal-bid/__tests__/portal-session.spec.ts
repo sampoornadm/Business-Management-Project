@@ -215,22 +215,33 @@ describe("PortalSession on the Conditions grid", () => {
     session = new PortalSession(page);
   });
 
-  it("groups condition amounts under each item's product id", async () => {
+  it("reads every item even when the grid only renders a window of rows", async () => {
     const rows = await session.readConditionRows();
-    expect(rows.map((r) => r.itemCode)).toEqual(["71802001600160", "5550001"]);
-    expect(rows[0]!.conditions).toMatchObject({
+    expect(rows.map((r) => r.itemCode)).toEqual(["71802001600160", "5550001", "6660002"]);
+    expect(rows[0]!.conditions).toEqual({
       Price: "17.75",
       "CGST (Ded-ITC) %": "9.00",
       "SGST (Ded-ITC) %": "9.00",
       "IGST (Ded-ITC) %": "0.00",
     });
+    expect(Object.keys(rows[2]!.conditions)).toHaveLength(4);
   });
 
-  it("writes a condition amount for the right item only", async () => {
-    await session.writeCondition("5550001", "Price", "12.5");
+  it("writes a condition amount for an item outside the initial window", async () => {
+    await session.writeCondition("6660002", "Price", "12.5");
     const rows = await session.readConditionRows();
-    expect(rows[1]!.conditions.Price).toBe("12.5");
+    expect(rows[2]!.conditions.Price).toBe("12.5");
     expect(rows[0]!.conditions.Price).toBe("17.75");
+    expect(rows[1]!.conditions.Price).toBe("0.00");
+  });
+
+  it("writes several conditions of one item in a row", async () => {
+    await session.writeCondition("5550001", "Price", "3");
+    await session.writeCondition("5550001", "CGST (Ded-ITC) %", "9");
+    await session.writeCondition("6660002", "Price", "4");
+    const rows = await session.readConditionRows();
+    expect(rows[1]!.conditions).toMatchObject({ Price: "3", "CGST (Ded-ITC) %": "9" });
+    expect(rows[2]!.conditions.Price).toBe("4");
   });
 
   it("fails when the item or condition is not on the grid", async () => {
