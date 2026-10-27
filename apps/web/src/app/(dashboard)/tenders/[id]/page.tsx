@@ -36,6 +36,7 @@ import { useState } from "react";
 import { ConvertToProjectDialog } from "@/components/projects/convert-to-project-dialog";
 import { LinkedBudgetaryQuotationCard } from "@/components/tenders/linked-budgetary-quotation-card";
 import { PinnedTenderNotes } from "@/components/tenders/pinned-tender-notes";
+import { PortalFillButton } from "@/components/tenders/portal-fill-button";
 import { TenderAssigneesTab } from "@/components/tenders/tender-assignees-tab";
 import { TenderCompetitorsTab } from "@/components/tenders/tender-competitors-tab";
 import { TenderDocumentsTab } from "@/components/tenders/tender-documents-tab";
@@ -85,6 +86,7 @@ export default function TenderDetailPage() {
   const canCreateBill = hasPermission(roleName, "bills:create");
   const canViewBills = hasPermission(roleName, "bills:read");
   const canGenerateDocument = hasPermission(roleName, "tenders:generate_document");
+  const canFillPortal = hasPermission(roleName, "tenders:fill_portal");
 
   async function handleDelete() {
     try {
@@ -178,6 +180,7 @@ export default function TenderDetailPage() {
             </Button>
           )}
           {canGenerateDocument && <TenderDownloadMenu tenderId={tender.id} tenderNumber={tender.tenderNumber} />}
+          {canFillPortal && <PortalFillButton tenderId={tender.id} />}
           {canUpdate && (
             <Button variant="outline" asChild>
               <Link href={`/tenders/${tender.id}/edit`}>

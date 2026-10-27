@@ -291,4 +291,18 @@ describe("fillBid", () => {
       }),
     );
   });
+
+  it("reports progress from the questions half to the items half, ending at 100", async () => {
+    const session = new FakeSession();
+    const seen: number[] = [];
+    await fillBid(
+      { session, payload, tenderNumber: "1400014359", businessId: "b", tenderId: "t", dryRun: false, confirm: async () => true, onProgress: (p) => seen.push(p) },
+      { portalBids: { upsertFromFill: async () => undefined, findByResponseNumber: async () => null }, audit: { log: async () => undefined } },
+    );
+    expect(seen.at(-1)).toBe(100);
+    expect([...seen]).toEqual([...seen].sort((a, b) => a - b));
+    // Every question step lands at or below the halfway mark before any item price is typed.
+    expect(seen.some((p) => p === 50)).toBe(true);
+    expect(seen.filter((p) => p > 0 && p < 50).length).toBeGreaterThan(0);
+  });
 });

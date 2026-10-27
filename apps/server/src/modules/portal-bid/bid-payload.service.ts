@@ -22,6 +22,28 @@ interface BidPayloadDeps {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+type BusinessForAnswers = NonNullable<Awaited<ReturnType<IBusinessesRepository["findById"]>>>;
+
+/** The answers the Business record itself supplies, keyed by question key. */
+export function businessAnswerValues(
+  business: BusinessForAnswers,
+  profile: Record<string, string>,
+): Record<string, string | null | undefined> {
+  const contact = business.contacts.find((c) => c.isPrimary) ?? business.contacts[0];
+  const cityPin = business.city && business.pincode ? `${business.city} - ${business.pincode}` : business.city ?? business.pincode;
+  return {
+    // The business record may predate the GSTIN field; the portal profile carries the same number.
+    supplierGstin: business.gstNumber || profile.supplierGstin,
+    panNumber: business.panNumber,
+    udyamNumber: business.udyamRegistrationNumber,
+    email: contact?.email,
+    phone: contact?.phone,
+    mobile: contact?.phone,
+    address: [business.address, cityPin].filter(Boolean).join(", ") || null,
+    contactPerson: contact?.name,
+  };
+}
+
 export class BidPayloadService {
   constructor(private readonly deps: BidPayloadDeps) {}
 
@@ -90,18 +112,7 @@ export class BidPayloadService {
       warnings.push(`Delivery: tender asks ${tenderDays} days, we offer ${tender.deliveryPeriodDays}`);
     }
 
-    const contact = business.contacts.find((c) => c.isPrimary) ?? business.contacts[0];
-    const cityPin = business.city && business.pincode ? `${business.city} - ${business.pincode}` : business.city ?? business.pincode;
-    const businessValues: Record<string, string | null | undefined> = {
-      supplierGstin: supplierGstin ?? undefined,
-      panNumber: business.panNumber,
-      udyamNumber: business.udyamRegistrationNumber,
-      email: contact?.email,
-      phone: contact?.phone,
-      mobile: contact?.phone,
-      address: [business.address, cityPin].filter(Boolean).join(", ") || null,
-      contactPerson: contact?.name,
-    };
+    const businessValues = businessAnswerValues(business, profile);
     const tenderValues: Record<string, string | null | undefined> = {
       hsnCode: hsn,
       consignmentWeight: weight.text,

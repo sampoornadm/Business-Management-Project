@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-import { chromium, type Frame, type Page } from "playwright-core";
+import { chromium, type Browser, type Frame, type Page } from "playwright-core";
 
 import type { Widget } from "../portal-bid.types.js";
 
@@ -62,15 +62,28 @@ export class PortalSession {
   }
 
   private inFlight = 0;
+  private browser: Browser | undefined;
 
   static async attach(cdpUrl: string): Promise<PortalSession> {
     const browser = await chromium.connectOverCDP(cdpUrl);
     const pages = browser.contexts().flatMap((context) => context.pages());
     const portalPages = pages.filter((candidate) => /sailisp\.co\.in/.test(candidate.url()));
-    if (portalPages.length === 0) throw new Error(`No SAIL ISP tab is open in the Chrome at ${cdpUrl}`);
+    if (portalPages.length === 0) {
+      await browser.close();
+      throw new Error(`No SAIL ISP tab is open in the Chrome at ${cdpUrl}`);
+    }
     const session = await PortalSession.findIn(portalPages);
-    if (!session) throw new Error("None of the SAIL ISP tabs is showing an RFx response; open the response first");
+    if (!session) {
+      await browser.close();
+      throw new Error("None of the SAIL ISP tabs is showing an RFx response; open the response first");
+    }
+    session.browser = browser;
     return session;
+  }
+
+  /** Lets go of the CDP connection; on a connected (not launched) browser this leaves Chrome open. */
+  async disconnect(): Promise<void> {
+    await this.browser?.close();
   }
 
   /** The first frame, in any of `pages`, that shows an RFx response header; null if none does. */
