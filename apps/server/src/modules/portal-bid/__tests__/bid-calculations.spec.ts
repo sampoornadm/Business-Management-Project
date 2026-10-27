@@ -26,13 +26,23 @@ describe("consignmentWeight", () => {
     expect(consignmentWeight([{ quantity: 800, unitWeightKg: 0.0625 }])).toEqual({ text: "50 Kg", missing: 0 });
   });
 
-  it("keeps decimals without trailing zeros", () => {
+  it("rounds the total up to the next 10 Kg", () => {
     expect(
       consignmentWeight([
         { quantity: 3, unitWeightKg: 1.25 },
         { quantity: 1, unitWeightKg: 0.5 },
       ]),
-    ).toEqual({ text: "4.25 Kg", missing: 0 });
+    ).toEqual({ text: "10 Kg", missing: 0 });
+    expect(consignmentWeight([{ quantity: 205.78, unitWeightKg: 1 }]).text).toBe("210 Kg");
+  });
+
+  it("keeps an exact multiple of 10 as it is, despite float noise", () => {
+    expect(consignmentWeight([{ quantity: 100, unitWeightKg: 1 }]).text).toBe("100 Kg");
+    expect(consignmentWeight([{ quantity: 3, unitWeightKg: 3.3333333333333335 }]).text).toBe("10 Kg");
+  });
+
+  it("rounds a tiny positive total up to 10 Kg", () => {
+    expect(consignmentWeight([{ quantity: 1, unitWeightKg: 0.001 }]).text).toBe("10 Kg");
   });
 
   it("reports no text when any item has no unit weight", () => {

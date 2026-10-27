@@ -9,7 +9,7 @@ export function joinHsnCodes(items: ReadonlyArray<{ hsnCode: string | null }>): 
 }
 
 /**
- * Consignment weight as "<n> Kg". `text` is null (and `missing` says how many items blocked it)
+ * Consignment weight as "<n> Kg", rounded up to the next 10 Kg. `text` is null (and `missing` says how many items blocked it)
  * as soon as any item lacks a quantity or unit weight — a partial sum would read as a real weight.
  */
 export function consignmentWeight(
@@ -22,7 +22,8 @@ export function consignmentWeight(
     else total += quantity * unitWeightKg;
   }
   if (missing > 0 || items.length === 0) return { text: null, missing };
-  return { text: `${Number(total.toFixed(3))} Kg`, missing: 0 };
+  // toFixed guards float noise: 10.000000000000002 must stay 10, not round up to 20.
+  return { text: `${Math.ceil(Number((total / 10).toFixed(6))) * 10} Kg`, missing: 0 };
 }
 
 function stateCode(gstin: string): string {

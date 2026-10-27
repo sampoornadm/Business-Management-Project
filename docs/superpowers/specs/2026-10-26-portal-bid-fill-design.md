@@ -71,7 +71,7 @@ Adding another buyer later means a new catalog file, nothing else.
 ### Per-tender derived values
 
 - **HSN code**: the distinct non-empty `hsnCode` values across the current BOQ items, in BOQ order (`sortOrder`), joined with `, `. One distinct value gives that value alone. Items with no HSN are skipped and listed in the warnings.
-- **Consignment weight**: Σ (quantity × `unitWeightKg`) over current BOQ items, written as `<n> Kg`. If any item has no `unitWeightKg`, the field is left untouched and reported.
+- **Consignment weight**: Σ (quantity × `unitWeightKg`) over current BOQ items, rounded up to the next 10 Kg, written as `<n> Kg` (the user's rule, 2026-10-27). If any item has no `unitWeightKg`, the field is left untouched and reported.
 - **Delivery period (days)**: `Tender.deliveryPeriodDays`.
 - **Tender-stated delivery days**: not stored. A pure function `parseDeliveryDaysFromNotes` reads the tender's notes (all notes: `Tender.notes` including pinned lines) and returns the days if a delivery period is stated (days, weeks and months converted), else `null`. Delivery periods are rarely stated. If the parsed value is shorter than `deliveryPeriodDays`, the tender shows a "check delivery period" badge, and the fill prints the warning and asks for confirmation before typing a period longer than the tender allows. Computed on read so it can never go stale.
 
