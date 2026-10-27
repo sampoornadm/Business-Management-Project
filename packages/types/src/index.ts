@@ -28,3 +28,4 @@ export * from "./tender.js";
 export * from "./theme.js";
 export * from "./user.js";
 export * from "./vendor.js";
+export * from "./portal-bid.js";

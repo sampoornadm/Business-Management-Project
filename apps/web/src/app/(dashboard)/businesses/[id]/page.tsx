@@ -24,6 +24,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
 import { ContactDialog } from "@/components/businesses/contact-dialog";
+import { PortalProfileCard } from "@/components/businesses/portal-profile-card";
 import {
   useAddBusinessContact,
   useBusiness,
@@ -52,6 +53,9 @@ export default function BusinessDetailPage() {
 
   const canUpdate = hasPermission(roleName, "businesses:update");
   const canDelete = hasPermission(roleName, "businesses:delete");
+  // The profile API acts on the signed-in business, so only that business's own page shows it.
+  const activeBusinessId = useAuthStore((state) => state.activeBusinessId);
+  const canSeePortalProfile = hasPermission(roleName, "tenders:fill_portal") && activeBusinessId === params.id;
 
   async function handleDelete() {
     try {
@@ -263,6 +267,8 @@ export default function BusinessDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {canSeePortalProfile && <PortalProfileCard />}
     </div>
   );
 }

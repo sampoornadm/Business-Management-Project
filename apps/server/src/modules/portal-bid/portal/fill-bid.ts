@@ -32,6 +32,14 @@ export interface FillBidInput {
   save?: boolean;
   /** Called once with the payload's warnings before anything is typed; false aborts the run. */
   confirm: (warnings: string[], header: PortalHeader) => Promise<boolean>;
+  /**
+   * Overall progress, 0-100, called as work completes. The questions page owns the first half and
+   * the item prices the second, so a questions-only or items-only run still ends at 100.
+   */
+  onProgress?: (percent: number) => void;
+  /** Who started the run and from where, for the audit entry; a CLI run has no user. */
+  actorId?: string | null;
+  source?: "cli" | "web";
 }
 
 export interface FillBidResult {
@@ -77,6 +85,12 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
   const mismatches: string[] = [];
   let filled = 0;
 
+  // Each page is a fixed share of the bar, advanced one step per field (written, then read back).
+  const pageShare = input.questionsOnly || input.itemsOnly ? 100 : 50;
+  const report = (done: number, total: number, offset: number) =>
+    input.onProgress?.(Math.min(100, Math.round(offset + (total === 0 ? pageShare : (done / total) * pageShare))));
+  const itemsOffset = input.itemsOnly ? 0 : pageShare;
+
   const header = await session.readHeader();
   if (header.rfxNumber !== input.tenderNumber) {
     throw new Error(`This portal response is for RFx ${header.rfxNumber}, not ${input.tenderNumber}`);
@@ -118,6 +132,8 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
     // Questions
     await session.openTab("Questions");
     const written = [];
+    const questionSteps = payload.answers.length * 2;
+    let questionDone = 0;
     for (const answer of payload.answers) {
       try {
         await session.writeField(answer.label, answer.value, answer.widget, {
@@ -130,7 +146,11 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
         if (message.startsWith("label not found") || message.startsWith("label ambiguous")) skipped.push(answer.label);
         else mismatches.push(`${answer.label}: ${message}`);
       }
+      questionDone += 1;
+      report(questionDone, questionSteps, 0);
     }
+    // A field that failed to write has no read-back, so its step is credited here.
+    questionDone += payload.answers.length - written.length;
     for (const answer of written) {
       const got = await session.readField(answer.label);
       if (got !== answer.value) mismatches.push(`${answer.label}: expected "${answer.value}", portal shows "${got}"`);
@@ -140,14 +160,19 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
           mismatches.push(`${answer.label} (comment): expected "${answer.comment}", portal shows "${comment}"`);
         }
       }
+      questionDone += 1;
+      report(questionDone, questionSteps, 0);
     }
-
+    report(1, 1, 0);
   }
 
   let portalTotal: number | null = null;
   if (!input.questionsOnly) {
     // Items / Conditions
     const pricedItems = await checkItems();
+    // Four conditions per item, then the read-back and the total as one last step.
+    const itemSteps = pricedItems.length * 4 + 1;
+    let itemDone = 0;
     for (const item of pricedItems) {
       const amounts: Array<[string, number]> = [
         [PRICE, item.rate],
@@ -164,6 +189,8 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
           // user knows what state the form is in.
           mismatches.push(`Item ${item.itemCode} ${type}: ${messageOf(error)}`);
         }
+        itemDone += 1;
+        report(itemDone, itemSteps, itemsOffset);
       }
     }
     const after = new Map((await session.readConditionRows()).map((row) => [row.itemCode, row.conditions]));
@@ -176,6 +203,7 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
       }
     }
 
+    report(itemSteps, itemSteps, itemsOffset);
     const finalHeader = await session.readHeader();
     portalTotal = parsePortalAmount(finalHeader.totalValue);
     if (portalTotal !== payload.expectedTotal) {
@@ -203,12 +231,13 @@ export async function fillBid(input: FillBidInput, deps: FillBidDeps): Promise<F
     summary,
   });
   await deps.audit.log({
-    actorId: null,
+    actorId: input.actorId ?? null,
     action: "TENDER_PORTAL_FILL_COMPLETED",
     entityType: "Tender",
     entityId: input.tenderId,
-    metadata: { responseNumber: header.responseNumber, source: "cli", ...summary },
+    metadata: { responseNumber: header.responseNumber, source: input.source ?? "cli", ...summary },
   });
 
+  input.onProgress?.(100);
   return { filled, skipped, mismatches, responseNumber: header.responseNumber, saved };
 }
