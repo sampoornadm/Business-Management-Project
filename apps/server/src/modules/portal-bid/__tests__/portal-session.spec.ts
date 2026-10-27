@@ -116,6 +116,16 @@ describe("PortalSession on the Questions page", () => {
     expect(await page.locator("#shown").textContent()).toBe("SAVED");
   });
 
+  it("clicks the toolbar Edit button and nothing else", async () => {
+    await session.edit();
+    expect(await page.locator("#shown").textContent()).toBe("EDIT");
+  });
+
+  it("refuses to edit when there is no single visible Edit button", async () => {
+    await page.evaluate(() => document.getElementById("tb-edit")!.remove());
+    await expect(session.edit()).rejects.toThrow("expected one Edit button, found 0");
+  });
+
   it("refuses to save when it cannot find exactly one Save button", async () => {
     await page.evaluate(() => document.getElementById("tb-save")!.remove());
     await expect(session.save()).rejects.toThrow("expected one Save button");

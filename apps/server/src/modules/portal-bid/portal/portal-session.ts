@@ -196,6 +196,18 @@ export class PortalSession {
     await this.settle();
   }
 
+  /** Presses the toolbar's Edit button once (the response opens read-only after a Save). */
+  async edit(): Promise<void> {
+    const button = this.frame
+      .locator('[ct="B"]')
+      .filter({ has: this.frame.locator(".lsButton__text", { hasText: /^Edit$/ }) })
+      .filter({ visible: true });
+    const count = await button.count();
+    if (count !== 1) throw new Error(`expected one Edit button, found ${count}`);
+    await button.click({ timeout: CLICK_TIMEOUT_MS });
+    await this.settle();
+  }
+
   async readConditionRows(): Promise<ConditionRow[]> {
     const index = await this.conditionIndex();
     return index.map(({ itemCode, conditions }) => ({
