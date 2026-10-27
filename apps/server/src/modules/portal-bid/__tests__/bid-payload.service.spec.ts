@@ -193,6 +193,13 @@ describe("BidPayloadService.buildPayload", () => {
     expect(payload.warnings.some((w) => w.includes("no current BOQ"))).toBe(true);
   });
 
+  it("falls back to the profile's supplier GSTIN when the business record has none", async () => {
+    business.gstNumber = null;
+    profiles.answers.supplierGstin = "19ADIPC4887G1Z9";
+    const payload = await build();
+    expect(payload.items[0]).toMatchObject({ cgstPct: 9, sgstPct: 9, igstPct: 0 });
+  });
+
   it("refuses to split GST without a billing-party GSTIN", async () => {
     delete profiles.answers.billingGstin;
     await expect(build()).rejects.toThrow(/billing/i);

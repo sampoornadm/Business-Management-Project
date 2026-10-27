@@ -41,7 +41,8 @@ export class BidPayloadService {
     if (!business) throw new NotFoundError("Business not found");
 
     const profile = await portalProfiles.findAnswers(businessId, portalCode);
-    const supplierGstin = business.gstNumber;
+    // The business record may predate the GSTIN field; the portal profile carries the same number.
+    const supplierGstin = business.gstNumber || profile.supplierGstin;
     const billingGstin = profile.billingGstin;
     // The GST split only matters for item prices; a questions-only run does not need it.
     if (includeItems && !supplierGstin) {

@@ -249,6 +249,13 @@ describe("fillBid", () => {
     expect(session.conditions.get("71802001600160")!.Price).toBe("0.00");
   });
 
+  it("fills only the items when asked, leaving every question alone", async () => {
+    const result = await run({ itemsOnly: true });
+    expect(session.fields.size).toBe(0);
+    expect(result).toMatchObject({ filled: 4, skipped: [], mismatches: [] });
+    expect(session.conditions.get("71802001600160")!.Price).toBe("17.75");
+  });
+
   it("saves once at the end when asked and every field matched", async () => {
     const result = await run({ save: true });
     expect(session.saves).toBe(1);
