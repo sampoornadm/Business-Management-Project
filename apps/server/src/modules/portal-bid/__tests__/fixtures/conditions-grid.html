@@ -1,0 +1,48 @@
+<!doctype html>
+<html><body>
+<!-- Models the Conditions tree table: it renders only a window of rows (the live one holds 100), a
+     collapsed node removes its condition rows from the DOM, and the toolbar has a Collapse All link. -->
+<a ct="LN" id="collapse-all"><span class="urAccessKey">C</span>ollapse All</a>
+<table id="tree"><tbody id="body"></tbody></table>
+<script>
+  const CONDITIONS = ['Price', 'CGST (Ded-ITC) %', 'SGST (Ded-ITC) %', 'IGST (Ded-ITC) %'];
+  const items = [
+    { code: '71802001600160', title: 'Item 1 - 71802001600160 GASKET FOR COOLING PLATE FLANGE', values: ['17.75', '9.00', '9.00', '0.00'] },
+    { code: '5550001', title: 'Item 2 - 5550001 SECOND ITEM', values: ['0.00', '0.00', '0.00', '0.00'] },
+    { code: '6660002', title: 'Item 3 - 6660002 THIRD ITEM', values: ['0.00', '0.00', '0.00', '0.00'] },
+  ];
+  const expanded = new Set(items.map((i) => i.code));
+  const WINDOW = 9;
+  const LATENCY = 450; // the live portal re-renders a moment after the page looks quiet
+  function nodeRow(text, toggle, onclick) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td cc="1"><span style="display:inline-block;width:12px;height:12px" ' + (toggle ? 'title="' + toggle + '"' : '') + '></span><span ct="TV"></span></td><td cc="3"></td><td cc="11"></td>';
+    tr.querySelector('[ct="TV"]').textContent = text;
+    if (onclick) tr.querySelector('span').addEventListener('click', onclick);
+    return tr;
+  }
+  function condRow(item, k) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td cc="1"></td><td cc="3"><input ct="I"></td><td cc="11"><input ct="I" readonly></td>';
+    const [amount, type] = tr.querySelectorAll('input');
+    amount.id = 'c-' + item.code + '-' + k; amount.value = item.values[k];
+    amount.addEventListener('input', () => { item.values[k] = amount.value; });
+    // Committing a value makes the live grid re-expand every node.
+    amount.addEventListener('change', () => { items.forEach((i) => expanded.add(i.code)); setTimeout(render, LATENCY); });
+    type.value = CONDITIONS[k];
+    return tr;
+  }
+  function render() {
+    const rows = [nodeRow('Header', null, null)];
+    for (const item of items) {
+      const open = expanded.has(item.code);
+      rows.push(nodeRow(item.title, open ? 'Collapse Node' : 'Expand Node', () => { open ? expanded.delete(item.code) : expanded.add(item.code); setTimeout(render, LATENCY); }));
+      if (open) CONDITIONS.forEach((_, k) => rows.push(condRow(item, k)));
+    }
+    const body = document.getElementById('body');
+    body.replaceChildren(...rows.slice(0, WINDOW));
+  }
+  document.getElementById('collapse-all').addEventListener('click', () => { expanded.clear(); setTimeout(render, LATENCY); });
+  render();
+</script>
+</body></html>

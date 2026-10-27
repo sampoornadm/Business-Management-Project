@@ -37,6 +37,7 @@ export function buildBoqItemTree(items: BoqItemWithBreakdown[]): BoqItemDto[] {
       amount: item.amount,
       gstRate: item.gstRate,
       hsnCode: item.hsnCode,
+      unitWeightKg: item.unitWeightKg,
       remarks: item.remarks,
       sortOrder: item.sortOrder,
       rateBreakdown: toRateBreakdownDto(item.rateBreakdown),

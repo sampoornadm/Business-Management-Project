@@ -140,6 +140,12 @@ export default function TenderDetailPage() {
               <Badge variant={tenderKindBadgeVariant(tender.kind)}>{TENDER_KIND_LABELS.BUDGETARY}</Badge>
             )}
             <Badge variant={tenderPriorityBadgeVariant(tender.priority)}>{tender.priority}</Badge>
+            {tender.deliveryPeriodNeedsReview && (
+              <Badge variant="signal">
+                Check delivery period: tender asks {tender.tenderDeliveryDays} days, we offer{" "}
+                {tender.deliveryPeriodDays}
+              </Badge>
+            )}
           </div>
           <p className="text-sm text-muted-foreground">
             {tender.tenderNumber} · {tender.client.name}

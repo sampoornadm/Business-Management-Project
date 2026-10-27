@@ -9,6 +9,7 @@ import type {
 
 import type { ExportableTable } from "../../shared/utils/table-export.js";
 
+import { parseDeliveryDaysFromNotes } from "./tender-delivery-days.parser.js";
 import type {
   TenderAssigneeWithRelations,
   TenderDetail,
@@ -73,6 +74,7 @@ function toTagDto(entity: TenderDetail["tags"][number]): TenderTagDto {
 }
 
 export function toTenderDto(entity: TenderDetail): TenderDto {
+  const tenderDeliveryDays = parseDeliveryDaysFromNotes(entity.notes);
   return {
     id: entity.id,
     tenderNumber: entity.tenderNumber,
@@ -93,6 +95,9 @@ export function toTenderDto(entity: TenderDetail): TenderDto {
     submissionDate: entity.submissionDate ? entity.submissionDate.toISOString() : null,
     openingDate: entity.openingDate ? entity.openingDate.toISOString() : null,
     validityPeriodDays: entity.validityPeriodDays,
+    deliveryPeriodDays: entity.deliveryPeriodDays,
+    tenderDeliveryDays,
+    deliveryPeriodNeedsReview: tenderDeliveryDays !== null && tenderDeliveryDays < entity.deliveryPeriodDays,
     statusChangedAt: entity.statusChangedAt.toISOString(),
     description: entity.description,
     remarks: entity.remarks,

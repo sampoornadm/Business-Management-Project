@@ -1,0 +1,43 @@
+<!doctype html>
+<html><body>
+<!-- Models what the live portal does after a round trip: it re-renders the DOM and hands out new
+     control ids, and a field can lose text typed just before the re-render. -->
+<table id="host">
+<tr>
+  <td><label ct="L" f="T1"><span>Place of Dispatch</span></label></td>
+  <td><input id="T1" ct="I" type="text" data-flaky="1"></td>
+</tr>
+<tr>
+  <td><label ct="L" f="R1"><span>Are you registered for GSTIN ?</span></label></td>
+  <td><table id="R1" ct="RG" data-flaky-radio="1"><tbody><tr>
+    <td><span ct="R_standards" id="R1a" class="lsRadioButton--unchecked"><span>Yes</span></span></td>
+    <td><span ct="R_standards" id="R1b" class="lsRadioButton--unchecked"><span>No</span></span></td>
+  </tr></tbody></table></td>
+</tr>
+</table>
+<script>
+  let serial = 0;
+  const fresh = (p) => p + (++serial);
+  function wireRadios(root) {
+    root.querySelectorAll('[ct="R_standards"]').forEach((r) => r.addEventListener('click', () => {
+      const group = r.closest('table[ct="RG"]');
+      if (group.dataset.flakyRadio === '1') { // first click: re-render with new ids, nothing selected
+        const label = document.querySelector('label[f="' + group.id + '"]');
+        const id = fresh('G');
+        const html = group.outerHTML.replace(/id="[^"]*"/g, () => 'id="' + fresh('X') + '"').replace('data-flaky-radio="1"', 'data-flaky-radio="0"');
+        group.outerHTML = html;
+        const next = document.querySelector('table[ct="RG"]');
+        next.id = id; label.setAttribute('f', id);
+        wireRadios(next);
+        return;
+      }
+      group.querySelectorAll('[ct="R_standards"]').forEach((o) => { o.className = 'lsRadioButton--unchecked'; });
+      r.className = 'lsRadioButton--checked';
+    }));
+  }
+  wireRadios(document);
+  document.querySelectorAll('input[data-flaky="1"]').forEach((i) => i.addEventListener('blur', () => {
+    if (i.dataset.flaky === '1') { i.dataset.flaky = '0'; i.value = ''; } // first commit is lost
+  }));
+</script>
+</body></html>

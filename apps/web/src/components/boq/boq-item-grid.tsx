@@ -68,9 +68,19 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
 
   async function commitField(
     item: BoqItemDto,
-    field: "description" | "unit" | "quantity" | "rate" | "gstRate" | "hsnCode",
+    field: "description" | "unit" | "quantity" | "rate" | "gstRate" | "hsnCode" | "unitWeightKg",
     value: string,
   ) {
+    if (field === "unitWeightKg") {
+      // Empty clears it (null); otherwise must be a positive number.
+      const parsed = value === "" ? null : Number(value);
+      if (parsed !== null && (Number.isNaN(parsed) || parsed <= 0)) {
+        toast({ variant: "destructive", title: "Enter a unit weight above 0 kg" });
+        return;
+      }
+      await commitUpdate(item, { unitWeightKg: parsed });
+      return;
+    }
     if (field === "hsnCode") {
       if (value !== "" && !/^\d{2,8}$/.test(value)) {
         toast({ variant: "destructive", title: "HSN code must be 2-8 digits" });
@@ -227,6 +237,16 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
       widthClassName: "w-24",
       getValue: (item) => item.gstRate,
       onCommit: (item, value) => void commitField(item, "gstRate", value),
+    },
+    {
+      key: "unitWeightKg",
+      header: "Unit wt (kg)",
+      align: "right",
+      editable: canEdit,
+      inputType: "number",
+      widthClassName: "w-28",
+      getValue: (item) => item.unitWeightKg ?? "",
+      onCommit: (item, value) => void commitField(item, "unitWeightKg", value),
     },
     {
       key: "amount",

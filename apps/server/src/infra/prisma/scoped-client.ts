@@ -14,6 +14,8 @@ export const SCOPED_MODELS = new Set([
   "HistoricalRate",
   "Notification",
   "SavedView",
+  "PortalBid",
+  "PortalProfile",
 ]);
 
 const READ_ACTIONS = new Set(["findFirst", "findFirstOrThrow", "findMany", "findUnique", "findUniqueOrThrow", "count", "aggregate", "groupBy", "updateMany", "deleteMany"]);

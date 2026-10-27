@@ -50,6 +50,7 @@ const createTenderBaseSchema = z.object({
   submissionDate: optionalDate,
   openingDate: z.coerce.date().optional(),
   validityPeriodDays: z.coerce.number().int().positive().optional(),
+  deliveryPeriodDays: z.coerce.number().int().positive().optional(),
   priority: z.enum(TENDER_PRIORITIES).optional(),
   description: z.string().max(5000).optional(),
   remarks: z.string().max(5000).optional(),
