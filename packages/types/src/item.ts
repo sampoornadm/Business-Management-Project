@@ -17,6 +17,8 @@ export interface ItemClassificationDto {
 export interface ItemListEntryDto extends ItemClassificationDto {
   id: string;
   canonicalName: string;
+  /** Generated 11-digit internal code (CC SS FFFF VVV); null only before backfill. */
+  itemCode: string | null;
   unit: string | null;
   quoteCount: number;
   vendorCount: number;
@@ -29,6 +31,8 @@ export interface ItemListEntryDto extends ItemClassificationDto {
 export interface ItemDetailDto extends ItemClassificationDto {
   id: string;
   canonicalName: string;
+  /** Generated 11-digit internal code (CC SS FFFF VVV); null only before backfill. */
+  itemCode: string | null;
   unit: string | null;
   // Every historical quote that resolved to this item (tender, vendor, rate, make, date).
   entries: ItemPriceHistoryDto[];
@@ -74,4 +78,9 @@ export interface UpdateItemCategoryInput {
 // used everywhere downstream (RFQ vendor-facing text, rate matching, price history grouping).
 export interface RenameItemInput {
   canonicalName: string;
+}
+
+/** Display form of the generated 11-digit item code: `73 18 0042 001` (CC SS FFFF VVV). */
+export function formatItemCodeForDisplay(code: string): string {
+  return /^\d{11}$/.test(code) ? `${code.slice(0, 2)} ${code.slice(2, 4)} ${code.slice(4, 8)} ${code.slice(8)}` : code;
 }

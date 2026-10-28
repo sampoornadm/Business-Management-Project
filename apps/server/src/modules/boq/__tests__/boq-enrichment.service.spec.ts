@@ -134,6 +134,21 @@ class FakeItemsRepository implements Partial<IItemsRepository> {
   async findNearestConfirmedMatch(): Promise<NearestConfirmedMatch[]> {
     return this.nearestConfirmedCategory;
   }
+
+  familyConfirmed: { canonicalName: string; hsnCode: string; gstRate: number | null }[] = [];
+  nearestConfirmedHsn: { canonicalName: string; hsnCode: string; gstRate: number | null; similarity: number }[] = [];
+
+  async findConfirmedHsnByFamily() {
+    return this.familyConfirmed;
+  }
+
+  async findNearestConfirmedHsn() {
+    return this.nearestConfirmedHsn;
+  }
+
+  async findConfirmedHsnUnembedded() {
+    return [];
+  }
 }
 
 class FakeReferenceDataRepository implements Partial<IReferenceDataRepository> {
@@ -492,6 +507,52 @@ describe("BoqEnrichmentService", () => {
     await service.enrichBoq(BOQ_ID, BUSINESS_ID);
 
     expect(boqRepository.enrichment.get(item.id)?.gstRate).toBe(12);
+  });
+
+  it("suggests a confirmed same-family HSN, names its source, and never auto-fills hsnCode or gstRate", async () => {
+    const { service, boqRepository, itemsRepository, classifier } = buildService();
+    const item = makeItem("XLPE cable 4 core 16 sqmm");
+    boqRepository.items = [item];
+    itemsRepository.familyConfirmed = [{ canonicalName: "XLPE cable 4 core 25 sqmm", hsnCode: "8544", gstRate: 12 }];
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock.mockResolvedValueOnce({ normalizedName: "XLPE Cable 4C x16", confidence: 0.8 });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    const result = boqRepository.enrichment.get(item.id);
+    expect(result?.suggestedHsnCode).toBe("8544");
+    expect(result?.suggestedHsnSource).toBe("XLPE cable 4 core 25 sqmm");
+    expect(result?.suggestedGstRate).toBe(12);
+    expect(result).not.toHaveProperty("hsnCode");
+    expect(result).not.toHaveProperty("gstRate");
+    expect(classifier.calls).toHaveLength(0);
+  });
+
+  it("suggests a nearest confirmed HSN only when it clears the reuse threshold", async () => {
+    const { service, boqRepository, itemsRepository } = buildService();
+    const item = makeItem("Armoured power cable");
+    boqRepository.items = [item];
+    itemsRepository.nearestConfirmedHsn = [
+      { canonicalName: "Power cable armoured", hsnCode: "8544", gstRate: 18, similarity: 0.5 },
+    ];
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock.mockResolvedValueOnce({ normalizedName: "Armoured Power Cable", confidence: 0.8 });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    expect(boqRepository.enrichment.get(item.id)?.suggestedHsnSource).toBeNull();
+
+    itemsRepository.nearestConfirmedHsn = [
+      { canonicalName: "Power cable armoured", hsnCode: "8544", gstRate: 18, similarity: 0.99 },
+    ];
+    embedMock.mockResolvedValueOnce([UNRELATED_VECTOR]);
+    generateJsonMock.mockResolvedValueOnce({ normalizedName: "Armoured Power Cable", confidence: 0.8 });
+
+    await service.enrichBoq(BOQ_ID, BUSINESS_ID);
+
+    const result = boqRepository.enrichment.get(item.id);
+    expect(result?.suggestedHsnCode).toBe("8544");
+    expect(result?.suggestedHsnSource).toBe("Power cable armoured");
   });
 
   it("suggests a fresh (non-catalog) HSN match but never auto-fills the real hsnCode field", async () => {

@@ -33,6 +33,11 @@ function collectLeafIds(items: BoqItemDto[]): string[] {
   return ids;
 }
 
+/** Every number in a description, sorted — mirrors the server's spec-match.ts for the verify hint. */
+function specNumbers(text: string): string {
+  return (text.match(/\d+(?:\.\d+)?/g) ?? []).map((n) => String(Number(n))).sort().join(",");
+}
+
 export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }) {
   const { toast } = useToast();
   const router = useRouter();
@@ -276,6 +281,15 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
             {item.suggestedHsnCode && item.suggestedHsnCode !== item.hsnCode && (
               <span className="flex items-center gap-1">
                 <AiBadge>HSN {item.suggestedHsnCode}</AiBadge>
+                {item.suggestedHsnSource && (
+                  <span
+                    className="max-w-[12rem] truncate text-xs text-muted-foreground"
+                    title={`Confirmed on: ${item.suggestedHsnSource}`}
+                  >
+                    from {item.suggestedHsnSource}
+                    {specNumbers(item.suggestedHsnSource) !== specNumbers(item.description) && " · verify spec"}
+                  </span>
+                )}
                 {canEdit && (
                   <Button
                     size="sm"

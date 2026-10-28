@@ -56,6 +56,7 @@ export function toItemListEntryDto(
   return {
     id: item.id,
     canonicalName: item.canonicalName,
+    itemCode: item.itemCode,
     unit: item.unit,
     categoryId: item.categoryId,
     categoryPath,
@@ -79,6 +80,7 @@ export function toItemDetailDto(
   return {
     id: item.id,
     canonicalName: item.canonicalName,
+    itemCode: item.itemCode,
     unit: item.unit,
     categoryId: item.categoryId,
     categoryPath,

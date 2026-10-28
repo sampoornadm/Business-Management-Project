@@ -50,6 +50,7 @@ export function buildBoqItemTree(items: BoqItemWithBreakdown[]): BoqItemDto[] {
       aiEnrichedAt: item.aiEnrichedAt?.toISOString() ?? null,
       rateSourceConfirmed: item.rateSourceConfirmed,
       suggestedHsnCode: item.suggestedHsnCode,
+      suggestedHsnSource: item.suggestedHsnSource,
       suggestedGstRate: item.suggestedGstRate,
       hsnCodeConfirmed: item.hsnCodeConfirmed,
       children: [],

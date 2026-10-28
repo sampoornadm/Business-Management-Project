@@ -835,6 +835,10 @@ model BoqItem {
   hsnCode          String?
   suggestedHsnCode String?
   suggestedGstRate Float?
+  // Which confirmed catalog Item a suggestedHsnCode was borrowed from (its canonicalName), null
+  // when it came from the classifier/keyword/ANN path. Lets the grid say where a suggestion came
+  // from so the estimator can judge whether the neighbour is really the same kind of item.
+  suggestedHsnSource String?
   hsnCodeConfirmed Boolean @default(false)
 
   // AI enrichment (optional, written only by the ai-enrichment worker). Deliberately
@@ -1074,6 +1078,13 @@ model Item {
   canonicalName String
   unit          String?
 
+  // Generated numeric internal code, 11 digits: CC SS FFFF VVV. CCSS = 4-digit HSN heading
+  // (chapter + heading), 0000 until known; FFFF = item family serial per business; VVV = variant
+  // serial within the family. See modules/items/item-code.ts. familyKey = canonicalName with its
+  // numbers stripped, so "XLPE Cable 4C x16" and "x25" share a family and differ in VVV.
+  itemCode  String?
+  familyKey String?
+
   // AI-suggested-then-human-confirmed classification. categoryId points at the current best
   // subcategory node in the Category tree; categoryConfirmed = false is an AI guess awaiting
   // review, true is human-approved. Null categoryId = unclassified. Same "suggest, never
@@ -1111,6 +1122,8 @@ model Item {
   updatedAt DateTime @updatedAt
 
   @@unique([businessId, canonicalName])
+  @@unique([businessId, itemCode])
+  @@index([businessId, familyKey])
   @@index([businessId])
   @@index([categoryId])
   @@map("items")

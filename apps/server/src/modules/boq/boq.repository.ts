@@ -89,6 +89,7 @@ export interface UpdateBoqItemEnrichmentData {
   aiRateSourceId: string | null;
   aiEnrichedAt: Date;
   suggestedHsnCode: string | null;
+  suggestedHsnSource: string | null;
   suggestedGstRate: number | null;
   // Omitted (not present at all, not set to undefined/null) when hsnCode is already
   // human-confirmed — Prisma's update() skips any key that's absent from `data`, so leaving

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatItemCodeForDisplay } from "@bmp/types";
 import {
   Badge,
   Button,
@@ -141,6 +142,7 @@ export default function ItemDetailPage() {
           )}
         </div>
         <p className="text-sm text-muted-foreground">
+          {item.itemCode ? `Code ${formatItemCodeForDisplay(item.itemCode)} · ` : ""}
           {item.entries.length} price record(s){item.unit ? ` · unit: ${item.unit}` : ""}
         </p>
       </div>
