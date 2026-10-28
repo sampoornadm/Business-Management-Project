@@ -98,5 +98,25 @@ export function createPortalBidRouter(controller: PortalBidController): Router {
     controller.getFillJob,
   );
 
+  /**
+   * @openapi
+   * /portal-bids/browser/open:
+   *   post:
+   *     tags: [Portal bids]
+   *     summary: Open (or bring forward) the bundled portal browser window on the machine the server runs on
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       200: { description: The browser status after opening }
+   * /portal-bids/browser/status:
+   *   get:
+   *     tags: [Portal bids]
+   *     summary: Whether the portal browser is open and showing a bid response
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       200: { description: open, onResponsePage and, when on a response, its RFx and response numbers }
+   */
+  router.post("/browser/open", authenticateMiddleware, requirePermission("tenders:fill_portal"), controller.openBrowser);
+  router.get("/browser/status", authenticateMiddleware, requirePermission("tenders:fill_portal"), controller.getBrowserStatus);
+
   return router;
 }

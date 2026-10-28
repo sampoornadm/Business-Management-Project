@@ -87,6 +87,14 @@ const envSchema = z.object({
   // doesn't run the worker on the same filesystem as the watched folder (see
   // apps/server/src/modules/tenders/local-docs/).
   LOCAL_DOCS_SYNC_ENABLED: booleanEnv("false"),
+  // Bundled portal browser (modules/portal-bid/portal/portal-browser.ts). Defaults suit a normal
+  // install: the profile folder is ~/.bmp-portal-browser and the browser is Playwright's Chromium.
+  PORTAL_URL: z.string().default("https://srm.sailisp.co.in"),
+  PORTAL_BROWSER_DIR: z.string().optional(),
+  // Run this browser binary instead of Playwright's Chromium, e.g. Edge on a PC that blocks the download.
+  PORTAL_BROWSER_PATH: z.string().optional(),
+  // Fallback: drive a Chrome you started yourself with --remote-debugging-port, e.g. http://127.0.0.1:9222.
+  PORTAL_CDP_URL: z.string().optional(),
   BUSINESSES_ROOT_DIR: z.string().default("~/BMP-Businesses"),
 
   // Separate opt-in from LOCAL_DOCS_SYNC_ENABLED above: that flag only attaches files

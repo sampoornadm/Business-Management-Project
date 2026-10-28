@@ -163,6 +163,12 @@ permission matches every key without a corresponding database row.
   container stdout into whatever log aggregator you use (CloudWatch, Loki, ELK, or just `docker
   compose logs`); no code changes needed since the JSON is already structured for that.
 
+## Portal browser (SAIL ISP bid fill) - desktop installs only
+
+The bid-fill buttons open a real Chromium window, so they work only where the server runs on a user's desktop (Windows or Mac). The Docker stack above cannot show a window on a user's screen; there the buttons return a clear error and everything else works as normal.
+
+On each desktop install: `pnpm portal:browser:install` (downloads Chromium, about 150 MB), then `pnpm portal:browser` to check the window opens. Windows notes: Playwright's Chromium is unsigned, so SmartScreen or antivirus may ask on first launch (allow-list the browsers folder); keep `PLAYWRIGHT_BROWSERS_PATH` short; set `PORTAL_BROWSER_PATH` to Edge if the download is blocked. Restarting the server closes the window (the portal login is kept in the profile folder). Bump `playwright-core` now and then to pick up browser security fixes. See `environment-variables.md` for the settings.
+
 ## Known follow-up
 
 `pnpm audit` currently reports high/critical findings in `nodemailer` and `vitest` that require

@@ -75,6 +75,18 @@ dev placeholder committed in `.env.example`.
 | `OLLAMA_BASE_URL` | No (default `http://localhost:11434`) | No | Used by the "extract from document" upload on the New Tender page and by AI enrichment. Requires `ollama serve` running locally with the configured models pulled. If the server/worker runs inside Docker, use `http://host.docker.internal:11434` to reach an Ollama instance on the host — `docker-compose.yml` already sets this for both. |
 | `OLLAMA_MODEL` | No (default `llama3.1:8b`) | No | Tender document extraction only. Pull with `ollama pull llama3.1:8b`. If unreachable/misconfigured, the upload returns a clear error — no other functionality is affected. |
 
+## Portal browser (SAIL ISP bid fill)
+
+The "Open portal browser" / "Fill portal bid" buttons on a tender launch a Chromium window **on the machine the server runs on**, so the server must run on a desktop (a user's PC), not inside Docker. Install the browser once per machine: `pnpm portal:browser:install`.
+
+| Variable | Required | Sensitive | Notes |
+|---|---|---|---|
+| `PORTAL_URL` | No (default `https://srm.sailisp.co.in`) | No | Page the browser opens on. |
+| `PORTAL_BROWSER_DIR` | No (default `~/.bmp-portal-browser`) | **Yes** (holds the portal login cookies) | Browser profile folder; the portal login persists here across restarts. Treat it like any browser profile. |
+| `PORTAL_BROWSER_PATH` | No | No | Run this Chromium-based binary (e.g. Edge's `msedge.exe`) instead of Playwright's Chromium, for PCs where the download is blocked. |
+| `PORTAL_CDP_URL` | No | No | Fallback: fill in a Chrome you started yourself with `--remote-debugging-port=9222`, e.g. `http://127.0.0.1:9222`. The `portal:fill`/`portal:action` CLI scripts always use this (`--cdp`), as they are separate processes and cannot reach the server's window. |
+| `PLAYWRIGHT_BROWSERS_PATH` | No | No | Where the Chromium download lives. To ship the browser inside the app folder, set it to a short path (e.g. `C:\bmp\browsers`) for both the install and the run: Windows breaks past 260 characters. |
+
 ## AI tender intelligence (optional)
 
 Enriches committed BOQ items in the background: normalized name, category/subcategory, and — only
