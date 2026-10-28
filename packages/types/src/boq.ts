@@ -62,6 +62,8 @@ export interface BoqItemDto {
   rateSourceConfirmed: boolean;
   /** AI-suggested HSN code + its paired GST% guess — travel together, see BoqItemGrid's Apply. */
   suggestedHsnCode: string | null;
+  /** Name of the confirmed catalog item the suggestion was borrowed from; null when AI-matched. */
+  suggestedHsnSource: string | null;
   suggestedGstRate: number | null;
   // True once a human has set hsnCode (typed it, or applied the suggestion) — never AI-set.
   hsnCodeConfirmed: boolean;

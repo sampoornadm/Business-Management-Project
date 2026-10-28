@@ -6,6 +6,7 @@ import { round2 } from "../../shared/utils/math.js";
 import { sameSpec } from "../../shared/utils/spec-match.js";
 import type { CategoriesService } from "../categories/categories.service.js";
 import type { IHsnClassifier } from "../classification/classification.service.js";
+import { deriveFamilyKey } from "../items/item-code.js";
 import { deriveCanonicalName } from "../items/items.helpers.js";
 import type { IItemsRepository } from "../items/items.repository.js";
 import type {
@@ -177,15 +178,21 @@ export class BoqEnrichmentService {
     // A confirmed catalog match always outranks a fresh match for the same call — same "human
     // feedback beats a fresh guess" rule the rate/category matching already use. A fresh match
     // is never trusted enough to become the real hsnCode — see the spread below.
-    const freshMatch = catalogHsn ? null : await this.matchHsnCode(description, unit, vector);
+    // A confirmed neighbour (same family, or a near name) sits between the two: weaker than an
+    // exact catalog hit — it may be a different size or material — so it only ever suggests, but
+    // stronger than a model's guess, because a person confirmed it.
+    const neighbour = catalogHsn ? null : await this.findConfirmedHsnNeighbour(businessId, canonicalName, vector);
+    const freshMatch =
+      catalogHsn || neighbour ? null : await this.matchHsnCode(description, unit, vector);
     const hsnCode = catalogHsn?.hsnCode ?? null;
-    const suggestedHsnCode = catalogHsn?.hsnCode ?? freshMatch?.code ?? null;
+    const suggestedHsnCode = catalogHsn?.hsnCode ?? neighbour?.hsnCode ?? freshMatch?.code ?? null;
 
     // Rate order: a human-confirmed catalog rate, else the rate the user curates against this
     // heading in the lookup sheet, else nothing. Never a model guess — an invented tax rate that
     // looks plausible is worse than an empty field, because nobody goes back to check it.
     const gstRate =
       catalogHsn?.gstRate ??
+      neighbour?.gstRate ??
       (suggestedHsnCode ? await this.referenceDataRepository.findGstRateByCode(suggestedHsnCode) : null);
 
     const category = this.categoryForHsnCode(suggestedHsnCode, categoryContext);
@@ -204,6 +211,7 @@ export class BoqEnrichmentService {
       aiRateSourceId: matched?.id ?? null,
       aiEnrichedAt: new Date(),
       suggestedHsnCode,
+      suggestedHsnSource: neighbour?.source ?? null,
       suggestedGstRate: gstRate,
       // hsnCode (the real billing field) is only ever set by an explicit human action — typing
       // over it, clicking Apply on a suggestion, or (here) a catalog match a human already
@@ -213,8 +221,48 @@ export class BoqEnrichmentService {
       // (hsnAlreadyConfirmed), never touch it again — omitting the key (not writing
       // null/undefined explicitly) makes Prisma leave it alone.
       ...(!hsnAlreadyConfirmed && hsnCode !== null ? { hsnCode } : {}),
-      ...(!hsnAlreadyConfirmed && gstRate !== null ? { gstRate } : {}),
+      // A neighbour's rate stays a suggestion too: the neighbour may be a different material.
+      ...(!hsnAlreadyConfirmed && gstRate !== null && !neighbour ? { gstRate } : {}),
     };
+  }
+
+  /**
+   * Looks for an Item whose HSN a human already confirmed that is close to this one but not
+   * identical in name. Same family (name minus numbers) wins outright; otherwise the nearest
+   * confirmed neighbour by embedding must clear HSN_REUSE_THRESHOLD. Never auto-applied — the
+   * embedding can't tell x16 from x25 or XLPE from PVC, so the estimator confirms (see items'
+   * spec-match.ts). `source` is the neighbour's name, shown next to the suggestion.
+   */
+  private async findConfirmedHsnNeighbour(
+    businessId: string,
+    canonicalName: string,
+    vector: number[],
+  ): Promise<{ hsnCode: string; gstRate: number | null; source: string } | null> {
+    const [sibling] = await this.itemsRepository.findConfirmedHsnByFamily(
+      businessId,
+      deriveFamilyKey(canonicalName),
+    );
+    if (sibling) return { hsnCode: sibling.hsnCode, gstRate: sibling.gstRate, source: sibling.canonicalName };
+
+    const threshold = await this.settingsService.get<number>("HSN_REUSE_THRESHOLD");
+    const [best] = await this.itemsRepository.findNearestConfirmedHsn(businessId, vector, 1);
+    if (!best || best.similarity < threshold) return null;
+    return { hsnCode: best.hsnCode, gstRate: best.gstRate, source: best.canonicalName };
+  }
+
+  /**
+   * Confirmed-HSN Items are only in the feedback pool once they have an embedding. Ones confirmed
+   * before this feature existed (or whose embedding was cleared by a rename) converge here on
+   * first use — same lazy pattern as embedPendingRates.
+   */
+  private async embedPendingConfirmedHsnItems(businessId: string): Promise<void> {
+    const pending = await this.itemsRepository.findConfirmedHsnUnembedded(businessId);
+    if (pending.length === 0) return;
+    const vectors = await embed(pending.map((item) => item.canonicalName));
+    for (const [index, item] of pending.entries()) {
+      const vector = vectors[index];
+      if (vector) await this.itemsRepository.setEmbedding(item.id, vector);
+    }
   }
 
   /**
@@ -332,6 +380,7 @@ export class BoqEnrichmentService {
     if (leaves.length === 0) return;
 
     await this.embedPendingRates(businessId);
+    await this.embedPendingConfirmedHsnItems(businessId);
     // Category leaves/paths are the same for every item on this BOQ — fetched once, not per
     // item, same reason embedPendingRates runs once up here instead of inside the loop.
     const categoryContext = await this.loadCategoryContext();

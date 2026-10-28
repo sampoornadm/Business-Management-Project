@@ -68,6 +68,12 @@ const envSchema = z.object({
   // Retrieval floor: candidates below this aren't even shown to the LLM. Measured with
   // bge-m3: unrelated trades score 0.31-0.38, same-trade items 0.84+.
   AI_CONTEXT_FLOOR: z.coerce.number().min(0).max(1).default(0.75),
+  // Cosine a human-confirmed HSN neighbour must clear to be *suggested* for a near-name item. It
+  // only ever fills suggestedHsnCode (an estimator still confirms), so it can sit well below
+  // AI_MATCH_THRESHOLD. Unmeasured placeholder — measure on real confirmed pairs, same way
+  // AI_MATCH_THRESHOLD was measured against bge-m3 rather than guessed. Same-family items
+  // (identical name once numbers are stripped) bypass it entirely.
+  HSN_REUSE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.88),
 
   // Below this the HSN classifier suggests nothing rather than guessing. Calibrated, not chosen:
   // against the 76 real labelled items, 0.05 answers 93.4% of them at 95.8% precision, while 0.13

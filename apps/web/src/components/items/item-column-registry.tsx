@@ -1,6 +1,6 @@
 "use client";
 
-import type { ItemListEntryDto } from "@bmp/types";
+import { formatItemCodeForDisplay, type ItemListEntryDto } from "@bmp/types";
 import { Badge, formatDate, SortableHeader } from "@bmp/ui";
 import type { FilterableColumnDef } from "@bmp/ui";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -54,9 +54,14 @@ export const ITEM_COLUMNS: ItemColumnConfig[] = [
     filterable: true,
     defaultVisible: true,
     cell: ({ row }) => (
-      <Link href={`/items/${row.original.id}`} className="font-medium hover:underline">
-        {row.original.canonicalName}
-      </Link>
+      <div>
+        <Link href={`/items/${row.original.id}`} className="font-medium hover:underline">
+          {row.original.canonicalName}
+        </Link>
+        {row.original.itemCode && (
+          <div className="font-mono text-xs text-muted-foreground">{formatItemCodeForDisplay(row.original.itemCode)}</div>
+        )}
+      </div>
     ),
   },
   {
