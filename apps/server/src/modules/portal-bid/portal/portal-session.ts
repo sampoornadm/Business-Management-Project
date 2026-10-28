@@ -51,16 +51,24 @@ export class PortalSession {
     // which is why waiting for "network idle" always ran into its timeout.
     const isAction = (request: { method(): string; url(): string }) =>
       request.method() === "POST" && request.url().includes("/webdynpro/");
-    page.on("request", (request) => {
+    const onRequest = (request: { method(): string; url(): string }) => {
       if (isAction(request)) this.inFlight += 1;
-    });
-    const done = (request: { method(): string; url(): string }) => {
+    };
+    const onDone = (request: { method(): string; url(): string }) => {
       if (isAction(request)) this.inFlight = Math.max(0, this.inFlight - 1);
     };
-    page.on("requestfinished", done);
-    page.on("requestfailed", done);
+    page.on("request", onRequest);
+    page.on("requestfinished", onDone);
+    page.on("requestfailed", onDone);
+    // A long-lived browser outlives many sessions, so each one must be able to take its listeners off.
+    this.detach = () => {
+      page.off("request", onRequest);
+      page.off("requestfinished", onDone);
+      page.off("requestfailed", onDone);
+    };
   }
 
+  private readonly detach: () => void;
   private inFlight = 0;
   private browser: Browser | undefined;
 
@@ -81,8 +89,12 @@ export class PortalSession {
     return session;
   }
 
-  /** Lets go of the CDP connection; on a connected (not launched) browser this leaves Chrome open. */
+  /**
+   * Stops listening to the page. For a session attached over CDP it also lets go of the connection,
+   * which leaves that Chrome open; a session on the bundled browser never closes the window.
+   */
   async disconnect(): Promise<void> {
+    this.detach();
     await this.browser?.close();
   }
 
@@ -92,6 +104,7 @@ export class PortalSession {
       for (const frame of page.frames()) {
         const session = new PortalSession(page, frame);
         if (await session.isResponsePage().catch(() => false)) return session;
+        session.detach();
       }
     }
     return null;

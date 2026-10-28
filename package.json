@@ -17,6 +17,8 @@
     "db:generate": "dotenv -e .env -- pnpm --filter @bmp/database generate",
     "portal:fill": "dotenv -e .env -- pnpm --filter @bmp/server exec tsx src/scripts/portal-fill.ts",
     "portal:profile:import": "dotenv -e .env -- pnpm --filter @bmp/server exec tsx src/scripts/portal-profile-import.ts",
+    "portal:browser": "dotenv -e .env -- pnpm --filter @bmp/server exec tsx src/scripts/portal-browser.ts",
+    "portal:browser:install": "pnpm --filter @bmp/server exec playwright-core install --no-shell chromium",
     "portal:action": "dotenv -e .env -- pnpm --filter @bmp/server exec tsx src/scripts/portal-action.ts",
     "db:migrate": "dotenv -e .env -- pnpm --filter @bmp/database migrate:deploy",
     "db:migrate:create": "dotenv -e .env -- pnpm --filter @bmp/database migrate:create",

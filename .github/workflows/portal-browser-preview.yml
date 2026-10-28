@@ -1,0 +1,58 @@
+name: Portal browser preview
+
+# Manual: launches the app's bundled Chromium exactly as "Open portal browser" does and uploads a
+# screenshot of the whole desktop, so its look on Windows can be checked without a Windows PC.
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner to preview on
+        type: choice
+        options: [windows-latest, macos-latest]
+        default: windows-latest
+
+env:
+  # config/env.ts validates the whole server environment; none of these are used by the preview.
+  DATABASE_URL: postgresql://bmp:preview@localhost:5432/bmp?schema=public
+  REDIS_URL: redis://localhost:6379
+  S3_ENDPOINT: http://localhost:9000
+  S3_REGION: us-east-1
+  S3_ACCESS_KEY_ID: preview
+  S3_SECRET_ACCESS_KEY: preview
+  S3_BUCKET: preview
+  SMTP_HOST: localhost
+  SMTP_PORT: "1025"
+  SMTP_FROM: "Preview <no-reply@bmp.local>"
+  ACCESS_TOKEN_SECRET: preview_access_token_secret_change_me
+  WEB_APP_URL: http://localhost:3000
+  NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+  SEED_USER_PASSWORD: ChangeMe123!
+
+jobs:
+  preview:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm portal:browser:install
+      - name: Open the portal browser and capture the desktop
+        shell: bash
+        run: |
+          pnpm exec tsx apps/server/src/scripts/portal-browser.ts &
+          sleep 25
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; \$b=[System.Windows.Forms.SystemInformation]::VirtualScreen; \$bmp=New-Object System.Drawing.Bitmap \$b.Width,\$b.Height; [System.Drawing.Graphics]::FromImage(\$bmp).CopyFromScreen(\$b.Location,[System.Drawing.Point]::Empty,\$b.Size); \$bmp.Save('portal-browser.png')"
+          else
+            screencapture -x portal-browser.png
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portal-browser-${{ runner.os }}
+          path: portal-browser.png

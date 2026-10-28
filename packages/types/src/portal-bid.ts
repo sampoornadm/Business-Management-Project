@@ -48,3 +48,12 @@ export interface PortalFillJobDto {
   result?: PortalFillResultDto;
   error?: string;
 }
+
+export interface PortalBrowserStatusDto {
+  /** The bundled browser window is open. */
+  open: boolean;
+  /** A SAIL ISP bid response is showing in it, so a fill can start. */
+  onResponsePage: boolean;
+  rfxNumber?: string;
+  responseNumber?: string;
+}

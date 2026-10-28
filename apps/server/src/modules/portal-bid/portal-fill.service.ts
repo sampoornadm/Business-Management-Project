@@ -81,8 +81,8 @@ interface RunnerDeps {
   payloads: Pick<BidPayloadService, "buildPayload">;
   portalBids: IPortalBidRepository;
   audit: Pick<AuditService, "log">;
-  attach: (cdpUrl: string) => Promise<IPortalSession & { disconnect(): Promise<void> }>;
-  cdpUrl: string;
+  /** The open bid response to fill; throws with a user-readable message when there is none. */
+  attach: () => Promise<IPortalSession & { disconnect(): Promise<void> }>;
 }
 
 /** Fills the open SAIL ISP response for a tender, typing only; it never saves or submits. */
@@ -92,15 +92,7 @@ export function createPortalFillRunner(deps: RunnerDeps): PortalFillRunner {
     if (!tender) throw new NotFoundError("Tender not found");
     const payload = await deps.payloads.buildPayload(tenderId, businessId, "SAIL_ISP");
 
-    const session = await deps.attach(deps.cdpUrl).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      // Playwright's own refusal text is a wall of connection detail; say what to do instead.
-      throw new Error(
-        /ECONNREFUSED|connect/i.test(message) && !/SAIL ISP/.test(message)
-          ? `Chrome is not reachable at ${deps.cdpUrl}. Start it with --remote-debugging-port=9222 and open the bid response on the portal.`
-          : message,
-      );
-    });
+    const session = await deps.attach();
     try {
       const result = await fillBid(
         {

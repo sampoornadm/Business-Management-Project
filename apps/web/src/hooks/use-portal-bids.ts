@@ -2,6 +2,7 @@
 
 import type {
   ApiResponse,
+  PortalBrowserStatusDto,
   PortalFillJobDto,
   PortalProfileDto,
   UpdatePortalProfileInput,
@@ -59,5 +60,18 @@ export function usePortalFillJob(jobId: string | null) {
     },
     enabled: Boolean(jobId),
     refetchInterval: (query) => (query.state.data?.status === "running" || !query.state.data ? POLL_MS : false),
+  });
+}
+
+export function useOpenPortalBrowser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await apiClient.post<ApiResponse<PortalBrowserStatusDto>>("/portal-bids/browser/open");
+      return unwrap(response.data);
+    },
+    onSuccess: (status) => {
+      queryClient.setQueryData(["portal-browser-status"], status);
+    },
   });
 }

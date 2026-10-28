@@ -169,6 +169,12 @@ receiving status.
   an audit `TENDER_STATUS_CHANGED → SUBMITTED` row and a `QUOTATION` attachment (`quotedAtByTender`); item
   text is matched against **current** BOQ items only (`boq.isCurrent`), like every other BOQ read.
   Tenders live in one business: a superadmin logged into another business correctly sees no matches.
+- The SAIL ISP bid fill (`modules/portal-bid/`) drives a Chromium window the **server process** launches
+  (`portal/portal-browser.ts`, Playwright `launchPersistentContext`, headed, profile in
+  `~/.bmp-portal-browser`). It needs a desktop: from the Docker stack there is no screen, so the buttons
+  fail with "Open the portal browser..." there. Chromium comes from `pnpm portal:browser:install`, not
+  `pnpm install`. The `portal:fill`/`portal:action` CLIs are separate processes and still attach over CDP
+  (`--cdp`, a Chrome started with `--remote-debugging-port`); they cannot see the server's window.
 - Repeatedly re-running integration tests against the same Redis burns through the login rate
   limiter (`RATE_LIMITS.LOGIN`) and integration tests will start failing with 429s that look like
   real bugs. `docker compose exec redis redis-cli FLUSHALL` before a fresh run if that happens.

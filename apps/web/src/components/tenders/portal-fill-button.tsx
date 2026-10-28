@@ -10,10 +10,10 @@ import {
   DialogTitle,
   useToast,
 } from "@bmp/ui";
-import { CheckCircle2, Loader2, TriangleAlert, Upload } from "lucide-react";
+import { CheckCircle2, Globe, Loader2, TriangleAlert, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { usePortalFillJob, useStartPortalFill } from "@/hooks/use-portal-bids";
+import { useOpenPortalBrowser, usePortalFillJob, useStartPortalFill } from "@/hooks/use-portal-bids";
 
 function Issues({ title, items }: { title: string; items: string[] }) {
   if (items.length === 0) return null;
@@ -130,5 +130,37 @@ export function PortalFillButton({ tenderId }: { tenderId: string }) {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/** Opens the app's own browser window on the machine the server runs on, to log into the portal. */
+export function OpenPortalBrowserButton() {
+  const { toast } = useToast();
+  const open = useOpenPortalBrowser();
+
+  async function handleClick() {
+    try {
+      const status = await open.mutateAsync();
+      toast({
+        title: "Portal browser opened",
+        description: status.onResponsePage
+          ? `Response ${status.responseNumber} is open and ready to fill.`
+          : "Log in and open your bid response in the window that opened.",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not open the portal browser",
+        description:
+          error instanceof Error ? error.message : "Run `pnpm portal:browser:install` on the server, then try again.",
+      });
+    }
+  }
+
+  return (
+    <Button variant="outline" onClick={handleClick} disabled={open.isPending}>
+      {open.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Globe className="mr-2 h-4 w-4" />}
+      Open portal browser
+    </Button>
   );
 }

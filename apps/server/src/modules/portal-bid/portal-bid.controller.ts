@@ -2,6 +2,7 @@ import { NotFoundError } from "../../core/errors/HttpErrors.js";
 import { sendSuccess } from "../../core/response/ApiResponse.js";
 import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 
+import type { PortalBrowser } from "./portal/portal-browser.js";
 import type { IPortalBidRepository } from "./portal-bid.repository.js";
 import type { PortalFillService } from "./portal-fill.service.js";
 import type { PortalProfileService } from "./portal-profile.service.js";
@@ -11,6 +12,7 @@ export class PortalBidController {
     private readonly portalBids: IPortalBidRepository,
     private readonly profiles: PortalProfileService,
     private readonly fills: PortalFillService,
+    private readonly browser: PortalBrowser,
   ) {}
 
   getByResponseNumber = asyncHandler(async (req, res) => {
@@ -39,5 +41,14 @@ export class PortalBidController {
 
   getFillJob = asyncHandler(async (req, res) => {
     sendSuccess(res, this.fills.get(req.params.jobId!, req.user!.businessId), "Portal fill status retrieved");
+  });
+
+  openBrowser = asyncHandler(async (_req, res) => {
+    await this.browser.open();
+    sendSuccess(res, await this.browser.status(), "Portal browser opened");
+  });
+
+  getBrowserStatus = asyncHandler(async (_req, res) => {
+    sendSuccess(res, await this.browser.status(), "Portal browser status retrieved");
   });
 }
