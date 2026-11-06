@@ -7,6 +7,7 @@ import { auditService } from "../modules/audit/audit.module.js";
 import { fillBid } from "../modules/portal-bid/portal/fill-bid.js";
 import { PortalSession } from "../modules/portal-bid/portal/portal-session.js";
 import { bidPayloadService, portalBidRepository } from "../modules/portal-bid/portal-bid.module.js";
+import { SAIL_ISP_QUESTIONS } from "../modules/portal-bid/sail-isp.questions.js";
 import { tendersRepository } from "../modules/tenders/tenders.module.js";
 
 const { values } = parseArgs({
@@ -20,6 +21,7 @@ const { values } = parseArgs({
     save: { type: "boolean", default: false },
     only: { type: "string" },
     "items-only": { type: "boolean", default: false },
+    weight: { type: "string" },
   },
 });
 
@@ -36,6 +38,13 @@ async function main(): Promise<number> {
   const payload = await bidPayloadService.buildPayload(tender.id, business.id, "SAIL_ISP", {
     includeItems: !values["questions-only"],
   });
+  if (values.weight) {
+    // Manual consignment weight, e.g. --weight "15 Kg", for tenders whose BOQ lacks unit weights.
+    payload.answers = payload.answers.filter((answer) => answer.key !== "consignmentWeight");
+    const label = SAIL_ISP_QUESTIONS.find((q) => q.key === "consignmentWeight")!.label;
+    payload.answers.push({ key: "consignmentWeight", label, widget: "text", value: values.weight, source: "tender" });
+    payload.warnings = payload.warnings.filter((w) => !w.startsWith("Consignment weight not filled"));
+  }
   if (values.only) {
     // Limit the run to some catalog keys, e.g. --only hsnCode,consignmentWeight.
     const wanted = new Set(values.only.split(",").map((key) => key.trim()));

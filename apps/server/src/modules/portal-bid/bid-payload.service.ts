@@ -38,7 +38,8 @@ export function businessAnswerValues(
     udyamNumber: business.udyamRegistrationNumber,
     email: contact?.email,
     phone: contact?.phone,
-    mobile: contact?.phone,
+    // BusinessContact has one phone number; a separate mobile lives in the portal profile.
+    mobile: profile.mobile || contact?.phone,
     address: [business.address, cityPin].filter(Boolean).join(", ") || null,
     contactPerson: contact?.name,
   };

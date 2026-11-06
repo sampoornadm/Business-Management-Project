@@ -15,7 +15,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Download, Loader2 } from "lucide-react";
 import { useState } from "react";
 
-import { downloadQuotation, downloadUndertaking } from "@/hooks/use-document-generation";
+import { downloadQuotation, downloadTenderSheet, downloadUndertaking } from "@/hooks/use-document-generation";
 
 export function TenderDownloadMenu({
   tenderId,
@@ -93,6 +93,9 @@ export function TenderDownloadMenu({
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        <DropdownMenuItem onClick={() => void handle(() => downloadTenderSheet(tenderId, tenderNumber))}>
+          Tender Sheet (PDF)
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

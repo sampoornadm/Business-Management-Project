@@ -55,6 +55,7 @@ import {
   usePushRatesToTender,
   useReopenRfq,
   useRemoveRfqVendor,
+  useAddRfqVendor,
   useRfq,
   useRfqComparison,
   useSelectQuote,
@@ -92,6 +93,8 @@ export default function RfqDetailPage() {
   const comparisonQuery = useRfqComparison(params.id);
   const vendorsQuery = useVendors({ page: 1, pageSize: 100, isActive: true });
   const removeVendor = useRemoveRfqVendor(params.id);
+  const addVendor = useAddRfqVendor(params.id);
+  const [addVendorId, setAddVendorId] = useState("");
   const upsertQuote = useUpsertRfqQuote(params.id);
   const selectQuote = useSelectQuote(params.id);
   const pushRatesToTender = usePushRatesToTender(params.id);
@@ -373,6 +376,42 @@ export default function RfqDetailPage() {
               ))
             )}
           </div>
+          {canUpdate && !isFinalized && (
+            <div className="flex items-center gap-2">
+              <Select value={addVendorId} onValueChange={setAddVendorId}>
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Add a vendor to this RFQ" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(vendorsQuery.data?.items ?? [])
+                    .filter((v) => !rfq.vendorInvites.some((i) => i.vendor.id === v.id))
+                    .map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                disabled={!addVendorId || addVendor.isPending}
+                onClick={async () => {
+                  try {
+                    await addVendor.mutateAsync(addVendorId);
+                    setAddVendorId("");
+                  } catch (error) {
+                    toast({
+                      variant: "destructive",
+                      title: "Could not add vendor",
+                      description: error instanceof Error ? error.message : "Please try again.",
+                    });
+                  }
+                }}
+              >
+                Add vendor
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

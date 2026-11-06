@@ -191,3 +191,25 @@ describe("generateQuotation", () => {
     ).rejects.toThrow(/no boq/i);
   });
 });
+
+describe("generateTenderSheet", () => {
+  it("builds a PDF from the current BOQ, named after the RFx number", async () => {
+    const fakeTendersRepository = {
+      findForDocumentGeneration: vi.fn().mockResolvedValue({
+        tenderNumber: "RFX-42",
+        submissionDate: new Date("2026-11-20T09:30:00Z"),
+        pinnedNotes: [{ lineText: "Rates inclusive of freight" }],
+      }),
+    };
+    const fakeBoqRepository = {
+      findCurrentBoq: vi.fn().mockResolvedValue({ id: "boq-1" }),
+      findItemsByBoqId: vi.fn().mockResolvedValue([item()]),
+    };
+
+    const { generateTenderSheet } = await import("../quotation-document.js");
+    const result = await generateTenderSheet(fakeTendersRepository, fakeBoqRepository, "tender-1", "business-1");
+
+    expect(result.filename).toMatch(/^Tender-Sheet-RFX-42-\d{2}-\d{2}-\d{4}\.pdf$/);
+    expect(result.buffer.subarray(0, 4).toString("latin1")).toBe("%PDF");
+  });
+});
