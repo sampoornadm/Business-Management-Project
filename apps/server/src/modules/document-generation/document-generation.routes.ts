@@ -61,5 +61,28 @@ export function createDocumentGenerationRouter(controller: DocumentGenerationCon
     controller.generateQuotation,
   );
 
+  /**
+   * @openapi
+   * /tenders/{id}/documents/tender-sheet:
+   *   post:
+   *     tags: [Document Generation]
+   *     summary: Generate a compact vendor Tender Sheet PDF (items, qty, UoM, blank rate column, pinned notes)
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Generated PDF }
+   *       404: { description: Tender not found, or it has no BOQ }
+   */
+  router.post(
+    "/:id/documents/tender-sheet",
+    authenticateMiddleware,
+    requirePermission("tenders:generate_document"),
+    controller.generateTenderSheet,
+  );
+
   return router;
 }

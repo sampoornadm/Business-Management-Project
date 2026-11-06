@@ -88,6 +88,37 @@ export function buildQuotationCsv(rows: QuotationRow[], totalAmount: number, pin
   return Buffer.concat([Buffer.from("﻿", "utf-8"), Buffer.from(lines.join("\r\n"), "utf-8")]);
 }
 
+/** Bulleted pinned-notes block under a PDF table, page-breaking as needed. */
+function drawPinnedNotes(
+  doc: PDFKit.PDFDocument,
+  pinnedNotes: string[],
+  heading: string,
+  x: number,
+  startY: number,
+  width: number,
+): void {
+  if (pinnedNotes.length === 0) return;
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  let y = startY;
+  if (y + 20 > bottom) {
+    doc.addPage();
+    y = doc.page.margins.top;
+  }
+  doc.font("Helvetica-Bold").fontSize(10).text(heading, x, y);
+  y += doc.heightOfString(heading, { width }) + 4;
+  doc.font("Helvetica").fontSize(9);
+  for (const note of pinnedNotes) {
+    const bullet = `• ${note}`;
+    const noteHeight = doc.heightOfString(bullet, { width }) + 3;
+    if (y + noteHeight > bottom) {
+      doc.addPage();
+      y = doc.page.margins.top;
+    }
+    doc.text(bullet, x, y, { width });
+    y += noteHeight;
+  }
+}
+
 // Fixed per-column widths sized for a description-heavy table (item descriptions in this app
 // commonly run 140-180 chars — see rfq/quote-sheet.ts), with wrapped row heights computed via
 // doc.heightOfString and page-break handling — same pattern as rfq/rfq-document.ts#buildRfrPdf.
@@ -153,38 +184,21 @@ export function buildQuotationPdf(
     y += 6;
     drawRow(["", "", "", "", "", "Total", formatNumber(totalAmount)], true);
 
-    if (pinnedNotes.length > 0) {
-      y += 10;
-      if (y + 20 > doc.page.height - doc.page.margins.bottom) {
-        doc.addPage();
-        y = doc.page.margins.top;
-      }
-      doc.font("Helvetica-Bold").fontSize(10).text("Important Notes", startX, y);
-      y += doc.heightOfString("Important Notes", { width: tableWidth }) + 4;
-      doc.font("Helvetica").fontSize(9);
-      for (const note of pinnedNotes) {
-        const bullet = `• ${note}`;
-        const noteHeight = doc.heightOfString(bullet, { width: tableWidth }) + 3;
-        if (y + noteHeight > doc.page.height - doc.page.margins.bottom) {
-          doc.addPage();
-          y = doc.page.margins.top;
-        }
-        doc.text(bullet, startX, y, { width: tableWidth });
-        y += noteHeight;
-      }
-    }
+    drawPinnedNotes(doc, pinnedNotes, "Important Notes", startX, y + 10, tableWidth);
 
     doc.end();
   });
 }
 
-export async function generateQuotation(
-  tendersRepository: Pick<ITendersRepository, "findForDocumentGeneration">,
-  boqRepository: Pick<IBoqRepository, "findCurrentBoq" | "findItemsByBoqId">,
+type DocTendersRepository = Pick<ITendersRepository, "findForDocumentGeneration">;
+type DocBoqRepository = Pick<IBoqRepository, "findCurrentBoq" | "findItemsByBoqId">;
+
+async function loadTenderBoq(
+  tendersRepository: DocTendersRepository,
+  boqRepository: DocBoqRepository,
   tenderId: string,
   businessId: string,
-  format: QuotationFormat,
-): Promise<GeneratedQuotation> {
+) {
   const tender = await tendersRepository.findForDocumentGeneration(tenderId, businessId);
   if (!tender) throw new NotFoundError("Tender not found");
 
@@ -192,7 +206,17 @@ export async function generateQuotation(
   if (!boq) throw new NotFoundError("No BOQ found for this tender");
 
   const items = await boqRepository.findItemsByBoqId(boq.id);
-  const rows = buildQuotationRows(buildBoqItemTree(items));
+  return { tender, items, rows: buildQuotationRows(buildBoqItemTree(items)) };
+}
+
+export async function generateQuotation(
+  tendersRepository: DocTendersRepository,
+  boqRepository: DocBoqRepository,
+  tenderId: string,
+  businessId: string,
+  format: QuotationFormat,
+): Promise<GeneratedQuotation> {
+  const { tender, items, rows } = await loadTenderBoq(tendersRepository, boqRepository, tenderId, businessId);
   const totalAmount = round2(items.reduce((sum, item) => sum + (item.amount ?? 0), 0));
   const generatedDate = formatDate(new Date());
   const filenameBase = `Quotation-${tender.tenderNumber}-${generatedDate}`;
@@ -247,4 +271,101 @@ export async function generateQuotation(
     tenderTitle: tender.title,
     businessCode: tender.business.code,
   };
+}
+
+// Tender Sheet: a bare, ink-light item list handed to vendors to fill in rates by hand (and kept
+// for our own records). No letterhead, no amounts, no total — just RFx no., deadline, items, notes.
+const TENDER_SHEET_COLUMN_HEADERS = ["Sl. No.", "Item Description", "Qty", "UoM", "Rate"];
+// Sums to 535 = A4 width (595) minus 2 x 30pt margins; the Rate cell is left wide for handwriting.
+const TENDER_SHEET_COLUMN_WIDTHS = [32, 343, 50, 40, 70];
+const TENDER_SHEET_COLUMN_ALIGN = ["center", "left", "right", "center", "left"] as const;
+const TENDER_SHEET_CELL_PADDING = 3;
+
+export function buildTenderSheetPdf(
+  rows: QuotationRow[],
+  header: { rfxNumber: string; submissionDeadline: string },
+  pinnedNotes: string[] = [],
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 30, size: "A4" });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const startX = doc.page.margins.left;
+    const bottom = doc.page.height - doc.page.margins.bottom;
+    const tableWidth = TENDER_SHEET_COLUMN_WIDTHS.reduce((sum, w) => sum + w, 0);
+    let y = doc.page.margins.top;
+
+    doc.font("Helvetica-Bold").fontSize(10);
+    doc.text(`RFx No: ${header.rfxNumber}`, startX, y, { width: tableWidth });
+    doc.text(`Submission Deadline: ${header.submissionDeadline}`, startX, y, { width: tableWidth, align: "right" });
+    y = doc.y + 8;
+
+    doc.lineWidth(0.5);
+    function drawRow(values: string[], isHeader: boolean) {
+      doc.font(isHeader ? "Helvetica-Bold" : "Helvetica").fontSize(8);
+      const pad = TENDER_SHEET_CELL_PADDING;
+      const rowHeight = Math.max(
+        16,
+        ...values.map(
+          (value, i) => doc.heightOfString(value, { width: TENDER_SHEET_COLUMN_WIDTHS[i]! - 2 * pad }) + 2 * pad,
+        ),
+      );
+      if (y + rowHeight > bottom) {
+        doc.addPage();
+        y = doc.page.margins.top;
+        // Repeat the header on every printed page so loose sheets still read on their own.
+        if (!isHeader) drawRow(TENDER_SHEET_COLUMN_HEADERS, true);
+        doc.font(isHeader ? "Helvetica-Bold" : "Helvetica").fontSize(8);
+      }
+      let x = startX;
+      values.forEach((value, i) => {
+        const width = TENDER_SHEET_COLUMN_WIDTHS[i]!;
+        doc.rect(x, y, width, rowHeight).stroke();
+        doc.text(value, x + pad, y + pad, { width: width - 2 * pad, align: TENDER_SHEET_COLUMN_ALIGN[i] });
+        x += width;
+      });
+      y += rowHeight;
+    }
+
+    drawRow(TENDER_SHEET_COLUMN_HEADERS, true);
+    for (const row of rows) drawRow([row.slNo, row.description, row.quantity, row.unit, ""], false);
+
+    drawPinnedNotes(doc, pinnedNotes, "Terms & Notes", startX, y + 12, tableWidth);
+
+    doc.end();
+  });
+}
+
+function formatDateTime(date: Date): string {
+  // ponytail: fixed IST, same default as ASSISTANT_TIMEZONE; read env if a non-IST business appears.
+  return date.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+export async function generateTenderSheet(
+  tendersRepository: DocTendersRepository,
+  boqRepository: DocBoqRepository,
+  tenderId: string,
+  businessId: string,
+): Promise<{ buffer: Buffer; filename: string }> {
+  const { tender, rows } = await loadTenderBoq(tendersRepository, boqRepository, tenderId, businessId);
+  const buffer = await buildTenderSheetPdf(
+    rows,
+    {
+      rfxNumber: tender.tenderNumber,
+      submissionDeadline: tender.submissionDate ? formatDateTime(tender.submissionDate) : "—",
+    },
+    tender.pinnedNotes.map((note) => note.lineText),
+  );
+  return { buffer, filename: `Tender-Sheet-${tender.tenderNumber}-${formatDate(new Date())}.pdf` };
 }

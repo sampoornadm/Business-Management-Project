@@ -2,42 +2,40 @@
 
 import { apiClient } from "@/lib/axios";
 
-export async function downloadUndertaking(
-  tenderId: string,
-  tenderNumber: string,
-  format: "pdf" | "docx" = "pdf",
-): Promise<void> {
-  const response = await apiClient.post<Blob>(
-    `/tenders/${tenderId}/documents/undertaking?format=${format}`,
-    undefined,
-    { responseType: "blob" },
-  );
+async function downloadGenerated(path: string, filename: string): Promise<void> {
+  const response = await apiClient.post<Blob>(path, undefined, { responseType: "blob" });
   const url = window.URL.createObjectURL(response.data);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `Undertaking-${tenderNumber}.${format}`;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
 }
 
-export async function downloadQuotation(
+export function downloadUndertaking(
+  tenderId: string,
+  tenderNumber: string,
+  format: "pdf" | "docx" = "pdf",
+): Promise<void> {
+  return downloadGenerated(
+    `/tenders/${tenderId}/documents/undertaking?format=${format}`,
+    `Undertaking-${tenderNumber}.${format}`,
+  );
+}
+
+export function downloadQuotation(
   tenderId: string,
   tenderNumber: string,
   format: "docx" | "csv" | "pdf",
 ): Promise<void> {
-  const response = await apiClient.post<Blob>(
+  return downloadGenerated(
     `/tenders/${tenderId}/documents/quotation?format=${format}`,
-    undefined,
-    { responseType: "blob" },
+    `Quotation-${tenderNumber}.${format}`,
   );
-  const url = window.URL.createObjectURL(response.data);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `Quotation-${tenderNumber}.${format}`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
+}
+
+export function downloadTenderSheet(tenderId: string, tenderNumber: string): Promise<void> {
+  return downloadGenerated(`/tenders/${tenderId}/documents/tender-sheet`, `Tender-Sheet-${tenderNumber}.pdf`);
 }
