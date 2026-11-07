@@ -36,6 +36,9 @@ export function downloadQuotation(
   );
 }
 
-export function downloadTenderSheet(tenderId: string, tenderNumber: string): Promise<void> {
-  return downloadGenerated(`/tenders/${tenderId}/documents/tender-sheet`, `Tender-Sheet-${tenderNumber}.pdf`);
+export function downloadTenderSheet(tenderId: string, tenderNumber: string, format: "pdf" | "docx"): Promise<void> {
+  return downloadGenerated(
+    `/tenders/${tenderId}/documents/tender-sheet?format=${format}`,
+    `Tender-Sheet-${tenderNumber}.${format}`,
+  );
 }

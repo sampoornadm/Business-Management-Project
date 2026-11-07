@@ -93,9 +93,17 @@ export function TenderDownloadMenu({
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-        <DropdownMenuItem onClick={() => void handle(() => downloadTenderSheet(tenderId, tenderNumber))}>
-          Tender Sheet (PDF)
-        </DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>Tender Sheet</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem onClick={() => void handle(() => downloadTenderSheet(tenderId, tenderNumber, "pdf"))}>
+              PDF
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => void handle(() => downloadTenderSheet(tenderId, tenderNumber, "docx"))}>
+              Word (.docx)
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
       </DropdownMenuContent>
     </DropdownMenu>
   );
