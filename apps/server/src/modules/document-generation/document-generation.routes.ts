@@ -66,15 +66,18 @@ export function createDocumentGenerationRouter(controller: DocumentGenerationCon
    * /tenders/{id}/documents/tender-sheet:
    *   post:
    *     tags: [Document Generation]
-   *     summary: Generate a compact vendor Tender Sheet PDF (items, qty, UoM, blank rate column, pinned notes)
+   *     summary: Generate a compact vendor Tender Sheet (items, qty, UoM, blank rate column, pinned notes)
    *     security: [{ bearerAuth: [] }]
    *     parameters:
    *       - in: path
    *         name: id
    *         required: true
    *         schema: { type: string }
+   *       - in: query
+   *         name: format
+   *         schema: { type: string, enum: [pdf, docx], default: pdf }
    *     responses:
-   *       200: { description: Generated PDF }
+   *       200: { description: Generated document }
    *       404: { description: Tender not found, or it has no BOQ }
    */
   router.post(

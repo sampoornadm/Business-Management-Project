@@ -5,10 +5,16 @@ import { saveGeneratedTenderDocument } from "../tenders/local-docs/generated-doc
 import type { ITendersRepository } from "../tenders/tenders.repository.js";
 
 import { generateUndertaking, type UndertakingFormat } from "./document-generation.service.js";
-import { generateQuotation, generateTenderSheet, type QuotationFormat } from "./quotation-document.js";
+import {
+  generateQuotation,
+  generateTenderSheet,
+  type QuotationFormat,
+  type TenderSheetFormat,
+} from "./quotation-document.js";
 
 const QUOTATION_FORMATS: QuotationFormat[] = ["docx", "csv", "pdf"];
 const UNDERTAKING_FORMATS: UndertakingFormat[] = ["docx", "pdf"];
+const TENDER_SHEET_FORMATS: TenderSheetFormat[] = ["pdf", "docx"];
 
 export class DocumentGenerationController {
   constructor(
@@ -80,14 +86,20 @@ export class DocumentGenerationController {
   // Not saved as a tender Attachment: it's a print/share copy, and a QUOTATION-typed attachment
   // would also count as "quoted" for the Assistant (quotedAtByTender).
   generateTenderSheet = asyncHandler(async (req, res) => {
+    const format = (req.query.format as string | undefined) ?? "pdf";
+    if (!TENDER_SHEET_FORMATS.includes(format as TenderSheetFormat)) {
+      throw new BadRequestError("format must be one of: pdf, docx");
+    }
+
     const result = await generateTenderSheet(
       this.tendersRepository,
       this.boqRepository,
       req.params.id!,
       req.user!.businessId,
+      format as TenderSheetFormat,
     );
 
-    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Type", result.mimeType);
     res.setHeader("Content-Disposition", `attachment; filename="${result.filename}"`);
     res.send(result.buffer);
   });

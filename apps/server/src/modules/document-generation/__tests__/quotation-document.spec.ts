@@ -60,11 +60,11 @@ describe("buildQuotationCsv", () => {
     // Strip the leading UTF-8 BOM before splitting into lines.
     const lines = csv.replace(/^﻿/, "").split("\r\n");
 
-    expect(lines[0]).toBe("Sl. No.,Item Code,Description,Unit,Quantity,Rate,Amount");
+    expect(lines[0]).toBe("Sl. No.,Description,Unit,Quantity,Rate,Amount");
     // amount formats as "1,000" (en-IN grouping) — its own comma makes escapeCsvField quote the
     // whole field, same as it would quote any description containing a comma.
-    expect(lines[1]).toBe('1,IT-1,Widget,Nos,10,100,"1,000"');
-    expect(lines[2]).toBe(',,,,,Total,"1,000"');
+    expect(lines[1]).toBe('1,Widget,Nos,10,100,"1,000"');
+    expect(lines[2]).toBe(',,,,Total,"1,000"');
   });
 
   it("quotes a description containing a comma", async () => {
@@ -207,9 +207,28 @@ describe("generateTenderSheet", () => {
     };
 
     const { generateTenderSheet } = await import("../quotation-document.js");
-    const result = await generateTenderSheet(fakeTendersRepository, fakeBoqRepository, "tender-1", "business-1");
+    const result = await generateTenderSheet(fakeTendersRepository, fakeBoqRepository, "tender-1", "business-1", "pdf");
 
     expect(result.filename).toMatch(/^Tender-Sheet-RFX-42-\d{2}-\d{2}-\d{4}\.pdf$/);
     expect(result.buffer.subarray(0, 4).toString("latin1")).toBe("%PDF");
+  });
+});
+
+describe("buildTenderSheetDocx", () => {
+  it("writes one escaped row per item, a blank rate cell, and the pinned notes", async () => {
+    const { buildTenderSheetDocx, buildQuotationRows } = await import("../quotation-document.js");
+    const PizZip = (await import("pizzip")).default;
+    const rows = buildQuotationRows([item({ description: "Bolt <M12> & nut\fset" })]);
+
+    const buffer = buildTenderSheetDocx(rows, { rfxNumber: "RFX-42", submissionDeadline: "20/11/2026" }, [
+      "Rates incl. GST",
+    ]);
+    const xml = new PizZip(buffer).file("word/document.xml")!.asText();
+
+    expect(xml).toContain("RFx No: RFX-42");
+    expect(xml).toContain("Bolt &lt;M12&gt; &amp; nutset");
+    expect(xml).not.toContain("Amount");
+    expect(xml).toContain("Rates incl. GST");
+    expect(xml.match(/<w:tr>/g)).toHaveLength(2); // header + one item
   });
 });

@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import type { BoqItemDto } from "@bmp/types";
 import PDFDocument from "pdfkit";
+import PizZip from "pizzip";
 
 import { NotFoundError } from "../../core/errors/HttpErrors.js";
 import { round2 } from "../../shared/utils/math.js";
@@ -15,7 +16,6 @@ export type QuotationFormat = "docx" | "csv" | "pdf";
 
 export interface QuotationRow {
   slNo: string;
-  itemCode: string;
   description: string;
   unit: string;
   quantity: string;
@@ -56,7 +56,6 @@ function formatNumber(value: number | null): string {
 export function buildQuotationRows(items: BoqItemDto[]): QuotationRow[] {
   return flattenBoqItems(items).map(({ node, depth }, index) => ({
     slNo: String(index + 1),
-    itemCode: node.itemCode ?? "",
     description: `${"  ".repeat(depth)}${node.description}`,
     unit: node.unit ?? "",
     quantity: formatNumber(node.quantity),
@@ -70,16 +69,16 @@ function escapeCsvField(value: string): string {
 }
 
 export function buildQuotationCsv(rows: QuotationRow[], totalAmount: number, pinnedNotes: string[] = []): Buffer {
-  const header = ["Sl. No.", "Item Code", "Description", "Unit", "Quantity", "Rate", "Amount"];
-  const dataLines = rows.map((r) => [r.slNo, r.itemCode, r.description, r.unit, r.quantity, r.rate, r.amount]);
-  const totalLine = ["", "", "", "", "", "Total", formatNumber(totalAmount)];
-  const blank = ["", "", "", "", "", "", ""];
+  const header = ["Sl. No.", "Description", "Unit", "Quantity", "Rate", "Amount"];
+  const dataLines = rows.map((r) => [r.slNo, r.description, r.unit, r.quantity, r.rate, r.amount]);
+  const totalLine = ["", "", "", "", "Total", formatNumber(totalAmount)];
+  const blank = ["", "", "", "", "", ""];
   // Notes have no natural column of their own, so they're placed under Description (the one
   // free-text column) — keeps them visually aligned with the item table instead of stranded
   // in column A when opened in a spreadsheet.
   const noteLines =
     pinnedNotes.length > 0
-      ? [blank, ["", "", "Notes", "", "", "", ""], ...pinnedNotes.map((note) => ["", "", `• ${note}`, "", "", "", ""])]
+      ? [blank, ["", "Notes", "", "", "", ""], ...pinnedNotes.map((note) => ["", `• ${note}`, "", "", "", ""])]
       : [];
   const lines = [header, ...dataLines, totalLine, ...noteLines].map((cols) => cols.map(escapeCsvField).join(","));
   // Prepend a UTF-8 BOM: without it, Excel opens the file assuming the system codepage
@@ -124,8 +123,8 @@ function drawPinnedNotes(
 // doc.heightOfString and page-break handling — same pattern as rfq/rfq-document.ts#buildRfrPdf.
 // Deliberately not the reports module's exportTableToPdf (reports/reports.export.ts), which uses
 // equal-width columns and a flat row height with no wrapping — wrong fit for this data.
-const QUOTATION_COLUMN_HEADERS = ["Sl. No.", "Item Code", "Description", "Unit", "Qty", "Rate", "Amount"];
-const QUOTATION_COLUMN_WIDTHS = [30, 50, 200, 40, 45, 60, 70];
+const QUOTATION_COLUMN_HEADERS = ["Sl. No.", "Description", "Unit", "Qty", "Rate", "Amount"];
+const QUOTATION_COLUMN_WIDTHS = [30, 250, 40, 45, 60, 70];
 
 export function buildQuotationPdf(
   rows: QuotationRow[],
@@ -174,15 +173,12 @@ export function buildQuotationPdf(
     y += 4;
 
     for (const row of rows) {
-      drawRow(
-        [row.slNo, row.itemCode, row.description, row.unit, row.quantity, row.rate, row.amount],
-        false,
-      );
+      drawRow([row.slNo, row.description, row.unit, row.quantity, row.rate, row.amount], false);
     }
     y += 4;
     doc.moveTo(startX, y).lineTo(startX + tableWidth, y).stroke();
     y += 6;
-    drawRow(["", "", "", "", "", "Total", formatNumber(totalAmount)], true);
+    drawRow(["", "", "", "", "Total", formatNumber(totalAmount)], true);
 
     drawPinnedNotes(doc, pinnedNotes, "Important Notes", startX, y + 10, tableWidth);
 
@@ -281,6 +277,11 @@ const TENDER_SHEET_COLUMN_WIDTHS = [32, 343, 50, 40, 70];
 const TENDER_SHEET_COLUMN_ALIGN = ["center", "left", "right", "center", "left"] as const;
 const TENDER_SHEET_CELL_PADDING = 3;
 
+/** Row values in TENDER_SHEET_COLUMN_HEADERS order; Rate is always blank for the vendor. */
+function tenderSheetCells(row: QuotationRow): string[] {
+  return [row.slNo, row.description, row.quantity, row.unit, ""];
+}
+
 export function buildTenderSheetPdf(
   rows: QuotationRow[],
   header: { rfxNumber: string; submissionDeadline: string },
@@ -331,7 +332,7 @@ export function buildTenderSheetPdf(
     }
 
     drawRow(TENDER_SHEET_COLUMN_HEADERS, true);
-    for (const row of rows) drawRow([row.slNo, row.description, row.quantity, row.unit, ""], false);
+    for (const row of rows) drawRow(tenderSheetCells(row), false);
 
     drawPinnedNotes(doc, pinnedNotes, "Terms & Notes", startX, y + 12, tableWidth);
 
@@ -352,20 +353,135 @@ function formatDateTime(date: Date): string {
   });
 }
 
+export type TenderSheetFormat = "pdf" | "docx";
+
 export async function generateTenderSheet(
   tendersRepository: DocTendersRepository,
   boqRepository: DocBoqRepository,
   tenderId: string,
   businessId: string,
-): Promise<{ buffer: Buffer; filename: string }> {
+  format: TenderSheetFormat,
+): Promise<{ buffer: Buffer; filename: string; mimeType: string }> {
   const { tender, rows } = await loadTenderBoq(tendersRepository, boqRepository, tenderId, businessId);
-  const buffer = await buildTenderSheetPdf(
-    rows,
-    {
-      rfxNumber: tender.tenderNumber,
-      submissionDeadline: tender.submissionDate ? formatDateTime(tender.submissionDate) : "—",
-    },
-    tender.pinnedNotes.map((note) => note.lineText),
+  const header = {
+    rfxNumber: tender.tenderNumber,
+    submissionDeadline: tender.submissionDate ? formatDateTime(tender.submissionDate) : "—",
+  };
+  const pinnedNotes = tender.pinnedNotes.map((note) => note.lineText);
+  const buffer =
+    format === "docx"
+      ? buildTenderSheetDocx(rows, header, pinnedNotes)
+      : await buildTenderSheetPdf(rows, header, pinnedNotes);
+  return {
+    buffer,
+    filename: `Tender-Sheet-${tender.tenderNumber}-${formatDate(new Date())}.${format}`,
+    mimeType: QUOTATION_MIME_TYPES[format],
+  };
+}
+
+// The Word version is written straight to OOXML with PizZip rather than filled from a template:
+// its layout is fixed in code (same columns/widths as the PDF), there's no letterhead to keep in
+// sync, and building the rows here sidesteps docxtemplater's loop quirks entirely.
+const TWIPS_PER_POINT = 20;
+const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+
+function xmlText(value: string): string {
+  return (
+    value
+      // XML 1.0 forbids most control chars (pdftotext leaves form feeds in extracted text);
+      // one of them in a description would make Word refuse to open the file.
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
   );
-  return { buffer, filename: `Tender-Sheet-${tender.tenderNumber}-${formatDate(new Date())}.pdf` };
+}
+
+function docxRun(text: string, rPr = ""): string {
+  const body = text
+    .split(/\r?\n/)
+    .map((line) => `<w:t xml:space="preserve">${xmlText(line)}</w:t>`)
+    .join("<w:br/>");
+  return `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ""}${body}</w:r>`;
+}
+
+export function buildTenderSheetDocx(
+  rows: QuotationRow[],
+  header: { rfxNumber: string; submissionDeadline: string },
+  pinnedNotes: string[] = [],
+): Buffer {
+  const widths = TENDER_SHEET_COLUMN_WIDTHS.map((w) => w * TWIPS_PER_POINT);
+  const tableWidth = widths.reduce((sum, w) => sum + w, 0);
+  const tableRow = (values: string[], isHeader: boolean) =>
+    // cantSplit keeps an item on one page; tblHeader repeats the header row on every printed page.
+    `<w:tr><w:trPr><w:cantSplit/>${isHeader ? "<w:tblHeader/>" : ""}</w:trPr>${values
+      .map(
+        (value, i) =>
+          `<w:tc><w:tcPr><w:tcW w:w="${widths[i]}" w:type="dxa"/></w:tcPr>` +
+          `<w:p><w:pPr><w:jc w:val="${TENDER_SHEET_COLUMN_ALIGN[i]}"/></w:pPr>${docxRun(value, isHeader ? "<w:b/>" : "")}</w:p></w:tc>`,
+      )
+      .join("")}</w:tr>`;
+  const border = (side: string) => `<w:${side} w:val="single" w:sz="4" w:space="0" w:color="000000"/>`;
+
+  const body =
+    `<w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="${tableWidth}"/></w:tabs><w:spacing w:after="160"/></w:pPr>` +
+    docxRun(`RFx No: ${header.rfxNumber}`, '<w:b/><w:sz w:val="20"/>') +
+    "<w:r><w:tab/></w:r>" +
+    docxRun(`Submission Deadline: ${header.submissionDeadline}`, '<w:b/><w:sz w:val="20"/>') +
+    "</w:p>" +
+    `<w:tbl><w:tblPr><w:tblW w:w="${tableWidth}" w:type="dxa"/><w:tblLayout w:type="fixed"/>` +
+    `<w:tblBorders>${["top", "left", "bottom", "right", "insideH", "insideV"].map(border).join("")}</w:tblBorders>` +
+    '<w:tblCellMar><w:left w:w="57" w:type="dxa"/><w:right w:w="57" w:type="dxa"/></w:tblCellMar></w:tblPr>' +
+    `<w:tblGrid>${widths.map((w) => `<w:gridCol w:w="${w}"/>`).join("")}</w:tblGrid>` +
+    tableRow(TENDER_SHEET_COLUMN_HEADERS, true) +
+    rows.map((row) => tableRow(tenderSheetCells(row), false)).join("") +
+    "</w:tbl><w:p/>" +
+    (pinnedNotes.length > 0
+      ? `<w:p><w:pPr><w:spacing w:before="160" w:after="80"/></w:pPr>${docxRun("Terms & Notes", '<w:b/><w:sz w:val="20"/>')}</w:p>` +
+        pinnedNotes
+          .map((note) => `<w:p><w:pPr><w:spacing w:after="60"/></w:pPr>${docxRun(`• ${note}`, '<w:sz w:val="18"/>')}</w:p>`)
+          .join("")
+      : "") +
+    '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>' +
+    '<w:pgMar w:top="600" w:right="600" w:bottom="600" w:left="600" w:header="400" w:footer="400" w:gutter="0"/></w:sectPr>';
+
+  const zip = new PizZip();
+  zip.file(
+    "[Content_Types].xml",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+      '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+      "</Types>",
+  );
+  zip.file(
+    "_rels/.rels",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+      "</Relationships>",
+  );
+  zip.file(
+    "word/_rels/document.xml.rels",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+      "</Relationships>",
+  );
+  // Document-wide defaults: Arial 8pt, no paragraph spacing — keeps the table as dense as the PDF.
+  zip.file(
+    "word/styles.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="${W_NS}"><w:docDefaults>` +
+      '<w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr></w:rPrDefault>' +
+      '<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault>' +
+      "</w:docDefaults></w:styles>",
+  );
+  zip.file(
+    "word/document.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="${W_NS}"><w:body>${body}</w:body></w:document>`,
+  );
+  return zip.generate({ type: "nodebuffer" });
 }
