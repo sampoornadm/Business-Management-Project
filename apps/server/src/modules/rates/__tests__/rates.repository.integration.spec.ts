@@ -130,14 +130,44 @@ describe("HistoricalRatesRepository vendor/own rate recording (integration)", ()
     expect(rows[0]!.effectiveDate.toISOString()).toBe("2026-10-01T00:00:00.000Z");
   });
 
-  it("recordVendorRates clears an older default for the same item from another RFQ", async () => {
+  it("recordVendorRates keeps each RFQ's own selected quote as its default", async () => {
     const older = await createRfqWithQuotes([{ vendorId: vendorAId, rate: 410 }]);
     await repository.recordVendorRates(older.rfqId, businessId, [vendorRow(older.quotes[0]!, true)]);
     const newer = await createRfqWithQuotes([{ vendorId: vendorBId, rate: 390 }]);
     await repository.recordVendorRates(newer.rfqId, businessId, [vendorRow(newer.quotes[0]!, true)]);
 
-    const defaults = await prisma.historicalRate.findMany({ where: { businessId, itemId, kind: "VENDOR", isDefault: true } });
-    expect(defaults.map((d) => d.rfqQuoteId)).toEqual([newer.quotes[0]!.id]);
+    const rows = await prisma.historicalRate.findMany({
+      where: { rfqQuoteId: { in: [older.quotes[0]!.id, newer.quotes[0]!.id] } },
+    });
+    expect(rows.every((r) => r.isDefault)).toBe(true);
+  });
+
+  it("findNearest sees chosen and hand-entered vendor rates, never a losing quote", async () => {
+    const { rfqId, quotes } = await createRfqWithQuotes([
+      { vendorId: vendorAId, rate: 999 },
+      { vendorId: vendorBId, rate: 380 },
+    ]);
+    const losing = { ...vendorRow(quotes[0]!, false), itemName: "ANN Losing Quote Cement" };
+    const chosen = { ...vendorRow(quotes[1]!, true), itemName: "ANN Losing Quote Cement" };
+    await repository.recordVendorRates(rfqId, businessId, [losing, chosen]);
+    const handEntered = await repository.create({
+      businessId,
+      category: "MATERIAL",
+      itemName: "ANN Losing Quote Cement",
+      unit: "bag",
+      rate: 400,
+      effectiveDate: new Date(),
+      createdById: userId,
+    });
+    const vector = new Array(1024).fill(0);
+    vector[7] = 1;
+    const ids = (await prisma.historicalRate.findMany({ where: { businessId, itemName: "ANN Losing Quote Cement" } })).map((r) => r.id);
+    for (const id of ids) await repository.setEmbedding(id, vector);
+
+    const matches = await repository.findNearest(businessId, vector, 10);
+
+    expect(matches.map((m) => m.rate).sort()).toEqual([380, 400]);
+    expect(matches.some((m) => m.id === handEntered.id)).toBe(true);
   });
 
   it("recordVendorRates re-run drops a quote no longer in rows", async () => {

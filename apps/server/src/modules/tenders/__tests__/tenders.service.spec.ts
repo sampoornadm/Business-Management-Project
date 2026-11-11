@@ -592,6 +592,17 @@ describe("TendersService", () => {
       expect(dto.submissionReference).toBe("ABC/123");
     });
 
+    it("Undo of SUBMITTED → CANCELLED resubmits with the stored reference, needing none", async () => {
+      const created = await createLocked();
+      await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "ABC/123" }, actorId, ctx);
+      await service.changeStatus(created.id, { status: "CANCELLED" }, actorId, ctx);
+
+      const dto = await service.changeStatus(created.id, { status: "SUBMITTED", remarks: "Undo" }, actorId, ctx);
+
+      expect(dto.status).toBe("SUBMITTED");
+      expect(dto.submissionReference).toBe("ABC/123");
+    });
+
     it("submit writes own rates for priced current-BOQ items only, with base rate and markup", async () => {
       const created = await createLocked();
       boqRepository.itemsByTender.set(created.id, [

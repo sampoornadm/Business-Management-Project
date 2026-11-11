@@ -250,10 +250,11 @@ export class TendersService {
 
     if (input.status === "SUBMITTED") {
       if (!tender.ratesLockedAt) throw new BadRequestError("Finalize the tender's rates before submitting");
-      // A fresh submission (from DRAFT/CANCELLED) needs its reference; undoing a WON/LOST result
-      // back to SUBMITTED is the same submission, so the stored reference stands.
+      // A fresh submission (from DRAFT/CANCELLED) needs a reference; one already stored — kept
+      // across reverts — counts, so undoing a Won/Lost/Cancelled back to SUBMITTED needs none.
       const freshSubmission = previousStatus === "DRAFT" || previousStatus === "CANCELLED";
-      if (freshSubmission && tender.kind === "TENDER" && !input.submissionReference) {
+      const reference = input.submissionReference ?? tender.submissionReference;
+      if (freshSubmission && tender.kind === "TENDER" && !reference) {
         throw new BadRequestError("Submission reference number is required");
       }
       // Before the status write on purpose: an idempotent replace, so a failed status write is
