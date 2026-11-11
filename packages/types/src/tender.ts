@@ -314,6 +314,8 @@ export interface ChangeTenderStatusInput {
   winnerName?: string;
   winningBidAmount?: number;
   lossReason?: string;
+  /** Required on DRAFT/CANCELLED → SUBMITTED for TENDER kind; kept from the last submission otherwise. */
+  submissionReference?: string;
 }
 
 export interface AddTenderAssigneeInput {

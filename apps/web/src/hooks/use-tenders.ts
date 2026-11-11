@@ -146,6 +146,20 @@ export function useChangeTenderStatus(id: string) {
   });
 }
 
+/** Items tab "Rates finalized" switch. Locking is required before Submitted; DRAFT only. */
+export function useSetTenderRatesLock(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (locked: boolean) => {
+      const response = await apiClient.put<ApiResponse<TenderDto>>(`/tenders/${id}/rates-lock`, { locked });
+      return unwrap(response.data);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["tenders"] });
+    },
+  });
+}
+
 export function useTenderStatusHistory(id: string | undefined, page = 1, pageSize = 20) {
   return useQuery({
     queryKey: ["tenders", id, "status-history", page, pageSize],
