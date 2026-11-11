@@ -60,6 +60,43 @@ export interface RecordFromRfqQuoteData {
   createdById: string;
 }
 
+/** One vendor's quote for one RFQ item, recorded on RFQ "Finalize rates". */
+export interface VendorRateRow {
+  businessId: string;
+  itemId: string;
+  itemName: string;
+  unit: string;
+  rate: number;
+  vendorId: string;
+  rfqQuoteId: string;
+  sourceTenderId: string | null;
+  quotedAt: Date;
+  /** True only for the quote selected as the purchase rate on its RFQ item. */
+  isDefault: boolean;
+  createdById: string;
+}
+
+/** The owner's own quoted rate for one item of a submitted tender. */
+export interface OwnRateRow {
+  businessId: string;
+  itemId: string;
+  itemName: string;
+  unit: string;
+  rate: number;
+  baseRate: number | null;
+  markupPercent: number | null;
+  createdById: string;
+}
+
+const itemRateArgs = {
+  include: {
+    vendor: { select: { id: true, name: true } },
+    rfqQuote: { select: { make: true, model: true, rfqItem: { select: { rfqId: true } } } },
+  },
+} satisfies Prisma.HistoricalRateDefaultArgs;
+
+export type ItemRateRow = Prisma.HistoricalRateGetPayload<typeof itemRateArgs> & { tenderNumber: string | null };
+
 export interface IHistoricalRatesRepository {
   findMany(filters: ListHistoricalRatesFilters): Promise<HistoricalRateWithCreator[]>;
   suggest(
@@ -73,6 +110,12 @@ export interface IHistoricalRatesRepository {
   setEmbedding(id: string, embedding: number[]): Promise<void>;
   findNearest(businessId: string, queryVector: number[], limit: number): Promise<HistoricalRateMatch[]>;
   recordFromRfqQuote(data: RecordFromRfqQuoteData): Promise<void>;
+  /** Upsert one VENDOR row per quote of this RFQ; drop this RFQ's rows for quotes not in `rows`. */
+  recordVendorRates(rfqId: string, rows: VendorRateRow[]): Promise<number>;
+  /** Replace every OWN row of this tender with `rows` (one per item, latest submission wins). */
+  replaceOwnRates(tenderId: string, rows: OwnRateRow[]): Promise<void>;
+  /** Both kinds for one inventory item, newest effectiveDate first. */
+  findByItem(itemId: string, businessId: string): Promise<ItemRateRow[]>;
 }
 
 export class HistoricalRatesRepository implements IHistoricalRatesRepository {
@@ -97,7 +140,7 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
     businessId: string,
   ): Promise<HistoricalRateWithCreator[]> {
     return this.prisma.historicalRate.findMany({
-      where: { businessId, category, itemName: { contains: itemName, mode: "insensitive" } },
+      where: { businessId, kind: "VENDOR", category, itemName: { contains: itemName, mode: "insensitive" } },
       orderBy: { effectiveDate: "desc" },
       take: limit,
       ...historicalRateArgs,
@@ -143,7 +186,7 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
       SELECT id, "itemName", unit, rate, category,
              1 - ("embeddingVector" <=> ${vectorLiteral}::vector) AS similarity
       FROM historical_rates
-      WHERE "businessId" = ${businessId} AND "embeddingVector" IS NOT NULL
+      WHERE "businessId" = ${businessId} AND kind = 'VENDOR' AND "embeddingVector" IS NOT NULL
       ORDER BY "embeddingVector" <=> ${vectorLiteral}::vector
       LIMIT ${limit}
     `;
@@ -189,5 +232,81 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
         },
       }),
     ]);
+  }
+
+  async recordVendorRates(rfqId: string, rows: VendorRateRow[]): Promise<number> {
+    const keepQuoteIds = rows.map((r) => r.rfqQuoteId);
+    // Business rule (not a DB constraint): at most one VENDOR isDefault row per (business, item) —
+    // the latest finalized purchase rate. Cleared before the upserts that set the new one.
+    const defaultItemKeys = rows.filter((r) => r.isDefault).map((r) => ({ businessId: r.businessId, itemId: r.itemId }));
+    await this.prisma.$transaction([
+      this.prisma.historicalRate.deleteMany({
+        where: { kind: "VENDOR", rfqQuote: { rfqItem: { rfqId } }, rfqQuoteId: { notIn: keepQuoteIds } },
+      }),
+      ...defaultItemKeys.map((key) =>
+        this.prisma.historicalRate.updateMany({
+          where: { ...key, kind: "VENDOR", isDefault: true },
+          data: { isDefault: false },
+        }),
+      ),
+      ...rows.map((row) => {
+        const fields = {
+          kind: "VENDOR" as const,
+          itemId: row.itemId,
+          itemName: row.itemName,
+          unit: row.unit,
+          rate: row.rate,
+          effectiveDate: row.quotedAt,
+          sourceTenderId: row.sourceTenderId,
+          vendorId: row.vendorId,
+          isDefault: row.isDefault,
+        };
+        return this.prisma.historicalRate.upsert({
+          where: { rfqQuoteId: row.rfqQuoteId },
+          create: {
+            id: randomUUID(),
+            businessId: row.businessId,
+            category: "MATERIAL",
+            rfqQuoteId: row.rfqQuoteId,
+            createdById: row.createdById,
+            ...fields,
+          },
+          update: fields,
+        });
+      }),
+    ]);
+    return rows.length;
+  }
+
+  async replaceOwnRates(tenderId: string, rows: OwnRateRow[]): Promise<void> {
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.historicalRate.deleteMany({ where: { kind: "OWN", sourceTenderId: tenderId } }),
+      this.prisma.historicalRate.createMany({
+        data: rows.map((row) => ({
+          id: randomUUID(),
+          kind: "OWN" as const,
+          category: "MATERIAL" as const,
+          sourceTenderId: tenderId,
+          effectiveDate: now,
+          ...row,
+        })),
+      }),
+    ]);
+  }
+
+  async findByItem(itemId: string, businessId: string): Promise<ItemRateRow[]> {
+    const rows = await this.prisma.historicalRate.findMany({
+      where: { itemId, businessId },
+      orderBy: { effectiveDate: "desc" },
+      ...itemRateArgs,
+    });
+    // sourceTenderId is an unenforced reference (no relation), so tender numbers are a second read.
+    const tenderIds = [...new Set(rows.map((r) => r.sourceTenderId).filter((id): id is string => id !== null))];
+    const tenders = tenderIds.length
+      ? await this.prisma.tender.findMany({ where: { id: { in: tenderIds }, businessId }, select: { id: true, tenderNumber: true } })
+      : [];
+    const numberById = new Map(tenders.map((t) => [t.id, t.tenderNumber]));
+    return rows.map((r) => ({ ...r, tenderNumber: r.sourceTenderId ? numberById.get(r.sourceTenderId) ?? null : null }));
   }
 }
