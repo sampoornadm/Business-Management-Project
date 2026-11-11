@@ -53,6 +53,19 @@ export function buildBoqItemTree(items: BoqItemWithBreakdown[]): BoqItemDto[] {
       suggestedHsnSource: item.suggestedHsnSource,
       suggestedGstRate: item.suggestedGstRate,
       hsnCodeConfirmed: item.hsnCodeConfirmed,
+      baseRate: item.baseRate,
+      markupPercent: item.markupPercent,
+      baseRateSource: item.baseRateQuote
+        ? {
+            quoteId: item.baseRateQuote.id,
+            rfqId: item.baseRateQuote.rfqItem.rfqId,
+            vendorId: item.baseRateQuote.vendor.id,
+            vendorName: item.baseRateQuote.vendor.name,
+            make: item.baseRateQuote.make,
+            model: item.baseRateQuote.model,
+            quotedAt: item.baseRateQuote.quotedAt.toISOString(),
+          }
+        : null,
       children: [],
     });
   }

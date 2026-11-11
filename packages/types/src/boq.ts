@@ -67,8 +67,27 @@ export interface BoqItemDto {
   suggestedGstRate: number | null;
   // True once a human has set hsnCode (typed it, or applied the suggestion) — never AI-set.
   hsnCodeConfirmed: boolean;
+  /** Vendor purchase rate this line is priced from (RFQ "Finalize rates"); null = priced by hand. */
+  baseRate: number | null;
+  /** rate = baseRate × (1 + markupPercent/100). Null when there is no base rate. */
+  markupPercent: number | null;
+  /** Which RFQ quote the base rate came from; null when it was never set or the quote is gone. */
+  baseRateSource: BoqBaseRateSourceDto | null;
   children: BoqItemDto[];
 }
+
+export interface BoqBaseRateSourceDto {
+  quoteId: string;
+  rfqId: string;
+  vendorId: string;
+  vendorName: string;
+  make: string;
+  model: string;
+  quotedAt: string;
+}
+
+/** Markup applied when a base rate first lands on a BOQ item that has none yet. */
+export const DEFAULT_MARKUP_PERCENT = 15;
 
 /** A ranked historical-rate candidate for a BOQ item, computed live (not persisted) so the
  * estimator can see near-misses too, not just the one match that cleared the auto-apply bar. */
@@ -175,12 +194,14 @@ export interface UpdateBoqItemInput {
   unitWeightKg?: number | null;
   remarks?: string;
   sortOrder?: number;
+  /** Only meaningful on an item with a base rate: rate becomes baseRate × (1 + markupPercent/100). */
+  markupPercent?: number;
 }
 
 export interface BulkUpdateBoqItemsInput {
   itemIds: string[];
-  /** Percentage adjustment applied to each selected item's rate, e.g. 5 = +5%, -10 = -10%. */
-  ratePercentAdjustment: number;
+  /** Markup % set (not compounded) on each selected item that has a base rate; others are skipped. */
+  markupPercent: number;
 }
 
 export interface UpsertBoqItemRateAnalysisInput {

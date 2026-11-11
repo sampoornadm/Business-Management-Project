@@ -159,6 +159,15 @@ export interface SelectQuoteInput {
   quoteId: string;
 }
 
+/** Result of RFQ "Finalize rates": vendor rates recorded + tender base rates set (or skipped). */
+export interface FinalizeRfqRatesResultDto {
+  vendorRatesRecorded: number;
+  tenderItemsUpdated: number;
+  tenderItemsSkipped: number;
+  /** True when the linked tender's rates were locked, so no tender item was touched. */
+  tenderLocked: boolean;
+}
+
 // One historical price observation: a single vendor's quote for one item, across every RFQ.
 // Regretted / no-price rows are excluded server-side, so `rate` is always a real number here.
 export interface ItemPriceHistoryDto {

@@ -108,6 +108,11 @@ export function toTenderDto(entity: TenderDetail): TenderDto {
     winnerName: entity.winnerName,
     winningBidAmount: entity.winningBidAmount,
     lossReason: entity.lossReason,
+    ratesLockedAt: entity.ratesLockedAt?.toISOString() ?? null,
+    ratesLockedByName: entity.ratesLockedBy
+      ? `${entity.ratesLockedBy.firstName} ${entity.ratesLockedBy.lastName}`.trim()
+      : null,
+    submissionReference: entity.submissionReference,
     convertedFrom: entity.convertedFrom
       ? {
           id: entity.convertedFrom.id,

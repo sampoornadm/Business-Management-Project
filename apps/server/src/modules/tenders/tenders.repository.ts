@@ -40,6 +40,7 @@ const tenderDetailArgs = {
     pinnedNotes: { orderBy: { createdAt: "asc" } },
     tags: { include: { tag: true } },
     convertedFrom: { select: { id: true, tenderNumber: true, title: true, updatedAt: true } },
+    ratesLockedBy: { select: actorSummarySelect },
   },
 } satisfies Prisma.TenderDefaultArgs;
 
