@@ -54,13 +54,14 @@ export const updateBoqItemSchema = z
     unitWeightKg: z.number().positive().nullable().optional(),
     remarks: z.string().max(1000).optional(),
     sortOrder: z.number().int().optional(),
+    markupPercent: z.number().min(-100).max(1000).optional(),
   })
   .refine((data) => Object.keys(data).length > 0, { message: "No fields to update" });
 export type UpdateBoqItemBody = z.infer<typeof updateBoqItemSchema>;
 
 export const bulkUpdateBoqItemsSchema = z.object({
   itemIds: z.array(z.string().uuid()).min(1),
-  ratePercentAdjustment: z.number().min(-100).max(1000),
+  markupPercent: z.number().min(-100).max(1000),
 });
 export type BulkUpdateBoqItemsBody = z.infer<typeof bulkUpdateBoqItemsSchema>;
 

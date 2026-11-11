@@ -9,7 +9,8 @@ vi.mock("../../../infra/llm/ollama.client.js", () => ({
   generateJson: vi.fn(),
 }));
 
-import { BadRequestError, NotFoundError } from "../../../core/errors/HttpErrors.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../../../core/errors/HttpErrors.js";
+import { round2 } from "../../../shared/utils/math.js";
 import type { AttachmentsService } from "../../attachments/attachments.service.js";
 import type { AuditService } from "../../audit/audit.service.js";
 import type { IItemsRepository } from "../../items/items.repository.js";
@@ -71,6 +72,10 @@ class FakeBoqRepository implements IBoqRepository {
         suggestedHsnCode: null,
         suggestedGstRate: null,
         hsnCodeConfirmed: false,
+        baseRate: null,
+        markupPercent: null,
+        baseRateQuoteId: null,
+        baseRateQuote: null,
         ...item,
         boqId: data.id,
         rateBreakdown: null,
@@ -119,6 +124,10 @@ class FakeBoqRepository implements IBoqRepository {
 
   createItem(data: CreateBoqItemData) {
     const item = {
+      baseRate: null,
+      markupPercent: null,
+      baseRateQuoteId: null,
+      baseRateQuote: null,
       ...data,
       rateBreakdown: null,
       createdAt: new Date(),
@@ -136,9 +145,17 @@ class FakeBoqRepository implements IBoqRepository {
     for (const update of updates) {
       const item = this.items.get(update.id);
       if (!item) continue;
-      item.rate = update.rate;
-      item.amount = update.amount;
+      Object.assign(item, update);
     }
+  }
+
+  async setBaseRate(
+    id: string,
+    data: { baseRate: number; baseRateQuoteId: string; markupPercent: number; rate: number; amount: number | null },
+  ) {
+    const item = this.items.get(id);
+    if (!item) throw new Error("not found");
+    Object.assign(item, data);
   }
 
   async updateItemEnrichment(id: string, data: UpdateBoqItemEnrichmentData) {
@@ -224,9 +241,11 @@ class FakeItemsRepository implements Partial<IItemsRepository> {
 
 class FakeTendersRepository implements Partial<ITendersRepository> {
   tenderIds = new Set<string>();
+  lockedTenderIds = new Set<string>();
 
   async findById(id: string, _businessId: string) {
-    return this.tenderIds.has(id) ? ({ id } as never) : null;
+    if (!this.tenderIds.has(id)) return null;
+    return { id, ratesLockedAt: this.lockedTenderIds.has(id) ? new Date() : null } as never;
   }
 }
 
@@ -344,39 +363,137 @@ describe("BoqService", () => {
     expect(current.id).toBe(second.id);
   });
 
-  it("bulk-updates rates by a percentage adjustment and recomputes amounts", async () => {
+  async function commitTwoItems() {
     const boq = await service.commitBoq(
       tenderId,
       businessId,
       {
         items: [
-          { tempId: "1", description: "Excavation", unit: "cum", quantity: 100, rate: 50 },
+          { tempId: "1", description: "Excavation", unit: "cum", quantity: 3, rate: 50 },
           { tempId: "2", description: "Backfilling", unit: "cum", quantity: 40, rate: 20 },
         ],
       },
       actorId,
       {},
     );
-    const itemIds = boq.items.map((item) => item.id);
+    const [excavation, backfilling] = boq.items.map((item) => item.id) as [string, string];
+    return { excavation, backfilling };
+  }
+
+  function giveBaseRate(itemId: string, baseRate: number, markupPercent: number) {
+    Object.assign(boqRepository.items.get(itemId)!, { baseRate, markupPercent, rate: round2(baseRate * (1 + markupPercent / 100)) });
+  }
+
+  it("updateItem with markupPercent recomputes rate and amount from baseRate", async () => {
+    const { excavation } = await commitTwoItems();
+    giveBaseRate(excavation, 200, 15);
+
+    const boq = await service.updateItem(excavation, { markupPercent: 10 }, actorId, businessId);
+
+    const item = boq.items.find((i) => i.id === excavation)!;
+    expect(item.markupPercent).toBe(10);
+    expect(item.rate).toBe(220);
+    expect(item.amount).toBe(660);
+  });
+
+  it("updateItem with rate on a based item recomputes markup", async () => {
+    const { excavation } = await commitTwoItems();
+    giveBaseRate(excavation, 200, 15);
+
+    const boq = await service.updateItem(excavation, { rate: 240 }, actorId, businessId);
+
+    const item = boq.items.find((i) => i.id === excavation)!;
+    expect(item.markupPercent).toBe(20);
+    expect(item.rate).toBe(240);
+    expect(item.amount).toBe(720);
+  });
+
+  it("updateItem on an item without baseRate ignores markup math", async () => {
+    const { excavation } = await commitTwoItems();
+
+    const boq = await service.updateItem(excavation, { rate: 70, markupPercent: 10 }, actorId, businessId);
+
+    const item = boq.items.find((i) => i.id === excavation)!;
+    expect(item.rate).toBe(70);
+    expect(item.markupPercent).toBeNull();
+  });
+
+  it("bulk markup sets markup on based items, skips others", async () => {
+    const { excavation, backfilling } = await commitTwoItems();
+    giveBaseRate(excavation, 200, 15);
 
     const updated = await service.bulkUpdateItems(
-      { itemIds, ratePercentAdjustment: 10 },
+      { itemIds: [excavation, backfilling], markupPercent: 25 },
       actorId,
       businessId,
     );
 
-    const excavation = updated.items.find((item) => item.description === "Excavation")!;
-    expect(excavation.rate).toBe(55);
-    expect(excavation.amount).toBe(5500);
-    const backfilling = updated.items.find((item) => item.description === "Backfilling")!;
-    expect(backfilling.rate).toBe(22);
-    expect(backfilling.amount).toBe(880);
+    const based = updated.items.find((i) => i.id === excavation)!;
+    expect(based.markupPercent).toBe(25);
+    expect(based.rate).toBe(250);
+    expect(based.amount).toBe(750);
+    const manual = updated.items.find((i) => i.id === backfilling)!;
+    expect(manual.rate).toBe(20);
+    expect(updated.skipped).toBe(1);
   });
 
   it("rejects a bulk update referencing an unknown item id", async () => {
     await expect(
-      service.bulkUpdateItems({ itemIds: [randomUUID()], ratePercentAdjustment: 5 }, actorId, businessId),
+      service.bulkUpdateItems({ itemIds: [randomUUID()], markupPercent: 5 }, actorId, businessId),
     ).rejects.toThrow(BadRequestError);
+  });
+
+  describe("rates lock", () => {
+    const rateAnalysis = {
+      materialCost: 100,
+      laborCost: 0,
+      machineryCost: 0,
+      transportCost: 0,
+      overheadPercent: 0,
+      profitPercent: 0,
+      taxPercent: 0,
+    };
+
+    it.each([
+      ["updateItem", (ids: { excavation: string }) => service.updateItem(ids.excavation, { rate: 1 }, actorId, businessId)],
+      ["addItem", () => service.addItem(tenderId, { description: "New" }, actorId, businessId)],
+      ["deleteItem", (ids: { excavation: string }) => service.deleteItem(ids.excavation, actorId, businessId)],
+      [
+        "bulkUpdateItems",
+        (ids: { excavation: string }) => service.bulkUpdateItems({ itemIds: [ids.excavation], markupPercent: 5 }, actorId, businessId),
+      ],
+      [
+        "upsertRateAnalysis",
+        (ids: { excavation: string }) => service.upsertRateAnalysis(ids.excavation, rateAnalysis, actorId, businessId),
+      ],
+      [
+        "commitBoq",
+        async () => {
+          const current = await service.getCurrentBoq(tenderId, businessId);
+          return service.commitBoq(
+            tenderId,
+            businessId,
+            { replacesBoqId: current.id, items: [{ tempId: "1", description: "X" }] },
+            actorId,
+            {},
+          );
+        },
+      ],
+    ])("%s throws ConflictError when tender rates are locked", async (_name, call) => {
+      const ids = await commitTwoItems();
+      tendersRepository.lockedTenderIds.add(tenderId);
+
+      await expect(call(ids)).rejects.toThrow(ConflictError);
+    });
+
+    it("still allows non-pricing edits (description, HSN, remarks) while locked", async () => {
+      const { excavation } = await commitTwoItems();
+      tendersRepository.lockedTenderIds.add(tenderId);
+
+      const boq = await service.updateItem(excavation, { remarks: "Check spec" }, actorId, businessId);
+
+      expect(boq.items.find((i) => i.id === excavation)!.remarks).toBe("Check spec");
+    });
   });
 
   it("computes a rate from the cost breakdown and applies it back to the item", async () => {

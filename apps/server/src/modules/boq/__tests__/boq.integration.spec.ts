@@ -208,7 +208,7 @@ describe("BOQ upload/commit workflow (integration)", () => {
     const bulkUpdateResponse = await request(app)
       .post("/api/v1/boq-items/bulk-update")
       .set("Authorization", `Bearer ${secondBusinessToken}`)
-      .send({ itemIds: [isolationItemId], ratePercentAdjustment: 10 });
+      .send({ itemIds: [isolationItemId], markupPercent: 10 });
     expect(bulkUpdateResponse.status).toBe(400); // "not found" -> repository filters it out first
 
     const deleteResponse = await request(app)

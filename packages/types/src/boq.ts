@@ -126,6 +126,11 @@ export interface BoqDto {
   updatedAt: string;
 }
 
+/** Bulk "Set markup %" response: the BOQ plus how many selected lines had no base rate. */
+export interface BulkUpdateBoqItemsResultDto extends BoqDto {
+  skipped: number;
+}
+
 export interface BoqListItemDto {
   id: string;
   groupId: string;

@@ -7,11 +7,12 @@ import type {
   BoqListItemDto,
   BoqParsePreviewDto,
   BoqRateCandidateDto,
+  BulkUpdateBoqItemsResultDto,
 } from "@bmp/types";
 
 import { BOQ_UPLOAD_LIMITS } from "../../config/constants.js";
 import { env } from "../../config/env.js";
-import { BadRequestError, NotFoundError } from "../../core/errors/HttpErrors.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../../core/errors/HttpErrors.js";
 import type { RequestContext } from "../../core/interfaces/request-context.js";
 import { embed } from "../../infra/llm/ollama.client.js";
 import { aiEnrichmentQueue } from "../../infra/queue/queues.js";
@@ -25,6 +26,7 @@ import type { IItemsRepository } from "../items/items.repository.js";
 import type { IHistoricalRatesRepository } from "../rates/rates.repository.js";
 import type { ITendersRepository } from "../tenders/tenders.repository.js";
 
+import { markupFromRate, rateFromMarkup } from "./boq-pricing.js";
 import { sumItemAmounts, toBoqDto, toBoqListItemDto } from "./boq.mapper.js";
 import { parseBoqFile } from "./boq.parser.js";
 import type {
@@ -63,6 +65,19 @@ export class BoqService {
   private async assertTenderExists(tenderId: string, businessId: string): Promise<void> {
     const tender = await this.tendersRepository.findById(tenderId, businessId);
     if (!tender) throw new NotFoundError("Tender not found");
+  }
+
+  /** Every pricing write on a tender's BOQ is refused while its rates are finalized (locked). */
+  private async assertRatesUnlocked(tenderId: string, businessId: string): Promise<void> {
+    const tender = await this.tendersRepository.findById(tenderId, businessId);
+    if (!tender) throw new NotFoundError("Tender not found");
+    if (tender.ratesLockedAt) throw new ConflictError("Tender rates are finalized — unlock them to edit");
+  }
+
+  private async assertBoqRatesUnlocked(boqId: string, businessId: string): Promise<void> {
+    const boq = await this.boqRepository.findBoqById(boqId, businessId);
+    if (!boq) throw new NotFoundError("BOQ not found");
+    await this.assertRatesUnlocked(boq.tenderId, businessId);
   }
 
   /**
@@ -124,7 +139,7 @@ export class BoqService {
     actorId: string,
     context: RequestContext,
   ): Promise<BoqDto> {
-    await this.assertTenderExists(tenderId, businessId);
+    await this.assertRatesUnlocked(tenderId, businessId);
 
     const boqId = randomUUID();
     let groupId: string;
@@ -238,9 +253,24 @@ export class BoqService {
   ): Promise<BoqDto> {
     const existing = await this.boqRepository.findItemById(itemId, businessId);
     if (!existing) throw new NotFoundError("BOQ item not found");
+    const { markupPercent: requestedMarkup, ...fields } = data;
+    if (fields.quantity !== undefined || fields.rate !== undefined || requestedMarkup !== undefined) {
+      await this.assertBoqRatesUnlocked(existing.boqId, businessId);
+    }
 
-    const quantity = data.quantity !== undefined ? data.quantity : existing.quantity;
-    const rate = data.rate !== undefined ? data.rate : existing.rate;
+    // A line priced from a vendor base rate keeps rate and markup in step: a new markup sets the
+    // rate, a hand-typed rate sets the markup. Lines without a base rate ignore markup entirely.
+    const quantity = fields.quantity !== undefined ? fields.quantity : existing.quantity;
+    let rate = fields.rate !== undefined ? fields.rate : existing.rate;
+    let markupPercent: number | null | undefined;
+    if (existing.baseRate !== null) {
+      if (requestedMarkup !== undefined) {
+        markupPercent = requestedMarkup;
+        rate = rateFromMarkup(existing.baseRate, requestedMarkup);
+      } else if (fields.rate !== undefined) {
+        markupPercent = markupFromRate(existing.baseRate, fields.rate, existing.markupPercent);
+      }
+    }
     const amount = quantity !== null && rate !== null ? round2(quantity * rate) : null;
 
     // Any human-committed hsnCode (typed directly, or applied from the AI suggestion) counts
@@ -250,7 +280,9 @@ export class BoqService {
     const hsnCodeConfirmed = hsnCode !== undefined ? hsnCode !== null : undefined;
 
     await this.boqRepository.updateItem(itemId, {
-      ...data,
+      ...fields,
+      ...(rate !== existing.rate ? { rate } : {}),
+      ...(markupPercent !== undefined ? { markupPercent } : {}),
       amount,
       ...(hsnCode !== undefined ? { hsnCode, hsnCodeConfirmed } : {}),
     });
@@ -308,7 +340,7 @@ export class BoqService {
     actorId: string,
     businessId: string,
   ): Promise<BoqDto> {
-    await this.assertTenderExists(tenderId, businessId);
+    await this.assertRatesUnlocked(tenderId, businessId);
 
     let boq = await this.boqRepository.findCurrentBoq(tenderId, businessId);
     if (!boq) {
@@ -366,6 +398,7 @@ export class BoqService {
   async deleteItem(itemId: string, actorId: string, businessId: string): Promise<BoqDto> {
     const existing = await this.boqRepository.findItemById(itemId, businessId);
     if (!existing) throw new NotFoundError("BOQ item not found");
+    await this.assertBoqRatesUnlocked(existing.boqId, businessId);
 
     await this.boqRepository.deleteItem(itemId);
     await this.auditService.log({
@@ -382,7 +415,7 @@ export class BoqService {
     input: BulkUpdateBoqItemsBody,
     actorId: string,
     businessId: string,
-  ): Promise<BoqDto> {
+  ): Promise<BulkUpdateBoqItemsResultDto> {
     const items = await this.boqRepository.findItemsByIds(input.itemIds, businessId);
     if (items.length !== input.itemIds.length) {
       throw new BadRequestError("One or more BOQ items were not found");
@@ -391,13 +424,17 @@ export class BoqService {
     if (items.some((item) => item.boqId !== boqId)) {
       throw new BadRequestError("All selected items must belong to the same BOQ");
     }
+    await this.assertBoqRatesUnlocked(boqId, businessId);
 
-    const factor = 1 + input.ratePercentAdjustment / 100;
-    const updates = items.map((item) => {
-      const rate = item.rate !== null ? round2(item.rate * factor) : null;
-      const amount = item.quantity !== null && rate !== null ? round2(item.quantity * rate) : null;
-      return { id: item.id, rate, amount };
+    // Sets (not compounds) the markup on every selected line priced from a base rate; lines
+    // priced by hand have nothing to mark up from and are skipped.
+    const updates = items.flatMap((item) => {
+      if (item.baseRate === null) return [];
+      const rate = rateFromMarkup(item.baseRate, input.markupPercent);
+      const amount = item.quantity !== null ? round2(item.quantity * rate) : null;
+      return [{ id: item.id, rate, amount, markupPercent: input.markupPercent }];
     });
+    const skipped = items.length - updates.length;
 
     await this.boqRepository.bulkUpdateRates(updates);
     await this.auditService.log({
@@ -405,9 +442,9 @@ export class BoqService {
       action: "BOQ_ITEMS_BULK_UPDATED",
       entityType: "BoqItem",
       entityId: boqId,
-      metadata: { itemIds: input.itemIds, ratePercentAdjustment: input.ratePercentAdjustment },
+      metadata: { itemIds: input.itemIds, markupPercent: input.markupPercent, skipped },
     });
-    return this.buildBoqDto(boqId, businessId);
+    return { ...(await this.buildBoqDto(boqId, businessId)), skipped };
   }
 
   async upsertRateAnalysis(
@@ -418,6 +455,7 @@ export class BoqService {
   ): Promise<BoqDto> {
     const existing = await this.boqRepository.findItemById(itemId, businessId);
     if (!existing) throw new NotFoundError("BOQ item not found");
+    await this.assertBoqRatesUnlocked(existing.boqId, businessId);
 
     const baseCost =
       input.materialCost + input.laborCost + input.machineryCost + input.transportCost;
@@ -432,7 +470,13 @@ export class BoqService {
     await this.boqRepository.upsertRateBreakdown(itemId, breakdown);
 
     const amount = existing.quantity !== null ? round2(existing.quantity * computedRate) : null;
-    await this.boqRepository.updateItem(itemId, { rate: computedRate, amount });
+    await this.boqRepository.updateItem(itemId, {
+      rate: computedRate,
+      amount,
+      ...(existing.baseRate !== null
+        ? { markupPercent: markupFromRate(existing.baseRate, computedRate, existing.markupPercent) }
+        : {}),
+    });
 
     await this.auditService.log({
       actorId,
@@ -459,6 +503,7 @@ export class BoqService {
     const existing = await this.boqRepository.findItemById(itemId, businessId);
     if (!existing) throw new NotFoundError("BOQ item not found");
 
+    await this.assertBoqRatesUnlocked(existing.boqId, businessId);
     const rate = body.override?.rate ?? existing.suggestedRate;
     if (rate === null) throw new BadRequestError("This item has no AI-suggested rate to confirm");
     const rateSourceId = body.override?.rateSourceId ?? existing.aiRateSourceId;
