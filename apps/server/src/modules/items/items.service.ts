@@ -22,6 +22,7 @@ import { logger } from "../../shared/logger/logger.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { CategoriesService } from "../categories/categories.service.js";
 import type { IHsnClassifier } from "../classification/classification.service.js";
+import type { IHistoricalRatesRepository } from "../rates/rates.repository.js";
 import type { RfqService } from "../rfq/rfq.service.js";
 
 import {
@@ -39,8 +40,6 @@ import type {
   ItemRow,
 } from "./items.repository.js";
 
-/** Cap on quote rows shown on the detail page — an item with more history than this is rare. */
-const DETAIL_ENTRY_LIMIT = 200;
 /** How many already-classified items ground the classifier prompt. */
 const CLASSIFY_EXAMPLE_LIMIT = 20;
 /**
@@ -69,6 +68,7 @@ export class ItemsService {
     private readonly categoriesService: CategoriesService,
     private readonly auditService: AuditService,
     private readonly classifier: IHsnClassifier,
+    private readonly ratesRepository: IHistoricalRatesRepository,
   ) {}
 
   /**
@@ -167,16 +167,9 @@ export class ItemsService {
 
   async getItemDetail(id: string, businessId: string): Promise<ItemDetailDto> {
     const item = await this.getItemOrThrow(id, businessId);
-    const priceResult = await this.rfqService.listItemPrices(
-      { page: 1, pageSize: DETAIL_ENTRY_LIMIT },
-      { businessId, itemId: id },
-    );
+    const rates = await this.ratesRepository.findByItem(id, businessId);
     const pathMap = await this.categoriesService.getPathMap();
-    return toItemDetailDto(
-      item,
-      priceResult.items,
-      item.categoryId ? pathMap.get(item.categoryId) ?? null : null,
-    );
+    return toItemDetailDto(item, rates, item.categoryId ? pathMap.get(item.categoryId) ?? null : null);
   }
 
   /** Confirm or override an item's category. A human touch clears the AI confidence. */

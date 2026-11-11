@@ -2,6 +2,7 @@ import { prisma } from "../../infra/prisma/client.js";
 import { auditService } from "../audit/audit.module.js";
 import { categoriesService } from "../categories/categories.module.js";
 import { classificationService } from "../classification/classification.module.js";
+import { ratesRepository } from "../rates/rates.module.js";
 import { rfqService } from "../rfq/rfq.module.js";
 
 import { ItemsController } from "./items.controller.js";
@@ -16,6 +17,7 @@ const itemsService = new ItemsService(
   categoriesService,
   auditService,
   classificationService,
+  ratesRepository,
 );
 const itemsController = new ItemsController(itemsService);
 

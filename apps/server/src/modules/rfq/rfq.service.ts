@@ -23,8 +23,8 @@ import type { ScopedRequestContext } from "../../core/interfaces/request-context
 import type { EmailService } from "../../infra/mailer/email.service.js";
 import { round2 } from "../../shared/utils/math.js";
 import type { AuditService } from "../audit/audit.service.js";
-import type { IBoqRepository } from "../boq/boq.repository.js";
 import { rateFromMarkup } from "../boq/boq-pricing.js";
+import type { IBoqRepository } from "../boq/boq.repository.js";
 import type { IBusinessesRepository } from "../businesses/businesses.repository.js";
 import type { ContactsService } from "../contacts/contacts.service.js";
 import { deriveCanonicalName } from "../items/items.helpers.js";

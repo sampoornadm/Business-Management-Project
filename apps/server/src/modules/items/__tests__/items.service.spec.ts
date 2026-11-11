@@ -10,6 +10,7 @@ import { ConflictError, NotFoundError } from "../../../core/errors/HttpErrors.js
 import type { AuditService } from "../../audit/audit.service.js";
 import type { CategoriesService } from "../../categories/categories.service.js";
 import type { IHsnClassifier } from "../../classification/classification.service.js";
+import type { IHistoricalRatesRepository } from "../../rates/rates.repository.js";
 import type { RfqService } from "../../rfq/rfq.service.js";
 import type {
   BoqNameRow,
@@ -160,9 +161,11 @@ class FakeClassifier {
 describe("ItemsService.renameItem", () => {
   let repository: FakeItemsRepository;
   let service: ItemsService;
+  let ratesRepository: { findByItem: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     repository = new FakeItemsRepository();
+    ratesRepository = { findByItem: vi.fn().mockResolvedValue([]) };
     const rfqService = {
       listItemPrices: vi.fn().mockResolvedValue({ items: [], totalItems: 0 }),
     } as unknown as RfqService;
@@ -176,7 +179,53 @@ describe("ItemsService.renameItem", () => {
       categoriesService,
       auditService,
       new FakeClassifier() as unknown as IHsnClassifier,
+      ratesRepository as unknown as IHistoricalRatesRepository,
     );
+  });
+
+  it("getItemDetail splits vendor and own rates newest first", async () => {
+    const item = makeItem({ id: "item-1", canonicalName: "OPC Cement" });
+    repository.items.set(item.id, item);
+    const base = { itemId: "item-1", businessId: BUSINESS_ID, rfqQuote: null, vendor: null, tenderNumber: null, sourceTenderId: null };
+    ratesRepository.findByItem.mockResolvedValue([
+      { ...base, id: "own-2", kind: "OWN", rate: 437, baseRate: 380, markupPercent: 15, effectiveDate: new Date("2026-11-02"), sourceTenderId: "t-2", tenderNumber: "TND-2", isDefault: false },
+      {
+        ...base,
+        id: "v-1",
+        kind: "VENDOR",
+        rate: 380,
+        baseRate: null,
+        markupPercent: null,
+        effectiveDate: new Date("2026-11-01"),
+        isDefault: true,
+        vendorId: "vendor-a",
+        vendor: { id: "vendor-a", name: "Vendor A" },
+        rfqQuote: { make: "ACC", model: "OPC53", rfqItem: { rfqId: "rfq-1" } },
+      },
+      { ...base, id: "own-1", kind: "OWN", rate: 420, baseRate: null, markupPercent: null, effectiveDate: new Date("2026-10-01"), sourceTenderId: "t-1", tenderNumber: "TND-1", isDefault: false },
+    ]);
+
+    const detail = await service.getItemDetail("item-1", BUSINESS_ID);
+
+    expect(detail.vendorRates).toEqual([
+      {
+        id: "v-1",
+        rate: 380,
+        effectiveDate: "2026-11-01T00:00:00.000Z",
+        vendorId: "vendor-a",
+        vendorName: "Vendor A",
+        rfqId: "rfq-1",
+        make: "ACC",
+        model: "OPC53",
+        isDefault: true,
+      },
+    ]);
+    expect(detail.ownRates.map((r) => [r.id, r.tenderNumber, r.tenderId])).toEqual([
+      ["own-2", "TND-2", "t-2"],
+      ["own-1", "TND-1", "t-1"],
+    ]);
+    expect(detail.ownRates[0]).toMatchObject({ rate: 437, baseRate: 380, markupPercent: 15 });
+    expect(ratesRepository.findByItem).toHaveBeenCalledWith("item-1", BUSINESS_ID);
   });
 
   it("renames the item when the new name is free", async () => {
@@ -258,6 +307,7 @@ describe("ItemsService classification audit logging", () => {
       categoriesService,
       auditService,
       classifier as unknown as IHsnClassifier,
+      { findByItem: vi.fn().mockResolvedValue([]) } as unknown as IHistoricalRatesRepository,
     );
   });
 
