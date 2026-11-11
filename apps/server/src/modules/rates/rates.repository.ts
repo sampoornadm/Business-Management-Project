@@ -60,7 +60,8 @@ export interface VendorRateRow {
   rfqQuoteId: string;
   sourceTenderId: string | null;
   quotedAt: Date;
-  /** True only for the quote selected as the purchase rate on its RFQ item. */
+  /** True only for the quote selected as the purchase rate on its RFQ item. AI rate matching reads
+   * these (plus hand-entered rates), never a losing quote — see findNearest. */
   isDefault: boolean;
   createdById: string;
 }
@@ -128,7 +129,13 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
     businessId: string,
   ): Promise<HistoricalRateWithCreator[]> {
     return this.prisma.historicalRate.findMany({
-      where: { businessId, kind: "VENDOR", category, itemName: { contains: itemName, mode: "insensitive" } },
+      where: {
+        businessId,
+        kind: "VENDOR",
+        OR: [{ isDefault: true }, { rfqQuoteId: null }],
+        category,
+        itemName: { contains: itemName, mode: "insensitive" },
+      },
       orderBy: { effectiveDate: "desc" },
       take: limit,
       ...historicalRateArgs,
@@ -175,6 +182,9 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
              1 - ("embeddingVector" <=> ${vectorLiteral}::vector) AS similarity
       FROM historical_rates
       WHERE "businessId" = ${businessId} AND kind = 'VENDOR' AND "embeddingVector" IS NOT NULL
+        -- Purchase rates only: an RFQ's chosen quote or a hand-entered rate. Losing quotes share the
+        -- winner's itemName (identical embedding), so they would otherwise tie for matches[0].
+        AND ("isDefault" OR "rfqQuoteId" IS NULL)
       ORDER BY "embeddingVector" <=> ${vectorLiteral}::vector
       LIMIT ${limit}
     `;
@@ -182,19 +192,10 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
 
   async recordVendorRates(rfqId: string, businessId: string, rows: VendorRateRow[]): Promise<number> {
     const keepQuoteIds = rows.map((r) => r.rfqQuoteId);
-    // Business rule (not a DB constraint): at most one VENDOR isDefault row per (business, item) —
-    // the latest finalized purchase rate. Cleared before the upserts that set the new one.
-    const defaultItemKeys = rows.filter((r) => r.isDefault).map((r) => ({ businessId, itemId: r.itemId }));
     await this.prisma.$transaction([
       this.prisma.historicalRate.deleteMany({
         where: { businessId, kind: "VENDOR", rfqQuote: { rfqItem: { rfqId } }, rfqQuoteId: { notIn: keepQuoteIds } },
       }),
-      ...defaultItemKeys.map((key) =>
-        this.prisma.historicalRate.updateMany({
-          where: { ...key, kind: "VENDOR", isDefault: true },
-          data: { isDefault: false },
-        }),
-      ),
       ...rows.map((row) => {
         const fields = {
           kind: "VENDOR" as const,
