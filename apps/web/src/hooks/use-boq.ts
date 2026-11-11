@@ -8,6 +8,7 @@ import type {
   BoqParsePreviewDto,
   BoqRateCandidateDto,
   BulkUpdateBoqItemsInput,
+  BulkUpdateBoqItemsResultDto,
   CommitBoqInput,
   ConfirmBoqRateSourceInput,
   CreateBoqItemInput,
@@ -111,7 +112,7 @@ export function useBulkUpdateBoqItems(tenderId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: BulkUpdateBoqItemsInput) => {
-      const response = await apiClient.post<ApiResponse<BoqDto>>("/boq-items/bulk-update", input);
+      const response = await apiClient.post<ApiResponse<BulkUpdateBoqItemsResultDto>>("/boq-items/bulk-update", input);
       return unwrap(response.data);
     },
     onSuccess: () => invalidateBoq(queryClient, tenderId),

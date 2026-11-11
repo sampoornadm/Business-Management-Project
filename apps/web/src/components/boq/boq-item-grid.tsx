@@ -3,6 +3,7 @@
 import { DEFAULT_GST_RATE, type BoqDto, type BoqItemDto, type RfqVendorSuggestionsDto } from "@bmp/types";
 import { AiBadge, Badge, Button, EditableTreeTable, Input, useToast, type EditableTreeColumn } from "@bmp/ui";
 import { Check, Send, Trash2, X } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -38,11 +39,21 @@ function specNumbers(text: string): string {
   return (text.match(/\d+(?:\.\d+)?/g) ?? []).map((n) => String(Number(n))).sort().join(",");
 }
 
-export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }) {
+export function BoqItemGrid({
+  tenderId,
+  boq,
+  ratesLocked,
+}: {
+  tenderId: string;
+  boq: BoqDto;
+  /** Tender rates are finalized: every pricing edit (rate, markup, quantity, add/delete) is off. */
+  ratesLocked: boolean;
+}) {
   const { toast } = useToast();
   const router = useRouter();
   const roleName = useAuthStore((state) => state.user?.role.name);
   const canEdit = hasPermission(roleName, "boq:update") && boq.isCurrent;
+  const canEditPricing = canEdit && !ratesLocked;
   const canSendRfq = hasPermission(roleName, "rfq:create");
 
   const updateItem = useUpdateBoqItem(tenderId);
@@ -53,7 +64,7 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
   const rejectRateSource = useRejectRateSource(tenderId);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [percentAdjustment, setPercentAdjustment] = useState("");
+  const [bulkMarkup, setBulkMarkup] = useState("");
   const [suggestions, setSuggestions] = useState<RfqVendorSuggestionsDto>();
 
   useEffect(() => {
@@ -73,7 +84,7 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
 
   async function commitField(
     item: BoqItemDto,
-    field: "description" | "unit" | "quantity" | "rate" | "gstRate" | "hsnCode" | "unitWeightKg",
+    field: "description" | "unit" | "quantity" | "rate" | "markupPercent" | "gstRate" | "hsnCode" | "unitWeightKg",
     value: string,
   ) {
     if (field === "unitWeightKg") {
@@ -106,13 +117,13 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
       await commitUpdate(item, { gstRate: parsed });
       return;
     }
-    if (field === "quantity" || field === "rate") {
+    if (field === "quantity" || field === "rate" || field === "markupPercent") {
       const parsed = value === "" ? undefined : Number(value);
       if (value !== "" && Number.isNaN(parsed)) {
         toast({ variant: "destructive", title: "Enter a valid number" });
         return;
       }
-      await commitUpdate(item, field === "quantity" ? { quantity: parsed } : { rate: parsed });
+      await commitUpdate(item, { [field]: parsed });
       return;
     }
     if (field === "description" && value.trim() === "") {
@@ -174,16 +185,23 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
   }
 
   async function handleBulkApply() {
-    const adjustment = Number(percentAdjustment);
-    if (percentAdjustment === "" || Number.isNaN(adjustment)) {
-      toast({ variant: "destructive", title: "Enter a percentage" });
+    const markupPercent = Number(bulkMarkup);
+    if (bulkMarkup === "" || Number.isNaN(markupPercent)) {
+      toast({ variant: "destructive", title: "Enter a markup percentage" });
       return;
     }
     try {
-      await bulkUpdate.mutateAsync({ itemIds: [...selectedIds], ratePercentAdjustment: adjustment });
-      toast({ title: `Adjusted ${selectedIds.size} item(s) by ${adjustment}%` });
+      const result = await bulkUpdate.mutateAsync({ itemIds: [...selectedIds], markupPercent });
+      const updated = selectedIds.size - result.skipped;
+      toast({
+        title: `Markup set to ${markupPercent}% on ${updated} item(s)`,
+        description:
+          result.skipped > 0
+            ? `${result.skipped} item(s) skipped — they have no base rate from an RFQ yet.`
+            : undefined,
+      });
       setSelectedIds(new Set());
-      setPercentAdjustment("");
+      setBulkMarkup("");
     } catch (error) {
       toast({
         variant: "destructive",
@@ -219,16 +237,57 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
       key: "quantity",
       header: "Quantity",
       align: "right",
-      editable: canEdit,
+      editable: canEditPricing,
       inputType: "number",
       getValue: (item) => item.quantity,
       onCommit: (item, value) => void commitField(item, "quantity", value),
     },
     {
+      key: "baseRate",
+      header: "Base rate",
+      align: "right",
+      render: (item) => {
+        if (item.baseRate === null) return <span className="text-muted-foreground">-</span>;
+        const source = item.baseRateSource;
+        const makeModel =
+          source && !(source.make === "Unbranded" && source.model === "Generic") ? `${source.make} / ${source.model} · ` : "";
+        return (
+          <div
+            className="flex flex-col items-end"
+            title={source ? `${makeModel}quoted ${new Date(source.quotedAt).toLocaleDateString()}` : undefined}
+          >
+            <span className="tabular-nums">{item.baseRate.toLocaleString()}</span>
+            {source && (
+              <Link href={`/rfqs/${source.rfqId}`} className="max-w-[9rem] truncate text-xs text-muted-foreground hover:underline">
+                {source.vendorName}
+              </Link>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: "markupPercent",
+      header: "Markup %",
+      align: "right",
+      widthClassName: "w-24",
+      // Only lines priced from a vendor base rate have something to mark up.
+      editable: (item) => canEditPricing && item.baseRate !== null,
+      inputType: "number",
+      getValue: (item) => item.markupPercent ?? "",
+      render: (item) =>
+        item.markupPercent !== null ? (
+          <span className="tabular-nums">{item.markupPercent}%</span>
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        ),
+      onCommit: (item, value) => void commitField(item, "markupPercent", value),
+    },
+    {
       key: "rate",
       header: "Rate",
       align: "right",
-      editable: canEdit,
+      editable: canEditPricing,
       inputType: "number",
       getValue: (item) => item.rate,
       onCommit: (item, value) => void commitField(item, "rate", value),
@@ -311,7 +370,7 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
                 {item.rateSourceConfirmed && (
                   <Check className="h-3.5 w-3.5 shrink-0 text-success" aria-label="Confirmed match" />
                 )}
-                {canEdit && (
+                {canEditPricing && (
                   <>
                     {!item.rateSourceConfirmed && (
                       <Button
@@ -338,7 +397,7 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
                 )}
               </>
             ) : (
-              canEdit && (
+              canEditPricing && (
                 <RateMatchCandidatesDialog
                   tenderId={tenderId}
                   itemId={item.id}
@@ -384,19 +443,19 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
         </div>
       )}
 
-      {canEdit && selectedIds.size > 0 && (
+      {canEditPricing && selectedIds.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-3">
           <span className="text-sm">{selectedIds.size} item(s) selected</span>
           <Input
             type="number"
             step="0.01"
-            placeholder="% adjustment"
-            value={percentAdjustment}
-            onChange={(e) => setPercentAdjustment(e.target.value)}
+            placeholder="Markup %"
+            value={bulkMarkup}
+            onChange={(e) => setBulkMarkup(e.target.value)}
             className="h-8 w-40"
           />
           <Button size="sm" onClick={handleBulkApply} disabled={bulkUpdate.isPending}>
-            Apply to rates
+            Set markup %
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
             Clear
@@ -407,12 +466,12 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
       <EditableTreeTable
         data={boq.items}
         columns={columns}
-        selectable={canEdit || canSendRfq}
+        selectable={canEditPricing || canSendRfq}
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
         isRowSelectable={isLeaf}
         renderRowActions={
-          canEdit
+          canEditPricing
             ? (item) => (
                 <div className="flex items-center gap-1">
                   <RateAnalysisDialog tenderId={tenderId} item={item} />
@@ -434,7 +493,10 @@ export function BoqItemGrid({ tenderId, boq }: { tenderId: string; boq: BoqDto }
 
       {canEdit && boq.items.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          {collectLeafIds(boq.items).length} line item(s). Select rows to apply a bulk rate adjustment.
+          {collectLeafIds(boq.items).length} line item(s).{" "}
+          {ratesLocked
+            ? "Rates are finalized — unlock them to edit pricing."
+            : "Select rows to set a markup on their base rates."}
         </p>
       )}
     </div>

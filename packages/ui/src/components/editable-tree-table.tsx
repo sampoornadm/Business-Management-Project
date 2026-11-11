@@ -22,7 +22,8 @@ export interface EditableTreeColumn<TRow extends EditableTreeRow> {
   widthClassName?: string;
   /** Read-only render for this cell. Ignored if `editable` is true. */
   render?: (row: TRow) => React.ReactNode;
-  editable?: boolean;
+  /** true/false for the whole column, or decided per row (e.g. only rows that have a value to edit). */
+  editable?: boolean | ((row: TRow) => boolean);
   /** "textarea" wraps and auto-grows — use it for long free text that a single line can't show. */
   inputType?: "text" | "number" | "textarea";
   getValue?: (row: TRow) => string | number | null;
@@ -325,7 +326,7 @@ export function EditableTreeTable<TRow extends EditableTreeRow>({
                         column.widthClassName,
                       )}
                     >
-                      {column.editable ? (
+                      {(typeof column.editable === "function" ? column.editable(row) : column.editable) ? (
                         <EditableCell row={row} column={column} />
                       ) : (
                         (column.render?.(row) ?? column.getValue?.(row) ?? "")

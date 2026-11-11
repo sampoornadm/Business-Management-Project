@@ -150,6 +150,16 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
   const itemsTotal = boq.data?.totalAmount ? Math.round(boq.data.totalAmount * 100) / 100 : undefined;
 
   const busy = changeStatus.isPending || committing !== null;
+  const ratesFinalized = tender.ratesLockedAt !== null;
+  // A fresh submission (not undoing a Won/Lost result) records its reference number.
+  const asksReference = formFor === "SUBMITTED" && (status === "DRAFT" || status === "CANCELLED");
+
+  function explainRatesGate() {
+    toast({
+      title: "Finalize rates first",
+      description: "Switch on “Rates finalized” on the Items tab, then mark the tender Submitted.",
+    });
+  }
 
   async function move(to: TenderStatus, extra: Omit<ChangeTenderStatusInput, "status"> = {}) {
     const from = status;
@@ -205,6 +215,7 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
       winnerName: text("winnerName"),
       winningBidAmount: amount ? Number(amount) : undefined,
       lossReason: text("lossReason"),
+      submissionReference: text("submissionReference"),
     });
   }
 
@@ -225,7 +236,13 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
   let submittedStage: ReactNode;
   if (status === "DRAFT") {
     submittedStage = canChange ? (
-      <Stage {...NEXT} label="Submitted" hoverLabel="Mark Submitted →" onClick={busy ? undefined : () => void move("SUBMITTED")} />
+      <Stage
+        {...NEXT}
+        label="Submitted"
+        hoverLabel={ratesFinalized ? "Mark Submitted →" : "Finalize rates first"}
+        title={ratesFinalized ? undefined : "Finalize rates on the Items tab before submitting"}
+        onClick={busy ? undefined : ratesFinalized ? () => setFormFor("SUBMITTED") : explainRatesGate}
+      />
     ) : (
       <Stage {...UPCOMING} label="Submitted" />
     );
@@ -326,6 +343,24 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
             </p>
             {reverting && (
               <p className="text-xs text-muted-foreground">Admins only. Logged in History with your reason.</p>
+            )}
+            {asksReference && !ratesFinalized && (
+              <p className="text-xs text-destructive">Finalize rates on the Items tab before submitting.</p>
+            )}
+            {asksReference && (
+              <div className="space-y-1">
+                <Label htmlFor="tracker-submission-reference">
+                  Submission reference number{tender.kind === "BUDGETARY" ? " (optional)" : ""}
+                </Label>
+                <Input
+                  id="tracker-submission-reference"
+                  name="submissionReference"
+                  defaultValue={tender.submissionReference ?? ""}
+                  placeholder="e.g. bid / quotation reference"
+                  required={tender.kind !== "BUDGETARY"}
+                  maxLength={200}
+                />
+              </div>
             )}
             {(formFor === "WON" || formFor === "LOST") && (
               <>
