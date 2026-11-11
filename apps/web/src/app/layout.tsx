@@ -2,7 +2,7 @@ import "./globals.css";
 
 import { Toaster } from "@bmp/ui";
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import type { PropsWithChildren } from "react";
 
 import { AuthProvider } from "@/providers/auth-provider";
@@ -12,15 +12,21 @@ import { ThemeProvider } from "@/providers/theme-provider";
 // IBM Plex Sans for UI/body text, IBM Plex Mono reserved for identifiers and
 // tabular data (tender numbers, item codes, amounts) — see packages/config's
 // tailwind preset for how these become the font-sans/font-mono utilities.
-const plexSans = IBM_Plex_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+// Self-hosted (./fonts, latin subset, SIL OFL — see fonts/OFL.txt) rather than next/font/google:
+// that one downloads from Google at compile time, so with no network at dev start the app silently
+// fell back to a system font, and `next build` / the Docker image build failed outright offline.
+const plexSans = localFont({
+  src: "./fonts/IBMPlexSans-Variable.woff2",
+  weight: "400 700",
   variable: "--font-sans",
   display: "swap",
 });
-const plexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+const plexMono = localFont({
+  src: [
+    { path: "./fonts/IBMPlexMono-400.woff2", weight: "400" },
+    { path: "./fonts/IBMPlexMono-500.woff2", weight: "500" },
+    { path: "./fonts/IBMPlexMono-600.woff2", weight: "600" },
+  ],
   variable: "--font-mono",
   display: "swap",
 });
