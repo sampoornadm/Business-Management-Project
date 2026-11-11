@@ -10,6 +10,8 @@ import {
   type TenderListItemDto,
   type TenderStatus,
   type TenderStatusHistoryEntryDto,
+  type SubmissionChanges,
+  type TenderSubmissionLineDto,
 } from "@bmp/types";
 
 import { EXPORT_MAX_ROWS, GENERIC_UPLOAD_LIMITS } from "../../config/constants.js";
@@ -19,10 +21,11 @@ import { buildPaginatedResult, type PaginationParams } from "../../core/interfac
 import type { ScopedRequestContext } from "../../core/interfaces/request-context.js";
 import type { EmailService } from "../../infra/mailer/email.service.js";
 import { logger } from "../../shared/logger/logger.js";
+import { round2 } from "../../shared/utils/math.js";
 import { toAttachmentDto } from "../attachments/attachments.mapper.js";
 import type { AttachmentsService } from "../attachments/attachments.service.js";
 import type { AuditService } from "../audit/audit.service.js";
-import type { IBoqRepository } from "../boq/boq.repository.js";
+import type { BoqItemWithBreakdown, IBoqRepository } from "../boq/boq.repository.js";
 import type { IBusinessesRepository } from "../businesses/businesses.repository.js";
 import { deriveCanonicalName } from "../items/items.helpers.js";
 import type { IItemsRepository } from "../items/items.repository.js";
@@ -33,7 +36,9 @@ import type { ITagsRepository } from "../tags/tags.repository.js";
 import type { IUsersRepository } from "../users/users.repository.js";
 
 import { ensureTenderFolders } from "./local-docs/folder-naming.js";
+import { diffSubmissions, renderSubmissionSummary, type SubmissionSnapshot } from "./submission-diff.js";
 import { detectRequiredDocuments } from "./tender-document-requirements.parser.js";
+import type { ITenderSubmissionsRepository } from "./tender-submissions.repository.js";
 import { toTenderDto, toTenderListItemDto } from "./tenders.mapper.js";
 import type {
   CreateCompetitorData,
@@ -67,6 +72,7 @@ export class TendersService {
     private readonly boqRepository: IBoqRepository,
     private readonly itemsRepository: IItemsRepository,
     private readonly ratesRepository: IHistoricalRatesRepository,
+    private readonly submissionsRepository: ITenderSubmissionsRepository,
   ) {}
 
   async listTenders(
@@ -248,18 +254,46 @@ export class TendersService {
       throw new ForbiddenError("Only an admin can move a tender back to an earlier stage");
     }
 
+    let submission: { number: number; snapshot: SubmissionSnapshot; changes: SubmissionChanges | null; summary: string } | null =
+      null;
     if (input.status === "SUBMITTED") {
       if (!tender.ratesLockedAt) throw new BadRequestError("Finalize the tender's rates before submitting");
-      // A fresh submission (from DRAFT/CANCELLED) needs a reference; one already stored — kept
-      // across reverts — counts, so undoing a Won/Lost/Cancelled back to SUBMITTED needs none.
-      const freshSubmission = previousStatus === "DRAFT" || previousStatus === "CANCELLED";
-      const reference = input.submissionReference ?? tender.submissionReference;
-      if (freshSubmission && tender.kind === "TENDER" && !reference) {
-        throw new BadRequestError("Submission reference number is required");
+      // A fresh submission is a new bid going out: from DRAFT, or from CANCELLED when this tender
+      // was never submitted (cancelled straight from Draft). Undoing a Won/Lost result or a cancel
+      // back to SUBMITTED is the same bid — only the status change is recorded.
+      const latest = await this.submissionsRepository.findLatest(id, context.businessId);
+      const fresh = previousStatus === "DRAFT" || (previousStatus === "CANCELLED" && latest === null);
+      if (fresh) {
+        const reference = input.submissionReference ?? tender.submissionReference;
+        if (tender.kind === "TENDER" && !reference) {
+          throw new BadRequestError("Submission reference number is required");
+        }
+        const items = await this.currentBoqItems(id, context.businessId);
+        // Before the status write on purpose: an idempotent replace, so a failed status write is
+        // retried safely instead of leaving a SUBMITTED tender with no rates in the inventory.
+        await this.recordOwnRates(id, items, actorId, context.businessId);
+
+        const lines = toSubmissionLines(items);
+        const snapshot: SubmissionSnapshot = {
+          reference: reference ?? null,
+          totalAmount: round2(lines.reduce((sum, line) => sum + (line.amount ?? 0), 0)),
+          lines,
+        };
+        const number = (latest?.number ?? 0) + 1;
+        const previous = latest
+          ? {
+              number: latest.number,
+              snapshot: {
+                reference: latest.submissionReference,
+                totalAmount: latest.totalAmount,
+                lines: latest.lines as unknown as TenderSubmissionLineDto[],
+              },
+            }
+          : null;
+        const changes = previous ? diffSubmissions(previous.snapshot, snapshot) : null;
+        const summary = renderSubmissionSummary(number, snapshot, previous && changes ? { ...previous, changes } : null);
+        submission = { number, snapshot, changes, summary };
       }
-      // Before the status write on purpose: an idempotent replace, so a failed status write is
-      // retried safely instead of leaving a SUBMITTED tender with no rates in the inventory.
-      await this.recordOwnRates(id, actorId, context.businessId);
     }
 
     // Leaving a result (reopen/undo) clears it, so a later Won/Lost never inherits stale fields.
@@ -273,6 +307,20 @@ export class TendersService {
       ...(input.submissionReference ? { submissionReference: input.submissionReference } : {}),
     });
 
+    if (submission) {
+      await this.submissionsRepository.create({
+        businessId: context.businessId,
+        tenderId: id,
+        number: submission.number,
+        submissionReference: submission.snapshot.reference,
+        totalAmount: submission.snapshot.totalAmount,
+        lines: submission.snapshot.lines,
+        changes: submission.changes,
+        summary: submission.summary,
+        submittedById: actorId,
+      });
+    }
+
     await this.auditService.log({
       actorId,
       action: "TENDER_STATUS_CHANGED",
@@ -282,7 +330,8 @@ export class TendersService {
         from: previousStatus,
         to: input.status,
         remarks: input.remarks ?? null,
-        submissionReference: input.submissionReference ?? null,
+        submissionReference: submission ? submission.snapshot.reference : (input.submissionReference ?? null),
+        ...(submission ? { submissionNumber: submission.number, summary: submission.summary } : {}),
       },
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
@@ -308,9 +357,17 @@ export class TendersService {
   }
 
   /** "My rate" per priced line of the current BOQ, written to the item inventory on submission. */
-  private async recordOwnRates(tenderId: string, actorId: string, businessId: string): Promise<void> {
+  private async currentBoqItems(tenderId: string, businessId: string): Promise<BoqItemWithBreakdown[]> {
     const boq = await this.boqRepository.findCurrentBoq(tenderId, businessId);
-    const items = boq ? await this.boqRepository.findItemsByBoqId(boq.id) : [];
+    return boq ? this.boqRepository.findItemsByBoqId(boq.id) : [];
+  }
+
+  private async recordOwnRates(
+    tenderId: string,
+    items: BoqItemWithBreakdown[],
+    actorId: string,
+    businessId: string,
+  ): Promise<void> {
     const rows: OwnRateRow[] = [];
     for (const line of items) {
       if (line.rate === null) continue;
@@ -389,7 +446,14 @@ export class TendersService {
     });
 
     const items: TenderStatusHistoryEntryDto[] = result.items.map((log) => {
-      const metadata = (log.metadata ?? {}) as { from?: TenderStatus; to?: TenderStatus; remarks?: string };
+      const metadata = (log.metadata ?? {}) as {
+        from?: TenderStatus;
+        to?: TenderStatus;
+        remarks?: string;
+        submissionReference?: string | null;
+        submissionNumber?: number;
+        summary?: string;
+      };
       return {
         id: log.id,
         fromStatus: metadata.from ?? null,
@@ -399,6 +463,14 @@ export class TendersService {
           ? { id: log.actor.id, firstName: log.actor.firstName, lastName: log.actor.lastName }
           : null,
         changedAt: log.createdAt,
+        submission:
+          metadata.submissionNumber !== undefined
+            ? {
+                number: metadata.submissionNumber,
+                reference: metadata.submissionReference ?? null,
+                summary: metadata.summary ?? "",
+              }
+            : null,
       };
     });
 
@@ -724,4 +796,25 @@ export class TendersService {
       upcomingDeadlines: upcoming.map(toTenderListItemDto),
     };
   }
+}
+
+/** The current BOQ's leaf lines (no other line names them as parent), as a submission freezes them. */
+function toSubmissionLines(items: BoqItemWithBreakdown[]): TenderSubmissionLineDto[] {
+  const parentIds = new Set(items.map((item) => item.parentId).filter((id): id is string => Boolean(id)));
+  return items
+    .filter((item) => !parentIds.has(item.id))
+    .map((item) => ({
+      boqItemId: item.id,
+      description: item.description,
+      unit: item.unit,
+      quantity: item.quantity,
+      rate: item.rate,
+      amount: item.amount,
+      baseRate: item.baseRate,
+      markupPercent: item.markupPercent,
+      vendorId: item.baseRateQuote?.vendor.id ?? null,
+      vendorName: item.baseRateQuote?.vendor.name ?? null,
+      hsnCode: item.hsnCode,
+      technicalDeviation: item.baseRateQuote?.technicalDeviation ?? null,
+    }));
 }

@@ -16,6 +16,11 @@ import type { IHistoricalRatesRepository, OwnRateRow } from "../../rates/rates.r
 import type { ITagsRepository } from "../../tags/tags.repository.js";
 import type { IUsersRepository } from "../../users/users.repository.js";
 import type {
+  CreateTenderSubmissionData,
+  ITenderSubmissionsRepository,
+  TenderSubmissionRow,
+} from "../tender-submissions.repository.js";
+import type {
   CreateCompetitorData,
   CreateTenderData,
   ITendersRepository,
@@ -332,8 +337,25 @@ class FakeItemsRepository implements Partial<IItemsRepository> {
 class FakeRatesRepository implements Partial<IHistoricalRatesRepository> {
   ownRates = new Map<string, OwnRateRow[]>();
 
+  replaceCalls = 0;
+
   async replaceOwnRates(tenderId: string, _businessId: string, rows: OwnRateRow[]) {
+    this.replaceCalls += 1;
     this.ownRates.set(tenderId, rows);
+  }
+}
+
+class FakeSubmissionsRepository implements ITenderSubmissionsRepository {
+  rows: TenderSubmissionRow[] = [];
+
+  async findLatest(tenderId: string, _businessId: string) {
+    return this.rows.filter((r) => r.tenderId === tenderId).sort((a, b) => b.number - a.number)[0] ?? null;
+  }
+
+  async create(data: CreateTenderSubmissionData) {
+    const row = { id: randomUUID(), submittedAt: new Date(), ...data } as unknown as TenderSubmissionRow;
+    this.rows.push(row);
+    return row;
   }
 }
 
@@ -341,6 +363,7 @@ describe("TendersService", () => {
   let tendersRepository: FakeTendersRepository;
   let boqRepository: FakeBoqRepository;
   let ratesRepository: FakeRatesRepository;
+  let submissionsRepository: FakeSubmissionsRepository;
   let auditService: AuditService;
   let notificationsService: NotificationsService;
   let emailService: EmailService;
@@ -368,6 +391,7 @@ describe("TendersService", () => {
     tendersRepository = new FakeTendersRepository();
     boqRepository = new FakeBoqRepository();
     ratesRepository = new FakeRatesRepository();
+    submissionsRepository = new FakeSubmissionsRepository();
     // Stateful enough for the status-undo check: list() returns the newest log() entry.
     const auditLogs: AuditLogDto[] = [];
     auditService = {
@@ -409,6 +433,7 @@ describe("TendersService", () => {
       boqRepository as unknown as IBoqRepository,
       new FakeItemsRepository() as unknown as IItemsRepository,
       ratesRepository as unknown as IHistoricalRatesRepository,
+      submissionsRepository,
     );
   });
 
@@ -540,6 +565,111 @@ describe("TendersService", () => {
     const created = await createLocked();
     await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
     await expect(service.delete(created.id, actorId, ctx)).rejects.toThrow(ConflictError);
+  });
+
+  describe("submission history", () => {
+    const submit = (id: string, ref = "REF-1") =>
+      service.changeStatus(id, { status: "SUBMITTED", submissionReference: ref }, actorId, ctx);
+    const backToDraft = async (id: string) => {
+      await service.changeStatus(id, { status: "DRAFT" }, actorId, ctx);
+      tendersRepository.tenders.get(id)!.ratesLockedAt = new Date();
+    };
+    function boqLine(id: string, description: string, rate: number, parentId: string | null = null) {
+      return { id, parentId, description, unit: "nos", quantity: 2, rate, amount: rate * 2, baseRate: null, markupPercent: null, hsnCode: null, baseRateQuote: null };
+    }
+
+    it("fresh submission from DRAFT stores #1 with leaf lines only and logs its summary", async () => {
+      const created = await createLocked();
+      boqRepository.itemsByTender.set(created.id, [
+        boqLine("p", "Cables", 0, null),
+        boqLine("c1", "XLPE 16", 100, "p"),
+        boqLine("c2", "XLPE 25", 150, "p"),
+      ]);
+
+      await submit(created.id, "ABC/123");
+
+      expect(submissionsRepository.rows).toHaveLength(1);
+      const row = submissionsRepository.rows[0]!;
+      expect(row.number).toBe(1);
+      expect((row.lines as unknown[]).length).toBe(2);
+      expect(row.summary).toBe("Submission #1 · ref ABC/123 · 2 items · total ₹500");
+      expect(auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "TENDER_STATUS_CHANGED",
+          metadata: expect.objectContaining({ submissionNumber: 1, summary: row.summary }),
+        }),
+      );
+    });
+
+    it("resubmission stores #2 compared with #1", async () => {
+      const created = await createLocked();
+      boqRepository.itemsByTender.set(created.id, [boqLine("a", "XLPE 16", 100)]);
+      await submit(created.id, "ABC/123");
+      await backToDraft(created.id);
+      boqRepository.itemsByTender.set(created.id, [boqLine("a", "XLPE 16", 90)]);
+
+      await submit(created.id, "ABC/124");
+
+      const second = submissionsRepository.rows[1]!;
+      expect(second.number).toBe(2);
+      expect(second.summary).toContain("ref ABC/124 (was ABC/123)");
+      expect(second.summary).toContain("Rates changed (1):");
+    });
+
+    it("WON → SUBMITTED records only the status change", async () => {
+      const created = await createLocked();
+      await submit(created.id);
+      await service.changeStatus(created.id, { status: "WON" }, actorId, ctx);
+      const ownRateWrites = ratesRepository.replaceCalls;
+
+      await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+
+      expect(submissionsRepository.rows).toHaveLength(1);
+      expect(ratesRepository.replaceCalls).toBe(ownRateWrites);
+    });
+
+    it("undoing a cancel of a submitted tender is not a new submission", async () => {
+      const created = await createLocked();
+      await submit(created.id);
+      await service.changeStatus(created.id, { status: "CANCELLED" }, actorId, ctx);
+
+      await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+
+      expect(submissionsRepository.rows).toHaveLength(1);
+    });
+
+    it("CANCELLED straight from DRAFT then SUBMITTED is #1", async () => {
+      const created = await createLocked();
+      await service.changeStatus(created.id, { status: "CANCELLED" }, actorId, ctx);
+
+      await submit(created.id);
+
+      expect(submissionsRepository.rows.map((r) => r.number)).toEqual([1]);
+    });
+
+    it("tender submitted before this feature becomes #1 on next fresh submit", async () => {
+      const created = await createLocked();
+      Object.assign(tendersRepository.tenders.get(created.id)!, { status: "SUBMITTED", submissionReference: "OLD/1" });
+      await backToDraft(created.id);
+
+      await submit(created.id, "NEW/2");
+
+      expect(submissionsRepository.rows).toHaveLength(1);
+      expect(submissionsRepository.rows[0]!.summary.startsWith("Submission #1 · ref NEW/2")).toBe(true);
+    });
+
+    it("getStatusHistory exposes submission number, reference and summary", async () => {
+      const created = await createLocked();
+      await submit(created.id, "ABC/123");
+      // The fake audit list returns only the newest row, which is the submission.
+      const history = await service.getStatusHistory(created.id, { page: 1, pageSize: 20 }, BUSINESS_ID);
+
+      expect(history.items[0]!.submission).toEqual({
+        number: 1,
+        reference: "ABC/123",
+        summary: submissionsRepository.rows[0]!.summary,
+      });
+    });
   });
 
   describe("rates lock and submission", () => {
