@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import ExcelJS from "exceljs";
 import PizZip from "pizzip";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -30,6 +31,7 @@ import type {
   UpdateRfqData,
   UpsertQuoteData,
 } from "../rfq.repository.js";
+import { buildQuoteSheet, ITEM_TABLE_HEADER_ROW } from "../quote-sheet.js";
 import { RfqService } from "../rfq.service.js";
 
 const CREATOR = { id: randomUUID(), firstName: "Priya", lastName: "Purchase" };
@@ -57,6 +59,7 @@ class FakeRfqRepository implements IRfqRepository {
         quantity: item.quantity,
         instructions: item.instructions ?? null,
         sortOrder: item.sortOrder ?? index,
+        selectionManual: false,
         quotes: [],
       })),
       vendorInvites: [],
@@ -122,10 +125,11 @@ class FakeRfqRepository implements IRfqRepository {
     rfq.status = status;
   }
 
-  async selectQuote(rfqItemId: string, quoteId: string) {
+  async selectQuote(rfqItemId: string, quoteId: string | null, manual: boolean) {
     for (const rfq of this.rfqs.values()) {
       const item = rfq.items.find((i) => i.id === rfqItemId);
       if (!item) continue;
+      item.selectionManual = manual;
       for (const quote of item.quotes as { id: string; isSelected: boolean }[]) {
         quote.isSelected = quote.id === quoteId;
       }
@@ -725,51 +729,89 @@ describe("RfqService", () => {
     expect(totals[0]!.vendorId).toBe(vendorB);
   });
 
-  it("selects a specific quote for an item, unselecting any prior selection", async () => {
+  function selectedVendor(rfq: { items: { quotes: { vendorId: string; isSelected: boolean }[] }[] }) {
+    return rfq.items[0]!.quotes.find((q) => q.isSelected)?.vendorId ?? null;
+  }
+
+  async function rfqWithTwoVendors() {
     const rfq = await createBasicRfq();
     await repository.addVendorInvite(rfq.id, vendorA);
     await repository.addVendorInvite(rfq.id, vendorB);
-    const itemId = rfq.items[0]!.id;
+    return { rfq, itemId: rfq.items[0]!.id };
+  }
+
+  it("selects a specific quote for an item, unselecting any prior selection", async () => {
+    const { rfq, itemId } = await rfqWithTwoVendors();
     await service.upsertQuote(itemId, vendorA, { rate: 400, regretted: false }, actorId, businessId);
     await service.upsertQuote(itemId, vendorB, { rate: 380, regretted: false }, actorId, businessId);
+    expect(selectedVendor(await service.getById(rfq.id, businessId))).toBe(vendorB);
 
-    // vendorA was the only quote on the item when it arrived, so auto-select-lowest
-    // picked it. vendorB's later, cheaper quote does not silently steal the
-    // selection — that's the whole point of the "only when nothing is selected
-    // yet" guard, exercised more directly by the next test.
-    let current = await service.getById(rfq.id, businessId);
-    expect(current.items[0]!.quotes.find((q) => q.vendorId === vendorA)!.isSelected).toBe(true);
-    expect(current.items[0]!.quotes.find((q) => q.vendorId === vendorB)!.isSelected).toBe(false);
-
-    // repository fake keys quotes by vendorId, not a separate id — selectQuote takes the
-    // quote's own id, which the fake generates; fetch it via the raw map.
     const rawItem = repository.rfqs.get(rfq.id)!.items[0]!;
-    const rawQuoteB = (rawItem.quotes as { id: string; vendorId: string }[]).find((q) => q.vendorId === vendorB)!;
+    const rawQuoteA = (rawItem.quotes as { id: string; vendorId: string }[]).find((q) => q.vendorId === vendorA)!;
+    await service.selectQuote(rfq.id, itemId, rawQuoteA.id, actorId, businessId);
 
-    // An explicit selectQuote call moves the selection regardless — including away
-    // from whichever quote got there first via auto-select.
-    await service.selectQuote(rfq.id, itemId, rawQuoteB.id, actorId, businessId);
-
-    current = await service.getById(rfq.id, businessId);
-    expect(current.items[0]!.quotes.find((q) => q.vendorId === vendorA)!.isSelected).toBe(false);
-    expect(current.items[0]!.quotes.find((q) => q.vendorId === vendorB)!.isSelected).toBe(true);
+    expect(selectedVendor(await service.getById(rfq.id, businessId))).toBe(vendorA);
   });
 
-  it("does not override an explicit selection when a cheaper quote arrives later", async () => {
-    const rfq = await createBasicRfq();
-    await repository.addVendorInvite(rfq.id, vendorA);
-    await repository.addVendorInvite(rfq.id, vendorB);
-    const itemId = rfq.items[0]!.id;
-    await service.upsertQuote(itemId, vendorA, { rate: 400, regretted: false }, actorId, businessId);
-    // Only one quote exists — vendorA gets auto-selected.
-    let current = await service.getById(rfq.id, businessId);
-    expect(current.items[0]!.quotes.find((q) => q.vendorId === vendorA)!.isSelected).toBe(true);
+  it("auto-selects a later cheaper quote", async () => {
+    const { rfq, itemId } = await rfqWithTwoVendors();
+    await service.upsertQuote(itemId, vendorA, { rate: 100, regretted: false }, actorId, businessId);
+    await service.upsertQuote(itemId, vendorB, { rate: 90, regretted: false }, actorId, businessId);
 
-    // A cheaper quote arrives — must NOT silently steal the selection.
-    await service.upsertQuote(itemId, vendorB, { rate: 350, regretted: false }, actorId, businessId);
-    current = await service.getById(rfq.id, businessId);
-    expect(current.items[0]!.quotes.find((q) => q.vendorId === vendorA)!.isSelected).toBe(true);
-    expect(current.items[0]!.quotes.find((q) => q.vendorId === vendorB)!.isSelected).toBe(false);
+    expect(selectedVendor(await service.getById(rfq.id, businessId))).toBe(vendorB);
+  });
+
+  it("moves auto-selection off a quote that becomes regretted", async () => {
+    const { rfq, itemId } = await rfqWithTwoVendors();
+    await service.upsertQuote(itemId, vendorA, { rate: 90, regretted: false }, actorId, businessId);
+    await service.upsertQuote(itemId, vendorB, { rate: 100, regretted: false }, actorId, businessId);
+    await service.upsertQuote(itemId, vendorA, { regretted: true }, actorId, businessId);
+
+    expect(selectedVendor(await service.getById(rfq.id, businessId))).toBe(vendorB);
+  });
+
+  it("clears auto-selection when no priced quote remains", async () => {
+    const { rfq, itemId } = await rfqWithTwoVendors();
+    await service.upsertQuote(itemId, vendorA, { rate: 90, regretted: false }, actorId, businessId);
+    await service.upsertQuote(itemId, vendorA, { regretted: true }, actorId, businessId);
+
+    expect(selectedVendor(await service.getById(rfq.id, businessId))).toBeNull();
+  });
+
+  it("never overrides a manual pick", async () => {
+    const { rfq, itemId } = await rfqWithTwoVendors();
+    await service.upsertQuote(itemId, vendorA, { rate: 120, regretted: false }, actorId, businessId);
+    const rawItem = repository.rfqs.get(rfq.id)!.items[0]!;
+    const rawQuoteA = (rawItem.quotes as { id: string; vendorId: string }[]).find((q) => q.vendorId === vendorA)!;
+    await service.selectQuote(rfq.id, itemId, rawQuoteA.id, actorId, businessId);
+
+    await service.upsertQuote(itemId, vendorB, { rate: 90, regretted: false }, actorId, businessId);
+
+    expect(selectedVendor(await service.getById(rfq.id, businessId))).toBe(vendorA);
+  });
+
+  it("importQuotes auto-selects lowest per item", async () => {
+    const { rfq, itemId } = await rfqWithTwoVendors();
+    await service.upsertQuote(itemId, vendorA, { rate: 100, regretted: false }, actorId, businessId);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(
+      await buildQuoteSheet({
+        businessName: "Archie Udyog",
+        businessAddress: null,
+        businessGstNumber: null,
+        rfqTitle: "RFQ",
+        tenderNumber: null,
+        dueDate: null,
+        instructions: null,
+        items: [{ rfqItemId: itemId, description: "OPC Cement", unit: "bag", quantity: 500, instructions: null }],
+      }),
+    );
+    wb.worksheets[0]!.getCell(`H${ITEM_TABLE_HEADER_ROW + 1}`).value = 80;
+    const buffer = Buffer.from(await wb.xlsx.writeBuffer());
+
+    await service.importQuotes(rfq.id, vendorB, buffer, actorId, businessId);
+
+    expect(selectedVendor(await service.getById(rfq.id, businessId))).toBe(vendorB);
   });
 
   it("rejects selecting a quote id that doesn't belong to the given item", async () => {

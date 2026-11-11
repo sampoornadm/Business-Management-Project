@@ -154,7 +154,8 @@ export interface IRfqRepository {
   update(id: string, data: UpdateRfqData): Promise<void>;
   delete(id: string): Promise<void>;
   updateStatus(id: string, status: RfqStatus): Promise<void>;
-  selectQuote(rfqItemId: string, quoteId: string): Promise<void>;
+  /** quoteId null clears the item's selection. `manual` records whether a human made this pick. */
+  selectQuote(rfqItemId: string, quoteId: string | null, manual: boolean): Promise<void>;
   reopen(id: string, status: RfqStatus): Promise<void>;
   findVendorInvite(rfqId: string, vendorId: string): Promise<{ id: string } | null>;
   addVendorInvite(rfqId: string, vendorId: string): Promise<void>;
@@ -298,16 +299,14 @@ export class RfqRepository implements IRfqRepository {
     await this.prisma.rfq.update({ where: { id }, data: { status } });
   }
 
-  async selectQuote(rfqItemId: string, quoteId: string): Promise<void> {
+  async selectQuote(rfqItemId: string, quoteId: string | null, manual: boolean): Promise<void> {
     await this.prisma.$transaction([
       this.prisma.rfqQuote.updateMany({
         where: { rfqItemId, isSelected: true },
         data: { isSelected: false },
       }),
-      this.prisma.rfqQuote.update({
-        where: { id: quoteId },
-        data: { isSelected: true },
-      }),
+      ...(quoteId ? [this.prisma.rfqQuote.update({ where: { id: quoteId }, data: { isSelected: true } })] : []),
+      this.prisma.rfqItem.update({ where: { id: rfqItemId }, data: { selectionManual: manual } }),
     ]);
   }
 

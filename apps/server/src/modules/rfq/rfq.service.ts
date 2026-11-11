@@ -307,19 +307,7 @@ export class RfqService {
       await this.rfqRepository.updateVendorInviteStatus(item.rfqId, vendorId, "RESPONDED");
     }
 
-    // Auto-select the lowest non-regretted quote, but only while nothing has
-    // been explicitly selected yet for this item — an explicit human choice
-    // (via selectQuote) always wins over a later, cheaper quote. Re-fetched
-    // fresh (not the `rfq`/item above) because those were read before the
-    // upsert just above and don't reflect the quote we just wrote.
-    const freshRfq = await this.rfqRepository.findRfqByItemId(rfqItemId, businessId);
-    const freshItem = freshRfq?.items.find((i) => i.id === rfqItemId);
-    if (freshItem && !freshItem.quotes.some((q) => q.isSelected)) {
-      const cheapest = freshItem.quotes
-        .filter((q) => !q.regretted && q.rate !== null)
-        .sort((a, b) => a.rate! - b.rate!)[0];
-      if (cheapest) await this.rfqRepository.selectQuote(rfqItemId, cheapest.id);
-    }
+    await this.autoSelectLowest(rfqItemId, businessId);
 
     await this.auditService.log({
       actorId,
@@ -398,6 +386,7 @@ export class RfqService {
         model: row.model,
         remarks: row.remarks,
       });
+      await this.autoSelectLowest(row.rfqItemId, businessId);
       imported += 1;
     }
 
@@ -493,7 +482,7 @@ export class RfqService {
     const quote = item.quotes.find((q) => q.id === quoteId);
     if (!quote) throw new BadRequestError("Quote does not belong to this item");
 
-    await this.rfqRepository.selectQuote(rfqItemId, quoteId);
+    await this.rfqRepository.selectQuote(rfqItemId, quoteId, true);
     await this.auditService.log({
       actorId,
       action: "RFQ_QUOTE_SELECTED",
@@ -502,6 +491,23 @@ export class RfqService {
       metadata: { rfqItemId, quoteId },
     });
     return this.getById(rfqId, businessId);
+  }
+
+  /**
+   * Keep an item's selection on its lowest priced, non-regretted quote (tie: earliest quotedAt)
+   * for as long as the selection is automatic. A human pick (selectionManual) is never touched.
+   * Re-reads the item so it sees the quote just written.
+   */
+  private async autoSelectLowest(rfqItemId: string, businessId: string): Promise<void> {
+    const rfq = await this.rfqRepository.findRfqByItemId(rfqItemId, businessId);
+    const item = rfq?.items.find((i) => i.id === rfqItemId);
+    if (!item || item.selectionManual) return;
+    const lowest = item.quotes
+      .filter((q) => !q.regretted && q.rate !== null)
+      .sort((a, b) => a.rate! - b.rate! || a.quotedAt.getTime() - b.quotedAt.getTime())[0];
+    const current = item.quotes.find((q) => q.isSelected);
+    if ((lowest?.id ?? null) === (current?.id ?? null)) return;
+    await this.rfqRepository.selectQuote(rfqItemId, lowest?.id ?? null, false);
   }
 
   async close(rfqId: string, actorId: string, businessId: string): Promise<RfqDto> {
