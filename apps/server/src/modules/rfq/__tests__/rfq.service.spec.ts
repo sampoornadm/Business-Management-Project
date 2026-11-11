@@ -191,7 +191,7 @@ class FakeRfqRepository implements IRfqRepository {
         Object.assign(existing, {
           rate: data.rate,
           regretted: data.regretted,
-          remarks: data.remarks ?? null,
+          technicalDeviation: data.technicalDeviation ?? null,
           ...(data.make !== undefined ? { make: data.make } : {}),
           ...(data.model !== undefined ? { model: data.model } : {}),
           ...(data.quotedAt !== undefined ? { quotedAt: data.quotedAt } : {}),
@@ -207,7 +207,7 @@ class FakeRfqRepository implements IRfqRepository {
           make: data.make ?? "Unbranded",
           model: data.model ?? "Generic",
           quotedAt: data.quotedAt ?? new Date(),
-          remarks: data.remarks ?? null,
+          technicalDeviation: data.technicalDeviation ?? null,
           updatedAt: new Date(),
           isSelected: false,
         });
@@ -706,7 +706,7 @@ describe("RfqService", () => {
       make: "Unbranded",
       model: "Generic",
       quotedAt: new Date(),
-      remarks: null,
+      technicalDeviation: null,
       updatedAt: new Date(),
     })) as unknown as typeof item.quotes;
     return rfq.id;
@@ -814,6 +814,48 @@ describe("RfqService", () => {
     await service.upsertQuote(itemId, vendorB, { rate: 90, regretted: false }, actorId, businessId);
 
     expect(selectedVendor(await service.getById(rfq.id, businessId))).toBe(vendorA);
+  });
+
+  it("upsertQuote stores null for a \"NA\" deviation", async () => {
+    const { rfq, itemId } = await rfqWithTwoVendors();
+    await service.upsertQuote(itemId, vendorA, { rate: 100, technicalDeviation: "NA" }, actorId, businessId);
+
+    const quote = (await service.getById(rfq.id, businessId)).items[0]!.quotes[0]!;
+    expect(quote.technicalDeviation).toBeNull();
+  });
+
+  it("upsertQuote keeps a real deviation, trimmed", async () => {
+    const { rfq, itemId } = await rfqWithTwoVendors();
+    await service.upsertQuote(itemId, vendorA, { rate: 100, technicalDeviation: " No ISI mark " }, actorId, businessId);
+
+    const quote = (await service.getById(rfq.id, businessId)).items[0]!.quotes[0]!;
+    expect(quote.technicalDeviation).toBe("No ISI mark");
+  });
+
+  it("importQuotes keeps a real deviation from the sheet", async () => {
+    const { rfq, itemId } = await rfqWithTwoVendors();
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(
+      await buildQuoteSheet({
+        businessName: "Archie Udyog",
+        businessAddress: null,
+        businessGstNumber: null,
+        rfqTitle: "RFQ",
+        tenderNumber: null,
+        dueDate: null,
+        instructions: null,
+        items: [{ rfqItemId: itemId, description: "OPC Cement", unit: "bag", quantity: 500, instructions: null }],
+      }),
+    );
+    const sheet = wb.worksheets[0]!;
+    sheet.getCell(`H${ITEM_TABLE_HEADER_ROW + 1}`).value = 80;
+    sheet.getCell(`L${ITEM_TABLE_HEADER_ROW + 1}`).value = "Make KEI";
+    expect(sheet.getCell(`L${ITEM_TABLE_HEADER_ROW}`).value).toBe("Technical deviation (if any)");
+
+    await service.importQuotes(rfq.id, vendorB, Buffer.from(await wb.xlsx.writeBuffer()), actorId, businessId);
+
+    const quote = (await service.getById(rfq.id, businessId)).items[0]!.quotes[0]!;
+    expect(quote.technicalDeviation).toBe("Make KEI");
   });
 
   it("importQuotes auto-selects lowest per item", async () => {

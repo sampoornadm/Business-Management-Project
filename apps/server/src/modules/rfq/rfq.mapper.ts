@@ -20,7 +20,7 @@ function toQuoteDto(quote: RfqItemDetail["quotes"][number]): RfqQuoteDto {
     make: quote.make,
     model: quote.model,
     quotedAt: quote.quotedAt.toISOString(),
-    remarks: quote.remarks,
+    technicalDeviation: quote.technicalDeviation,
     updatedAt: quote.updatedAt.toISOString(),
     isSelected: quote.isSelected,
   };
@@ -78,7 +78,7 @@ export function toItemPriceHistoryDto(
     make: row.make,
     model: row.model,
     quotedAt: row.quotedAt.toISOString(),
-    remarks: row.remarks,
+    technicalDeviation: row.technicalDeviation,
     rfqId: row.rfqItem.rfq.id,
     rfqTitle: row.rfqItem.rfq.title,
     tenderId: row.rfqItem.rfq.tender?.id ?? null,

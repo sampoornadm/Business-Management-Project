@@ -145,7 +145,7 @@ const RFR_COLUMN_HEADERS = [
   "Make",
   "Model",
   "Regret (Y/N)",
-  "Remarks",
+  "Technical deviation (if any)",
 ];
 const RFR_COLUMN_WIDTHS = [130, 35, 35, 75, 45, 50, 50, 35, 60];
 

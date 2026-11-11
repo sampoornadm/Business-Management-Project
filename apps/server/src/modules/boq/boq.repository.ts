@@ -19,6 +19,7 @@ const boqItemWithBreakdownArgs = {
         make: true,
         model: true,
         quotedAt: true,
+        technicalDeviation: true,
         vendor: { select: { id: true, name: true } },
         rfqItem: { select: { rfqId: true } },
       },

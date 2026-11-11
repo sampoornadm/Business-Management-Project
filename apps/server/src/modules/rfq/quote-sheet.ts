@@ -20,7 +20,7 @@ const COLUMNS = [
   { header: "Make", key: "make", width: 18 },
   { header: "Model", key: "model", width: 18 },
   { header: "Regret (Y/N)", key: "regret", width: 14 },
-  { header: "Remarks", key: "remarks", width: 30 },
+  { header: "Technical deviation (if any)", key: "technicalDeviation", width: 30 },
 ] as const;
 
 // A fixed-size business/RFQ header block above the item table, so the number of rows to
@@ -41,7 +41,7 @@ const COL_RATE = 8;
 const COL_MAKE = 9;
 const COL_MODEL = 10;
 const COL_REGRET = 11;
-const COL_REMARKS = 12;
+const COL_DEVIATION = 12;
 
 export interface ParsedQuoteRow {
   rfqItemId: string;
@@ -49,7 +49,7 @@ export interface ParsedQuoteRow {
   regretted: boolean;
   make?: string;
   model?: string;
-  remarks?: string;
+  technicalDeviation?: string;
 }
 
 export interface ParsedQuoteSheet {
@@ -176,7 +176,7 @@ export async function parseQuoteSheet(buffer: Buffer): Promise<ParsedQuoteSheet>
 
     const make = text(row.getCell(COL_MAKE));
     const model = text(row.getCell(COL_MODEL));
-    const remarks = text(row.getCell(COL_REMARKS));
+    const technicalDeviation = text(row.getCell(COL_DEVIATION));
 
     rows.push({
       rfqItemId,
@@ -184,7 +184,7 @@ export async function parseQuoteSheet(buffer: Buffer): Promise<ParsedQuoteSheet>
       regretted,
       ...(make ? { make } : {}),
       ...(model ? { model } : {}),
-      ...(remarks ? { remarks } : {}),
+      ...(technicalDeviation ? { technicalDeviation } : {}),
     });
   });
 
