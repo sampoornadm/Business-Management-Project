@@ -11,11 +11,16 @@ describe("findNearest (HistoricalRate ANN, integration)", () => {
   let userId: string;
   const rateIds: string[] = [];
 
-  async function insertEmbeddedRate(itemName: string, vector: number[]): Promise<string> {
+  async function insertEmbeddedRate(
+    itemName: string,
+    vector: number[],
+    kind: "VENDOR" | "OWN" = "VENDOR",
+  ): Promise<string> {
     const id = randomUUID();
     await prisma.historicalRate.create({
       data: {
         id,
+        kind,
         businessId,
         category: "MATERIAL",
         itemName,
@@ -81,6 +86,17 @@ describe("findNearest (HistoricalRate ANN, integration)", () => {
     expect(results[0]?.itemName).toBe("XLPE Cable 4C x16");
     expect(results[0]?.similarity).toBeCloseTo(1, 5);
     expect(results[2]?.itemName).toBe("PVC Pipe 100mm");
+  });
+
+  it("findNearest ignores OWN rows", async () => {
+    const dims = 1024;
+    const exact = new Array(dims).fill(0);
+    exact[5] = 1;
+    await insertEmbeddedRate("Own quoted rate row", exact, "OWN");
+
+    const results = await repository.findNearest(businessId, exact, 50);
+
+    expect(results.map((r) => r.itemName)).not.toContain("Own quoted rate row");
   });
 
   // setEmbedding writes embedding/embeddedAt (Prisma) and embeddingVector (raw SQL) in one
