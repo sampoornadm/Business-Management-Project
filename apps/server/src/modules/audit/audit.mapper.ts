@@ -33,8 +33,10 @@ const AUDIT_LOG_EXPORT_COLUMNS: { key: string; header: string }[] = [
   { key: "actorId", header: "Actor" },
   { key: "action", header: "Action" },
   { key: "entityType", header: "Entity Type" },
+  { key: "entityCode", header: "Entity" },
   { key: "entityId", header: "Entity ID" },
   { key: "ipAddress", header: "IP Address" },
+  { key: "details", header: "Details" },
   { key: "createdAt", header: "When" },
 ];
 
@@ -43,6 +45,8 @@ function auditLogExportRow(log: AuditLogDto): Record<string, string | number> {
     actorId: log.actor ? `${log.actor.firstName} ${log.actor.lastName}` : "System",
     action: log.action,
     entityType: log.entityType ?? "",
+    entityCode: log.entityCode ?? "",
+    details: typeof log.metadata?.summary === "string" ? log.metadata.summary : "",
     entityId: log.entityId ?? "",
     ipAddress: log.ipAddress ?? "",
     createdAt: log.createdAt.slice(0, 10),

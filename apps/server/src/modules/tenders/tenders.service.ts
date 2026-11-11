@@ -224,6 +224,8 @@ export class TendersService {
       action: "TENDER_DELETED",
       entityType: "Tender",
       entityId: id,
+      // Passed explicitly: the row is already gone, so the audit resolver could not look it up.
+      entityCode: tender.tenderNumber,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
     });

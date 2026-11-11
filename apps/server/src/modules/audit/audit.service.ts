@@ -6,12 +6,28 @@ import { buildPaginatedResult, type PaginationParams } from "../../core/interfac
 
 import { toAuditLogDto } from "./audit.mapper.js";
 import type { AuditLogFilters, CreateAuditLogData, IAuditRepository } from "./audit.repository.js";
+import type { EntityCodeResolver } from "./entity-code.js";
 
 export class AuditService {
-  constructor(private readonly auditRepository: IAuditRepository) {}
+  constructor(
+    private readonly auditRepository: IAuditRepository,
+    private readonly resolveEntityCode: EntityCodeResolver,
+  ) {}
 
+  /** Records an event. The entity's readable code is looked up here unless the caller passes one. */
   async log(data: CreateAuditLogData): Promise<void> {
-    await this.auditRepository.create(data);
+    const entityCode = data.entityCode !== undefined ? data.entityCode : await this.lookupEntityCode(data);
+    await this.auditRepository.create({ ...data, entityCode });
+  }
+
+  // A missing code must never cost the event itself, so any lookup failure is stored as null.
+  private async lookupEntityCode(data: CreateAuditLogData): Promise<string | null> {
+    if (!data.entityType || !data.entityId) return null;
+    try {
+      return await this.resolveEntityCode(data.entityType, data.entityId);
+    } catch {
+      return null;
+    }
   }
 
   async list(

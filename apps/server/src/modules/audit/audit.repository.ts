@@ -12,6 +12,8 @@ export interface CreateAuditLogData {
   action: string;
   entityType?: string | null;
   entityId?: string | null;
+  /** Readable entity code; resolved by AuditService.log when omitted. */
+  entityCode?: string | null;
   metadata?: Prisma.InputJsonValue;
   ipAddress?: string | null;
   userAgent?: string | null;
@@ -51,6 +53,7 @@ export class AuditRepository implements IAuditRepository {
         action: data.action,
         entityType: data.entityType ?? null,
         entityId: data.entityId ?? null,
+        entityCode: data.entityCode ?? null,
         metadata: data.metadata,
         ipAddress: data.ipAddress ?? null,
         userAgent: data.userAgent ?? null,
