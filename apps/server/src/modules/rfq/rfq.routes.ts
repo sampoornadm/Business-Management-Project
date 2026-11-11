@@ -407,10 +407,11 @@ export function createRfqRouter(controller: RfqController): Router {
 
   /**
    * @openapi
-   * /rfqs/{id}/close:
+   * /rfqs/{id}/finalize-rates:
    *   post:
    *     tags: [RFQ]
-   *     summary: Close the RFQ (no more quotes accepted)
+   *     summary: Finalize rates — close the RFQ, record every vendor's priced quote per item, and set
+   *       the linked tender's BOQ base rates from the selected quotes (skipped while tender rates are locked)
    *     security: [{ bearerAuth: [] }]
    *     parameters:
    *       - in: path
@@ -418,9 +419,10 @@ export function createRfqRouter(controller: RfqController): Router {
    *         required: true
    *         schema: { type: string }
    *     responses:
-   *       200: { description: RFQ closed }
+   *       200: { description: Counts of vendor rates recorded and tender items updated/skipped }
+   *       409: { description: RFQ is already finalized }
    */
-  router.post("/:id/close", authenticateMiddleware, requirePermission("rfq:update"), controller.close);
+  router.post("/:id/finalize-rates", authenticateMiddleware, requirePermission("rfq:update"), controller.finalizeRates);
 
   /**
    * @openapi
@@ -438,23 +440,6 @@ export function createRfqRouter(controller: RfqController): Router {
    *       200: { description: RFQ reopened }
    */
   router.post("/:id/reopen", authenticateMiddleware, requirePermission("rfq:update"), controller.reopen);
-
-  /**
-   * @openapi
-   * /rfqs/{id}/push-rates-to-tender:
-   *   post:
-   *     tags: [RFQ]
-   *     summary: Push each RFQ item's selected vendor quote onto its linked tender BOQ item's rate
-   *     security: [{ bearerAuth: [] }]
-   *     parameters:
-   *       - in: path
-   *         name: id
-   *         required: true
-   *         schema: { type: string }
-   *     responses:
-   *       200: { description: Rates pushed to tender }
-   */
-  router.post("/:id/push-rates-to-tender", authenticateMiddleware, requirePermission("rfq:update"), controller.pushRatesToTender);
 
   return router;
 }

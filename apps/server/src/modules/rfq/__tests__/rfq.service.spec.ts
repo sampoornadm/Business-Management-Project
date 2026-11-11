@@ -18,7 +18,8 @@ import type {
   UpdateContactData,
 } from "../../contacts/contacts.repository.js";
 import { ContactsService } from "../../contacts/contacts.service.js";
-import type { IHistoricalRatesRepository, RecordFromRfqQuoteData } from "../../rates/rates.repository.js";
+import type { IItemsRepository } from "../../items/items.repository.js";
+import type { IHistoricalRatesRepository, VendorRateRow } from "../../rates/rates.repository.js";
 import type { ITendersRepository } from "../../tenders/tenders.repository.js";
 import type { IUsersRepository } from "../../users/users.repository.js";
 import type { IVendorsRepository, VendorItemTypeMatch } from "../../vendors/vendors.repository.js";
@@ -228,12 +229,14 @@ class FakeTendersRepository implements Partial<ITendersRepository> {
   tenderIds = new Set<string>();
   tenderNumbers = new Map<string, string>();
   pinnedNotesByTenderId = new Map<string, string[]>();
+  lockedTenderIds = new Set<string>();
 
   async findById(id: string, _businessId: string) {
     if (!this.tenderIds.has(id)) return null;
     const lines = this.pinnedNotesByTenderId.get(id) ?? [];
     return {
       id,
+      ratesLockedAt: this.lockedTenderIds.has(id) ? new Date() : null,
       tenderNumber: this.tenderNumbers.get(id) ?? "TND-0000",
       pinnedNotes: lines.map((lineText, index) => ({ id: `pin-${index}`, lineText })),
     } as never;
@@ -336,24 +339,44 @@ class FakeUsersRepository implements Partial<IUsersRepository> {
 
 class FakeBoqRepository implements Partial<IBoqRepository> {
   items = new Map<string, BoqItemWithBreakdown>();
-  updatedRates = new Map<string, number>();
-  updatedAmounts = new Map<string, number | null>();
+  /** tenderId → current BOQ id. */
+  currentBoqIds = new Map<string, string>();
+
+  async findCurrentBoq(tenderId: string, _businessId: string) {
+    const id = this.currentBoqIds.get(tenderId);
+    return id ? ({ id, tenderId } as never) : null;
+  }
 
   async findItemsByIds(ids: string[], _businessId: string) {
     return ids.map((id) => this.items.get(id)).filter((item): item is BoqItemWithBreakdown => Boolean(item));
   }
 
-  async updateItem(id: string, data: { rate?: number | null; amount?: number | null }) {
-    if (data.rate !== undefined && data.rate !== null) this.updatedRates.set(id, data.rate);
-    if (data.amount !== undefined) this.updatedAmounts.set(id, data.amount);
+  async setBaseRate(id: string, data: object) {
+    Object.assign(this.items.get(id)!, data);
   }
 }
 
 class FakeHistoricalRatesRepository implements Partial<IHistoricalRatesRepository> {
-  recorded: RecordFromRfqQuoteData[] = [];
+  recorded: VendorRateRow[] = [];
 
-  async recordFromRfqQuote(data: RecordFromRfqQuoteData) {
-    this.recorded.push(data);
+  async recordVendorRates(_rfqId: string, _businessId: string, rows: VendorRateRow[]) {
+    this.recorded = rows;
+    return rows.length;
+  }
+}
+
+class FakeItemsRepository implements Partial<IItemsRepository> {
+  /** canonicalName → id */
+  items = new Map<string, string>();
+  links = new Map<string, string>();
+
+  async findOrCreateItem(_businessId: string, canonicalName: string) {
+    if (!this.items.has(canonicalName)) this.items.set(canonicalName, randomUUID());
+    return { id: this.items.get(canonicalName)! };
+  }
+
+  async linkRfqItems(itemId: string, rfqItemIds: string[]) {
+    for (const id of rfqItemIds) this.links.set(id, itemId);
   }
 }
 
@@ -374,6 +397,7 @@ describe("RfqService", () => {
   let businessesRepository: FakeBusinessesRepository;
   let ratesRepository: FakeHistoricalRatesRepository;
   let contactsRepository: FakeContactsRepository;
+  let itemsRepository: FakeItemsRepository;
   let contactsService: ContactsService;
   let emailService: { queueRfqEmail: ReturnType<typeof vi.fn> };
   let auditService: AuditService;
@@ -392,6 +416,7 @@ describe("RfqService", () => {
     businessesRepository = new FakeBusinessesRepository();
     ratesRepository = new FakeHistoricalRatesRepository();
     contactsRepository = new FakeContactsRepository();
+    itemsRepository = new FakeItemsRepository();
     contactsService = new ContactsService(contactsRepository);
     vendorsRepository.vendorIds.add(vendorA);
     vendorsRepository.vendorIds.add(vendorB);
@@ -414,6 +439,7 @@ describe("RfqService", () => {
       auditService,
       ratesRepository as unknown as IHistoricalRatesRepository,
       contactsService,
+      itemsRepository as unknown as IItemsRepository,
     );
   });
 
@@ -462,7 +488,7 @@ describe("RfqService", () => {
 
   it("rejects deleting a closed RFQ", async () => {
     const rfq = await createBasicRfq();
-    await service.close(rfq.id, actorId, businessId);
+    await service.finalizeRates(rfq.id, actorId, businessId);
 
     await expect(service.delete(rfq.id, actorId, { businessId })).rejects.toThrow(ConflictError);
   });
@@ -569,7 +595,7 @@ describe("RfqService", () => {
 
   it("rejects editing items on a finalized RFQ", async () => {
     const rfq = await createBasicRfq();
-    await service.close(rfq.id, actorId, businessId);
+    await service.finalizeRates(rfq.id, actorId, businessId);
 
     await expect(
       service.update(rfq.id, { items: [{ description: "New Item", quantity: 1 }] }, actorId, businessId),
@@ -825,11 +851,6 @@ describe("RfqService", () => {
     ).rejects.toThrow(BadRequestError);
   });
 
-  it("closes an RFQ", async () => {
-    const rfq = await createBasicRfq();
-    const closed = await service.close(rfq.id, actorId, businessId);
-    expect(closed.status).toBe("CLOSED");
-  });
 
   it("throws for an unknown RFQ id", async () => {
     await expect(service.getById(randomUUID(), businessId)).rejects.toThrow(NotFoundError);
@@ -874,14 +895,14 @@ describe("RfqService", () => {
     it("reopens a CLOSED RFQ back to SENT", async () => {
       const rfq = await createBasicRfq();
       await repository.addVendorInvite(rfq.id, vendorA);
-      await service.close(rfq.id, actorId, businessId);
+      await service.finalizeRates(rfq.id, actorId, businessId);
       const reopened = await service.reopen(rfq.id, actorId, { businessId });
       expect(reopened.status).toBe("SENT");
     });
 
     it("reopens a CLOSED RFQ with no vendor invites back to DRAFT", async () => {
       const rfq = await createBasicRfq();
-      await service.close(rfq.id, actorId, businessId);
+      await service.finalizeRates(rfq.id, actorId, businessId);
 
       const reopened = await service.reopen(rfq.id, actorId, { businessId });
       expect(reopened.status).toBe("DRAFT");
@@ -890,7 +911,7 @@ describe("RfqService", () => {
     it("reopens a CLOSED RFQ that already had vendor invites back to SENT", async () => {
       const rfq = await createBasicRfq();
       await service.addVendorInvite(rfq.id, vendorA, actorId, businessId);
-      await service.close(rfq.id, actorId, businessId);
+      await service.finalizeRates(rfq.id, actorId, businessId);
 
       const reopened = await service.reopen(rfq.id, actorId, { businessId });
       expect(reopened.status).toBe("SENT");
@@ -1068,107 +1089,135 @@ describe("RfqService", () => {
     });
   });
 
-  describe("pushRatesToTender", () => {
-    it("pushes selected rates onto the tender's BOQ items, recomputes amount, and records historical rates", async () => {
-      const boqItemId = randomUUID();
-      boqRepository.items.set(boqItemId, { id: boqItemId, quantity: 10 } as unknown as BoqItemWithBreakdown);
+  describe("finalizeRates", () => {
+    const tenderId = randomUUID();
+    const boqId = randomUUID();
+
+    function boqItem(id: string, overrides: Partial<Record<string, unknown>> = {}) {
+      boqRepository.items.set(id, {
+        id,
+        boqId,
+        quantity: 10,
+        rate: null,
+        amount: null,
+        baseRate: null,
+        markupPercent: null,
+        ...overrides,
+      } as unknown as BoqItemWithBreakdown);
+    }
+
+    async function tenderRfq(items: { boqItemId?: string; description: string }[]) {
+      tendersRepository.tenderIds.add(tenderId);
+      boqRepository.currentBoqIds.set(tenderId, boqId);
       const rfq = await service.create(
         {
-          title: "Push Test RFQ",
-          items: [{ boqItemId, description: "OPC Cement", unit: "bag", quantity: 100 }],
+          title: "Finalize Test RFQ",
+          tenderId,
+          items: items.map((i) => ({ ...i, unit: "bag", quantity: 100 })),
         },
         actorId,
         { businessId },
       );
       await repository.addVendorInvite(rfq.id, vendorA);
-      await service.upsertQuote(rfq.items[0]!.id, vendorA, { rate: 375, regretted: false }, actorId, businessId);
-      await service.close(rfq.id, actorId, businessId);
+      await repository.addVendorInvite(rfq.id, vendorB);
+      return rfq;
+    }
 
-      const result = await service.pushRatesToTender(rfq.id, actorId, businessId);
+    it("closes the RFQ and records every priced quote", async () => {
+      const rfq = await tenderRfq([{ description: "OPC Cement" }, { description: "River Sand" }]);
+      const [cement, sand] = rfq.items.map((i) => i.id) as [string, string];
+      await service.upsertQuote(cement, vendorA, { rate: 400 }, actorId, businessId);
+      await service.upsertQuote(cement, vendorB, { rate: 380 }, actorId, businessId);
+      await service.upsertQuote(sand, vendorA, { rate: 50 }, actorId, businessId);
+      await service.upsertQuote(sand, vendorB, { regretted: true }, actorId, businessId);
 
-      expect(result.updatedItems).toBe(1);
-      expect(boqRepository.updatedRates.get(boqItemId)).toBe(375);
-      // amount is the BOQ item's own quantity (10) × the pushed rate, not the RFQ item's quantity (100).
-      expect(boqRepository.updatedAmounts.get(boqItemId)).toBe(3750);
-      expect(ratesRepository.recorded).toHaveLength(1);
-      expect(ratesRepository.recorded[0]).toMatchObject({
-        businessId,
-        itemName: "OPC Cement",
-        unit: "bag",
-        rate: 375,
-        vendorId: vendorA,
-        createdById: actorId,
-      });
+      const result = await service.finalizeRates(rfq.id, actorId, businessId);
+
+      expect(result.vendorRatesRecorded).toBe(3);
+      expect((await service.getById(rfq.id, businessId)).status).toBe("CLOSED");
+      expect(ratesRepository.recorded.filter((r) => r.isDefault).map((r) => r.rate).sort()).toEqual([380, 50].sort());
+      expect(ratesRepository.recorded.every((r) => r.itemId && r.sourceTenderId === tenderId)).toBe(true);
+      expect(itemsRepository.links.get(cement)).toBeDefined();
     });
 
-    it("skips items with no linked BOQ item", async () => {
-      const rfq = await service.create(
-        { title: "No BOQ Link RFQ", items: [{ description: "Loose Item", unit: "unit", quantity: 5 }] },
-        actorId,
-        { businessId },
-      );
-      await repository.addVendorInvite(rfq.id, vendorA);
-      await service.upsertQuote(rfq.items[0]!.id, vendorA, { rate: 100, regretted: false }, actorId, businessId);
-      await service.close(rfq.id, actorId, businessId);
-
-      const result = await service.pushRatesToTender(rfq.id, actorId, businessId);
-
-      expect(result.updatedItems).toBe(0);
-      expect(boqRepository.updatedRates.size).toBe(0);
-      expect(ratesRepository.recorded).toHaveLength(0);
-    });
-
-    it("skips an item whose boqItemId doesn't resolve to a real BOQ item for this business (never writes it)", async () => {
-      const unresolvedBoqItemId = randomUUID();
-      // Deliberately never added to boqRepository.items — simulates a boqItemId that the
-      // business-scoped batch fetch (findItemsByIds) didn't resolve: a nonexistent id, or one
-      // belonging to another business's BOQ. boqItemId is only UUID-format validated at RFQ
-      // creation, so this is reachable from client input.
-      const rfq = await service.create(
-        {
-          title: "Unresolved BOQ Link RFQ",
-          items: [{ boqItemId: unresolvedBoqItemId, description: "Ghost Item", unit: "unit", quantity: 5 }],
-        },
-        actorId,
-        { businessId },
-      );
-      await repository.addVendorInvite(rfq.id, vendorA);
-      await service.upsertQuote(rfq.items[0]!.id, vendorA, { rate: 100, regretted: false }, actorId, businessId);
-      await service.close(rfq.id, actorId, businessId);
-
-      const result = await service.pushRatesToTender(rfq.id, actorId, businessId);
-
-      expect(result.updatedItems).toBe(0);
-      expect(boqRepository.updatedRates.has(unresolvedBoqItemId)).toBe(false);
-      expect(boqRepository.updatedAmounts.has(unresolvedBoqItemId)).toBe(false);
-      expect(ratesRepository.recorded).toHaveLength(0);
-    });
-
-    it("skips a linked BOQ item whose only quote is regretted (no selected, priced quote)", async () => {
+    it("sets base rate with 15% default markup on current-BOQ items", async () => {
       const boqItemId = randomUUID();
-      boqRepository.items.set(boqItemId, { id: boqItemId, quantity: 10 } as unknown as BoqItemWithBreakdown);
-      const rfq = await service.create(
-        { title: "Regretted Quote RFQ", items: [{ boqItemId, description: "Rebar", unit: "kg", quantity: 50 }] },
-        actorId,
-        { businessId },
-      );
-      await repository.addVendorInvite(rfq.id, vendorA);
-      // Regretted: no rate, and auto-select never picks a regretted quote — so this item ends up
-      // with a quote but no *selected, priced* quote, exercising the `!selected || rate === null` skip.
-      await service.upsertQuote(rfq.items[0]!.id, vendorA, { regretted: true }, actorId, businessId);
-      await service.close(rfq.id, actorId, businessId);
+      boqItem(boqItemId);
+      const rfq = await tenderRfq([{ boqItemId, description: "OPC Cement" }]);
+      await service.upsertQuote(rfq.items[0]!.id, vendorA, { rate: 100 }, actorId, businessId);
 
-      const result = await service.pushRatesToTender(rfq.id, actorId, businessId);
+      const result = await service.finalizeRates(rfq.id, actorId, businessId);
 
-      expect(result.updatedItems).toBe(0);
-      expect(boqRepository.updatedRates.has(boqItemId)).toBe(false);
-      expect(boqRepository.updatedAmounts.has(boqItemId)).toBe(false);
-      expect(ratesRepository.recorded).toHaveLength(0);
+      expect(result).toMatchObject({ tenderItemsUpdated: 1, tenderItemsSkipped: 0, tenderLocked: false });
+      expect(boqRepository.items.get(boqItemId)).toMatchObject({ baseRate: 100, markupPercent: 15, rate: 115, amount: 1150 });
     });
 
-    it("refuses to push rates for an RFQ that isn't closed", async () => {
+    it("keeps an item's existing markup on re-finalize", async () => {
+      const boqItemId = randomUUID();
+      boqItem(boqItemId, { baseRate: 90, markupPercent: 20 });
+      const rfq = await tenderRfq([{ boqItemId, description: "OPC Cement" }]);
+      await service.upsertQuote(rfq.items[0]!.id, vendorA, { rate: 100 }, actorId, businessId);
+
+      await service.finalizeRates(rfq.id, actorId, businessId);
+
+      expect(boqRepository.items.get(boqItemId)).toMatchObject({ baseRate: 100, markupPercent: 20, rate: 120 });
+    });
+
+    it("skips selected-but-regretted, unselected, and non-current-BOQ items and counts them", async () => {
+      const regrettedId = randomUUID();
+      const unquotedId = randomUUID();
+      const oldVersionId = randomUUID();
+      boqItem(regrettedId);
+      boqItem(unquotedId);
+      boqItem(oldVersionId, { boqId: randomUUID() });
+      const rfq = await tenderRfq([
+        { boqItemId: regrettedId, description: "A" },
+        { boqItemId: unquotedId, description: "B" },
+        { boqItemId: oldVersionId, description: "C" },
+      ]);
+      const [a, , c] = rfq.items.map((i) => i.id) as [string, string, string];
+      await service.upsertQuote(a, vendorA, { rate: 100 }, actorId, businessId);
+      const rawA = repository.rfqs.get(rfq.id)!.items[0]!;
+      const quoteA = (rawA.quotes as { id: string }[])[0]!;
+      await service.selectQuote(rfq.id, a, quoteA.id, actorId, businessId);
+      await service.upsertQuote(a, vendorA, { regretted: true }, actorId, businessId);
+      await service.upsertQuote(c, vendorA, { rate: 70 }, actorId, businessId);
+
+      const result = await service.finalizeRates(rfq.id, actorId, businessId);
+
+      expect(result).toMatchObject({ tenderItemsUpdated: 0, tenderItemsSkipped: 3 });
+      expect(boqRepository.items.get(oldVersionId)!.baseRate).toBeNull();
+    });
+
+    it("skips tender writes when tender rates are locked but still records vendor rates", async () => {
+      const boqItemId = randomUUID();
+      boqItem(boqItemId);
+      const rfq = await tenderRfq([{ boqItemId, description: "OPC Cement" }]);
+      await service.upsertQuote(rfq.items[0]!.id, vendorA, { rate: 100 }, actorId, businessId);
+      tendersRepository.lockedTenderIds.add(tenderId);
+
+      const result = await service.finalizeRates(rfq.id, actorId, businessId);
+
+      expect(result).toMatchObject({ vendorRatesRecorded: 1, tenderItemsUpdated: 0, tenderLocked: true });
+      expect(boqRepository.items.get(boqItemId)!.baseRate).toBeNull();
+    });
+
+    it("RFQ without a tender records vendor rates only", async () => {
       const rfq = await createBasicRfq();
-      await expect(service.pushRatesToTender(rfq.id, actorId, businessId)).rejects.toThrow(ConflictError);
+      await repository.addVendorInvite(rfq.id, vendorA);
+      await service.upsertQuote(rfq.items[0]!.id, vendorA, { rate: 400 }, actorId, businessId);
+
+      const result = await service.finalizeRates(rfq.id, actorId, businessId);
+
+      expect(result).toEqual({ vendorRatesRecorded: 1, tenderItemsUpdated: 0, tenderItemsSkipped: 0, tenderLocked: false });
+      expect(ratesRepository.recorded[0]).toMatchObject({ sourceTenderId: null, isDefault: true, vendorId: vendorA });
+    });
+
+    it("rejects finalizing an already-closed RFQ", async () => {
+      const rfq = await createBasicRfq();
+      await service.finalizeRates(rfq.id, actorId, businessId);
+
+      await expect(service.finalizeRates(rfq.id, actorId, businessId)).rejects.toThrow(ConflictError);
     });
   });
 });

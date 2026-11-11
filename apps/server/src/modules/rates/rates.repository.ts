@@ -49,17 +49,6 @@ export interface HistoricalRateMatch {
   similarity: number;
 }
 
-export interface RecordFromRfqQuoteData {
-  businessId: string;
-  itemName: string;
-  unit: string;
-  rate: number;
-  vendorId: string;
-  rfqQuoteId: string;
-  sourceTenderId?: string | null;
-  createdById: string;
-}
-
 /** One vendor's quote for one RFQ item, recorded on RFQ "Finalize rates". */
 export interface VendorRateRow {
   businessId: string;
@@ -109,11 +98,10 @@ export interface IHistoricalRatesRepository {
   findUnembedded(businessId: string): Promise<{ id: string; itemName: string }[]>;
   setEmbedding(id: string, embedding: number[]): Promise<void>;
   findNearest(businessId: string, queryVector: number[], limit: number): Promise<HistoricalRateMatch[]>;
-  recordFromRfqQuote(data: RecordFromRfqQuoteData): Promise<void>;
   /** Upsert one VENDOR row per quote of this RFQ; drop this RFQ's rows for quotes not in `rows`. */
-  recordVendorRates(rfqId: string, rows: VendorRateRow[]): Promise<number>;
+  recordVendorRates(rfqId: string, businessId: string, rows: VendorRateRow[]): Promise<number>;
   /** Replace every OWN row of this tender with `rows` (one per item, latest submission wins). */
-  replaceOwnRates(tenderId: string, rows: OwnRateRow[]): Promise<void>;
+  replaceOwnRates(tenderId: string, businessId: string, rows: OwnRateRow[]): Promise<void>;
   /** Both kinds for one inventory item, newest effectiveDate first. */
   findByItem(itemId: string, businessId: string): Promise<ItemRateRow[]>;
 }
@@ -192,56 +180,14 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
     `;
   }
 
-  async recordFromRfqQuote(data: RecordFromRfqQuoteData): Promise<void> {
-    // Business rule (not a DB constraint): at most one isDefault=true row per (businessId,
-    // itemName). Clearing the prior default and inserting the new one must be atomic, or a
-    // crash mid-way could leave either zero or two defaults for the same item.
-    //
-    // upsert (not create): rfqQuoteId is @unique, and "push rates to tender" is re-clickable on a
-    // CLOSED RFQ indefinitely — a repeat push for a quote already recorded must update the
-    // existing row, not throw P2002.
-    await this.prisma.$transaction([
-      this.prisma.historicalRate.updateMany({
-        where: { businessId: data.businessId, itemName: data.itemName, isDefault: true },
-        data: { isDefault: false },
-      }),
-      this.prisma.historicalRate.upsert({
-        where: { rfqQuoteId: data.rfqQuoteId },
-        create: {
-          id: randomUUID(),
-          businessId: data.businessId,
-          category: "MATERIAL",
-          itemName: data.itemName,
-          unit: data.unit,
-          rate: data.rate,
-          effectiveDate: new Date(),
-          sourceTenderId: data.sourceTenderId ?? null,
-          vendorId: data.vendorId,
-          rfqQuoteId: data.rfqQuoteId,
-          isDefault: true,
-          createdById: data.createdById,
-        },
-        update: {
-          itemName: data.itemName,
-          unit: data.unit,
-          rate: data.rate,
-          effectiveDate: new Date(),
-          sourceTenderId: data.sourceTenderId ?? null,
-          vendorId: data.vendorId,
-          isDefault: true,
-        },
-      }),
-    ]);
-  }
-
-  async recordVendorRates(rfqId: string, rows: VendorRateRow[]): Promise<number> {
+  async recordVendorRates(rfqId: string, businessId: string, rows: VendorRateRow[]): Promise<number> {
     const keepQuoteIds = rows.map((r) => r.rfqQuoteId);
     // Business rule (not a DB constraint): at most one VENDOR isDefault row per (business, item) —
     // the latest finalized purchase rate. Cleared before the upserts that set the new one.
-    const defaultItemKeys = rows.filter((r) => r.isDefault).map((r) => ({ businessId: r.businessId, itemId: r.itemId }));
+    const defaultItemKeys = rows.filter((r) => r.isDefault).map((r) => ({ businessId, itemId: r.itemId }));
     await this.prisma.$transaction([
       this.prisma.historicalRate.deleteMany({
-        where: { kind: "VENDOR", rfqQuote: { rfqItem: { rfqId } }, rfqQuoteId: { notIn: keepQuoteIds } },
+        where: { businessId, kind: "VENDOR", rfqQuote: { rfqItem: { rfqId } }, rfqQuoteId: { notIn: keepQuoteIds } },
       }),
       ...defaultItemKeys.map((key) =>
         this.prisma.historicalRate.updateMany({
@@ -278,10 +224,10 @@ export class HistoricalRatesRepository implements IHistoricalRatesRepository {
     return rows.length;
   }
 
-  async replaceOwnRates(tenderId: string, rows: OwnRateRow[]): Promise<void> {
+  async replaceOwnRates(tenderId: string, businessId: string, rows: OwnRateRow[]): Promise<void> {
     const now = new Date();
     await this.prisma.$transaction([
-      this.prisma.historicalRate.deleteMany({ where: { kind: "OWN", sourceTenderId: tenderId } }),
+      this.prisma.historicalRate.deleteMany({ where: { businessId, kind: "OWN", sourceTenderId: tenderId } }),
       this.prisma.historicalRate.createMany({
         data: rows.map((row) => ({
           id: randomUUID(),
