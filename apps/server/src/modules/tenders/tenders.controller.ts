@@ -16,6 +16,7 @@ import type {
   ExtractTenderDocumentBody,
   ListTendersQueryParsed,
   PinTenderNoteBody,
+  SetRatesLockBody,
   SetTenderTagsBody,
   UpdateCompetitorBody,
   UpdateTenderBody,
@@ -129,6 +130,16 @@ export class TendersController {
       roleId: req.user!.roleId,
     });
     sendSuccess(res, tender, "Tender status updated");
+  });
+
+  setRatesLock = asyncHandler(async (req, res) => {
+    const body = req.body as SetRatesLockBody;
+    const tender = await this.tendersService.setRatesLock(req.params.id!, body.locked, req.user!.id, {
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+      businessId: req.user!.businessId,
+    });
+    sendSuccess(res, tender, body.locked ? "Tender rates finalized" : "Tender rates unlocked");
   });
 
   statusHistory = asyncHandler(async (req, res) => {

@@ -111,6 +111,12 @@ export interface StatusChangeData {
   winnerName?: string | null;
   winningBidAmount?: number | null;
   lossReason?: string | null;
+  submissionReference?: string;
+}
+
+export interface RatesLockData {
+  ratesLockedAt: Date | null;
+  ratesLockedById: string | null;
 }
 
 export interface CreateCompetitorData {
@@ -133,6 +139,7 @@ export interface ITendersRepository {
   create(data: CreateTenderData): Promise<TenderDetail>;
   update(id: string, data: UpdateTenderData): Promise<TenderDetail>;
   updateStatus(id: string, data: StatusChangeData): Promise<TenderDetail>;
+  setRatesLock(id: string, data: RatesLockData): Promise<TenderDetail>;
   delete(id: string): Promise<void>;
 
   findAssignee(tenderId: string, userId: string): Promise<{ id: string } | null>;
@@ -253,6 +260,10 @@ export class TendersRepository implements ITendersRepository {
   }
 
   updateStatus(id: string, data: StatusChangeData): Promise<TenderDetail> {
+    return this.prisma.tender.update({ where: { id }, data, ...tenderDetailArgs });
+  }
+
+  setRatesLock(id: string, data: RatesLockData): Promise<TenderDetail> {
     return this.prisma.tender.update({ where: { id }, data, ...tenderDetailArgs });
   }
 

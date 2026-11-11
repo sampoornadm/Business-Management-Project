@@ -16,6 +16,7 @@ import {
   exportTendersQuerySchema,
   listTendersQuerySchema,
   pinTenderNoteSchema,
+  setRatesLockSchema,
   setTenderTagsSchema,
   updateCompetitorSchema,
   updateTenderSchema,
@@ -240,6 +241,39 @@ export function createTendersRouter(controller: TendersController): Router {
     requirePermission("tenders:change_status"),
     validate(changeTenderStatusSchema),
     controller.changeStatus,
+  );
+
+  /**
+   * @openapi
+   * /tenders/{id}/rates-lock:
+   *   put:
+   *     tags: [Tenders]
+   *     summary: Finalize (lock) or unlock the tender's BOQ rates — DRAFT only; SUBMITTED requires locked
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [locked]
+   *             properties:
+   *               locked: { type: boolean }
+   *     responses:
+   *       200: { description: Rates lock updated }
+   *       409: { description: Tender is not a draft }
+   */
+  router.put(
+    "/:id/rates-lock",
+    authenticateMiddleware,
+    requirePermission("boq:update"),
+    validate(setRatesLockSchema),
+    controller.setRatesLock,
   );
 
   /**
