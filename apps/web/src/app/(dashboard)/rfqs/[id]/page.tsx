@@ -48,11 +48,10 @@ import { QuoteSheetActions } from "@/components/rfq/quote-sheet-actions";
 import { PinnedTenderNotes } from "@/components/tenders/pinned-tender-notes";
 import { useCreatePurchaseOrderFromRfq } from "@/hooks/use-purchase-orders";
 import {
-  useCloseRfq,
   useDeleteRfq,
+  useFinalizeRfqRates,
   useInviteVendor,
   usePreviewInviteVendor,
-  usePushRatesToTender,
   useReopenRfq,
   useRemoveRfqVendor,
   useAddRfqVendor,
@@ -97,10 +96,9 @@ export default function RfqDetailPage() {
   const [addVendorId, setAddVendorId] = useState("");
   const upsertQuote = useUpsertRfqQuote(params.id);
   const selectQuote = useSelectQuote(params.id);
-  const pushRatesToTender = usePushRatesToTender(params.id);
   const previewInvite = usePreviewInviteVendor(params.id);
   const inviteVendorMutation = useInviteVendor(params.id);
-  const closeRfq = useCloseRfq(params.id);
+  const finalizeRates = useFinalizeRfqRates(params.id);
   const reopenRfq = useReopenRfq(params.id);
   const createPoFromRfq = useCreatePurchaseOrderFromRfq();
   const deleteRfq = useDeleteRfq();
@@ -116,19 +114,6 @@ export default function RfqDetailPage() {
       toast({
         variant: "destructive",
         title: "Could not select quote",
-        description: error instanceof Error ? error.message : "Please try again.",
-      });
-    }
-  }
-
-  async function handlePushRates() {
-    try {
-      const result = await pushRatesToTender.mutateAsync();
-      toast({ title: `Pushed rates for ${result.updatedItems} item(s) to the tender` });
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Could not push rates",
         description: error instanceof Error ? error.message : "Please try again.",
       });
     }
@@ -175,14 +160,23 @@ export default function RfqDetailPage() {
     }
   }
 
-  async function handleClose() {
+  async function handleFinalizeRates() {
     try {
-      await closeRfq.mutateAsync();
-      toast({ title: "RFQ closed" });
+      const result = await finalizeRates.mutateAsync();
+      const tenderPart = rfqQuery.data?.tenderId
+        ? ` · ${result.tenderItemsUpdated} tender item(s) got a base rate` +
+          (result.tenderItemsSkipped > 0 ? `, ${result.tenderItemsSkipped} skipped` : "")
+        : "";
+      toast({
+        title: "Rates finalized",
+        description: result.tenderLocked
+          ? `${result.vendorRatesRecorded} vendor rate(s) recorded. Tender rates are locked — unlock them on the tender and finalize again to update base rates.`
+          : `${result.vendorRatesRecorded} vendor rate(s) recorded${tenderPart}.`,
+      });
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Could not close RFQ",
+        title: "Could not finalize rates",
         description: error instanceof Error ? error.message : "Please try again.",
       });
     }
@@ -261,9 +255,29 @@ export default function RfqDetailPage() {
           </Button>
         )}
         {canUpdate && !isFinalized && (
-          <Button variant="outline" onClick={handleClose} disabled={closeRfq.isPending}>
-            Close RFQ
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" disabled={finalizeRates.isPending}>
+                Finalize rates
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Finalize rates for this RFQ?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This closes the RFQ and records every vendor&apos;s quoted rate against its item.
+                  {rfq.tenderId
+                    ? " Each item's selected quote becomes the base rate on the linked tender (15% markup the first time)."
+                    : ""}{" "}
+                  You can reopen it later to change quotes and finalize again.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleFinalizeRates}>Finalize rates</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         )}
         {canDelete && rfq.status === "DRAFT" && (
           <AlertDialog>
@@ -336,11 +350,6 @@ export default function RfqDetailPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        )}
-        {rfq.status === "CLOSED" && canUpdate && (
-          <Button variant="outline" onClick={handlePushRates} disabled={pushRatesToTender.isPending}>
-            Push rates to tender
-          </Button>
         )}
         {rfq.status === "CLOSED" && canCreatePo && (
           <Button onClick={handleCreatePo}>

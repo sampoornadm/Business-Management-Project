@@ -1,6 +1,6 @@
 "use client";
 
-import { formatItemCodeForDisplay } from "@bmp/types";
+import { formatItemCodeForDisplay, type ItemOwnRateDto, type ItemVendorRateDto } from "@bmp/types";
 import {
   Badge,
   Button,
@@ -41,6 +41,8 @@ import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { hasPermission } from "@/lib/permissions";
 
 const UNCLASSIFIED = "none";
+/** Rate histories show this many recent years by default; older rows sit behind "Show all". */
+const RECENT_YEARS = 5;
 
 export default function ItemDetailPage() {
   const params = useParams<{ id: string }>();
@@ -143,7 +145,8 @@ export default function ItemDetailPage() {
         </div>
         <p className="text-sm text-muted-foreground">
           {item.itemCode ? `Code ${formatItemCodeForDisplay(item.itemCode)} · ` : ""}
-          {item.entries.length} price record(s){item.unit ? ` · unit: ${item.unit}` : ""}
+          {item.vendorRates.length} vendor rate(s) · {item.ownRates.length} of my rate(s)
+          {item.unit ? ` · unit: ${item.unit}` : ""}
         </p>
       </div>
 
@@ -245,73 +248,149 @@ export default function ItemDetailPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Price history</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-auto">
-            <Table>
-              <TableHeader>
+      <VendorRatesCard rates={item.vendorRates} />
+      <OwnRatesCard rates={item.ownRates} />
+    </div>
+  );
+}
+
+/** Rows from the last RECENT_YEARS years unless `showAll`; also how many older rows are hidden. */
+function useRecent<T extends { effectiveDate: string }>(rows: T[]) {
+  const [showAll, setShowAll] = useState(false);
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - RECENT_YEARS);
+  const recent = rows.filter((row) => new Date(row.effectiveDate) >= cutoff);
+  return { visible: showAll ? rows : recent, hiddenCount: rows.length - recent.length, showAll, setShowAll };
+}
+
+function ShowAllToggle({ hiddenCount, showAll, onToggle }: { hiddenCount: number; showAll: boolean; onToggle: () => void }) {
+  if (hiddenCount === 0) return null;
+  return (
+    <Button variant="ghost" size="sm" onClick={onToggle}>
+      {showAll ? `Show last ${RECENT_YEARS} years` : `Show all (${hiddenCount} older)`}
+    </Button>
+  );
+}
+
+function VendorRatesCard({ rates }: { rates: ItemVendorRateDto[] }) {
+  const { visible, hiddenCount, showAll, setShowAll } = useRecent(rates);
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-base">Vendor rates</CardTitle>
+        <ShowAllToggle hiddenCount={hiddenCount} showAll={showAll} onToggle={() => setShowAll(!showAll)} />
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Vendor</TableHead>
+                <TableHead className="text-right">Rate</TableHead>
+                <TableHead>Make / Model</TableHead>
+                <TableHead>RFQ</TableHead>
+                <TableHead>Date</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visible.length === 0 ? (
                 <TableRow>
-                  <TableHead>Tender</TableHead>
-                  <TableHead>RFQ</TableHead>
-                  <TableHead>Vendor</TableHead>
-                  <TableHead className="text-right">Rate</TableHead>
-                  <TableHead>Make / Model</TableHead>
-                  <TableHead className="text-right">Qty</TableHead>
-                  <TableHead>Date</TableHead>
+                  <TableCell colSpan={5} className="h-20 text-center text-sm text-muted-foreground">
+                    No vendor rates yet — they are recorded when an RFQ&apos;s rates are finalized.
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {item.entries.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-20 text-center text-sm text-muted-foreground">
-                      No priced quotes yet for this item.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  item.entries.map((entry) => (
-                    <TableRow key={entry.quoteId}>
-                      <TableCell>
-                        {entry.tenderId ? (
-                          <Link href={`/tenders/${entry.tenderId}`} className="hover:underline">
-                            {entry.tenderName}
+              ) : (
+                visible.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {row.vendorId ? (
+                          <Link href={`/vendors/${row.vendorId}`} className="hover:underline">
+                            {row.vendorName}
                           </Link>
                         ) : (
-                          <span className="text-muted-foreground">Standalone</span>
+                          <span className="text-muted-foreground">-</span>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <Link href={`/rfqs/${entry.rfqId}`} className="text-primary hover:underline">
-                          {entry.rfqTitle}
+                        {row.isDefault && <Badge variant="secondary">Selected</Badge>}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{row.rate.toLocaleString()}</TableCell>
+                    <TableCell>
+                      {!row.make || (row.make === "Unbranded" && row.model === "Generic") ? "-" : `${row.make} / ${row.model}`}
+                    </TableCell>
+                    <TableCell>
+                      {row.rfqId ? (
+                        <Link href={`/rfqs/${row.rfqId}`} className="text-primary hover:underline">
+                          View RFQ
                         </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Link href={`/vendors/${entry.vendorId}`} className="hover:underline">
-                          {entry.vendorName}
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>{formatDate(row.effectiveDate)}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OwnRatesCard({ rates }: { rates: ItemOwnRateDto[] }) {
+  const { visible, hiddenCount, showAll, setShowAll } = useRecent(rates);
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-base">My rates</CardTitle>
+        <ShowAllToggle hiddenCount={hiddenCount} showAll={showAll} onToggle={() => setShowAll(!showAll)} />
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tender</TableHead>
+                <TableHead className="text-right">My rate</TableHead>
+                <TableHead className="text-right">Base rate</TableHead>
+                <TableHead className="text-right">Markup</TableHead>
+                <TableHead>Submitted</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visible.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-20 text-center text-sm text-muted-foreground">
+                    No rates of mine yet — they are recorded when a tender is submitted.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                visible.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>
+                      {row.tenderId ? (
+                        <Link href={`/tenders/${row.tenderId}`} className="hover:underline">
+                          {row.tenderNumber ?? "Tender"}
                         </Link>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums font-medium">
-                        {entry.rate.toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        {entry.make === "Unbranded" && entry.model === "Generic"
-                          ? "-"
-                          : `${entry.make} / ${entry.model}`}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {entry.quantity.toLocaleString()}
-                      </TableCell>
-                      <TableCell>{formatDate(entry.quotedAt)}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{row.rate.toLocaleString()}</TableCell>
+                    <TableCell className="text-right tabular-nums">{row.baseRate?.toLocaleString() ?? "-"}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.markupPercent !== null ? `${row.markupPercent}%` : "-"}
+                    </TableCell>
+                    <TableCell>{formatDate(row.effectiveDate)}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -3,6 +3,7 @@
 import type {
   ApiResponse,
   CreateRfqInput,
+  FinalizeRfqRatesResultDto,
   InviteVendorInput,
   InviteVendorPreviewDto,
   InviteVendorPreviewInput,
@@ -218,27 +219,22 @@ export function useSelectQuote(rfqId: string) {
   });
 }
 
-export function usePushRatesToTender(rfqId: string) {
+/**
+ * RFQ "Finalize rates": closes the RFQ, records vendor rates and sets the linked tender's base
+ * rates — so the tender BOQ and the item inventory are refreshed too, not just this RFQ.
+ */
+export function useFinalizeRfqRates(rfqId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const response = await apiClient.post<ApiResponse<{ updatedItems: number }>>(
-        `/rfqs/${rfqId}/push-rates-to-tender`,
-      );
+      const response = await apiClient.post<ApiResponse<FinalizeRfqRatesResultDto>>(`/rfqs/${rfqId}/finalize-rates`);
       return unwrap(response.data);
     },
-    onSuccess: () => invalidateRfq(queryClient, rfqId),
-  });
-}
-
-export function useCloseRfq(id: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const response = await apiClient.post<ApiResponse<RfqDto>>(`/rfqs/${id}/close`);
-      return unwrap(response.data);
+    onSuccess: () => {
+      invalidateRfq(queryClient, rfqId);
+      void queryClient.invalidateQueries({ queryKey: ["tenders"] });
+      void queryClient.invalidateQueries({ queryKey: ["items"] });
     },
-    onSuccess: () => invalidateRfq(queryClient, id),
   });
 }
 
