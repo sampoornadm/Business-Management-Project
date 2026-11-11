@@ -145,7 +145,8 @@ This part builds the rate trail itself. Part 2 builds the history/change-log on 
 - The submit action opens a small dialog asking for the submission reference number (required),
   prefilled with the previous one if any. Stored on the tender; included in the
   `TENDER_STATUS_CHANGED` metadata.
-- In the same transaction: for each current-BOQ item with a rate, resolve its `Item` (same exact
+- Just before the status write (an idempotent replace, so a failed status write is safely retried):
+  for each current-BOQ item with a rate, resolve its `Item` (same exact
   canonical-name find-or-create rule already used by `items.service.ts#backfill` and
   `boq.service.ts#propagateHsnToItem`) and upsert one "my rate" row for (tender, item) with rate, base
   rate, markup, date.
