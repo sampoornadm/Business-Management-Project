@@ -1,7 +1,14 @@
-import type { ItemDetailDto, ItemListEntryDto, ItemPriceHistoryDto, ItemSortField } from "@bmp/types";
+import type {
+  ItemDetailDto,
+  ItemListEntryDto,
+  ItemOwnRateDto,
+  ItemSortField,
+  ItemVendorRateDto,
+} from "@bmp/types";
 
 import { round2 } from "../../shared/utils/math.js";
 import type { ExportableTable } from "../../shared/utils/table-export.js";
+import type { ItemRateRow } from "../rates/rates.repository.js";
 
 import type { ItemQuoteRow, ItemRow } from "./items.repository.js";
 
@@ -74,7 +81,7 @@ export function toItemListEntryDto(
 
 export function toItemDetailDto(
   item: ItemRow,
-  entries: ItemPriceHistoryDto[],
+  rates: ItemRateRow[],
   categoryPath: string | null,
 ): ItemDetailDto {
   return {
@@ -87,7 +94,34 @@ export function toItemDetailDto(
     confirmed: item.categoryConfirmed,
     aiConfidence: item.aiConfidence,
     needsReview: item.needsReview,
-    entries,
+    vendorRates: rates.filter((r) => r.kind === "VENDOR").map(toItemVendorRateDto),
+    ownRates: rates.filter((r) => r.kind === "OWN").map(toItemOwnRateDto),
+  };
+}
+
+function toItemVendorRateDto(row: ItemRateRow): ItemVendorRateDto {
+  return {
+    id: row.id,
+    rate: row.rate,
+    effectiveDate: row.effectiveDate.toISOString(),
+    vendorId: row.vendor?.id ?? null,
+    vendorName: row.vendor?.name ?? null,
+    rfqId: row.rfqQuote?.rfqItem.rfqId ?? null,
+    make: row.rfqQuote?.make ?? null,
+    model: row.rfqQuote?.model ?? null,
+    isDefault: row.isDefault,
+  };
+}
+
+function toItemOwnRateDto(row: ItemRateRow): ItemOwnRateDto {
+  return {
+    id: row.id,
+    rate: row.rate,
+    baseRate: row.baseRate,
+    markupPercent: row.markupPercent,
+    effectiveDate: row.effectiveDate.toISOString(),
+    tenderId: row.sourceTenderId,
+    tenderNumber: row.tenderNumber,
   };
 }
 

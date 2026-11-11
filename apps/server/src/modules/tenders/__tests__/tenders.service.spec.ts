@@ -10,9 +10,9 @@ import type { AuditService } from "../../audit/audit.service.js";
 import type { IBoqRepository } from "../../boq/boq.repository.js";
 import type { IBusinessesRepository } from "../../businesses/businesses.repository.js";
 import type { IItemsRepository } from "../../items/items.repository.js";
-import type { IHistoricalRatesRepository, OwnRateRow } from "../../rates/rates.repository.js";
 import type { NotificationsService } from "../../notifications/notifications.service.js";
 import type { IOrganizationsRepository, OrganizationEntity } from "../../organizations/organizations.repository.js";
+import type { IHistoricalRatesRepository, OwnRateRow } from "../../rates/rates.repository.js";
 import type { ITagsRepository } from "../../tags/tags.repository.js";
 import type { IUsersRepository } from "../../users/users.repository.js";
 import type {
