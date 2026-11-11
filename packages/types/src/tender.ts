@@ -360,6 +360,49 @@ export interface TenderStatusHistoryEntryDto {
   remarks: string | null;
   changedBy: { id: string; firstName: string; lastName: string } | null;
   changedAt: string;
+  /** Set when this status change was a fresh submission (DRAFT → SUBMITTED, …). */
+  submission: { number: number; reference: string | null; summary: string } | null;
+}
+
+/** One leaf BOQ line as frozen in a tender submission. */
+export interface TenderSubmissionLineDto {
+  boqItemId: string;
+  description: string;
+  unit: string | null;
+  quantity: number | null;
+  rate: number | null;
+  amount: number | null;
+  baseRate: number | null;
+  markupPercent: number | null;
+  vendorId: string | null;
+  vendorName: string | null;
+  hsnCode: string | null;
+  technicalDeviation: string | null;
+}
+
+export type SubmissionLineField =
+  | "rate"
+  | "baseRate"
+  | "markupPercent"
+  | "vendor"
+  | "quantity"
+  | "hsnCode"
+  | "technicalDeviation";
+
+/** A line present in both submissions, with the fields that differ. */
+export interface SubmissionLineDiff {
+  before: TenderSubmissionLineDto;
+  after: TenderSubmissionLineDto;
+  changed: SubmissionLineField[];
+}
+
+/** What changed between a submission and the one immediately before it. */
+export interface SubmissionChanges {
+  reference: { before: string | null; after: string | null } | null;
+  total: { before: number; after: number } | null;
+  lines: SubmissionLineDiff[];
+  added: TenderSubmissionLineDto[];
+  removed: TenderSubmissionLineDto[];
 }
 
 export interface TenderDashboardStatsDto {

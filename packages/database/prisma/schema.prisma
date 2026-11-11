@@ -40,6 +40,7 @@ model User {
 
   createdTenders         Tender[]               @relation("TenderCreatedBy")
   ratesLockedTenders     Tender[]               @relation("TenderRatesLockedBy")
+  tenderSubmissions      TenderSubmission[]     @relation("TenderSubmittedBy")
   tenderAssignments      TenderAssignee[]       @relation("TenderAssignee")
   tenderAssignmentsGiven TenderAssignee[]       @relation("TenderAssignedBy")
   pinnedTenderNotes      TenderPinnedNote[]      @relation("TenderPinnedBy")
@@ -159,6 +160,7 @@ model Business {
   savedViews      SavedView[]
   portalBids      PortalBid[]
   portalProfiles  PortalProfile[]
+  tenderSubmissions TenderSubmission[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -264,6 +266,9 @@ model AuditLog {
   action     String
   entityType String?
   entityId   String?
+  // Human-readable code of the entity (tender number, PO number, item code, …), resolved and stored
+  // when the row is written (AuditService.log) so it survives the entity being deleted.
+  entityCode String?
   metadata   Json?
   ipAddress  String?
   userAgent  String?
@@ -272,6 +277,7 @@ model AuditLog {
 
   @@index([actorId])
   @@index([entityType, entityId])
+  @@index([entityCode])
   @@index([createdAt])
   @@map("audit_logs")
 }
@@ -580,6 +586,7 @@ model Tender {
   rfqs           Rfq[]
   purchaseOrders PurchaseOrder[]
   bills          Bill[]
+  submissions    TenderSubmission[]
   project        Project?
 
   createdAt DateTime @default(now())
@@ -592,6 +599,33 @@ model Tender {
   @@index([kind])
   @@index([convertedFromId])
   @@map("tenders")
+}
+
+// One fresh submission of a tender (DRAFT → SUBMITTED, or CANCELLED → SUBMITTED before any
+// submission exists): a frozen copy of the current BOQ's leaf lines plus what changed since the
+// previous submission, rendered once into `summary`. Never updated after insert.
+// See docs/superpowers/specs/2026-11-12-submission-history-design.md.
+model TenderSubmission {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  tenderId   String
+  tender     Tender   @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+
+  number              Int
+  submissionReference String?
+  totalAmount         Float
+  lines               Json // TenderSubmissionLineDto[]
+  changes             Json? // SubmissionChanges vs the previous submission; null for #1
+  summary             String
+
+  submittedById String?
+  submittedBy   User?    @relation("TenderSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
+  submittedAt   DateTime @default(now())
+
+  @@unique([tenderId, number])
+  @@index([businessId])
+  @@map("tender_submissions")
 }
 
 model TenderAssignee {
@@ -1256,8 +1290,11 @@ model RfqQuote {
   // fixes a typo.
   quotedAt DateTime @default(now())
 
-  remarks   String?
-  updatedAt DateTime @updatedAt
+  // The vendor's technical deviation for this line ("Technical deviation (if any)" on the quote
+  // sheet). Normalised on write: "No"/"NA"/"Nil"/blank are stored as null (technical-deviation.ts).
+  // Column kept as `remarks` — it held the same free text before the rename.
+  technicalDeviation String?  @map("remarks")
+  updatedAt          DateTime @updatedAt
 
   isSelected Boolean @default(false)
 
