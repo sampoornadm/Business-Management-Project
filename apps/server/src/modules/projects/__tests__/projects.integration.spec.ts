@@ -45,11 +45,17 @@ describe("Project execution workflow (integration)", () => {
       });
     const newTenderId = tenderResponse.body.data.id as string;
 
+    // Rates must be finalized (locked) before a tender can be submitted.
+    const lockResponse = await request(app)
+      .put(`/api/v1/tenders/${newTenderId}/rates-lock`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ locked: true });
+    expect(lockResponse.status).toBe(200);
     for (const status of WON_TRANSITION_CHAIN) {
       const response = await request(app)
         .patch(`/api/v1/tenders/${newTenderId}/status`)
         .set("Authorization", `Bearer ${accessToken}`)
-        .send({ status });
+        .send({ status, submissionReference: "REF-1" });
       expect(response.status).toBe(200);
     }
     const wonResponse = await request(app)

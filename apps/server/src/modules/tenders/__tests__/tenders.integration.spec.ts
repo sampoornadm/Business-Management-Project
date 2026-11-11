@@ -46,6 +46,51 @@ describe("Tender workflow (integration)", () => {
     await prisma.$disconnect();
   });
 
+  async function lockRates(tenderId: string): Promise<void> {
+    const response = await request(app)
+      .put(`/api/v1/tenders/${tenderId}/rates-lock`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ locked: true });
+    expect(response.status).toBe(200);
+  }
+
+  it("lock → submit gating", async () => {
+    const createResponse = await request(app)
+      .post("/api/v1/tenders")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        tenderNumber: `TND-${randomUUID().slice(0, 8)}`,
+        title: "Gated Tender",
+        clientId: organizationId,
+        submissionDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+    expect(createResponse.status).toBe(201);
+    const tenderId = createResponse.body.data.id as string;
+
+    const unlockedSubmit = await request(app)
+      .patch(`/api/v1/tenders/${tenderId}/status`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ status: "SUBMITTED", submissionReference: "ABC/123" });
+    expect(unlockedSubmit.status).toBe(400);
+
+    await lockRates(tenderId);
+    const submit = await request(app)
+      .patch(`/api/v1/tenders/${tenderId}/status`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ status: "SUBMITTED", submissionReference: "ABC/123" });
+    expect(submit.status).toBe(200);
+
+    const unlockWhileSubmitted = await request(app)
+      .put(`/api/v1/tenders/${tenderId}/rates-lock`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ locked: false });
+    expect(unlockWhileSubmitted.status).toBe(409);
+
+    const fetched = await request(app).get(`/api/v1/tenders/${tenderId}`).set("Authorization", `Bearer ${accessToken}`);
+    expect(fetched.body.data.submissionReference).toBe("ABC/123");
+    expect(fetched.body.data.ratesLockedAt).not.toBeNull();
+  });
+
   it("creates a tender, advances its status through valid transitions, and records history", async () => {
     const createResponse = await request(app)
       .post("/api/v1/tenders")
@@ -67,10 +112,11 @@ describe("Tender workflow (integration)", () => {
     const tenderId = createResponse.body.data.id as string;
     expect(createResponse.body.data.status).toBe("DRAFT");
 
+    await lockRates(tenderId);
     const firstTransition = await request(app)
       .patch(`/api/v1/tenders/${tenderId}/status`)
       .set("Authorization", `Bearer ${accessToken}`)
-      .send({ status: "SUBMITTED" });
+      .send({ status: "SUBMITTED", submissionReference: "REF-1" });
     expect(firstTransition.status).toBe(200);
     expect(firstTransition.body.data.status).toBe("SUBMITTED");
 
@@ -115,10 +161,11 @@ describe("Tender workflow (integration)", () => {
       });
     const tenderId = createResponse.body.data.id as string;
 
+    await lockRates(tenderId);
     await request(app)
       .patch(`/api/v1/tenders/${tenderId}/status`)
       .set("Authorization", `Bearer ${accessToken}`)
-      .send({ status: "SUBMITTED" });
+      .send({ status: "SUBMITTED", submissionReference: "REF-1" });
 
     const deleteResponse = await request(app)
       .delete(`/api/v1/tenders/${tenderId}`)

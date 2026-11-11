@@ -88,8 +88,15 @@ export const changeTenderStatusSchema = z.object({
   winnerName: z.string().max(200).optional(),
   winningBidAmount: z.coerce.number().nonnegative().optional(),
   lossReason: z.string().max(2000).optional(),
+  // Asked for on DRAFT/CANCELLED → SUBMITTED (required there for TENDER kind, see TendersService).
+  submissionReference: z.string().trim().min(1).max(200).optional(),
 });
 export type ChangeTenderStatusBody = z.infer<typeof changeTenderStatusSchema>;
+
+export const setRatesLockSchema = z.object({
+  locked: z.boolean(),
+});
+export type SetRatesLockBody = z.infer<typeof setRatesLockSchema>;
 
 export const addAssigneeSchema = z.object({
   userId: z.string().uuid(),

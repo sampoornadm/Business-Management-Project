@@ -7,7 +7,10 @@ import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from ".
 import type { EmailService } from "../../../infra/mailer/email.service.js";
 import type { AttachmentsService } from "../../attachments/attachments.service.js";
 import type { AuditService } from "../../audit/audit.service.js";
+import type { IBoqRepository } from "../../boq/boq.repository.js";
 import type { IBusinessesRepository } from "../../businesses/businesses.repository.js";
+import type { IItemsRepository } from "../../items/items.repository.js";
+import type { IHistoricalRatesRepository, OwnRateRow } from "../../rates/rates.repository.js";
 import type { NotificationsService } from "../../notifications/notifications.service.js";
 import type { IOrganizationsRepository, OrganizationEntity } from "../../organizations/organizations.repository.js";
 import type { ITagsRepository } from "../../tags/tags.repository.js";
@@ -64,6 +67,10 @@ function buildTender(overrides: Partial<TenderDetail> = {}): TenderDetail {
     competitors: [],
     pinnedNotes: [],
     tags: [],
+    ratesLockedAt: null,
+    ratesLockedById: null,
+    ratesLockedBy: null,
+    submissionReference: null,
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -112,6 +119,13 @@ class FakeTendersRepository implements Partial<ITendersRepository> {
   }
 
   async updateStatus(id: string, data: StatusChangeData) {
+    const tender = this.tenders.get(id);
+    if (!tender) throw new Error("not found");
+    Object.assign(tender, data);
+    return tender;
+  }
+
+  async setRatesLock(id: string, data: { ratesLockedAt: Date | null; ratesLockedById: string | null }) {
     const tender = this.tenders.get(id);
     if (!tender) throw new Error("not found");
     Object.assign(tender, data);
@@ -296,8 +310,37 @@ class FakeBusinessesRepository implements Partial<IBusinessesRepository> {
 
 const BUSINESS_ID = randomUUID();
 
+class FakeBoqRepository implements Partial<IBoqRepository> {
+  /** tenderId → current BOQ's items */
+  itemsByTender = new Map<string, Record<string, unknown>[]>();
+
+  async findCurrentBoq(tenderId: string) {
+    return this.itemsByTender.has(tenderId) ? ({ id: `boq-${tenderId}`, tenderId } as never) : null;
+  }
+
+  async findItemsByBoqId(boqId: string) {
+    return (this.itemsByTender.get(boqId.replace(/^boq-/, "")) ?? []) as never;
+  }
+}
+
+class FakeItemsRepository implements Partial<IItemsRepository> {
+  async findOrCreateItem(_businessId: string, canonicalName: string) {
+    return { id: `item:${canonicalName}` };
+  }
+}
+
+class FakeRatesRepository implements Partial<IHistoricalRatesRepository> {
+  ownRates = new Map<string, OwnRateRow[]>();
+
+  async replaceOwnRates(tenderId: string, _businessId: string, rows: OwnRateRow[]) {
+    this.ownRates.set(tenderId, rows);
+  }
+}
+
 describe("TendersService", () => {
   let tendersRepository: FakeTendersRepository;
+  let boqRepository: FakeBoqRepository;
+  let ratesRepository: FakeRatesRepository;
   let auditService: AuditService;
   let notificationsService: NotificationsService;
   let emailService: EmailService;
@@ -323,6 +366,8 @@ describe("TendersService", () => {
 
   beforeEach(() => {
     tendersRepository = new FakeTendersRepository();
+    boqRepository = new FakeBoqRepository();
+    ratesRepository = new FakeRatesRepository();
     // Stateful enough for the status-undo check: list() returns the newest log() entry.
     const auditLogs: AuditLogDto[] = [];
     auditService = {
@@ -361,8 +406,18 @@ describe("TendersService", () => {
       notificationsService,
       emailService,
       hasPermission,
+      boqRepository as unknown as IBoqRepository,
+      new FakeItemsRepository() as unknown as IItemsRepository,
+      ratesRepository as unknown as IHistoricalRatesRepository,
     );
   });
+
+  /** A draft tender whose rates are already finalized, ready to be submitted. */
+  async function createLocked(input: Omit<CreateTenderData, "businessId"> = baseInput) {
+    const created = await service.create(input, ctx);
+    tendersRepository.tenders.get(created.id)!.ratesLockedAt = new Date();
+    return created;
+  }
 
   it("creates a tender", async () => {
     const dto = await service.create(baseInput, ctx);
@@ -382,36 +437,36 @@ describe("TendersService", () => {
   });
 
   it("allows a valid status transition", async () => {
-    const created = await service.create(baseInput, ctx);
-    const updated = await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    const created = await createLocked();
+    const updated = await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
     expect(updated.status).toBe("SUBMITTED");
   });
 
   it("rejects an illegal status transition", async () => {
-    const created = await service.create(baseInput, ctx);
+    const created = await createLocked();
     await expect(
       service.changeStatus(created.id, { status: "WON" }, actorId, ctx),
     ).rejects.toThrow(BadRequestError);
   });
 
   it("allows reopening a WON tender back to SUBMITTED", async () => {
-    const created = await service.create(baseInput, ctx);
-    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    const created = await createLocked();
+    await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
     await service.changeStatus(created.id, { status: "WON" }, actorId, ctx);
-    const reopened = await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    const reopened = await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
     expect(reopened.status).toBe("SUBMITTED");
   });
 
   it("allows reopening a CANCELLED tender all the way back to DRAFT", async () => {
-    const created = await service.create(baseInput, ctx);
+    const created = await createLocked();
     await service.changeStatus(created.id, { status: "CANCELLED" }, actorId, ctx);
     const reopened = await service.changeStatus(created.id, { status: "DRAFT" }, actorId, ctx);
     expect(reopened.status).toBe("DRAFT");
   });
 
   it("rejects moving a tender back a stage without tenders:revert_status", async () => {
-    const created = await service.create(baseInput, ctx);
-    await service.changeStatus(created.id, { status: "SUBMITTED" }, randomUUID(), ctx);
+    const created = await createLocked();
+    await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, randomUUID(), ctx);
     hasPermission.mockResolvedValue(false);
     await expect(
       service.changeStatus(created.id, { status: "DRAFT" }, actorId, ctx),
@@ -421,19 +476,19 @@ describe("TendersService", () => {
 
   it("lets a non-admin undo their own status change right after making it", async () => {
     hasPermission.mockResolvedValue(false);
-    const created = await service.create(baseInput, ctx);
-    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    const created = await createLocked();
+    await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
     await service.changeStatus(created.id, { status: "WON" }, actorId, ctx);
-    const undone = await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    const undone = await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
     expect(undone.status).toBe("SUBMITTED");
   });
 
   it("stops a non-admin undoing their own status change once the undo window has passed", async () => {
     hasPermission.mockResolvedValue(false);
-    const created = await service.create(baseInput, ctx);
+    const created = await createLocked();
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
-      await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+      await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
       vi.setSystemTime(Date.now() + 5 * 60_000);
       await expect(
         service.changeStatus(created.id, { status: "DRAFT" }, actorId, ctx),
@@ -444,23 +499,23 @@ describe("TendersService", () => {
   });
 
   it("clears the recorded result when a WON tender is reopened", async () => {
-    const created = await service.create(baseInput, ctx);
-    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    const created = await createLocked();
+    await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
     await service.changeStatus(
       created.id,
       { status: "WON", winnerName: "Us", winningBidAmount: 4_850_000 },
       actorId,
       ctx,
     );
-    const reopened = await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    const reopened = await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
     expect(reopened.winnerName).toBeNull();
     expect(reopened.winningBidAmount).toBeNull();
     expect(reopened.lossReason).toBeNull();
   });
 
   it("rejects a direct terminal-to-terminal jump even after reopen support is added", async () => {
-    const created = await service.create(baseInput, ctx);
-    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    const created = await createLocked();
+    await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
     await service.changeStatus(created.id, { status: "WON" }, actorId, ctx);
     await expect(
       service.changeStatus(created.id, { status: "LOST" }, actorId, ctx),
@@ -468,8 +523,8 @@ describe("TendersService", () => {
   });
 
   it("notifies assignees and the creator on status change, excluding the actor", async () => {
-    const created = await service.create(baseInput, ctx);
-    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    const created = await createLocked();
+    await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
     // actorId === createdById here, and there are no other assignees, so no notification is sent
     expect(notificationsService.createMany).not.toHaveBeenCalled();
 
@@ -482,9 +537,116 @@ describe("TendersService", () => {
   });
 
   it("only allows deleting a tender while it is in Draft status", async () => {
-    const created = await service.create(baseInput, ctx);
-    await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+    const created = await createLocked();
+    await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
     await expect(service.delete(created.id, actorId, ctx)).rejects.toThrow(ConflictError);
+  });
+
+  describe("rates lock and submission", () => {
+    it("refuses SUBMITTED when rates are not locked", async () => {
+      const created = await service.create(baseInput, ctx);
+
+      await expect(
+        service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx),
+      ).rejects.toThrow("Finalize the tender's rates before submitting");
+    });
+
+    it("requires a reference when submitting a TENDER from DRAFT", async () => {
+      const created = await createLocked();
+
+      await expect(service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx)).rejects.toThrow(
+        "Submission reference number is required",
+      );
+    });
+
+    it("stores the reference and logs it with the status change", async () => {
+      const created = await createLocked();
+
+      const dto = await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "ABC/123" }, actorId, ctx);
+
+      expect(dto.submissionReference).toBe("ABC/123");
+      expect(auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "TENDER_STATUS_CHANGED",
+          metadata: expect.objectContaining({ submissionReference: "ABC/123" }),
+        }),
+      );
+    });
+
+    it("BUDGETARY submits without a reference", async () => {
+      const created = await createLocked({ ...baseInput, kind: "BUDGETARY" } as Omit<CreateTenderData, "businessId">);
+
+      const dto = await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+
+      expect(dto.status).toBe("SUBMITTED");
+    });
+
+    it("WON → SUBMITTED keeps the stored reference and needs none", async () => {
+      const created = await createLocked();
+      await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "ABC/123" }, actorId, ctx);
+      await service.changeStatus(created.id, { status: "WON" }, actorId, ctx);
+
+      const dto = await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+
+      expect(dto.status).toBe("SUBMITTED");
+      expect(dto.submissionReference).toBe("ABC/123");
+    });
+
+    it("submit writes own rates for priced current-BOQ items only, with base rate and markup", async () => {
+      const created = await createLocked();
+      boqRepository.itemsByTender.set(created.id, [
+        { id: "b1", description: "OPC Cement", unit: "bag", rate: 115, baseRate: 100, markupPercent: 15 },
+        { id: "b2", description: "Unpriced line", unit: "nos", rate: null, baseRate: null, markupPercent: null },
+        { id: "b3", description: "Hand priced", unit: null, rate: 40, baseRate: null, markupPercent: null },
+      ]);
+
+      await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
+
+      const rows = ratesRepository.ownRates.get(created.id)!;
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toMatchObject({ itemName: "OPC Cement", unit: "bag", rate: 115, baseRate: 100, markupPercent: 15, businessId: BUSINESS_ID, createdById: actorId });
+      expect(rows[0]!.itemId).toMatch(/^item:/);
+      expect(rows[1]).toMatchObject({ itemName: "Hand priced", unit: "unit", rate: 40, baseRate: null });
+    });
+
+    it("submit with no current BOQ succeeds and writes no own rates", async () => {
+      const created = await createLocked();
+
+      const dto = await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
+
+      expect(dto.status).toBe("SUBMITTED");
+      expect(ratesRepository.ownRates.get(created.id)).toEqual([]);
+    });
+
+    it("setRatesLock locks and unlocks a draft, recording who locked it", async () => {
+      const created = await service.create(baseInput, ctx);
+
+      const locked = await service.setRatesLock(created.id, true, actorId, ctx);
+      expect(locked.ratesLockedAt).not.toBeNull();
+      expect(tendersRepository.tenders.get(created.id)!.ratesLockedById).toBe(actorId);
+      expect(auditService.log).toHaveBeenCalledWith(expect.objectContaining({ action: "TENDER_RATES_LOCKED" }));
+
+      const unlocked = await service.setRatesLock(created.id, false, actorId, ctx);
+      expect(unlocked.ratesLockedAt).toBeNull();
+      expect(auditService.log).toHaveBeenCalledWith(expect.objectContaining({ action: "TENDER_RATES_UNLOCKED" }));
+    });
+
+    it("setRatesLock refuses outside DRAFT", async () => {
+      const created = await createLocked();
+      await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
+
+      await expect(service.setRatesLock(created.id, false, actorId, ctx)).rejects.toThrow(ConflictError);
+    });
+
+    it("reverting SUBMITTED → DRAFT leaves rates locked", async () => {
+      const created = await createLocked();
+      await service.changeStatus(created.id, { status: "SUBMITTED", submissionReference: "REF-1" }, actorId, ctx);
+
+      const dto = await service.changeStatus(created.id, { status: "DRAFT" }, actorId, ctx);
+
+      expect(dto.status).toBe("DRAFT");
+      expect(dto.ratesLockedAt).not.toBeNull();
+    });
   });
 
   describe("delivery period review flag", () => {

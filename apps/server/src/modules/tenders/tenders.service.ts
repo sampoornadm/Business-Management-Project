@@ -22,9 +22,13 @@ import { logger } from "../../shared/logger/logger.js";
 import { toAttachmentDto } from "../attachments/attachments.mapper.js";
 import type { AttachmentsService } from "../attachments/attachments.service.js";
 import type { AuditService } from "../audit/audit.service.js";
+import type { IBoqRepository } from "../boq/boq.repository.js";
 import type { IBusinessesRepository } from "../businesses/businesses.repository.js";
+import { deriveCanonicalName } from "../items/items.helpers.js";
+import type { IItemsRepository } from "../items/items.repository.js";
 import type { NotificationsService } from "../notifications/notifications.service.js";
 import type { IOrganizationsRepository } from "../organizations/organizations.repository.js";
+import type { IHistoricalRatesRepository, OwnRateRow } from "../rates/rates.repository.js";
 import type { ITagsRepository } from "../tags/tags.repository.js";
 import type { IUsersRepository } from "../users/users.repository.js";
 
@@ -60,6 +64,9 @@ export class TendersService {
     private readonly notificationsService: NotificationsService,
     private readonly emailService: EmailService,
     private readonly hasPermission: (roleId: string, permissionKey: string) => Promise<boolean>,
+    private readonly boqRepository: IBoqRepository,
+    private readonly itemsRepository: IItemsRepository,
+    private readonly ratesRepository: IHistoricalRatesRepository,
   ) {}
 
   async listTenders(
@@ -241,6 +248,19 @@ export class TendersService {
       throw new ForbiddenError("Only an admin can move a tender back to an earlier stage");
     }
 
+    if (input.status === "SUBMITTED") {
+      if (!tender.ratesLockedAt) throw new BadRequestError("Finalize the tender's rates before submitting");
+      // A fresh submission (from DRAFT/CANCELLED) needs its reference; undoing a WON/LOST result
+      // back to SUBMITTED is the same submission, so the stored reference stands.
+      const freshSubmission = previousStatus === "DRAFT" || previousStatus === "CANCELLED";
+      if (freshSubmission && tender.kind === "TENDER" && !input.submissionReference) {
+        throw new BadRequestError("Submission reference number is required");
+      }
+      // Before the status write on purpose: an idempotent replace, so a failed status write is
+      // retried safely instead of leaving a SUBMITTED tender with no rates in the inventory.
+      await this.recordOwnRates(id, actorId, context.businessId);
+    }
+
     // Leaving a result (reopen/undo) clears it, so a later Won/Lost never inherits stale fields.
     const keepsResult = TENDER_TERMINAL_STATUSES.includes(input.status);
     const updated = await this.tendersRepository.updateStatus(id, {
@@ -249,6 +269,7 @@ export class TendersService {
       winnerName: keepsResult ? input.winnerName : null,
       winningBidAmount: keepsResult ? input.winningBidAmount : null,
       lossReason: keepsResult ? input.lossReason : null,
+      ...(input.submissionReference ? { submissionReference: input.submissionReference } : {}),
     });
 
     await this.auditService.log({
@@ -256,7 +277,12 @@ export class TendersService {
       action: "TENDER_STATUS_CHANGED",
       entityType: "Tender",
       entityId: id,
-      metadata: { from: previousStatus, to: input.status, remarks: input.remarks ?? null },
+      metadata: {
+        from: previousStatus,
+        to: input.status,
+        remarks: input.remarks ?? null,
+        submissionReference: input.submissionReference ?? null,
+      },
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
     });
@@ -277,6 +303,53 @@ export class TendersService {
       });
     }
 
+    return toTenderDto(updated);
+  }
+
+  /** "My rate" per priced line of the current BOQ, written to the item inventory on submission. */
+  private async recordOwnRates(tenderId: string, actorId: string, businessId: string): Promise<void> {
+    const boq = await this.boqRepository.findCurrentBoq(tenderId, businessId);
+    const items = boq ? await this.boqRepository.findItemsByBoqId(boq.id) : [];
+    const rows: OwnRateRow[] = [];
+    for (const line of items) {
+      if (line.rate === null) continue;
+      const { id: itemId } = await this.itemsRepository.findOrCreateItem(
+        businessId,
+        deriveCanonicalName(null, line.description),
+        line.unit,
+      );
+      rows.push({
+        businessId,
+        itemId,
+        itemName: line.description,
+        unit: line.unit ?? "unit",
+        rate: line.rate,
+        baseRate: line.baseRate,
+        markupPercent: line.markupPercent,
+        createdById: actorId,
+      });
+    }
+    await this.ratesRepository.replaceOwnRates(tenderId, businessId, rows);
+  }
+
+  /** "Finalize rates" toggle on the Items tab. Only a DRAFT tender's rates can be locked/unlocked. */
+  async setRatesLock(id: string, locked: boolean, actorId: string, context: ScopedRequestContext): Promise<TenderDto> {
+    const tender = await this.assertTenderExists(id, context.businessId);
+    if (tender.status !== "DRAFT") {
+      throw new ConflictError("Rates can only be locked or unlocked while the tender is a draft");
+    }
+    const updated = await this.tendersRepository.setRatesLock(id, {
+      ratesLockedAt: locked ? new Date() : null,
+      ratesLockedById: locked ? actorId : null,
+    });
+    await this.auditService.log({
+      actorId,
+      action: locked ? "TENDER_RATES_LOCKED" : "TENDER_RATES_UNLOCKED",
+      entityType: "Tender",
+      entityId: id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+    });
     return toTenderDto(updated);
   }
 

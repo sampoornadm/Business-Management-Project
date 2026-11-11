@@ -7,6 +7,9 @@ import { auditService } from "../audit/audit.module.js";
 import { businessesRepository } from "../businesses/businesses.module.js";
 import { notificationsService } from "../notifications/notifications.module.js";
 import { organizationsRepository } from "../organizations/organizations.module.js";
+import { BoqRepository } from "../boq/boq.repository.js";
+import { ItemsRepository } from "../items/items.repository.js";
+import { HistoricalRatesRepository } from "../rates/rates.repository.js";
 import { TagsRepository } from "../tags/tags.repository.js";
 import { usersRepository } from "../users/users.module.js";
 
@@ -33,6 +36,9 @@ export const tendersService = new TendersService(
   notificationsService,
   emailService,
   roleHasPermission,
+  new BoqRepository(prisma),
+  new ItemsRepository(prisma),
+  new HistoricalRatesRepository(prisma),
 );
 // Adapts ollama.client's (prompt, model?, options?) to the service's own narrower (prompt,
 // options?) — the service never picks a model (always the env default), only ever a timeout.
