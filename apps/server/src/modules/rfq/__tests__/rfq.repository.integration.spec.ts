@@ -68,12 +68,21 @@ describe("RfqRepository (integration)", () => {
   });
 
   it("selecting a new quote unselects the previously-selected one for the same item", async () => {
-    await repository.selectQuote(rfqItemId, quoteAId);
+    await repository.selectQuote(rfqItemId, quoteAId, true);
 
     const quoteA = await prisma.rfqQuote.findUniqueOrThrow({ where: { id: quoteAId } });
     const quoteB = await prisma.rfqQuote.findUniqueOrThrow({ where: { id: quoteBId } });
     expect(quoteA.isSelected).toBe(true);
     expect(quoteB.isSelected).toBe(false);
+    expect((await prisma.rfqItem.findUniqueOrThrow({ where: { id: rfqItemId } })).selectionManual).toBe(true);
+  });
+
+  it("selectQuote(null) clears the item's selection and records an automatic pick", async () => {
+    await repository.selectQuote(rfqItemId, null, false);
+
+    const selected = await prisma.rfqQuote.count({ where: { rfqItemId, isSelected: true } });
+    expect(selected).toBe(0);
+    expect((await prisma.rfqItem.findUniqueOrThrow({ where: { id: rfqItemId } })).selectionManual).toBe(false);
   });
 
   describe("update", () => {
