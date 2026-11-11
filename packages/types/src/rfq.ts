@@ -31,7 +31,8 @@ export interface RfqQuoteDto {
   make: string;
   model: string;
   quotedAt: string;
-  remarks: string | null;
+  /** Vendor's technical deviation for this line; null = none ("No"/"NA"/blank are normalised away). */
+  technicalDeviation: string | null;
   updatedAt: string;
   isSelected: boolean;
 }
@@ -118,7 +119,7 @@ export interface UpsertRfqQuoteInput {
   make?: string;
   model?: string;
   quotedAt?: string;
-  remarks?: string;
+  technicalDeviation?: string;
 }
 
 export interface RfqComparisonQuoteDto {
@@ -182,7 +183,8 @@ export interface ItemPriceHistoryDto {
   make: string;
   model: string;
   quotedAt: string;
-  remarks: string | null;
+  /** Vendor's technical deviation for this line; null = none ("No"/"NA"/blank are normalised away). */
+  technicalDeviation: string | null;
   rfqId: string;
   rfqTitle: string;
   // Null when the quote's RFQ is standalone (not tied to a tender).

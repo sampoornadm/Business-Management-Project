@@ -18,6 +18,7 @@ export function toAuditLogDto(entity: AuditLogWithActor): AuditLogDto {
     action: entity.action,
     entityType: entity.entityType,
     entityId: entity.entityId,
+    entityCode: entity.entityCode,
     metadata: (entity.metadata as Record<string, unknown> | null) ?? null,
     ipAddress: entity.ipAddress,
     createdAt: entity.createdAt.toISOString(),
