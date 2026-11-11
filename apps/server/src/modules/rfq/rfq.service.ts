@@ -1,17 +1,19 @@
-import type {
-  ContactDto,
-  InviteVendorPreviewDto,
-  ItemPriceHistoryDto,
-  PaginatedResult,
-  RecommendedVendorDto,
-  RfqComparisonDto,
-  RfqComparisonItemDto,
-  RfqComparisonVendorTotalDto,
-  RfqDto,
-  RfqListItemDto,
-  RfqVendorSuggestionsDto,
-  RfqVendorSuggestionsPerItemDto,
-  SuggestedVendorDto,
+import {
+  DEFAULT_MARKUP_PERCENT,
+  type ContactDto,
+  type FinalizeRfqRatesResultDto,
+  type InviteVendorPreviewDto,
+  type ItemPriceHistoryDto,
+  type PaginatedResult,
+  type RecommendedVendorDto,
+  type RfqComparisonDto,
+  type RfqComparisonItemDto,
+  type RfqComparisonVendorTotalDto,
+  type RfqDto,
+  type RfqListItemDto,
+  type RfqVendorSuggestionsDto,
+  type RfqVendorSuggestionsPerItemDto,
+  type SuggestedVendorDto,
 } from "@bmp/types";
 
 import { EXPORT_MAX_ROWS } from "../../config/constants.js";
@@ -22,9 +24,12 @@ import type { EmailService } from "../../infra/mailer/email.service.js";
 import { round2 } from "../../shared/utils/math.js";
 import type { AuditService } from "../audit/audit.service.js";
 import type { IBoqRepository } from "../boq/boq.repository.js";
+import { rateFromMarkup } from "../boq/boq-pricing.js";
 import type { IBusinessesRepository } from "../businesses/businesses.repository.js";
 import type { ContactsService } from "../contacts/contacts.service.js";
-import type { IHistoricalRatesRepository } from "../rates/rates.repository.js";
+import { deriveCanonicalName } from "../items/items.helpers.js";
+import type { IItemsRepository } from "../items/items.repository.js";
+import type { IHistoricalRatesRepository, VendorRateRow } from "../rates/rates.repository.js";
 import type { ITendersRepository } from "../tenders/tenders.repository.js";
 import type { IUsersRepository } from "../users/users.repository.js";
 import type { IVendorsRepository } from "../vendors/vendors.repository.js";
@@ -55,6 +60,7 @@ export class RfqService {
     private readonly auditService: AuditService,
     private readonly ratesRepository: IHistoricalRatesRepository,
     private readonly contactsService: ContactsService,
+    private readonly itemsRepository: IItemsRepository,
   ) {}
 
   private async getDetailOrThrow(id: string, businessId: string): Promise<RfqDetail> {
@@ -510,15 +516,6 @@ export class RfqService {
     await this.rfqRepository.selectQuote(rfqItemId, lowest?.id ?? null, false);
   }
 
-  async close(rfqId: string, actorId: string, businessId: string): Promise<RfqDto> {
-    const rfq = await this.getDetailOrThrow(rfqId, businessId);
-    if (FINALIZED_STATUSES.has(rfq.status)) throw new ConflictError("RFQ is already finalized");
-
-    await this.rfqRepository.updateStatus(rfqId, "CLOSED");
-    await this.auditService.log({ actorId, action: "RFQ_CLOSED", entityType: "Rfq", entityId: rfqId });
-    return this.getById(rfqId, businessId);
-  }
-
   // Reopening a finalized (CLOSED/CANCELLED) RFQ goes back to SENT if vendors were already
   // invited, else DRAFT — mirroring how the RFQ got to SENT in the first place (see
   // addVendorInvite below). There's no "award" to clear: awards are now per-item quote
@@ -659,63 +656,102 @@ export class RfqService {
     return this.getById(rfqId, context.businessId);
   }
 
-  // Only closed RFQs are final enough to trust: an item's selected quote is
-  // pushed onto its linked BOQ item's rate and recorded as a historical rate
-  // (via rates.repository#recordFromRfqQuote, Task 7's transactional isDefault
-  // flip). Items with no boqItemId (standalone RFQ lines) or no selected/priced
-  // quote are silently skipped, not errors — a partial RFQ still pushes what it can.
-  async pushRatesToTender(
-    rfqId: string,
-    actorId: string,
-    businessId: string,
-  ): Promise<{ updatedItems: number }> {
+
+  /**
+   * "Finalize rates": closes the RFQ, records every vendor's priced quote as that vendor's rate
+   * for the inventory item (selected quote = default), and — when the RFQ belongs to a tender
+   * whose rates are not locked — sets each current-BOQ line's base rate from its selected quote,
+   * keeping the line's markup (15% the first time). Reopen undoes the close; finalizing again
+   * re-records and replaces. Writes happen before the status change so a failure leaves the RFQ
+   * open to retry.
+   */
+  async finalizeRates(rfqId: string, actorId: string, businessId: string): Promise<FinalizeRfqRatesResultDto> {
     const rfq = await this.getDetailOrThrow(rfqId, businessId);
-    if (rfq.status !== "CLOSED") {
-      throw new ConflictError("RFQ must be closed before pushing rates to the tender");
-    }
+    if (FINALIZED_STATUSES.has(rfq.status)) throw new ConflictError("RFQ is already finalized");
 
-    // amount is a stored column (quantity × rate), not derived on read — every other
-    // rate-writing path (BoqService.updateItem/addItem/bulkUpdateItems) recomputes and
-    // persists it alongside rate. Batch-fetch quantities once, not once per item.
-    const boqItemIds = rfq.items.map((item) => item.boqItemId).filter((id): id is string => Boolean(id));
-    const boqItems = await this.boqRepository.findItemsByIds(boqItemIds, businessId);
-    const quantityByBoqItemId = new Map(boqItems.map((boqItem) => [boqItem.id, boqItem.quantity]));
-
-    let updatedItems = 0;
+    const vendorRows: VendorRateRow[] = [];
     for (const item of rfq.items) {
-      if (!item.boqItemId) continue;
-      // boqItemId is client-supplied at RFQ-creation time with only UUID-format validation (no
-      // ownership check) and BoqRepository#updateItem has no business filter — the batch fetch
-      // above IS the business-scope check. `.has()` (not `.get() ?? null`) because a real BOQ
-      // item can legitimately have a null quantity; only "absent from the map" means "didn't
-      // resolve for this business," and that's what must be skipped, not written to.
-      if (!quantityByBoqItemId.has(item.boqItemId)) continue;
-      const selected = item.quotes.find((q) => q.isSelected);
-      if (!selected || selected.rate === null) continue;
-
-      const quantity = quantityByBoqItemId.get(item.boqItemId) ?? null;
-      const amount = quantity !== null ? round2(quantity * selected.rate) : null;
-      await this.boqRepository.updateItem(item.boqItemId, { rate: selected.rate, amount });
-      await this.ratesRepository.recordFromRfqQuote({
-        businessId,
-        itemName: item.description,
-        unit: item.unit ?? "unit",
-        rate: selected.rate,
-        vendorId: selected.vendor.id,
-        rfqQuoteId: selected.id,
-        sourceTenderId: rfq.tenderId,
-        createdById: actorId,
-      });
-      updatedItems += 1;
+      const priced = item.quotes.filter((q) => !q.regretted && q.rate !== null);
+      if (priced.length === 0) continue;
+      let itemId = item.itemId;
+      if (!itemId) {
+        ({ id: itemId } = await this.itemsRepository.findOrCreateItem(
+          businessId,
+          deriveCanonicalName(null, item.description),
+          item.unit,
+        ));
+        await this.itemsRepository.linkRfqItems(itemId, [item.id]);
+      }
+      for (const quote of priced) {
+        vendorRows.push({
+          businessId,
+          itemId,
+          itemName: item.description,
+          unit: item.unit ?? "unit",
+          rate: quote.rate!,
+          vendorId: quote.vendorId,
+          rfqQuoteId: quote.id,
+          sourceTenderId: rfq.tenderId,
+          quotedAt: quote.quotedAt,
+          isDefault: quote.isSelected,
+          createdById: actorId,
+        });
+      }
     }
+    const vendorRatesRecorded = await this.ratesRepository.recordVendorRates(rfqId, businessId, vendorRows);
 
+    const tenderResult = rfq.tenderId
+      ? await this.setTenderBaseRates(rfq, rfq.tenderId, businessId)
+      : { tenderItemsUpdated: 0, tenderItemsSkipped: 0, tenderLocked: false };
+
+    await this.rfqRepository.updateStatus(rfqId, "CLOSED");
+    const result: FinalizeRfqRatesResultDto = { vendorRatesRecorded, ...tenderResult };
     await this.auditService.log({
       actorId,
-      action: "RFQ_RATES_PUSHED_TO_TENDER",
+      action: "RFQ_RATES_FINALIZED",
       entityType: "Rfq",
       entityId: rfqId,
-      metadata: { updatedItems },
+      metadata: { ...result },
     });
-    return { updatedItems };
+    return result;
+  }
+
+  private async setTenderBaseRates(
+    rfq: RfqDetail,
+    tenderId: string,
+    businessId: string,
+  ): Promise<Omit<FinalizeRfqRatesResultDto, "vendorRatesRecorded">> {
+    const linked = rfq.items.filter((item) => item.boqItemId);
+    const tender = await this.tendersRepository.findById(tenderId, businessId);
+    if (!tender || tender.ratesLockedAt) {
+      return { tenderItemsUpdated: 0, tenderItemsSkipped: linked.length, tenderLocked: Boolean(tender?.ratesLockedAt) };
+    }
+    const currentBoq = await this.boqRepository.findCurrentBoq(tenderId, businessId);
+    // boqItemId is client-supplied at RFQ creation (UUID-checked only); this business-scoped fetch
+    // filtered to the tender's current BOQ version is the ownership check.
+    const boqItems = currentBoq
+      ? (await this.boqRepository.findItemsByIds(linked.map((i) => i.boqItemId!), businessId)).filter(
+          (b) => b.boqId === currentBoq.id,
+        )
+      : [];
+    const boqItemById = new Map(boqItems.map((b) => [b.id, b]));
+
+    let tenderItemsUpdated = 0;
+    for (const item of linked) {
+      const boqItem = boqItemById.get(item.boqItemId!);
+      const selected = item.quotes.find((q) => q.isSelected && !q.regretted && q.rate !== null);
+      if (!boqItem || !selected) continue;
+      const markupPercent = boqItem.markupPercent ?? DEFAULT_MARKUP_PERCENT;
+      const rate = rateFromMarkup(selected.rate!, markupPercent);
+      await this.boqRepository.setBaseRate(boqItem.id, {
+        baseRate: selected.rate!,
+        baseRateQuoteId: selected.id,
+        markupPercent,
+        rate,
+        amount: boqItem.quantity !== null ? round2(boqItem.quantity * rate) : null,
+      });
+      tenderItemsUpdated += 1;
+    }
+    return { tenderItemsUpdated, tenderItemsSkipped: linked.length - tenderItemsUpdated, tenderLocked: false };
   }
 }

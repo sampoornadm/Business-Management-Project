@@ -74,7 +74,12 @@ export async function cleanupIntegrationTestUser(testUser: IntegrationTestUser):
   // cleared before the user itself can be deleted.
   await prisma.attachment.deleteMany({ where: { uploadedById: testUser.userId } });
   await prisma.userBusiness.deleteMany({ where: { userId: testUser.userId } });
-  await prisma.business.deleteMany({ where: { id: { in: [testUser.businessId, testUser.secondBusinessId] } } });
+  const businessIds = [testUser.businessId, testUser.secondBusinessId];
+  // RFQ "Finalize rates" records HistoricalRate rows and find-or-creates inventory Items for the
+  // business; both reference Business with onDelete: Restrict.
+  await prisma.historicalRate.deleteMany({ where: { businessId: { in: businessIds } } });
+  await prisma.item.deleteMany({ where: { businessId: { in: businessIds } } });
+  await prisma.business.deleteMany({ where: { id: { in: businessIds } } });
   await prisma.user.deleteMany({ where: { id: testUser.userId } });
 }
 

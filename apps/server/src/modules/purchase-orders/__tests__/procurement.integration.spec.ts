@@ -87,10 +87,14 @@ describe("Procurement workflow (integration)", () => {
     // marked that quote isSelected the moment it was recorded — no explicit select-quote call
     // needed here before closing.
     const closeResponse = await request(app)
-      .post(`/api/v1/rfqs/${rfqId}/close`)
+      .post(`/api/v1/rfqs/${rfqId}/finalize-rates`)
       .set("Authorization", `Bearer ${testUser.accessToken}`);
     expect(closeResponse.status).toBe(200);
-    expect(closeResponse.body.data.status).toBe("CLOSED");
+    expect(closeResponse.body.data.vendorRatesRecorded).toBeGreaterThan(0);
+    const closedRfq = await request(app)
+      .get(`/api/v1/rfqs/${rfqId}`)
+      .set("Authorization", `Bearer ${testUser.accessToken}`);
+    expect(closedRfq.body.data.status).toBe("CLOSED");
 
     const poResponse = await request(app)
       .post("/api/v1/purchase-orders/from-rfq")

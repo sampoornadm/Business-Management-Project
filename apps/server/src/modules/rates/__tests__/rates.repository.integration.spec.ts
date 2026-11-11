@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@bmp/database";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { withBusinessScopeGuard } from "../../../infra/prisma/scoped-client.js";
 import { HistoricalRatesRepository, type VendorRateRow } from "../rates.repository.js";
 
 describe("HistoricalRatesRepository vendor/own rate recording (integration)", () => {
@@ -69,7 +70,8 @@ describe("HistoricalRatesRepository vendor/own rate recording (integration)", ()
   }
 
   beforeAll(async () => {
-    repository = new HistoricalRatesRepository(prisma);
+    // The app's real (business-scope-guarded) client, so a query missing businessId fails here too.
+    repository = new HistoricalRatesRepository(withBusinessScopeGuard(prisma));
     const business = await prisma.business.create({
       data: { id: randomUUID(), name: `Rates Repo Test ${randomUUID()}`, code: `RRT${randomUUID().slice(0, 6)}` },
     });
@@ -117,7 +119,7 @@ describe("HistoricalRatesRepository vendor/own rate recording (integration)", ()
       { vendorId: vendorBId, rate: 380 },
     ]);
 
-    const count = await repository.recordVendorRates(rfqId, [vendorRow(quotes[0]!, false), vendorRow(quotes[1]!, true)]);
+    const count = await repository.recordVendorRates(rfqId, businessId, [vendorRow(quotes[0]!, false), vendorRow(quotes[1]!, true)]);
 
     expect(count).toBe(2);
     const rows = await prisma.historicalRate.findMany({ where: { rfqQuoteId: { in: quotes.map((q) => q.id) } } });
@@ -130,9 +132,9 @@ describe("HistoricalRatesRepository vendor/own rate recording (integration)", ()
 
   it("recordVendorRates clears an older default for the same item from another RFQ", async () => {
     const older = await createRfqWithQuotes([{ vendorId: vendorAId, rate: 410 }]);
-    await repository.recordVendorRates(older.rfqId, [vendorRow(older.quotes[0]!, true)]);
+    await repository.recordVendorRates(older.rfqId, businessId, [vendorRow(older.quotes[0]!, true)]);
     const newer = await createRfqWithQuotes([{ vendorId: vendorBId, rate: 390 }]);
-    await repository.recordVendorRates(newer.rfqId, [vendorRow(newer.quotes[0]!, true)]);
+    await repository.recordVendorRates(newer.rfqId, businessId, [vendorRow(newer.quotes[0]!, true)]);
 
     const defaults = await prisma.historicalRate.findMany({ where: { businessId, itemId, kind: "VENDOR", isDefault: true } });
     expect(defaults.map((d) => d.rfqQuoteId)).toEqual([newer.quotes[0]!.id]);
@@ -143,9 +145,9 @@ describe("HistoricalRatesRepository vendor/own rate recording (integration)", ()
       { vendorId: vendorAId, rate: 400 },
       { vendorId: vendorBId, rate: 380 },
     ]);
-    await repository.recordVendorRates(rfqId, [vendorRow(quotes[0]!, false), vendorRow(quotes[1]!, true)]);
+    await repository.recordVendorRates(rfqId, businessId, [vendorRow(quotes[0]!, false), vendorRow(quotes[1]!, true)]);
 
-    await repository.recordVendorRates(rfqId, [vendorRow(quotes[1]!, true)]);
+    await repository.recordVendorRates(rfqId, businessId, [vendorRow(quotes[1]!, true)]);
 
     const rows = await prisma.historicalRate.findMany({ where: { rfqQuoteId: { in: quotes.map((q) => q.id) } } });
     expect(rows.map((r) => r.rfqQuoteId)).toEqual([quotes[1]!.id]);
@@ -164,10 +166,10 @@ describe("HistoricalRatesRepository vendor/own rate recording (integration)", ()
       markupPercent: 15,
       createdById: userId,
     });
-    await repository.replaceOwnRates(tenderA, [own(437)]);
-    await repository.replaceOwnRates(tenderB, [own(450)]);
+    await repository.replaceOwnRates(tenderA, businessId, [own(437)]);
+    await repository.replaceOwnRates(tenderB, businessId, [own(450)]);
 
-    await repository.replaceOwnRates(tenderA, [own(420)]);
+    await repository.replaceOwnRates(tenderA, businessId, [own(420)]);
 
     const rowsA = await prisma.historicalRate.findMany({ where: { sourceTenderId: tenderA, kind: "OWN" } });
     const rowsB = await prisma.historicalRate.findMany({ where: { sourceTenderId: tenderB, kind: "OWN" } });

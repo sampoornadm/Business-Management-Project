@@ -215,9 +215,9 @@ export class RfqController {
     sendSuccess(res, rfq, "Quote selected");
   });
 
-  close = asyncHandler(async (req, res) => {
-    const rfq = await this.rfqService.close(req.params.id!, req.user!.id, req.user!.businessId);
-    sendSuccess(res, rfq, "RFQ closed");
+  finalizeRates = asyncHandler(async (req, res) => {
+    const result = await this.rfqService.finalizeRates(req.params.id!, req.user!.id, req.user!.businessId);
+    sendSuccess(res, result, "RFQ rates finalized");
   });
 
   reopen = asyncHandler(async (req, res) => {
@@ -227,11 +227,6 @@ export class RfqController {
       businessId: req.user!.businessId,
     });
     sendSuccess(res, rfq, "RFQ reopened");
-  });
-
-  pushRatesToTender = asyncHandler(async (req, res) => {
-    const result = await this.rfqService.pushRatesToTender(req.params.id!, req.user!.id, req.user!.businessId);
-    sendSuccess(res, result, "Rates pushed to tender");
   });
 
   suggestVendors = asyncHandler(async (req, res) => {
