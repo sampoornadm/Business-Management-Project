@@ -1,7 +1,7 @@
 # Submission History & Change Log — Design
 
 Date: 2026-11-12
-Status: draft, awaiting approval
+Status: approved 2026-11-12
 Part 2 of 2. Part 1 (rate finalization: RFQ "Finalize rates", BOQ base rate + markup, tender rates
 lock, submission reference, own/vendor rate history) shipped to `main` 2026-11-11 — see
 `docs/superpowers/specs/2026-11-11-rate-finalization-design.md`.
@@ -19,9 +19,9 @@ says "Draft → Submitted" with a remark, and the Audit Log shows a raw entity U
 
 - `TendersService.changeStatus` logs `TENDER_STATUS_CHANGED` (`{from, to, remarks,
   submissionReference}`) to `AuditLog`. A "fresh" submission (from DRAFT/CANCELLED) requires rates
-  locked and (TENDER kind) a reference; it writes the owner's rates (`recordOwnRates`). WON/LOST →
-  SUBMITTED currently also re-runs `recordOwnRates` (a Part 1 deferred minor — it moves those rows'
-  dates).
+  locked and (TENDER kind) a reference; it writes the owner's rates (`recordOwnRates`). **Bug to
+  remove:** WON/LOST → SUBMITTED currently also re-runs `recordOwnRates`, re-saving the owner's
+  rates with today's date — the owner wants that move to record only the status change.
 - Each current-BOQ `BoqItem` carries description, unit, quantity, rate, amount, `baseRate`,
   `markupPercent`, `baseRateQuoteId` (→ `RfqQuote` → vendor), `hsnCode`, `gstRate`.
 - `RfqQuote.remarks` holds the vendor's free-text reply; it only arrives through the Excel quote
@@ -75,7 +75,8 @@ says "Draft → Submitted" with a remark, and the Audit Log shows a raw entity U
 - **Fresh submission** = move to SUBMITTED from DRAFT; or from CANCELLED when the tender has no
   submission yet (cancelled straight from Draft). CANCELLED → SUBMITTED for a tender that already
   has submissions (undoing a cancel), and WON/LOST → SUBMITTED, are plain status changes: no new
-  submission, no own-rate re-write (this also fixes Part 1's deferred minor).
+  submission, and the owner's rates are **not** re-saved — the only record is the
+  `TENDER_STATUS_CHANGED` audit row (e.g. "Won → Submitted").
 - **Item snapshot** (per current-BOQ line, leaf lines only): BOQ item id, description, unit,
   quantity, rate, amount, base rate, markup %, base-rate vendor id + name, HSN code, technical
   deviation (the base-rate quote's, as it was at submission).
