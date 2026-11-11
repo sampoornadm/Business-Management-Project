@@ -39,6 +39,7 @@ model User {
   uploadedAttachments     Attachment[]             @relation("AttachmentUploadedBy")
 
   createdTenders         Tender[]               @relation("TenderCreatedBy")
+  ratesLockedTenders     Tender[]               @relation("TenderRatesLockedBy")
   tenderAssignments      TenderAssignee[]       @relation("TenderAssignee")
   tenderAssignmentsGiven TenderAssignee[]       @relation("TenderAssignedBy")
   pinnedTenderNotes      TenderPinnedNote[]      @relation("TenderPinnedBy")
@@ -557,6 +558,16 @@ model Tender {
   convertedFrom   Tender?  @relation("BudgetaryConversion", fields: [convertedFromId], references: [id], onDelete: SetNull)
   convertedTo     Tender[] @relation("BudgetaryConversion")
 
+  // Rates lock ("Finalize rates" on the Items tab). Set = the current BOQ's pricing is frozen;
+  // moving to SUBMITTED requires it, and it can only be toggled while DRAFT. See
+  // docs/superpowers/specs/2026-11-11-rate-finalization-design.md.
+  ratesLockedAt   DateTime?
+  ratesLockedById String?
+  ratesLockedBy   User?     @relation("TenderRatesLockedBy", fields: [ratesLockedById], references: [id], onDelete: SetNull)
+  // Reference number of the latest submission (the owner's quotation/bid reference). Asked for on
+  // DRAFT/CANCELLED → SUBMITTED; kept across reverts so a resubmission can prefill it.
+  submissionReference String?
+
   createdById String
   createdBy   User   @relation("TenderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
@@ -862,6 +873,15 @@ model BoqItem {
   // Per-unit weight in kg; consignment weight on portal bid forms is Σ quantity × unitWeightKg.
   unitWeightKg Float?
 
+  // Purchase-side pricing. baseRate is the vendor rate this line is priced from (set by RFQ
+  // "Finalize rates" from the selected quote); rate = baseRate × (1 + markupPercent/100). Null
+  // baseRate = priced by hand, markup unused. Plain stored columns so a submission snapshot
+  // can copy them as-is.
+  baseRate        Float?
+  markupPercent   Float?
+  baseRateQuoteId String?
+  baseRateQuote   RfqQuote? @relation(fields: [baseRateQuoteId], references: [id], onDelete: SetNull)
+
   rateBreakdown BoqItemRateBreakdown?
 
   createdAt DateTime @default(now())
@@ -917,6 +937,15 @@ model HistoricalRate {
   rfqQuote   RfqQuote? @relation(fields: [rfqQuoteId], references: [id], onDelete: SetNull)
   isDefault  Boolean   @default(false)
 
+  // VENDOR = a vendor's quoted purchase rate (from RFQ finalize, or entered by hand); OWN = the
+  // owner's own quoted rate for a submitted tender (sourceTenderId), with its baseRate/markup.
+  // AI rate matching reads VENDOR rows only.
+  kind          HistoricalRateKind @default(VENDOR)
+  itemId        String?
+  item          Item?              @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  baseRate      Float?
+  markupPercent Float?
+
   // Embedding of `itemName`, populated lazily by the ai-enrichment worker. Real rate matching
   // now queries embeddingVector below via pgvector ANN (see boq-enrichment.service.ts) — this
   // Float[] is kept only per the design doc's Non-goals (smaller diff; nothing reads it as a
@@ -934,7 +963,14 @@ model HistoricalRate {
 
   @@index([businessId])
   @@index([category, itemName])
+  @@index([itemId, kind])
+  @@index([sourceTenderId, kind])
   @@map("historical_rates")
+}
+
+enum HistoricalRateKind {
+  VENDOR
+  OWN
 }
 
 // ---------------------------------------------------------------------------
@@ -1048,6 +1084,10 @@ model RfqItem {
   quantity    Float
   sortOrder   Int     @default(0)
 
+  // false = the selected quote is the automatic lowest-rate pick (re-picked whenever quotes
+  // change); true = a human chose it, never overridden automatically.
+  selectionManual Boolean @default(false)
+
   // Per-line instruction on the generated RFR (e.g. "ISI marked only"). Set only when the
   // item is added — RfqItem has no update path today, so this follows description/unit/
   // quantity in being fixed at creation.
@@ -1116,7 +1156,8 @@ model Item {
   embeddedAt DateTime?
   embeddingVector Unsupported("vector(1024)")?
 
-  rfqItems RfqItem[]
+  rfqItems        RfqItem[]
+  historicalRates HistoricalRate[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1221,6 +1262,7 @@ model RfqQuote {
   isSelected Boolean @default(false)
 
   historicalRate HistoricalRate?
+  baseRateFor    BoqItem[]
 
   @@unique([rfqItemId, vendorId])
   @@index([vendorId])

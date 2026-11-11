@@ -1,5 +1,4 @@
 import type { FilterCondition } from "./filtering.js";
-import type { ItemPriceHistoryDto } from "./rfq.js";
 
 // A resolved item's current classification. categoryId set + confirmed:false is an AI guess
 // awaiting review; confirmed:true is human-approved; categoryId null is unclassified.
@@ -34,8 +33,33 @@ export interface ItemDetailDto extends ItemClassificationDto {
   /** Generated 11-digit internal code (CC SS FFFF VVV); null only before backfill. */
   itemCode: string | null;
   unit: string | null;
-  // Every historical quote that resolved to this item (tender, vendor, rate, make, date).
-  entries: ItemPriceHistoryDto[];
+  /** Vendor rates recorded by RFQ "Finalize rates", newest first. */
+  vendorRates: ItemVendorRateDto[];
+  /** The owner's own quoted rates, one per submitted tender, newest first. */
+  ownRates: ItemOwnRateDto[];
+}
+
+export interface ItemVendorRateDto {
+  id: string;
+  rate: number;
+  effectiveDate: string;
+  vendorId: string | null;
+  vendorName: string | null;
+  rfqId: string | null;
+  make: string | null;
+  model: string | null;
+  /** True for the quote that was selected as the purchase rate on its RFQ. */
+  isDefault: boolean;
+}
+
+export interface ItemOwnRateDto {
+  id: string;
+  rate: number;
+  baseRate: number | null;
+  markupPercent: number | null;
+  effectiveDate: string;
+  tenderId: string | null;
+  tenderNumber: string | null;
 }
 
 export const ITEM_SORT_FIELDS = [

@@ -11,7 +11,19 @@ const boqWithCreatorArgs = {
 export type BoqWithCreator = Prisma.BoqGetPayload<typeof boqWithCreatorArgs>;
 
 const boqItemWithBreakdownArgs = {
-  include: { rateBreakdown: true },
+  include: {
+    rateBreakdown: true,
+    baseRateQuote: {
+      select: {
+        id: true,
+        make: true,
+        model: true,
+        quotedAt: true,
+        vendor: { select: { id: true, name: true } },
+        rfqItem: { select: { rfqId: true } },
+      },
+    },
+  },
 } satisfies Prisma.BoqItemDefaultArgs;
 
 export type BoqItemWithBreakdown = Prisma.BoqItemGetPayload<typeof boqItemWithBreakdownArgs>;

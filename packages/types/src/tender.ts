@@ -211,6 +211,11 @@ export interface TenderDto extends TenderListItemDto {
   winnerName: string | null;
   winningBidAmount: number | null;
   lossReason: string | null;
+  /** Set while the current BOQ's rates are finalized (locked); required before SUBMITTED. */
+  ratesLockedAt: string | null;
+  ratesLockedByName: string | null;
+  /** Reference number of the latest submission; prefilled on resubmission. */
+  submissionReference: string | null;
   convertedFrom: TenderLinkedBudgetaryDto | null;
   createdBy: { id: string; firstName: string; lastName: string };
   assignees: TenderAssigneeDto[];
