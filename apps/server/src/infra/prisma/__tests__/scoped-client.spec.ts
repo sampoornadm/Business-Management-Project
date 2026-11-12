@@ -21,12 +21,12 @@ describe("assertBusinessScoped", () => {
     expect(() => assertBusinessScoped("Vendor", { name: "Acme" })).not.toThrow();
   });
 
-  it("lists exactly the 15 scoped model names", () => {
+  it("lists exactly the 16 scoped model names", () => {
     expect(SCOPED_MODELS).toEqual(
       new Set([
         "Tender", "Project", "Boq", "Rfq", "PurchaseOrder", "GoodsReceipt",
         "BankAccount", "Invoice", "Expense", "Payment", "HistoricalRate", "Notification",
-        "SavedView", "PortalBid", "PortalProfile",
+        "SavedView", "PortalBid", "PortalProfile", "TenderSubmission",
       ]),
     );
   });
