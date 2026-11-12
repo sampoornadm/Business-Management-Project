@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Input } from "@bmp/ui";
-import { Check } from "lucide-react";
+import { AlertTriangle, Check } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function QuoteCell({
@@ -12,6 +12,7 @@ export function QuoteCell({
   onSelect,
   selectable,
   canSelect = true,
+  technicalDeviation = null,
 }: {
   initialRate: number | null;
   onCommit: (rate: number) => void;
@@ -20,6 +21,8 @@ export function QuoteCell({
   onSelect?: () => void;
   selectable?: boolean;
   canSelect?: boolean;
+  /** The vendor's technical deviation for this line, shown as a read-only marker. */
+  technicalDeviation?: string | null;
 }) {
   const [value, setValue] = useState(initialRate !== null ? String(initialRate) : "");
 
@@ -52,6 +55,14 @@ export function QuoteCell({
         placeholder="Rate"
         className="h-8 w-28"
       />
+      {technicalDeviation && (
+        <AlertTriangle
+          className="h-4 w-4 shrink-0 text-signal"
+          aria-label={`Technical deviation: ${technicalDeviation}`}
+        >
+          <title>{`Technical deviation: ${technicalDeviation}`}</title>
+        </AlertTriangle>
+      )}
       {selectable && initialRate !== null && (
         <Button
           type="button"

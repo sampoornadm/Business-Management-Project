@@ -478,6 +478,7 @@ export default function RfqDetailPage() {
                               isSelected={quote?.isSelected ?? false}
                               selectable={Boolean(quote) && !quote?.regretted}
                               canSelect={canUpdate}
+                              technicalDeviation={quote?.technicalDeviation ?? null}
                               onSelect={() => quote && handleSelectQuote(item.id, quote.id)}
                               onCommit={(rate) =>
                                 upsertQuote.mutate({ itemId: item.id, vendorId: invite.vendor.id, input: { rate } })
