@@ -4,6 +4,7 @@ import type { AuditLogDto } from "@bmp/types";
 import { Badge, formatDateTime, SortableHeader } from "@bmp/ui";
 import type { FilterableColumnDef } from "@bmp/ui";
 import type { ColumnDef } from "@tanstack/react-table";
+import { useState } from "react";
 
 export interface AuditLogColumnConfig extends FilterableColumnDef {
   sortable: boolean;
@@ -80,6 +81,7 @@ const AUDIT_ACTIONS = [
   "PURCHASE_ORDER_CREATED",
   "PURCHASE_ORDER_CREATED_FROM_RFQ",
   "RFQ_CLOSED",
+  "RFQ_RATES_FINALIZED",
   "RFQ_CREATED",
   "RFQ_QUOTES_IMPORTED",
   "RFQ_QUOTE_RECORDED",
@@ -100,6 +102,8 @@ const AUDIT_ACTIONS = [
   "TENDER_DOCUMENT_UPLOADED",
   "TENDER_NOTE_PINNED",
   "TENDER_NOTE_UNPINNED",
+  "TENDER_RATES_LOCKED",
+  "TENDER_RATES_UNLOCKED",
   "TENDER_STATUS_CHANGED",
   "TENDER_TAGS_UPDATED",
   "TENDER_UNASSIGNED",
@@ -145,6 +149,17 @@ const AUDIT_ENTITY_TYPES = [
 const ACTION_OPTIONS = AUDIT_ACTIONS.map((a) => ({ value: a, label: titleCase(a) }));
 const ENTITY_TYPE_OPTIONS = AUDIT_ENTITY_TYPES.map((t) => ({ value: t, label: t }));
 
+/** First line of an event's summary (e.g. a tender submission's change log); click for all of it. */
+function DetailsCell({ summary }: { summary: string }) {
+  const [open, setOpen] = useState(false);
+  const firstLine = summary.split("\n")[0];
+  return (
+    <button type="button" className="max-w-md text-left" title={summary} onClick={() => setOpen(!open)}>
+      {open ? <pre className="whitespace-pre-wrap font-sans text-xs">{summary}</pre> : <span className="line-clamp-1">{firstLine}</span>}
+    </button>
+  );
+}
+
 export const AUDIT_LOG_COLUMNS: AuditLogColumnConfig[] = [
   {
     key: "actorId",
@@ -180,6 +195,28 @@ export const AUDIT_LOG_COLUMNS: AuditLogColumnConfig[] = [
     defaultVisible: true,
     enumOptions: ENTITY_TYPE_OPTIONS,
     cell: ({ row }) => row.original.entityType ?? "-",
+  },
+  {
+    key: "entityCode",
+    label: "Entity",
+    type: "text",
+    sortable: true,
+    filterable: true,
+    nullable: true,
+    defaultVisible: true,
+    cell: ({ row }) => row.original.entityCode ?? "-",
+  },
+  {
+    key: "details",
+    label: "Details",
+    type: "text",
+    sortable: false,
+    filterable: false,
+    defaultVisible: true,
+    cell: ({ row }) => {
+      const summary = row.original.metadata?.summary;
+      return typeof summary === "string" && summary ? <DetailsCell summary={summary} /> : "-";
+    },
   },
   {
     key: "entityId",

@@ -2,7 +2,7 @@
 
 import { DEFAULT_GST_RATE, type BoqDto, type BoqItemDto, type RfqVendorSuggestionsDto } from "@bmp/types";
 import { AiBadge, Badge, Button, EditableTreeTable, Input, useToast, type EditableTreeColumn } from "@bmp/ui";
-import { Check, Send, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, Send, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -258,9 +258,19 @@ export function BoqItemGrid({
           >
             <span className="tabular-nums">{item.baseRate.toLocaleString()}</span>
             {source && (
-              <Link href={`/rfqs/${source.rfqId}`} className="max-w-[9rem] truncate text-xs text-muted-foreground hover:underline">
-                {source.vendorName}
-              </Link>
+              <span className="flex items-center gap-1">
+                {source.technicalDeviation && (
+                  <AlertTriangle
+                    className="h-3.5 w-3.5 shrink-0 text-signal"
+                    aria-label={`Technical deviation: ${source.technicalDeviation}`}
+                  >
+                    <title>{`Technical deviation: ${source.technicalDeviation}`}</title>
+                  </AlertTriangle>
+                )}
+                <Link href={`/rfqs/${source.rfqId}`} className="max-w-[9rem] truncate text-xs text-muted-foreground hover:underline">
+                  {source.vendorName}
+                </Link>
+              </span>
             )}
           </div>
         );
