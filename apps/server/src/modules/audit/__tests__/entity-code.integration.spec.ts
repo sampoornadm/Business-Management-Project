@@ -5,6 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createEntityCodeResolver } from "../entity-code.js";
 
+const code = async (p: Promise<{ code: string | null } | null>) => (await p)?.code ?? null;
+
 describe("createEntityCodeResolver (integration)", () => {
   const resolve = createEntityCodeResolver(prisma);
   let businessId: string;
@@ -49,22 +51,26 @@ describe("createEntityCodeResolver (integration)", () => {
   });
 
   it("Tender → its tender number", async () => {
-    expect(await resolve("Tender", tenderId)).toBe(tenderNumber);
+    expect(await resolve("Tender", tenderId)).toEqual({ code: tenderNumber, businessId });
   });
 
   it("BoqItem → its tender's number", async () => {
-    expect(await resolve("BoqItem", boqItemId)).toBe(tenderNumber);
+    expect(await resolve("BoqItem", boqItemId)).toEqual({ code: tenderNumber, businessId });
   });
 
   it("Item → display-formatted item code", async () => {
-    expect(await resolve("Item", itemId)).toBe("73 18 0042 001");
+    expect(await resolve("Item", itemId)).toEqual({ code: "73 18 0042 001", businessId });
+  });
+
+  it("Organization (global) → its name with no business", async () => {
+    expect(await resolve("Organization", clientId)).toEqual({ code: expect.stringContaining("EC Client"), businessId: null });
   });
 
   it("unknown type → null", async () => {
-    expect(await resolve("Spaceship", tenderId)).toBeNull();
+    expect(await code(resolve("Spaceship", tenderId))).toBeNull();
   });
 
   it("missing id → null", async () => {
-    expect(await resolve("Tender", randomUUID())).toBeNull();
+    expect(await code(resolve("Tender", randomUUID()))).toBeNull();
   });
 });

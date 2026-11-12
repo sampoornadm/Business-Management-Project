@@ -14,21 +14,28 @@ export class AuditService {
     private readonly resolveEntityCode: EntityCodeResolver,
   ) {}
 
-  /** Records an event. The entity's readable code is looked up here unless the caller passes one. */
+  /**
+   * Records an event. The entity's readable code and owning business are looked up here unless the
+   * caller passes them (the business decides which viewers can see the row).
+   */
   async log(data: CreateAuditLogData): Promise<void> {
-    const entityCode = data.entityCode !== undefined ? data.entityCode : await this.lookupEntityCode(data);
-    await this.auditRepository.create({ ...data, entityCode });
+    const needsLookup = data.entityCode === undefined || data.businessId === undefined;
+    const found = needsLookup ? await this.lookupEntityRef(data) : null;
+    await this.auditRepository.create({
+      ...data,
+      entityCode: data.entityCode !== undefined ? data.entityCode : (found?.code ?? null),
+      businessId: data.businessId !== undefined ? data.businessId : (found?.businessId ?? null),
+    });
   }
 
-  // The entity's current code; once it is gone (most *_DELETED events log after the delete), the
-  // last code an earlier row recorded for it. A missing code must never cost the event itself, so
-  // any lookup failure is stored as null.
-  private async lookupEntityCode(data: CreateAuditLogData): Promise<string | null> {
+  // The entity as it is now; once it is gone (most *_DELETED events log after the delete), what an
+  // earlier row recorded for it. A failed lookup must never cost the event itself — stored as null.
+  private async lookupEntityRef(data: CreateAuditLogData) {
     if (!data.entityType || !data.entityId) return null;
     try {
       return (
         (await this.resolveEntityCode(data.entityType, data.entityId)) ??
-        (await this.auditRepository.findLatestEntityCode(data.entityType, data.entityId))
+        (await this.auditRepository.findLatestEntityRef(data.entityType, data.entityId))
       );
     } catch {
       return null;

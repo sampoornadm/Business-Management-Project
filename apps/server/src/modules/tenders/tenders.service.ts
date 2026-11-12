@@ -226,6 +226,7 @@ export class TendersService {
       entityId: id,
       // Passed explicitly: the row is already gone, so the audit resolver could not look it up.
       entityCode: tender.tenderNumber,
+      businessId: context.businessId,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
     });

@@ -7,6 +7,11 @@ import { AUDIT_LOG_EXPORT_COLUMN_KEYS, buildAuditLogExportTable } from "./audit.
 import type { AuditService } from "./audit.service.js";
 import type { ExportAuditLogsQueryParsed, ListAuditLogsQueryParsed } from "./audit.validation.js";
 
+// Super Admin reads the whole log; everyone else sees their active business's rows plus global ones.
+function visibleBusinessId(user: { roleName: string; businessId: string }): string | undefined {
+  return user.roleName === "SUPER_ADMIN" ? undefined : user.businessId;
+}
+
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
@@ -19,6 +24,7 @@ export class AuditController {
       filters: query.filters,
       sortBy: query.sortBy,
       sortDir: query.sortDir,
+      visibleBusinessId: visibleBusinessId(req.user!),
     });
     sendSuccess(res, result, "Audit logs retrieved");
   });
@@ -33,6 +39,7 @@ export class AuditController {
         filters: query.filters,
         sortBy: query.sortBy,
         sortDir: query.sortDir,
+        visibleBusinessId: visibleBusinessId(req.user!),
       },
       query.scope,
       pagination,
