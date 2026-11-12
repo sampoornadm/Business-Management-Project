@@ -191,7 +191,7 @@ class FakeRfqRepository implements IRfqRepository {
         Object.assign(existing, {
           rate: data.rate,
           regretted: data.regretted,
-          technicalDeviation: data.technicalDeviation ?? null,
+          ...(data.technicalDeviation !== undefined ? { technicalDeviation: data.technicalDeviation } : {}),
           ...(data.make !== undefined ? { make: data.make } : {}),
           ...(data.model !== undefined ? { model: data.model } : {}),
           ...(data.quotedAt !== undefined ? { quotedAt: data.quotedAt } : {}),
@@ -830,6 +830,17 @@ describe("RfqService", () => {
 
     const quote = (await service.getById(rfq.id, businessId)).items[0]!.quotes[0]!;
     expect(quote.technicalDeviation).toBe("No ISI mark");
+  });
+
+  it("a rate-only upsert keeps an existing deviation", async () => {
+    const { rfq, itemId } = await rfqWithTwoVendors();
+    await service.upsertQuote(itemId, vendorA, { rate: 100, technicalDeviation: "Make KEI" }, actorId, businessId);
+
+    await service.upsertQuote(itemId, vendorA, { rate: 90 }, actorId, businessId);
+
+    const quote = (await service.getById(rfq.id, businessId)).items[0]!.quotes[0]!;
+    expect(quote.rate).toBe(90);
+    expect(quote.technicalDeviation).toBe("Make KEI");
   });
 
   it("importQuotes keeps a real deviation from the sheet", async () => {

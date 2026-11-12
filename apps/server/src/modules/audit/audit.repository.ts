@@ -37,6 +37,8 @@ export type AuditLogWithActor = Prisma.AuditLogGetPayload<typeof auditLogWithAct
 
 export interface IAuditRepository {
   create(data: CreateAuditLogData): Promise<void>;
+  /** The most recent non-null entityCode recorded for this entity, if any. */
+  findLatestEntityCode(entityType: string, entityId: string): Promise<string | null>;
   findMany(
     pagination: PaginationParams,
     filters: AuditLogFilters,
@@ -59,6 +61,15 @@ export class AuditRepository implements IAuditRepository {
         userAgent: data.userAgent ?? null,
       },
     });
+  }
+
+  async findLatestEntityCode(entityType: string, entityId: string): Promise<string | null> {
+    const row = await this.prisma.auditLog.findFirst({
+      where: { entityType, entityId, entityCode: { not: null } },
+      orderBy: { createdAt: "desc" },
+      select: { entityCode: true },
+    });
+    return row?.entityCode ?? null;
   }
 
   async findMany(
