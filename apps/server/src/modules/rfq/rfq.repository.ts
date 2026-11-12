@@ -351,8 +351,9 @@ export class RfqRepository implements IRfqRepository {
     const payload = {
       rate: data.rate,
       regretted: data.regretted,
-      technicalDeviation: data.technicalDeviation ?? null,
-      // Omit rather than pass undefined so the column defaults apply on create.
+      // Omit rather than pass undefined so the column defaults apply on create — and so a
+      // rate-only edit (the RFQ page's quote cell) keeps the vendor's technical deviation.
+      ...(data.technicalDeviation !== undefined ? { technicalDeviation: data.technicalDeviation } : {}),
       ...(data.make !== undefined ? { make: data.make } : {}),
       ...(data.model !== undefined ? { model: data.model } : {}),
       ...(data.quotedAt !== undefined ? { quotedAt: data.quotedAt } : {}),

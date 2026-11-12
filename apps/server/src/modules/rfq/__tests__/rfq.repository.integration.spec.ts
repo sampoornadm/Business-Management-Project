@@ -85,6 +85,16 @@ describe("RfqRepository (integration)", () => {
     expect((await prisma.rfqItem.findUniqueOrThrow({ where: { id: rfqItemId } })).selectionManual).toBe(false);
   });
 
+  it("a rate-only upsert keeps the quote's technical deviation", async () => {
+    await repository.upsertQuote(rfqItemId, vendorAId, { rate: 400, regretted: false, technicalDeviation: "Make KEI" });
+
+    await repository.upsertQuote(rfqItemId, vendorAId, { rate: 390, regretted: false });
+
+    const quote = await prisma.rfqQuote.findUniqueOrThrow({ where: { id: quoteAId } });
+    expect(quote.rate).toBe(390);
+    expect(quote.technicalDeviation).toBe("Make KEI");
+  });
+
   describe("update", () => {
     // Its own RFQ + item, separate from the outer suite's rfqId/rfqItemId — these tests mutate
     // and delete items, which would break the quote-selection test's fixture if shared.

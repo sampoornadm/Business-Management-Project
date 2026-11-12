@@ -308,7 +308,10 @@ export class RfqService {
       make: input.make,
       model: input.model,
       quotedAt: input.quotedAt,
-      technicalDeviation: normalizeTechnicalDeviation(input.technicalDeviation),
+      // Untouched unless sent: the quote cell edits only the rate. The sheet import (below) always
+      // sends it, since a returned sheet is the vendor's whole reply for that line.
+      technicalDeviation:
+        input.technicalDeviation === undefined ? undefined : normalizeTechnicalDeviation(input.technicalDeviation),
     });
     if (invite.status === "INVITED") {
       await this.rfqRepository.updateVendorInviteStatus(item.rfqId, vendorId, "RESPONDED");

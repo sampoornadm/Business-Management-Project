@@ -20,11 +20,16 @@ export class AuditService {
     await this.auditRepository.create({ ...data, entityCode });
   }
 
-  // A missing code must never cost the event itself, so any lookup failure is stored as null.
+  // The entity's current code; once it is gone (most *_DELETED events log after the delete), the
+  // last code an earlier row recorded for it. A missing code must never cost the event itself, so
+  // any lookup failure is stored as null.
   private async lookupEntityCode(data: CreateAuditLogData): Promise<string | null> {
     if (!data.entityType || !data.entityId) return null;
     try {
-      return await this.resolveEntityCode(data.entityType, data.entityId);
+      return (
+        (await this.resolveEntityCode(data.entityType, data.entityId)) ??
+        (await this.auditRepository.findLatestEntityCode(data.entityType, data.entityId))
+      );
     } catch {
       return null;
     }
