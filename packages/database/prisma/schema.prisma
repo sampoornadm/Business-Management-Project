@@ -269,6 +269,10 @@ model AuditLog {
   // Human-readable code of the entity (tender number, PO number, item code, …), resolved and stored
   // when the row is written (AuditService.log) so it survives the entity being deleted.
   entityCode String?
+  // Business the entity belongs to (resolved with entityCode); null for global entities (users,
+  // vendors, organizations) and entity-less events. Non-Super-Admins see only their active
+  // business's rows plus null ones. Plain id, no FK — same convention as entityId.
+  businessId String?
   metadata   Json?
   ipAddress  String?
   userAgent  String?
@@ -278,6 +282,7 @@ model AuditLog {
   @@index([actorId])
   @@index([entityType, entityId])
   @@index([entityCode])
+  @@index([businessId])
   @@index([createdAt])
   @@map("audit_logs")
 }
