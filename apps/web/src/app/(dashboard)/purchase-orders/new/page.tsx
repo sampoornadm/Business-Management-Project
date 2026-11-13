@@ -7,7 +7,10 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  FormActions,
+  formatMoney,
   Input,
+  PageHeader,
   Select,
   SelectContent,
   SelectItem,
@@ -107,10 +110,10 @@ export default function NewPurchaseOrderPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Create Purchase Order</h1>
-        <p className="text-sm text-muted-foreground">Place a direct order with a vendor.</p>
-      </div>
+      <PageHeader
+        title="Create purchase order"
+        description="Place a direct order with a vendor."
+      />
 
       <Card>
         <CardHeader>
@@ -214,7 +217,7 @@ export default function NewPurchaseOrderPage() {
                   </TableCell>
                   <TableCell>
                     {items.length > 1 && (
-                      <Button size="sm" variant="ghost" onClick={() => removeItem(index)}>
+                      <Button size="sm" variant="ghost" aria-label="Remove item" onClick={() => removeItem(index)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     )}
@@ -223,13 +226,15 @@ export default function NewPurchaseOrderPage() {
               ))}
             </TableBody>
           </Table>
-          <p className="mt-3 text-right text-sm font-medium">Total: {total.toLocaleString()}</p>
+          <p className="mt-3 text-right text-sm font-medium">Total: {formatMoney(total)}</p>
         </CardContent>
       </Card>
 
-      <Button onClick={handleSubmit} disabled={createPo.isPending}>
-        {createPo.isPending ? "Creating…" : "Create Purchase Order"}
-      </Button>
+      <FormActions onCancel={() => window.history.back()}>
+        <Button onClick={handleSubmit} disabled={createPo.isPending}>
+          {createPo.isPending ? "Creating…" : "Create purchase order"}
+        </Button>
+      </FormActions>
     </div>
   );
 }

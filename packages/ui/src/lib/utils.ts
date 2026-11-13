@@ -28,3 +28,20 @@ export function formatDateTime(date: string | Date | null | undefined): string {
     minute: "2-digit",
   });
 }
+
+const inr = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/**
+ * The one way an amount of money is shown: rupee sign, Indian digit grouping (lakh/crore),
+ * always two decimals — "₹12,34,567.00" — regardless of the viewer's browser locale.
+ * Counts and quantities are not money; don't pass them here.
+ */
+export function formatMoney(value: number | null | undefined): string {
+  if (value === null || value === undefined) return EMPTY_VALUE;
+  return inr.format(value);
+}

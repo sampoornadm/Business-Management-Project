@@ -15,6 +15,7 @@ import {
   CardTitle,
   CITIES_BY_STATE,
   Form,
+  FormActions,
   FormControl,
   FormField,
   FormItem,
@@ -628,9 +629,11 @@ export function TenderForm({
           </CardContent>
         </Card>
 
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Saving..." : submitLabel}
-        </Button>
+        <FormActions onCancel={() => window.history.back()}>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Saving…" : submitLabel}
+          </Button>
+        </FormActions>
       </form>
     </Form>
   );

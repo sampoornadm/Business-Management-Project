@@ -202,7 +202,7 @@ export default function OrganizationsPage() {
   const addOrgButton = (
     <Button asChild>
       <Link href="/organizations/new">
-        <Building2 className="mr-2 h-4 w-4" /> Add Organization
+        <Building2 className="mr-2 h-4 w-4" /> Add organization
       </Link>
     </Button>
   );

@@ -4,6 +4,7 @@ import type { PurchaseOrderItemDto } from "@bmp/types";
 import {
   Button,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -116,6 +117,11 @@ export function GoodsReceiptDialog({
           />
         </div>
         <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
           <Button onClick={handleSubmit} disabled={createGoodsReceipt.isPending}>
             {createGoodsReceipt.isPending ? "Recording…" : "Record receipt"}
           </Button>

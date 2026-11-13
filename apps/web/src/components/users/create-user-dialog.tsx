@@ -3,6 +3,7 @@
 import {
   Button,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -71,7 +72,7 @@ export function CreateUserDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button>
-          <UserPlus className="mr-2 h-4 w-4" /> Add User
+          <UserPlus className="mr-2 h-4 w-4" /> Add user
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -162,8 +163,13 @@ export function CreateUserDialog() {
               )}
             />
             <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  Cancel
+                </Button>
+              </DialogClose>
               <Button type="submit" disabled={createUser.isPending}>
-                {createUser.isPending ? "Creating..." : "Create user"}
+                {createUser.isPending ? "Creating…" : "Create user"}
               </Button>
             </DialogFooter>
           </form>

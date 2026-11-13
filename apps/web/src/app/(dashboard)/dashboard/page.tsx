@@ -1,7 +1,7 @@
 "use client";
 
 import { TENDER_STATUS_LABELS, type TenderStatus } from "@bmp/types";
-import { Badge, Card, CardContent, CardHeader, CardTitle, formatDate, KpiGrid, Skeleton, StatCard } from "@bmp/ui";
+import { Badge, Card, CardContent, CardHeader, CardTitle, formatDate, KpiGrid, PageHeader, Skeleton, StatCard } from "@bmp/ui";
 import { Activity, Database, FileClock, FileText, HardDrive, Users2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -62,10 +62,10 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Welcome back, {user?.firstName}</h1>
-        <p className="text-sm text-muted-foreground">Here&apos;s what&apos;s happening in your workspace.</p>
-      </div>
+      <PageHeader
+        title={<>Welcome back, {user?.firstName}</>}
+        description={<>Here&apos;s what&apos;s happening in your workspace.</>}
+      />
 
       <KpiGrid>
         <StatCard

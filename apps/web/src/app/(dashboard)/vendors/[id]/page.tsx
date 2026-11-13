@@ -17,7 +17,8 @@ import {
   CardHeader,
   CardTitle,
   Input,
-  Skeleton,
+  PageHeader,
+  PageSkeleton,
   StarRating,
   useToast,
 } from "@bmp/ui";
@@ -114,63 +115,63 @@ export default function VendorDetailPage() {
   }
 
   if (vendorQuery.isLoading || !vendorQuery.data) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   const vendor = vendorQuery.data;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{vendor.name}</h1>
+      <PageHeader
+        title={vendor.name}
+        badges={
+          <>
             <Badge variant="outline">{CATEGORY_LABELS[vendor.category]}</Badge>
             <Badge variant={vendor.isActive ? "success" : "secondary"}>
               {vendor.isActive ? "Active" : "Inactive"}
             </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {[vendor.city, vendor.state].filter(Boolean).join(", ") || "No address on file"}
-          </p>
-        </div>
-        {canUpdate && (
-          <div className="flex gap-2">
-            <Button variant="outline" asChild>
-              <Link href={`/vendors/${vendor.id}/edit`}>
-                <Pencil className="mr-2 h-4 w-4" /> Edit
-              </Link>
-            </Button>
-            {canDelete && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive">
-                    <Trash2 className="mr-2 h-4 w-4" /> Delete
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete this vendor?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This can&apos;t be undone. Vendors referenced by any purchase order can&apos;t be
-                      deleted.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+          </>
+        }
+        actions={
+          <>
+            {canUpdate && (
+              <div className="flex gap-2">
+                {canDelete && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructiveOutline">
+                        <Trash2 className="mr-2 h-4 w-4" /> Delete
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete this vendor?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This can&apos;t be undone. Vendors referenced by any purchase order can&apos;t be
+                          deleted.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+                <Button variant="outline" asChild>
+                  <Link href={`/vendors/${vendor.id}/edit`}>
+                    <Pencil className="mr-2 h-4 w-4" /> Edit
+                  </Link>
+                </Button>
+              </div>
             )}
-          </div>
-        )}
-      </div>
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          {[vendor.city, vendor.state].filter(Boolean).join(", ") || "No address on file"}
+        </p>
+      </PageHeader>
 
       <Card>
         <CardHeader>
@@ -260,7 +261,7 @@ export default function VendorDetailPage() {
                         departmentOptions={departmentOptions.data?.values ?? []}
                         designationOptions={designationOptions.data?.values ?? []}
                         trigger={
-                          <Button size="sm" variant="ghost">
+                          <Button size="sm" variant="ghost" aria-label="Edit contact">
                             <Pencil className="h-4 w-4" />
                           </Button>
                         }
@@ -299,7 +300,7 @@ export default function VendorDetailPage() {
               />
               <Input placeholder="Make (optional)" value={make} onChange={(e) => setMake(e.target.value)} />
               <Button onClick={handleAddItemTag} disabled={addItemTag.isPending}>
-                <Plus className="mr-2 h-4 w-4" /> Add
+                <Plus className="mr-2 h-4 w-4" /> Add tag
               </Button>
             </div>
           )}

@@ -41,7 +41,7 @@ function VerifyEmailStatus() {
       <CardHeader>
         <CardTitle>Email verification</CardTitle>
         <CardDescription>
-          {status === "pending" && "Verifying your email address..."}
+          {status === "pending" && "Verifying your email address…"}
           {status === "success" && "Your email has been verified."}
           {status === "error" && "This verification link is invalid or has expired."}
         </CardDescription>

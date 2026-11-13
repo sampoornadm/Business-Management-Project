@@ -208,7 +208,7 @@ export default function PurchaseOrdersPage() {
   const createPoButton = (
     <Button asChild>
       <Link href="/purchase-orders/new">
-        <FilePlus2 className="mr-2 h-4 w-4" /> Create Purchase Order
+        <FilePlus2 className="mr-2 h-4 w-4" /> Create purchase order
       </Link>
     </Button>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useToast } from "@bmp/ui";
+import { PageHeader, useToast } from "@bmp/ui";
 import { useRouter } from "next/navigation";
 
 import { VendorForm, type VendorFormValues } from "@/components/vendors/vendor-form";
@@ -27,10 +27,10 @@ export default function NewVendorPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Add Vendor</h1>
-        <p className="text-sm text-muted-foreground">Register a new supplier or service provider.</p>
-      </div>
+      <PageHeader
+        title="Add vendor"
+        description="Register a new supplier or service provider."
+      />
       <VendorForm onSubmit={handleSubmit} isSubmitting={createVendor.isPending} />
     </div>
   );

@@ -14,6 +14,10 @@ const buttonVariants = cva(
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/90",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        // Quiet trigger for a destructive action that still asks for confirmation;
+        // the filled `destructive` is for the confirming button itself.
+        destructiveOutline:
+          "border border-destructive/40 bg-background text-destructive hover:bg-destructive/10",
         outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
@@ -48,6 +52,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <Comp
         className={cn(buttonVariants({ variant, size, className }), isStatic && "active:scale-100")}
         ref={ref}
+        // An icon-only button's aria-label doubles as its hover tooltip.
+        title={props["aria-label"]}
         {...props}
       />
     );

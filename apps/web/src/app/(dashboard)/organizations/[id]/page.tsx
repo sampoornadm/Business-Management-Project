@@ -16,7 +16,8 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  Skeleton,
+  PageHeader,
+  PageSkeleton,
   useToast,
 } from "@bmp/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
@@ -78,62 +79,62 @@ export default function OrganizationDetailPage() {
   }
 
   if (organizationQuery.isLoading || !organizationQuery.data) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   const organization = organizationQuery.data;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{organization.name}</h1>
+      <PageHeader
+        title={organization.name}
+        badges={
+          <>
             <Badge variant={organization.type === "GOVERNMENT" ? "secondary" : "outline"}>
               {organization.type === "GOVERNMENT" ? "Government" : "Private"}
             </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {[organization.city, organization.state].filter(Boolean).join(", ") || "No address on file"}
-          </p>
-        </div>
-        {canUpdate && (
-          <div className="flex gap-2">
-            <Button variant="outline" asChild>
-              <Link href={`/organizations/${organization.id}/edit`}>
-                <Pencil className="mr-2 h-4 w-4" /> Edit
-              </Link>
-            </Button>
-            {canDelete && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive">
-                    <Trash2 className="mr-2 h-4 w-4" /> Delete
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete this organization?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This can&apos;t be undone. Organizations referenced by any tender can&apos;t be
-                      deleted.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+          </>
+        }
+        actions={
+          <>
+            {canUpdate && (
+              <div className="flex gap-2">
+                {canDelete && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructiveOutline">
+                        <Trash2 className="mr-2 h-4 w-4" /> Delete
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete this organization?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This can&apos;t be undone. Organizations referenced by any tender can&apos;t be
+                          deleted.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+                <Button variant="outline" asChild>
+                  <Link href={`/organizations/${organization.id}/edit`}>
+                    <Pencil className="mr-2 h-4 w-4" /> Edit
+                  </Link>
+                </Button>
+              </div>
             )}
-          </div>
-        )}
-      </div>
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          {[organization.city, organization.state].filter(Boolean).join(", ") || "No address on file"}
+        </p>
+      </PageHeader>
 
       <Card>
         <CardHeader>
@@ -231,7 +232,7 @@ export default function OrganizationDetailPage() {
                         departmentOptions={departmentOptions.data?.values ?? []}
                         designationOptions={designationOptions.data?.values ?? []}
                         trigger={
-                          <Button size="sm" variant="ghost">
+                          <Button size="sm" variant="ghost" aria-label="Edit contact">
                             <Pencil className="h-4 w-4" />
                           </Button>
                         }

@@ -1,7 +1,7 @@
 "use client";
 
 import { DEFAULT_GST_RATE, type BoqDto, type BoqItemDto, type RfqVendorSuggestionsDto } from "@bmp/types";
-import { AiBadge, Badge, Button, EditableTreeTable, Input, useToast, type EditableTreeColumn } from "@bmp/ui";
+import { AiBadge, Badge, Button, confirmAction, type EditableTreeColumn, EditableTreeTable, formatMoney, Input, useToast } from "@bmp/ui";
 import { AlertTriangle, Check, Send, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -172,7 +172,7 @@ export function BoqItemGrid({
   }
 
   async function handleDelete(item: BoqItemDto) {
-    if (!window.confirm(`Delete "${item.description}"?`)) return;
+    if (!(await confirmAction({ title: "Delete this item?", description: item.description, confirmLabel: "Delete item" }))) return;
     try {
       await deleteItem.mutateAsync(item.id);
     } catch (error) {
@@ -256,7 +256,7 @@ export function BoqItemGrid({
             className="flex flex-col items-end"
             title={source ? `${makeModel}quoted ${new Date(source.quotedAt).toLocaleDateString()}` : undefined}
           >
-            <span className="tabular-nums">{item.baseRate.toLocaleString()}</span>
+            <span className="tabular-nums">{formatMoney(item.baseRate)}</span>
             {source && (
               <span className="flex items-center gap-1">
                 {source.technicalDeviation && (
@@ -326,7 +326,7 @@ export function BoqItemGrid({
       key: "amount",
       header: "Amount",
       align: "right",
-      getValue: (item) => item.amount?.toLocaleString() ?? "-",
+      getValue: (item) => formatMoney(item.amount),
     },
     {
       key: "hsnCode",
@@ -373,7 +373,7 @@ export function BoqItemGrid({
             )}
             {item.suggestedRate !== null ? (
               <>
-                <AiBadge className="tabular-nums">{item.suggestedRate.toLocaleString()}</AiBadge>
+                <AiBadge className="tabular-nums">{formatMoney(item.suggestedRate)}</AiBadge>
                 <Badge variant={confidence >= 0.95 ? "success" : "outline"} className="text-xs">
                   {Math.round(confidence * 100)}%
                 </Badge>
@@ -468,7 +468,7 @@ export function BoqItemGrid({
             Set markup %
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
-            Clear
+            Clear selection
           </Button>
         </div>
       )}
@@ -489,6 +489,7 @@ export function BoqItemGrid({
                     size="icon"
                     variant="ghost"
                     className="h-8 w-8"
+                    aria-label="Delete item"
                     onClick={() => void handleDelete(item)}
                     disabled={deleteItem.isPending}
                   >

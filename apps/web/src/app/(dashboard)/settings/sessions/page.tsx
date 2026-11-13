@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
   formatDateTime,
+  PageHeader,
   Skeleton,
   useToast,
 } from "@bmp/ui";
@@ -36,15 +37,15 @@ export default function SessionsPage() {
 
   return (
     <div className="max-w-3xl space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Active Sessions</h1>
-          <p className="text-sm text-muted-foreground">Devices currently signed in to your account.</p>
-        </div>
-        <Button variant="outline" onClick={() => logoutAll.mutate()} disabled={logoutAll.isPending}>
-          Log out everywhere
-        </Button>
-      </div>
+      <PageHeader
+        title="Active sessions"
+        description="Devices currently signed in to your account."
+        actions={
+          <Button variant="outline" onClick={() => logoutAll.mutate()} disabled={logoutAll.isPending}>
+            Log out everywhere
+          </Button>
+        }
+      />
 
       {sessionsQuery.isLoading ? (
         <Skeleton className="h-48 w-full" />

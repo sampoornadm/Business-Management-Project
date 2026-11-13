@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   CardContent,
+  formatMoney,
   Input,
   Label,
   Skeleton,
@@ -174,7 +175,7 @@ export function TenderItemsTab({ tender }: { tender: TenderDto }) {
             <span className="text-sm text-muted-foreground">
               Version {boqQuery.data.version} · {versionsQuery.data?.length ?? 1} version(s)
             </span>
-            <span className="text-sm font-medium">Total: {boqQuery.data.totalAmount.toLocaleString()}</span>
+            <span className="text-sm font-medium">Total: {formatMoney(boqQuery.data.totalAmount)}</span>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <RatesLockSwitch tender={tender} />

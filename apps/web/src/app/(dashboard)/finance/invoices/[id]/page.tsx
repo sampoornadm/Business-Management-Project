@@ -1,19 +1,12 @@
 "use client";
 
-import { Badge, Card, CardContent, CardHeader, CardTitle, formatDate, Skeleton, useToast } from "@bmp/ui";
+import { Card, CardContent, CardHeader, CardTitle, formatDate, formatMoney, PageHeader, PageSkeleton, useToast } from "@bmp/ui";
 import { useParams } from "next/navigation";
 
 import { RecordPaymentDialog } from "@/components/finance/record-payment-dialog";
+import { StatusBadge } from "@/components/status-badge";
 import { useInvoice, useRecordInvoicePayment } from "@/hooks/use-finance";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
-
-const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
-  DRAFT: "outline",
-  SENT: "secondary",
-  PARTIALLY_PAID: "secondary",
-  PAID: "success",
-  OVERDUE: "destructive",
-};
 
 export default function InvoiceDetailPage() {
   const params = useParams<{ id: string }>();
@@ -23,7 +16,7 @@ export default function InvoiceDetailPage() {
   const recordPayment = useRecordInvoicePayment(params.id);
 
   if (invoiceQuery.isLoading || !invoiceQuery.data) {
-    return <Skeleton className="h-64 w-full" />;
+    return <PageSkeleton />;
   }
 
   const invoice = invoiceQuery.data;
@@ -31,25 +24,30 @@ export default function InvoiceDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{invoice.invoiceNumber}</h1>
-            <Badge variant={STATUS_VARIANT[invoice.status]}>{invoice.status}</Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">{invoice.clientName}</p>
-        </div>
-        {remaining > 0 && (
-          <RecordPaymentDialog
-            remainingAmount={remaining}
-            isSubmitting={recordPayment.isPending}
-            onSubmit={async (input) => {
-              await recordPayment.mutateAsync(input);
-              toast({ title: "Payment recorded" });
-            }}
-          />
-        )}
-      </div>
+      <PageHeader
+        title={invoice.invoiceNumber}
+        badges={
+          <>
+            <StatusBadge status={invoice.status} />
+          </>
+        }
+        actions={
+          <>
+            {remaining > 0 && (
+              <RecordPaymentDialog
+                remainingAmount={remaining}
+                isSubmitting={recordPayment.isPending}
+                onSubmit={async (input) => {
+                  await recordPayment.mutateAsync(input);
+                  toast({ title: "Payment recorded" });
+                }}
+              />
+            )}
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">{invoice.clientName}</p>
+      </PageHeader>
 
       <Card>
         <CardHeader>
@@ -58,19 +56,19 @@ export default function InvoiceDetailPage() {
         <CardContent className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
           <div>
             <p className="text-muted-foreground">Subtotal</p>
-            <p>{invoice.subtotal.toLocaleString()}</p>
+            <p>{formatMoney(invoice.subtotal)}</p>
           </div>
           <div>
             <p className="text-muted-foreground">GST ({invoice.gstPercent}%)</p>
-            <p>{invoice.gstAmount.toLocaleString()}</p>
+            <p>{formatMoney(invoice.gstAmount)}</p>
           </div>
           <div>
             <p className="text-muted-foreground">Total</p>
-            <p className="font-semibold">{invoice.totalAmount.toLocaleString()}</p>
+            <p className="font-semibold">{formatMoney(invoice.totalAmount)}</p>
           </div>
           <div>
             <p className="text-muted-foreground">Paid</p>
-            <p>{invoice.amountPaid.toLocaleString()}</p>
+            <p>{formatMoney(invoice.amountPaid)}</p>
           </div>
         </CardContent>
       </Card>
@@ -87,7 +85,7 @@ export default function InvoiceDetailPage() {
               {invoice.payments.map((payment) => (
                 <div key={payment.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
                   <div>
-                    <p className="font-medium">{payment.amount.toLocaleString()}</p>
+                    <p className="font-medium">{formatMoney(payment.amount)}</p>
                     <p className="text-muted-foreground">
                       {payment.method} · {formatDate(payment.paymentDate)}
                       {payment.referenceNumber ? ` · ${payment.referenceNumber}` : ""}

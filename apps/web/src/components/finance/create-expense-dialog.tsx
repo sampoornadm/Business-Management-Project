@@ -4,6 +4,7 @@ import { EXPENSE_CATEGORIES } from "@bmp/types";
 import {
   Button,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -82,8 +83,13 @@ export function CreateExpenseDialog() {
           <Input type="number" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </div>
         <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
           <Button onClick={handleSubmit} disabled={createExpense.isPending}>
-            Add
+            Add expense
           </Button>
         </DialogFooter>
       </DialogContent>

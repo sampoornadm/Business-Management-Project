@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
   Form,
+  FormActions,
   FormControl,
   FormField,
   FormItem,
@@ -274,9 +275,11 @@ export function VendorForm({
           </CardContent>
         </Card>
 
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Saving..." : submitLabel}
-        </Button>
+        <FormActions onCancel={() => window.history.back()}>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Saving…" : submitLabel}
+          </Button>
+        </FormActions>
       </form>
     </Form>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { TENDER_DOCUMENT_TYPES, type TenderDocumentType } from "@bmp/types";
-import { DocumentUpload, Skeleton, type DocumentVersion, useToast } from "@bmp/ui";
+import { confirmAction, DocumentUpload, type DocumentVersion, Skeleton, useToast } from "@bmp/ui";
 import { AlertTriangle, Loader2, Plus } from "lucide-react";
 import { useRef, type ChangeEvent } from "react";
 
@@ -72,7 +72,12 @@ function DocumentLineage({
   }
 
   async function handleDelete() {
-    if (!window.confirm("Delete this file? All of its versions will be removed.")) return;
+    const confirmed = await confirmAction({
+      title: "Delete this file?",
+      description: "All of its versions will be removed.",
+      confirmLabel: "Delete file",
+    });
+    if (!confirmed) return;
     try {
       await deleteDocument.mutateAsync(documentGroupId);
       toast({ title: "Document deleted" });
@@ -162,7 +167,7 @@ function AddAnotherFileLink({
         className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
       >
         {upload.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-        {upload.isPending ? "Uploading..." : "Add another file"}
+        {upload.isPending ? "Uploading…" : "Add another file"}
       </button>
     </div>
   );

@@ -18,6 +18,7 @@ import {
   FormLabel,
   FormMessage,
   Input,
+  PageHeader,
   useToast,
 } from "@bmp/ui";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -122,10 +123,10 @@ export default function ProfilePage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Your profile</h1>
-        <p className="text-sm text-muted-foreground">Manage your personal information and security.</p>
-      </div>
+      <PageHeader
+        title="Your profile"
+        description="Manage your personal information and security."
+      />
 
       <Card>
         <CardHeader className="flex flex-row items-start justify-between space-y-0">
@@ -221,7 +222,7 @@ export default function ProfilePage() {
                   />
                   <div className="flex gap-2">
                     <Button type="submit" disabled={updateProfile.isPending}>
-                      {updateProfile.isPending ? "Saving..." : "Save changes"}
+                      {updateProfile.isPending ? "Saving…" : "Save changes"}
                     </Button>
                     <Button type="button" variant="outline" onClick={handleCancelEdit}>
                       Cancel
@@ -318,7 +319,7 @@ export default function ProfilePage() {
                 )}
               />
               <Button type="submit" disabled={changePassword.isPending}>
-                {changePassword.isPending ? "Updating..." : "Change password"}
+                {changePassword.isPending ? "Updating…" : "Change password"}
               </Button>
             </form>
           </Form>

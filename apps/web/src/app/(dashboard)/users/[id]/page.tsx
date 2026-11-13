@@ -26,12 +26,12 @@ import {
   FormLabel,
   FormMessage,
   Input,
+  PageSkeleton,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Skeleton,
   useToast,
 } from "@bmp/ui";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -122,12 +122,7 @@ export default function UserDetailPage() {
   }
 
   if (userQuery.isLoading || !userQuery.data) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   const user = userQuery.data;
@@ -202,7 +197,7 @@ export default function UserDetailPage() {
               />
               {canUpdate && (
                 <Button type="submit" disabled={updateUser.isPending}>
-                  {updateUser.isPending ? "Saving..." : "Save changes"}
+                  {updateUser.isPending ? "Saving…" : "Save changes"}
                 </Button>
               )}
             </form>

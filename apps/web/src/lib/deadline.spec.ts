@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { daysUntil, deadlineLabel, isPastDue } from "./deadline";
+import { daysUntil, isPastDue, timeLeftLabel } from "./deadline";
 
 describe("daysUntil", () => {
   it("returns 0 for a deadline later today", () => {
@@ -54,24 +54,28 @@ describe("isPastDue", () => {
   });
 });
 
-describe("deadlineLabel", () => {
-  it("labels Closed once the deadline has passed, even same-day with daysLeft still 0", () => {
-    expect(deadlineLabel(0, true)).toBe("Closed");
+describe("timeLeftLabel", () => {
+  const now = new Date(2026, 8, 26, 10, 0);
+
+  it("labels Closed once the exact time has passed, even on the same calendar day", () => {
+    expect(timeLeftLabel(new Date(2026, 8, 26, 9, 59), now)).toBe("Closed");
   });
 
-  it("labels a past calendar day as Closed", () => {
-    expect(deadlineLabel(-1, true)).toBe("Closed");
+  it("counts minutes inside the last hour", () => {
+    expect(timeLeftLabel(new Date(2026, 8, 26, 10, 20), now)).toBe("20 min left");
   });
 
-  it("labels zero days as Due today when the deadline hasn't passed yet", () => {
-    expect(deadlineLabel(0, false)).toBe("Due today");
+  it("counts hours inside the last 24 hours, even when the date is tomorrow", () => {
+    expect(timeLeftLabel(new Date(2026, 8, 26, 15, 30), now)).toBe("5 hours left");
+    expect(timeLeftLabel(new Date(2026, 8, 26, 11, 0), now)).toBe("1 hour left");
+    expect(timeLeftLabel(new Date(2026, 8, 27, 8, 0), now)).toBe("22 hours left");
   });
 
-  it("labels one day as Due tomorrow", () => {
-    expect(deadlineLabel(1, false)).toBe("Due tomorrow");
+  it("labels the next calendar day as Due tomorrow once it is over 24 hours away", () => {
+    expect(timeLeftLabel(new Date(2026, 8, 27, 17, 0), now)).toBe("Due tomorrow");
   });
 
-  it("labels multiple days as N days left", () => {
-    expect(deadlineLabel(5, false)).toBe("5 days left");
+  it("counts calendar days beyond that", () => {
+    expect(timeLeftLabel(new Date(2026, 9, 1, 9, 0), now)).toBe("5 days left");
   });
 });

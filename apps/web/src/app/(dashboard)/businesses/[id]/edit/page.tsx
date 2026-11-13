@@ -1,6 +1,6 @@
 "use client";
 
-import { Skeleton, useToast } from "@bmp/ui";
+import { PageHeader, PageSkeleton, useToast } from "@bmp/ui";
 import { useParams, useRouter } from "next/navigation";
 
 import { BusinessForm, type BusinessFormValues } from "@/components/businesses/business-form";
@@ -30,16 +30,14 @@ export default function EditBusinessPage() {
   }
 
   if (businessQuery.isLoading || !businessQuery.data) {
-    return <Skeleton className="h-96 w-full max-w-3xl" />;
+    return <PageSkeleton className="max-w-3xl" />;
   }
 
   const business = businessQuery.data;
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Edit Business</h1>
-      </div>
+      <PageHeader title="Edit business" />
       <BusinessForm
         defaultValues={{
           name: business.name,

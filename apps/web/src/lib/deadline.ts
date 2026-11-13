@@ -24,9 +24,20 @@ export function isPastDue(dueDate: string | Date, now: Date = new Date()): boole
   return due.getTime() <= now.getTime();
 }
 
-export function deadlineLabel(daysLeft: number, pastDue: boolean): string {
-  if (pastDue) return "Closed";
-  if (daysLeft === 0) return "Due today";
-  if (daysLeft === 1) return "Due tomorrow";
-  return `${daysLeft} days left`;
+/**
+ * The time left in words. Inside the last 24 hours it counts hours (then minutes), because
+ * "Due today" hides whether that means 20 hours or 20 minutes; beyond that it counts calendar days.
+ */
+export function timeLeftLabel(dueDate: string | Date, now: Date = new Date()): string {
+  const due = typeof dueDate === "string" ? new Date(dueDate) : dueDate;
+  const msLeft = due.getTime() - now.getTime();
+  if (msLeft <= 0) return "Closed";
+
+  const minutes = Math.ceil(msLeft / 60_000);
+  if (minutes < 60) return `${minutes} min left`;
+  const hours = Math.floor(msLeft / 3_600_000);
+  if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} left`;
+
+  const days = daysUntil(due, now);
+  return days === 1 ? "Due tomorrow" : `${days} days left`;
 }

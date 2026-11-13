@@ -7,8 +7,9 @@ import type { FilterableColumnDef } from "@bmp/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 
+import { humanize } from "@/components/status-badge";
 import { TenderDownloadMenu } from "@/components/tenders/tender-download-menu";
-import { daysUntil, deadlineLabel, isPastDue } from "@/lib/deadline";
+import { daysUntil, timeLeftLabel, isPastDue } from "@/lib/deadline";
 import { tenderPriorityBadgeVariant, tenderStatusBadgeVariant } from "@/lib/tender-status";
 
 export interface TenderColumnConfig extends FilterableColumnDef {
@@ -73,7 +74,7 @@ export const TENDER_COLUMNS: TenderColumnConfig[] = [
     defaultVisible: true,
     enumOptions: TENDER_PRIORITIES.map((p) => ({ value: p, label: p })),
     cell: ({ row }) => (
-      <Badge variant={tenderPriorityBadgeVariant(row.original.priority)}>{row.original.priority}</Badge>
+      <Badge variant={tenderPriorityBadgeVariant(row.original.priority)}>{humanize(row.original.priority)}</Badge>
     ),
   },
   {
@@ -103,7 +104,7 @@ export const TENDER_COLUMNS: TenderColumnConfig[] = [
         <DeadlineProgress
           dateText={formatDateTime(due)}
           daysLeft={daysLeft}
-          label={deadlineLabel(daysLeft, pastDue)}
+          label={timeLeftLabel(due)}
           pastDue={pastDue}
           className="min-w-40"
         />

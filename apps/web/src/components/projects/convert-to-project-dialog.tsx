@@ -3,6 +3,7 @@
 import {
   Button,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -43,7 +44,7 @@ export function ConvertToProjectDialog({ tenderId }: { tenderId: string }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline">
-          <Building className="mr-2 h-4 w-4" /> Convert to Project
+          <Building className="mr-2 h-4 w-4" /> Convert to project
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -55,8 +56,13 @@ export function ConvertToProjectDialog({ tenderId }: { tenderId: string }) {
           <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         </div>
         <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
           <Button onClick={handleSubmit} disabled={createProject.isPending}>
-            {createProject.isPending ? "Creating…" : "Create Project"}
+            {createProject.isPending ? "Creating…" : "Create project"}
           </Button>
         </DialogFooter>
       </DialogContent>

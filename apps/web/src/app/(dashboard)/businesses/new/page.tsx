@@ -1,6 +1,6 @@
 "use client";
 
-import { useToast } from "@bmp/ui";
+import { PageHeader, useToast } from "@bmp/ui";
 import { useRouter } from "next/navigation";
 
 import { BusinessForm, type BusinessFormValues } from "@/components/businesses/business-form";
@@ -27,12 +27,10 @@ export default function NewBusinessPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Add a business</h1>
-        <p className="text-sm text-muted-foreground">
-          Tenders, projects, and finance records are scoped to a business.
-        </p>
-      </div>
+      <PageHeader
+        title="Add a business"
+        description="Tenders, projects, and finance records are scoped to a business."
+      />
       <BusinessForm onSubmit={handleSubmit} isSubmitting={createBusiness.isPending} submitLabel="Create business" />
     </div>
   );

@@ -2,14 +2,15 @@
 
 import { TENDER_STATUS_LABELS, type TenderStatus } from "@bmp/types";
 import {
-  Badge,
   Button,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  formatMoney,
   Input,
   KpiGrid,
+  PageHeader,
   Skeleton,
   StatCard,
   Table,
@@ -40,6 +41,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { StatusBadge } from "@/components/status-badge";
 import {
   downloadReportExport,
   useFinancialSummaryReport,
@@ -251,7 +253,7 @@ function ProcurementSpendTab() {
       <Card>
         <CardContent className="pt-6">
           <p className="text-sm text-muted-foreground">Grand total spend</p>
-          <p className="text-2xl font-semibold">{formatNumber(report?.grandTotal)}</p>
+          <p className="text-2xl font-semibold">{formatMoney(report?.grandTotal)}</p>
         </CardContent>
       </Card>
       <Card>
@@ -281,7 +283,7 @@ function ProcurementSpendTab() {
                 />
                 <Tooltip
                   cursor={{ stroke: "hsl(var(--primary))", strokeWidth: 1 }}
-                  formatter={(value: number) => value.toLocaleString()}
+                  formatter={(value: number) => formatMoney(value)}
                   {...chartTooltipStyle}
                 />
                 <Area
@@ -320,7 +322,7 @@ function ProcurementSpendTab() {
                 report?.byVendor.map((row) => (
                   <TableRow key={row.vendorId}>
                     <TableCell>{row.vendorName}</TableCell>
-                    <TableCell className="text-right">{formatNumber(row.total)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(row.total)}</TableCell>
                   </TableRow>
                 ))
               )}
@@ -343,11 +345,11 @@ function ProjectCostingTab() {
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <p className="text-muted-foreground">Total budget</p>
-            <p className="text-lg font-semibold">{formatNumber(report?.totalBudget)}</p>
+            <p className="text-lg font-semibold">{formatMoney(report?.totalBudget)}</p>
           </div>
           <div>
             <p className="text-muted-foreground">Total actual cost</p>
-            <p className="text-lg font-semibold">{formatNumber(report?.totalActualCost)}</p>
+            <p className="text-lg font-semibold">{formatMoney(report?.totalActualCost)}</p>
           </div>
         </div>
         <ExportButtons reportKey="project-costing" />
@@ -383,7 +385,7 @@ function ProjectCostingTab() {
                 />
                 <Tooltip
                   cursor={{ fill: "hsl(var(--muted))" }}
-                  formatter={(value: number) => value.toLocaleString()}
+                  formatter={(value: number) => formatMoney(value)}
                   {...chartTooltipStyle}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -431,12 +433,12 @@ function ProjectCostingTab() {
                   <TableRow key={row.projectId}>
                     <TableCell>{row.name}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{row.status}</Badge>
+                      <StatusBadge status={row.status} />
                     </TableCell>
-                    <TableCell className="text-right">{formatNumber(row.budget)}</TableCell>
-                    <TableCell className="text-right">{formatNumber(row.actualCost)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(row.budget)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(row.actualCost)}</TableCell>
                     <TableCell className={`text-right ${row.variance < 0 ? "text-destructive" : ""}`}>
-                      {formatNumber(row.variance)}
+                      {formatMoney(row.variance)}
                     </TableCell>
                   </TableRow>
                 ))
@@ -483,7 +485,7 @@ function FinancialSummaryTab() {
                 />
                 <Tooltip
                   cursor={{ fill: "hsl(var(--muted))" }}
-                  formatter={(value: number) => value.toLocaleString()}
+                  formatter={(value: number) => formatMoney(value)}
                   {...chartTooltipStyle}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -615,12 +617,10 @@ function VendorPerformanceTab() {
 export default function ReportsPage() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
-        <p className="text-sm text-muted-foreground">
-          Cross-module insights across tenders, procurement, projects, and finance.
-        </p>
-      </div>
+      <PageHeader
+        title="Reports"
+        description="Cross-module insights across tenders, procurement, projects, and finance."
+      />
 
       <KpiCards />
 

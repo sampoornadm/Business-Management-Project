@@ -14,13 +14,15 @@ import {
   DialogHeader,
   DialogTitle,
   formatDate,
+  formatMoney,
   Input,
+  PageHeader,
+  PageSkeleton,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Skeleton,
   Table,
   TableBody,
   TableCell,
@@ -114,25 +116,22 @@ export default function ItemDetailPage() {
   }
 
   if (itemQuery.isLoading || !itemQuery.data) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   const item = itemQuery.data;
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link href="/items" className="text-sm text-muted-foreground hover:underline">
-          ← Back to items
-        </Link>
-        <div className="mt-1 flex items-center gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight">{item.canonicalName}</h1>
-          {canUpdate && (
+      <PageHeader
+        title={item.canonicalName}
+        back={
+          <Link href="/items" className="hover:underline">
+            ← Back to items
+          </Link>
+        }
+        badges={
+          canUpdate && (
             <Button
               size="sm"
               variant="ghost"
@@ -141,14 +140,16 @@ export default function ItemDetailPage() {
             >
               <Pencil className="h-4 w-4" />
             </Button>
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {item.itemCode ? `Code ${formatItemCodeForDisplay(item.itemCode)} · ` : ""}
-          {item.vendorRates.length} vendor rate(s) · {item.ownRates.length} of my rate(s)
-          {item.unit ? ` · unit: ${item.unit}` : ""}
-        </p>
-      </div>
+          )
+        }
+        description={
+          <>
+            {item.itemCode ? `Code ${formatItemCodeForDisplay(item.itemCode)} · ` : ""}
+            {item.vendorRates.length} vendor rate(s) · {item.ownRates.length} of my rate(s)
+            {item.unit ? ` · unit: ${item.unit}` : ""}
+          </>
+        }
+      />
 
       <Dialog open={isRenaming} onOpenChange={setIsRenaming}>
         <DialogContent>
@@ -314,7 +315,7 @@ function VendorRatesCard({ rates }: { rates: ItemVendorRateDto[] }) {
                         {row.isDefault && <Badge variant="secondary">Selected</Badge>}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">{row.rate.toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{formatMoney(row.rate)}</TableCell>
                     <TableCell>
                       {!row.make || (row.make === "Unbranded" && row.model === "Generic") ? "-" : `${row.make} / ${row.model}`}
                     </TableCell>
@@ -378,8 +379,8 @@ function OwnRatesCard({ rates }: { rates: ItemOwnRateDto[] }) {
                         <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">{row.rate.toLocaleString()}</TableCell>
-                    <TableCell className="text-right tabular-nums">{row.baseRate?.toLocaleString() ?? "-"}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{formatMoney(row.rate)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatMoney(row.baseRate)}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {row.markupPercent !== null ? `${row.markupPercent}%` : "-"}
                     </TableCell>

@@ -1,7 +1,7 @@
 "use client";
 
 import { formatItemCodeForDisplay, type ItemListEntryDto } from "@bmp/types";
-import { Badge, formatDate, SortableHeader } from "@bmp/ui";
+import { Badge, formatDate, formatMoney, SortableHeader } from "@bmp/ui";
 import type { FilterableColumnDef } from "@bmp/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle } from "lucide-react";
@@ -17,8 +17,8 @@ export interface ItemColumnConfig extends FilterableColumnDef {
 function rateRange(entry: ItemListEntryDto): string {
   if (entry.minRate === null || entry.maxRate === null) return "-";
   return entry.minRate === entry.maxRate
-    ? entry.minRate.toLocaleString()
-    : `${entry.minRate.toLocaleString()} – ${entry.maxRate.toLocaleString()}`;
+    ? formatMoney(entry.minRate)
+    : `${formatMoney(entry.minRate)} – ${formatMoney(entry.maxRate)}`;
 }
 
 function CategoryCell({ entry }: { entry: ItemListEntryDto }) {
@@ -124,7 +124,7 @@ export const ITEM_COLUMNS: ItemColumnConfig[] = [
     filterable: false,
     defaultVisible: true,
     cell: ({ row }) => (
-      <span className="tabular-nums">{row.original.avgRate?.toLocaleString() ?? "-"}</span>
+      <span className="tabular-nums">{formatMoney(row.original.avgRate)}</span>
     ),
   },
   {

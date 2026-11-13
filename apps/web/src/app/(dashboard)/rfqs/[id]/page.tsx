@@ -16,19 +16,23 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  confirmAction,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
   formatDate,
+  formatMoney,
+  PageHeader,
+  PageSkeleton,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Skeleton,
   Table,
   TableBody,
   TableCell,
@@ -45,6 +49,7 @@ import { useEffect, useState } from "react";
 
 import { QuoteCell } from "@/components/rfq/quote-cell";
 import { QuoteSheetActions } from "@/components/rfq/quote-sheet-actions";
+import { humanize, StatusBadge } from "@/components/status-badge";
 import { PinnedTenderNotes } from "@/components/tenders/pinned-tender-notes";
 import { useCreatePurchaseOrderFromRfq } from "@/hooks/use-purchase-orders";
 import {
@@ -65,13 +70,6 @@ import { useVendors } from "@/hooks/use-vendors";
 import { useAuthStore } from "@/lib/auth-store";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { hasPermission } from "@/lib/permissions";
-
-const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
-  DRAFT: "outline",
-  SENT: "secondary",
-  CLOSED: "success",
-  CANCELLED: "destructive",
-};
 
 export default function RfqDetailPage() {
   const params = useParams<{ id: string }>();
@@ -183,7 +181,13 @@ export default function RfqDetailPage() {
   }
 
   async function handleReopen() {
-    if (!window.confirm("This will reopen the RFQ for further quotes. Continue?")) return;
+    const confirmed = await confirmAction({
+      title: "Reopen this RFQ?",
+      description: "Vendors' quotes can be changed again, and rates will need finalizing again.",
+      confirmLabel: "Reopen RFQ",
+      destructive: false,
+    });
+    if (!confirmed) return;
     try {
       await reopenRfq.mutateAsync();
       toast({ title: "RFQ reopened" });
@@ -215,12 +219,7 @@ export default function RfqDetailPage() {
   }
 
   if (rfqQuery.isLoading || !rfqQuery.data) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   const rfq = rfqQuery.data;
@@ -228,135 +227,147 @@ export default function RfqDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{rfq.title}</h1>
-            <Badge variant={STATUS_VARIANT[rfq.status]}>{rfq.status}</Badge>
-          </div>
-          {rfq.tenderId && tenderQuery.data && (
-            <p className="text-sm text-muted-foreground">
-              for Tender:{" "}
-              <Link href={`/tenders/${rfq.tenderId}`} className="text-primary hover:underline">
-                {tenderQuery.data.title}
-              </Link>
-            </p>
-          )}
-          <p className="text-sm text-muted-foreground">
-            {rfq.itemCount} item(s) · {rfq.vendorCount} vendor(s) invited
-            {rfq.dueDate ? ` · due ${formatDate(rfq.dueDate)}` : ""}
-          </p>
-        </div>
-        {canUpdate && !isFinalized && (
-          <Button variant="outline" asChild>
-            <Link href={`/rfqs/${rfq.id}/edit`}>
-              <Pencil className="mr-2 h-4 w-4" /> Edit RFQ
-            </Link>
-          </Button>
-        )}
-        {canUpdate && !isFinalized && (
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" disabled={finalizeRates.isPending}>
-                Finalize rates
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Finalize rates for this RFQ?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This closes the RFQ and records every vendor&apos;s quoted rate against its item.
-                  {rfq.tenderId
-                    ? " Each item's selected quote becomes the base rate on the linked tender (15% markup the first time)."
-                    : ""}{" "}
-                  You can reopen it later to change quotes and finalize again.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleFinalizeRates}>Finalize rates</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
-        {canDelete && rfq.status === "DRAFT" && (
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive">
-                <Trash2 className="mr-2 h-4 w-4" /> Delete
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete this RFQ?</AlertDialogTitle>
-                <AlertDialogDescription>This can&apos;t be undone.</AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
-        {canUpdate && isFinalized && (
-          <Button variant="outline" onClick={handleReopen} disabled={reopenRfq.isPending}>
-            Reopen RFQ
-          </Button>
-        )}
-        {canSendRfq && !isFinalized && (
-          <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <Send className="mr-2 h-4 w-4" /> Send RFQ
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Send RFQ</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Vendor</label>
-                  <Select value={sendVendorId} onValueChange={setSendVendorId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a vendor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(vendorsQuery.data?.items ?? []).map((v) => (
-                        <SelectItem key={v.id} value={v.id}>
-                          {v.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Message</label>
-                  <Textarea
-                    rows={10}
-                    value={sendText}
-                    onChange={(e) => setSendText(e.target.value)}
-                    disabled={previewInvite.isPending}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  onClick={handleSendRfq}
-                  disabled={inviteVendorMutation.isPending || previewInvite.isPending || !sendVendorId}
-                >
-                  {inviteVendorMutation.isPending ? "Sending…" : "Send"}
+      <PageHeader
+        title={rfq.title}
+        badges={
+          <>
+            <StatusBadge status={rfq.status} />
+          </>
+        }
+        actions={
+          <>
+            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+              {canDelete && rfq.status === "DRAFT" && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructiveOutline">
+                      <Trash2 className="mr-2 h-4 w-4" /> Delete
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete this RFQ?</AlertDialogTitle>
+                      <AlertDialogDescription>This can&apos;t be undone.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+              {canUpdate && !isFinalized && (
+                <Button variant="outline" asChild>
+                  <Link href={`/rfqs/${rfq.id}/edit`}>
+                    <Pencil className="mr-2 h-4 w-4" /> Edit RFQ
+                  </Link>
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              )}
+              {canSendRfq && !isFinalized && (
+                <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline">
+                      <Send className="mr-2 h-4 w-4" /> Send RFQ
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle>Send RFQ</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium">Vendor</label>
+                        <Select value={sendVendorId} onValueChange={setSendVendorId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a vendor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(vendorsQuery.data?.items ?? []).map((v) => (
+                              <SelectItem key={v.id} value={v.id}>
+                                {v.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium">Message</label>
+                        <Textarea
+                          rows={10}
+                          value={sendText}
+                          onChange={(e) => setSendText(e.target.value)}
+                          disabled={previewInvite.isPending}
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <DialogClose asChild>
+                        <Button type="button" variant="outline">
+                          Cancel
+                        </Button>
+                      </DialogClose>
+                      <Button
+                        onClick={handleSendRfq}
+                        disabled={inviteVendorMutation.isPending || previewInvite.isPending || !sendVendorId}
+                      >
+                        {inviteVendorMutation.isPending ? "Sending…" : "Send"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
+              {canUpdate && !isFinalized && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button disabled={finalizeRates.isPending}>
+                      Finalize rates
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Finalize rates for this RFQ?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This closes the RFQ and records every vendor&apos;s quoted rate against its item.
+                        {rfq.tenderId
+                          ? " Each item's selected quote becomes the base rate on the linked tender (15% markup the first time)."
+                          : ""}{" "}
+                        You can reopen it later to change quotes and finalize again.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleFinalizeRates}>Finalize rates</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+              {canUpdate && isFinalized && (
+                <Button variant="outline" onClick={handleReopen} disabled={reopenRfq.isPending}>
+                  Reopen RFQ
+                </Button>
+              )}
+              {rfq.status === "CLOSED" && canCreatePo && (
+                <Button onClick={handleCreatePo}>
+                  <ShoppingCart className="mr-2 h-4 w-4" /> Create purchase orders
+                </Button>
+              )}
+            </div>
+          </>
+        }
+      >
+        {rfq.tenderId && tenderQuery.data && (
+          <p className="text-sm text-muted-foreground">
+            for Tender:{" "}
+            <Link href={`/tenders/${rfq.tenderId}`} className="text-primary hover:underline">
+              {tenderQuery.data.title}
+            </Link>
+          </p>
         )}
-        {rfq.status === "CLOSED" && canCreatePo && (
-          <Button onClick={handleCreatePo}>
-            <ShoppingCart className="mr-2 h-4 w-4" /> Create Purchase Order(s)
-          </Button>
-        )}
-      </div>
+        <p className="text-sm text-muted-foreground">
+          {rfq.itemCount} item(s) · {rfq.vendorCount} vendor(s) invited
+          {rfq.dueDate ? ` · due ${formatDate(rfq.dueDate)}` : ""}
+        </p>
+      </PageHeader>
 
       <Card>
         <CardHeader>
@@ -369,7 +380,7 @@ export default function RfqDetailPage() {
             ) : (
               rfq.vendorInvites.map((invite) => (
                 <Badge key={invite.id} variant="secondary" className="flex items-center gap-1">
-                  {invite.vendor.name} · {invite.status}
+                  {invite.vendor.name} · {humanize(invite.status)}
                   {canUpdate && !isFinalized && (
                     <button
                       type="button"
@@ -377,6 +388,7 @@ export default function RfqDetailPage() {
                         await removeVendor.mutateAsync(invite.vendor.id);
                       }}
                       aria-label={`Remove ${invite.vendor.name}`}
+                      title={`Remove ${invite.vendor.name}`}
                     >
                       <Trash2 className="ml-1 h-3 w-3" />
                     </button>
@@ -534,7 +546,7 @@ export default function RfqDetailPage() {
                     )}
                   </div>
                   <p className="text-muted-foreground">
-                    Total: {total.total.toLocaleString()} ({total.itemsQuoted} item(s) quoted)
+                    Total: {formatMoney(total.total)} ({total.itemsQuoted} item(s) quoted)
                   </p>
                 </div>
               ))}

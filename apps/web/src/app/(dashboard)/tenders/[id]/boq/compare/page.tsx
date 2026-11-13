@@ -4,6 +4,9 @@ import {
   Badge,
   Card,
   CardContent,
+  formatMoney,
+  PageHeader,
+  PageSkeleton,
   Select,
   SelectContent,
   SelectItem,
@@ -29,7 +32,7 @@ import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 function formatDelta(value: number | null): string {
   if (value === null) return "-";
   const sign = value > 0 ? "+" : "";
-  return `${sign}${value.toLocaleString()}`;
+  return `${sign}${formatMoney(value)}`;
 }
 
 export default function BoqComparePage() {
@@ -42,24 +45,21 @@ export default function BoqComparePage() {
   const comparison = useCompareBoq(params.id, compareTenderId || undefined);
 
   if (tenderQuery.isLoading || !tenderQuery.data) {
-    return <Skeleton className="h-64 w-full" />;
+    return <PageSkeleton />;
   }
 
   const candidateTenders = (otherTendersQuery.data?.items ?? []).filter((t) => t.id !== params.id);
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link
-          href={`/tenders/${params.id}`}
-          className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-3 w-3" /> Back to tender
-        </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Compare BOQ — {tenderQuery.data.title}
-        </h1>
-      </div>
+      <PageHeader
+        title={<>Compare BOQ — {tenderQuery.data.title}</>}
+        back={
+          <Link href={`/tenders/${params.id}`} className="inline-flex items-center gap-1 hover:text-foreground">
+            <ArrowLeft className="h-3 w-3" /> Back to tender
+          </Link>
+        }
+      />
 
       <Card>
         <CardContent className="space-y-2 pt-6">
@@ -87,12 +87,12 @@ export default function BoqComparePage() {
             <div className="flex gap-6 text-sm">
               <div>
                 <p className="text-muted-foreground">This tender total</p>
-                <p className="text-lg font-semibold">{comparison.data.baseTotalAmount.toLocaleString()}</p>
+                <p className="text-lg font-semibold">{formatMoney(comparison.data.baseTotalAmount)}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Comparison tender total</p>
                 <p className="text-lg font-semibold">
-                  {comparison.data.compareTotalAmount.toLocaleString()}
+                  {formatMoney(comparison.data.compareTotalAmount)}
                 </p>
               </div>
               <div>
@@ -120,9 +120,9 @@ export default function BoqComparePage() {
                     <TableRow key={`${line.description}-${index}`}>
                       <TableCell>{line.description}</TableCell>
                       <TableCell>{line.unit ?? "-"}</TableCell>
-                      <TableCell className="text-right">{line.baseRate?.toLocaleString() ?? "-"}</TableCell>
+                      <TableCell className="text-right">{formatMoney(line.baseRate)}</TableCell>
                       <TableCell className="text-right">
-                        {line.compareRate?.toLocaleString() ?? "-"}
+                        {formatMoney(line.compareRate)}
                       </TableCell>
                       <TableCell className="text-right">{formatDelta(line.rateDelta)}</TableCell>
                       <TableCell className="text-right">{formatDelta(line.amountDelta)}</TableCell>

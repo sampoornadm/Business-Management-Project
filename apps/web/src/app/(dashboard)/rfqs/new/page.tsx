@@ -9,8 +9,10 @@ import {
   CardHeader,
   CardTitle,
   Checkbox,
+  FormActions,
   Input,
   MultiSelect,
+  PageHeader,
   Select,
   SelectContent,
   SelectItem,
@@ -164,12 +166,10 @@ export default function NewRfqPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Create RFQ</h1>
-        <p className="text-sm text-muted-foreground">
-          Request quotations from vendors for a set of items.
-        </p>
-      </div>
+      <PageHeader
+        title="Create RFQ"
+        description="Request quotations from vendors for a set of items."
+      />
 
       <Card>
         <CardHeader>
@@ -387,7 +387,7 @@ export default function NewRfqPage() {
                       </TableCell>
                       <TableCell>
                         {items.length > 1 && (
-                          <Button size="sm" variant="ghost" onClick={() => removeItem(index)}>
+                          <Button size="sm" variant="ghost" aria-label="Remove item" onClick={() => removeItem(index)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         )}
@@ -401,9 +401,11 @@ export default function NewRfqPage() {
         </CardContent>
       </Card>
 
-      <Button onClick={handleSubmit} disabled={createRfq.isPending}>
-        {createRfq.isPending ? "Creating…" : "Create RFQ"}
-      </Button>
+      <FormActions onCancel={() => window.history.back()}>
+        <Button onClick={handleSubmit} disabled={createRfq.isPending}>
+          {createRfq.isPending ? "Creating…" : "Create RFQ"}
+        </Button>
+      </FormActions>
     </div>
   );
 }

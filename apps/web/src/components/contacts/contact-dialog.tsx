@@ -6,6 +6,7 @@ import {
   Checkbox,
   Combobox,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -138,7 +139,7 @@ export function ContactDialog({
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium">Phone numbers</label>
               <Button type="button" size="sm" variant="outline" onClick={addPhone}>
-                <Plus className="mr-1 h-3.5 w-3.5" /> Add
+                <Plus className="mr-1 h-3.5 w-3.5" /> Add phone
               </Button>
             </div>
             {phones.map((row) => (
@@ -163,6 +164,7 @@ export function ContactDialog({
                   type="button"
                   size="sm"
                   variant="ghost"
+                  aria-label="Remove phone"
                   onClick={() => setPhones((rows) => rows.filter((r) => r.key !== row.key))}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -175,7 +177,7 @@ export function ContactDialog({
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium">Emails</label>
               <Button type="button" size="sm" variant="outline" onClick={addEmail}>
-                <Plus className="mr-1 h-3.5 w-3.5" /> Add
+                <Plus className="mr-1 h-3.5 w-3.5" /> Add email
               </Button>
             </div>
             {emails.map((row) => (
@@ -201,6 +203,7 @@ export function ContactDialog({
                   type="button"
                   size="sm"
                   variant="ghost"
+                  aria-label="Remove email"
                   onClick={() => setEmails((rows) => rows.filter((r) => r.key !== row.key))}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -220,6 +223,11 @@ export function ContactDialog({
           </div>
         </div>
         <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
           <Button type="button" onClick={handleSubmit}>
             Save
           </Button>

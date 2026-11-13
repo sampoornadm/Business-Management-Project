@@ -2,17 +2,18 @@
 
 import { BILL_STATUS_TRANSITIONS, type BillStatus } from "@bmp/types";
 import {
-  Badge,
   Button,
   Card,
   CardContent,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
   formatDate,
+  formatMoney,
   Input,
   Table,
   TableBody,
@@ -26,14 +27,8 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 
 import { CreateInvoiceFromBillDialog } from "@/components/finance/create-invoice-from-bill-dialog";
+import { humanize, StatusBadge } from "@/components/status-badge";
 import { useAddBill, useBills, useUpdateBillStatus } from "@/hooks/use-projects";
-
-const STATUS_VARIANT: Record<BillStatus, "success" | "secondary" | "outline" | "destructive"> = {
-  DRAFT: "outline",
-  SUBMITTED: "secondary",
-  APPROVED: "secondary",
-  PAID: "success",
-};
 
 function AddBillDialog({ projectId, lastCumulative }: { projectId: string; lastCumulative: number }) {
   const { toast } = useToast();
@@ -87,13 +82,18 @@ function AddBillDialog({ projectId, lastCumulative }: { projectId: string; lastC
             onChange={(e) => setCumulativeAmount(e.target.value)}
           />
           <p className="text-sm text-muted-foreground">
-            Previous cumulative: {lastCumulative.toLocaleString()}
-            {preview !== null && ` · This bill's amount: ${preview.toLocaleString()}`}
+            Previous cumulative: {formatMoney(lastCumulative)}
+            {preview !== null && ` · This bill's amount: ${formatMoney(preview)}`}
           </p>
         </div>
         <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
           <Button onClick={handleSubmit} disabled={addBill.isPending}>
-            Create
+            Create bill
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -152,15 +152,15 @@ export function BillsTab({ projectId }: { projectId: string }) {
                   <TableRow key={bill.id}>
                     <TableCell>{bill.billNumber}</TableCell>
                     <TableCell>{formatDate(bill.billDate)}</TableCell>
-                    <TableCell className="text-right">{bill.cumulativeAmount.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{bill.currentBillAmount.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">{formatMoney(bill.cumulativeAmount)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(bill.currentBillAmount)}</TableCell>
                     <TableCell>
-                      <Badge variant={STATUS_VARIANT[bill.status]}>{bill.status}</Badge>
+                      <StatusBadge status={bill.status} />
                     </TableCell>
                     <TableCell className="space-x-2">
                       {nextStatuses.length > 0 && (
                         <Button size="sm" variant="outline" onClick={() => advance(bill.id, nextStatuses[0]!)}>
-                          Mark {nextStatuses[0]}
+                          Mark as {humanize(nextStatuses[0]!).toLowerCase()}
                         </Button>
                       )}
                       {bill.status !== "DRAFT" && (

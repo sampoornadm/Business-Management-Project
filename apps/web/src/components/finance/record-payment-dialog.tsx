@@ -4,11 +4,13 @@ import { PAYMENT_METHODS } from "@bmp/types";
 import {
   Button,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  formatMoney,
   Input,
   Select,
   SelectContent,
@@ -87,7 +89,7 @@ export function RecordPaymentDialog({
           <div className="space-y-1">
             <label className="text-sm font-medium">Amount</label>
             <Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            <p className="text-xs text-muted-foreground">Remaining: {remainingAmount.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">Remaining: {formatMoney(remainingAmount)}</p>
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium">Method</label>
@@ -127,6 +129,11 @@ export function RecordPaymentDialog({
           </div>
         </div>
         <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
           <Button onClick={handleSubmit} disabled={isSubmitting}>
             {isSubmitting ? "Recording…" : "Record"}
           </Button>
