@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  isSailRfxNumber,
   isTenderStatusReversal,
   TENDER_STATUS_LABELS,
   type ChangeTenderStatusInput,
@@ -22,6 +23,7 @@ import {
 import { Ban, Check, Minus, X } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 
+import { useFetchStatementAction } from "@/components/competitors/fetch-statement";
 import { useCurrentBoq } from "@/hooks/use-boq";
 import { useChangeTenderStatus, useTenderStatusHistory } from "@/hooks/use-tenders";
 import { canRevertTo } from "@/lib/tender-stepper";
@@ -117,6 +119,8 @@ export interface TenderStatusTrackerProps {
   canChange: boolean;
   canRevert: boolean;
   canViewBoq: boolean;
+  /** May read the client's comparative statement from the portal once a result is in. */
+  canFetchStatement?: boolean;
 }
 
 /**
@@ -124,9 +128,16 @@ export interface TenderStatusTrackerProps {
  * Result circle opens into a Won / Lost / Cancelled band that collapses into the pick. Only
  * `canRevert` (admins) can click an earlier stage to move back; anyone gets a short Undo.
  */
-export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }: TenderStatusTrackerProps) {
+export function TenderStatusTracker({
+  tender,
+  canChange,
+  canRevert,
+  canViewBoq,
+  canFetchStatement = false,
+}: TenderStatusTrackerProps) {
   const { toast } = useToast();
   const changeStatus = useChangeTenderStatus(tender.id);
+  const fetchStatement = useFetchStatementAction(tender.id);
   const status = tender.status;
   const [bandOpen, setBandOpen] = useState(false);
   const [committing, setCommitting] = useState<Outcome | null>(null);
@@ -174,6 +185,11 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
           </ToastAction>
         ),
       });
+      // The client publishes every bidder's rates once the tender is opened. The status is
+      // already saved; this follows on its own and reports through its own toasts.
+      if (canFetchStatement && (to === "WON" || to === "LOST") && isSailRfxNumber(tender.tenderNumber)) {
+        void fetchStatement.run();
+      }
     } catch (error) {
       setCommitting(null);
       toast({

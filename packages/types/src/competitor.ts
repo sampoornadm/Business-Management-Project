@@ -1,6 +1,14 @@
 // Competitor rates read from the client portal's comparative statement (SAIL ISP). All rates
 // are the basic price per unit unless a field says otherwise.
 
+/**
+ * SAIL ISP numbers its RFx with ten digits, and that number is the tender number here. Tenders
+ * from other clients (and budgetary quotations) have no comparative statement on that portal.
+ */
+export function isSailRfxNumber(tenderNumber: string): boolean {
+  return /^\d{10}$/.test(tenderNumber);
+}
+
 export type TrendDirection = "RISING" | "FALLING" | "FLAT";
 
 export interface RateForecastDto {

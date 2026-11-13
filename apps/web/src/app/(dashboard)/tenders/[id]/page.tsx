@@ -1,6 +1,6 @@
 "use client";
 
-import { TENDER_KIND_LABELS } from "@bmp/types";
+import { isSailRfxNumber, TENDER_KIND_LABELS } from "@bmp/types";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,6 +39,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
+import { FetchStatementMenuItem } from "@/components/competitors/fetch-statement";
 import { ConvertToProjectDialog } from "@/components/projects/convert-to-project-dialog";
 import { humanize } from "@/components/status-badge";
 import { LinkedBudgetaryQuotationCard } from "@/components/tenders/linked-budgetary-quotation-card";
@@ -139,9 +140,13 @@ export default function TenderDetailPage() {
   // (fill the bid while Draft, bill once Won); rarely used actions sit in the "More" menu.
   const isDraft = tender.status === "DRAFT";
   const isWon = tender.status === "WON";
-  // Portal bid actions only matter until a result is in.
+  // Filling the bid only matters until a result is in; the portal window itself stays reachable
+  // afterwards, because the client's comparative statement only appears there once the tender is opened.
   const bidOpen = isDraft || tender.status === "SUBMITTED";
-  const showPortalInMenu = canFillPortal && bidOpen && !isDraft;
+  const showPortalInMenu = canFillPortal && !isDraft;
+  // The client's comparative statement exists only for SAIL ISP tenders, once a result is in.
+  const showFetchStatement =
+    canFillPortal && (isWon || tender.status === "LOST") && isSailRfxNumber(tender.tenderNumber);
   const showDelete = canDelete && isDraft;
   const hasMoreActions = canViewBills || showPortalInMenu || showDelete;
 
@@ -182,6 +187,7 @@ export default function TenderDetailPage() {
                       </DropdownMenuItem>
                     )}
                     {showPortalInMenu && <OpenPortalBrowserButton menuItem />}
+                    {showFetchStatement && <FetchStatementMenuItem tenderId={tender.id} />}
                     {showDelete && (
                       <>
                         {(canViewBills || showPortalInMenu) && <DropdownMenuSeparator />}
@@ -241,6 +247,7 @@ export default function TenderDetailPage() {
             canChange={canChangeStatus}
             canRevert={canRevertStatus}
             canViewBoq={canViewBoq}
+            canFetchStatement={canFillPortal}
           />
         </div>
       </PageHeader>

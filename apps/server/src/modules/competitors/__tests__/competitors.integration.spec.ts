@@ -199,6 +199,20 @@ describe("competitor rates (integration)", () => {
     expect(reads).toBe(0);
   });
 
+  it("refuses a tender whose number is not a portal RFx number, without touching the portal", async () => {
+    let reads = 0;
+    statementSource.read = () => {
+      reads += 1;
+      return Promise.resolve(matrix());
+    };
+    await prisma.tender.update({ where: { id: openTenderId }, data: { status: "LOST" } });
+    const response = await fetchStatement(openTenderId);
+    await prisma.tender.update({ where: { id: openTenderId }, data: { status: "SUBMITTED" } });
+    expect(response.status).toBe(400);
+    expect(response.body.error.message).toMatch(/RFx number/);
+    expect(reads).toBe(0);
+  });
+
   it("gives rates to beat for a tender's BOQ items, leaving out its own statement", async () => {
     await fetchStatement();
     const own = (await request(app).get(`/api/v1/competitors/tenders/${tenderId}/rates-to-beat`).set(auth())).body.data;

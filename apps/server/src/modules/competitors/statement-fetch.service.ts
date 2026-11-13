@@ -1,4 +1,4 @@
-import type { FetchStatementResultDto } from "@bmp/types";
+import { isSailRfxNumber, type FetchStatementResultDto } from "@bmp/types";
 
 import {
   BadRequestError,
@@ -41,6 +41,12 @@ export class StatementFetchService {
     if (!tender) throw new NotFoundError("Tender not found");
     if (!RESULT_STATUSES.has(tender.status)) {
       throw new BadRequestError("The comparative statement can be fetched once the tender is marked Won or Lost");
+    }
+
+    if (!isSailRfxNumber(tender.tenderNumber)) {
+      throw new BadRequestError(
+        `Tender number ${tender.tenderNumber} is not a SAIL ISP RFx number, so there is no comparative statement to fetch`,
+      );
     }
 
     let grid: string[][];
