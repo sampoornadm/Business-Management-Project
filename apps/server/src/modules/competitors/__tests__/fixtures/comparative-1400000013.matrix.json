@@ -1,0 +1,634 @@
+[
+[
+"R F Q Details",
+"",
+"",
+"",
+"",
+""
+],
+[
+"ORGANIZATION NAME",
+"SAIL IISCO STEEL PLANT",
+"",
+"",
+"",
+""
+],
+[
+"PURCHASE ORGANIZATION NAME",
+"ISP MATERIAL MANAGEMENT DEPARTMENT",
+"",
+"",
+"",
+""
+],
+[
+"R F Q No",
+"1400000013",
+"",
+"",
+"",
+""
+],
+[
+"R F Q OWNER",
+"RFQ OWNER",
+"",
+"",
+"",
+""
+],
+[
+"DESCRIPTION",
+"MJ/S02/2026/1007_COIL SPRING",
+"",
+"",
+"",
+""
+],
+[
+"BID Start Date",
+"16.10.2026 10 : 22 : 18",
+"",
+"",
+"",
+""
+],
+[
+"BID End Date",
+"23.10.2026 15 : 00 : 00",
+"",
+"",
+"",
+""
+],
+[
+"Basis of Evaluation",
+"Overall",
+"",
+"",
+"",
+""
+],
+[
+"Payment Terms",
+"Z016",
+"",
+"",
+"",
+""
+],
+[
+"Payment Terms Description",
+"100% PAYMENT WITHIN 30 DAYS OF RECEIPT AND ACCEPT",
+"",
+"",
+"",
+""
+],
+[
+"",
+"",
+"",
+"",
+"",
+""
+],
+[
+"QUOTATION DETAIL(S) : R F Q HEADER LEVEL",
+"",
+"",
+"",
+"",
+""
+],
+[
+"Supplier Name",
+"( 1000000001 ) ALPHA SPRING WORKS",
+"( 1000000002 ) BETA ENGINEERING CORPORATION",
+"( 1000000003 ) GAMMA ENGINEERING WORKS",
+"( 1000000004 ) DELTA ENTERPRISES",
+"( 1000000005 ) EPSILON INDUSTRIES"
+],
+[
+"Submitted By",
+"( 0500000001 ) Mr. ALPHA CONTACT",
+"( 0500000002 ) Mr. BETA CONTACT",
+"( 0500000003 ) Mr. GAMMA CONTACT",
+"( 0500000004 ) Mr. DELTA CONTACT",
+"( 0500000005 ) Mr. EPSILON CONTACT"
+],
+[
+"Qutotation Reference No",
+"8100000001",
+"8100000002",
+"8100000003",
+"8100000004",
+"8100000005"
+],
+[
+"",
+"",
+"",
+"",
+"",
+""
+],
+[
+"Type of GSTIN Registration",
+"NORMAL",
+"NORMAL",
+"NORMAL",
+"NORMAL",
+"NORMAL"
+],
+[
+"Are you registered for GSTIN ? (N.B: Vendors who are not registered are case of Reverse Charge and ISP has to pay GST to GOVT.)",
+"Yes",
+"Yes",
+"Yes",
+"Yes",
+"Yes"
+],
+[
+"State of the Billing Party (GST State)",
+"WEST BENGAL",
+"WEST BENGAL",
+"20",
+"West Bengal",
+"West Bengal - 19"
+],
+[
+"We confirm that we accept all clauses mentioned in Scope of Work in totality",
+"Yes",
+"Yes",
+"Yes",
+"Yes",
+"Yes"
+],
+[
+"We confirm that we accept all the Terms and & Conditions mentioned in NIT",
+"Yes",
+"Yes",
+"Yes",
+"Yes",
+"Yes"
+],
+[
+"Are you Micro & Small Enterprise (MSE)?",
+"Yes",
+"Yes",
+"Yes",
+"Yes",
+"Yes"
+],
+[
+"If MSE Provide Status ?",
+"MSE-GENERAL",
+"MSE-GENERAL",
+"MSE-GENERAL",
+"MSE-GENERAL",
+"MSE-GENERAL"
+],
+[
+"Caste of Entrepreneur having minimum stake 51%",
+"GENERAL",
+"GENERAL",
+"100",
+"Not Applicable",
+"General"
+],
+[
+"Weight of the consignment (Mention the weight in numeric followed by applicable unit of measurement)",
+"0",
+"1800KG",
+"NA",
+"1400 Kg",
+"500 Kg"
+],
+[
+"Terms of Delivery/Incoterms",
+"FOS: F.O.R, SAIL-ISP, BURNPUR",
+"FBS: FOR BURNPUR STORES AT ASANSOL",
+"FBS: FOR BURNPUR STORES AT ASANSOL",
+"DAP: DELIVERED AT LOCATION",
+"FOS: F.O.R, SAIL-ISP, BURNPUR"
+],
+[
+"Dispatch Mode",
+"ROAD",
+"ROAD",
+"ROAD",
+"ROAD",
+"ROAD"
+],
+[
+"Read and agree with all terms and conditions of RFQ,GCC and SAIL P1",
+"Yes",
+"Yes",
+"Yes",
+"Yes",
+"Yes"
+],
+[
+"Price variation details to be uploaded in c folder (if any)",
+"No",
+"No",
+"No",
+"No",
+"No"
+],
+[
+"Technical Deviation(s)",
+"ACCEPTED AS PER TENDER SPECIFICATION",
+"ACCEPTED AS PER TENDER SPECIFICATION",
+"ACCEPTED AS PER TENDER SPECIFICATION",
+"ACCEPTED AS PER TENDER SPECIFICATION",
+"ACCEPTED AS PER TENDER SPECIFICATION"
+],
+[
+"Delivery period from the date of order placement (No. of Days)",
+"180 DAYS",
+"240",
+"280",
+"150",
+"120"
+],
+[
+"PRD Clause",
+"NA",
+"N.A.",
+"NA",
+"Not Applicable",
+"NA"
+],
+[
+"Price variation formula and Max. limit (RS.)",
+"NA",
+"N.A.",
+"NA",
+"Not Applicable",
+"NA"
+],
+[
+"List of all required documents enclosed/attached as per RFQ details",
+"Yes",
+"Yes",
+"Yes",
+"Yes",
+"Yes"
+],
+[
+"Reason for non compliance with respect to documents as per RFQ requirement",
+"NA",
+"N.A.",
+"NA",
+"Not Applicable",
+"NA"
+],
+[
+"Remarks if any",
+"NA",
+"N.A.",
+"NA",
+"No",
+"NA"
+],
+[
+"Whether you accept the bid securing declaration as per the format avaialble in standard documents",
+"Yes",
+"Yes",
+"Yes",
+"Yes",
+"Yes"
+],
+[
+"Adherence to clause regarding restriction on procurement from a bidder of a country (RULE 144 (XI) as per F.NO. 6/18/2019-PPD DT",
+"Yes",
+"Yes",
+"Yes",
+"Yes",
+"Yes"
+],
+[
+"Whether you accept the non collusive declarartion as per the format available in standard documents.",
+"Yes",
+"Yes",
+"Yes",
+"Yes",
+"Yes"
+],
+[
+"Domestic value addition (%)> 50% as per the DPIIT guideline no. . P-45021/2/2017-PP (BEII) and declaration format attached in th",
+"Yes",
+"Yes",
+"Yes",
+"Yes",
+"Yes"
+],
+[
+"If Domestic value addition (%)> 20% and If Domestic value addition (%)< 50% as per the DPIIT guideline no. . P-45021/2/2017-PP (",
+"No",
+"No",
+"No",
+"No",
+"No"
+],
+[
+"Domestic value addition (%)< 20% as per the DPIIT guideline no. . P-45021/2/2017-PP (BEII) and declaration format attached in th",
+"No",
+"No",
+"No",
+"No",
+"No"
+],
+[
+"Techno commercial offer validity from date of tender opening",
+"Yes",
+"Yes",
+"Yes",
+"Yes",
+"Yes Comment: 20 days"
+],
+[
+"Price bid validity from date of price bid opening",
+"Yes",
+"Yes",
+"Yes",
+"Yes",
+"Yes Comment: 20 days"
+],
+[
+"Terms of payment",
+"AS PER RFQ",
+"AS PER RFQ",
+"AS PER RFQ",
+"AS PER RFQ",
+"AS PER RFQ"
+],
+[
+"Are you Local \"MSE\"?",
+"No",
+"Yes",
+"Yes",
+"No",
+"Yes"
+],
+[
+"Are the items, MII Class 1 Eligible (Domestic value addition 50% and above)?",
+"Yes",
+"Yes",
+"Yes",
+"Yes",
+"Yes"
+],
+[
+"Are the items, MII Class 2 Eligible (Domestic value addition between 20% to 50%)?",
+"No",
+"No",
+"No",
+"No",
+"No"
+],
+[
+"WE UNDERTAKE THAT WE SHALL NOT GIVE OR TAKE ANY FINANCIAL OR NON-FINANCIAL BRIBE, TO OR FROM ANYONE DURING THE TENDER OR DURING",
+"Yes",
+"Yes",
+"Yes",
+"Yes",
+"Yes"
+],
+[
+"Price Matching Required",
+"No",
+"No",
+"No",
+"No",
+"No"
+],
+[
+"Wheather Quoted For All Item",
+"Yes",
+"Yes",
+"Yes",
+"Yes",
+"Yes"
+],
+[
+"Total LCNITC(As Quoted)",
+"891000.00",
+"528000.00",
+"610500.00",
+"561000.00",
+"940500.00"
+],
+[
+"",
+"",
+"",
+"",
+"",
+""
+],
+[
+"QUOTATION DETAIL(S) : R F Q ITEM LEVEL",
+"",
+"",
+"",
+"",
+""
+],
+[
+"Supplier Name",
+"( 1000000001 ) ALPHA SPRING WORKS",
+"( 1000000002 ) BETA ENGINEERING CORPORATION",
+"( 1000000003 ) GAMMA ENGINEERING WORKS",
+"( 1000000004 ) DELTA ENTERPRISES",
+"( 1000000005 ) EPSILON INDUSTRIES"
+],
+[
+"Submitted By",
+"( 0500000001 ) Mr. ALPHA CONTACT",
+"( 0500000002 ) Mr. BETA CONTACT",
+"( 0500000003 ) Mr. GAMMA CONTACT",
+"( 0500000004 ) Mr. DELTA CONTACT",
+"( 0500000005 ) Mr. EPSILON CONTACT"
+],
+[
+"",
+"",
+"",
+"",
+"",
+""
+],
+[
+"Sl No",
+"001",
+"001",
+"001",
+"001",
+"001"
+],
+[
+"Item Code",
+"20110601001260",
+"20110601001260",
+"20110601001260",
+"20110601001260",
+"20110601001260"
+],
+[
+"Item Description",
+"COIL SPRING,PSL-1397,MK-20",
+"COIL SPRING,PSL-1397,MK-20",
+"COIL SPRING,PSL-1397,MK-20",
+"COIL SPRING,PSL-1397,MK-20",
+"COIL SPRING,PSL-1397,MK-20"
+],
+[
+"RFQ Item Quantity",
+"3300.000",
+"3300.000",
+"3300.000",
+"3300.000",
+"3300.000"
+],
+[
+"Offer Quantity",
+"3300.000",
+"3300.000",
+"3300.000",
+"3300.000",
+"3300.000"
+],
+[
+"Item UoM",
+"EA",
+"EA",
+"EA",
+"EA",
+"EA"
+],
+[
+"Order Currency",
+"INR",
+"INR",
+"INR",
+"INR",
+"INR"
+],
+[
+"Price as quoted",
+"891000.00",
+"528000.00",
+"610500.00",
+"561000.00",
+"940500.00"
+],
+[
+"IGST (Ded-ITC) %",
+"",
+"",
+"109890.00 ( 18.00 % )",
+"",
+""
+],
+[
+"CGST (Ded-ITC) %",
+"80190.00 ( 9.00 % )",
+"47520.00 ( 9.00 % )",
+"",
+"50490.00 ( 9.00 % )",
+"84645.00 ( 9.00 % )"
+],
+[
+"SGST (Ded-ITC) %",
+"80190.00 ( 9.00 % )",
+"47520.00 ( 9.00 % )",
+"",
+"50490.00 ( 9.00 % )",
+"84645.00 ( 9.00 % )"
+],
+[
+"GST",
+"160380.00",
+"95040.00",
+"109890.00",
+"100980.00",
+"169290.00"
+],
+[
+"Landed Cost",
+"1051380.00",
+"623040.00",
+"720390.00",
+"661980.00",
+"1109790.00"
+],
+[
+"Total LCNITC",
+"891000",
+"528000",
+"610500",
+"561000",
+"940500"
+],
+[
+"Currency Conversion Exchange Rate",
+"1.00",
+"1.00",
+"1.00",
+"1.00",
+"1.00"
+],
+[
+"Total LCNITC(INR)",
+"891000.00",
+"528000.00",
+"610500.00",
+"561000.00",
+"940500.00"
+],
+[
+"Total Landed Cost(INR)",
+"1051380.00",
+"623040.00",
+"720390.00",
+"661980.00",
+"1109790.00"
+],
+[
+"Total GST(INR)",
+"160380.00",
+"95040.00",
+"109890.00",
+"100980.00",
+"169290.00"
+],
+[
+"Total LCNITC(INR) per Unit",
+"270.00",
+"160.00",
+"185.00",
+"170.00",
+"285.00"
+],
+[
+"Basic Price Per Unit",
+"270.00",
+"160.00",
+"185.00",
+"170.00",
+"285.00"
+],
+[
+"Landed Cost Per Unit ( INR )",
+"318.60",
+"188.80",
+"218.30",
+"200.60",
+"336.30"
+]
+]
