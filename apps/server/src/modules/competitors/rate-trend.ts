@@ -16,7 +16,7 @@ export interface RateForecast {
 }
 
 const DAY_MS = 86_400_000;
-/** A predicted move smaller than this share of the last rate is reported as flat. */
+/** A trend moving the rate by less than this share of the last rate per year is reported as flat. */
 const FLAT_BAND = 0.01;
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
@@ -47,8 +47,10 @@ export function forecastRate(points: RatePoint[], asOf: Date): RateForecast | nu
   const clamped = Math.min(last.rate + step, Math.max(last.rate - step, fitted));
   const predictedRate = round2(Math.max(0, clamped));
 
-  const change = predictedRate - last.rate;
+  // The direction describes the history (rate change per year), not the size of the next step:
+  // a steadily falling rate is "falling" even when the next tender is tomorrow.
+  const perYear = slope * 365;
   const direction: TrendDirection =
-    Math.abs(change) <= Math.abs(last.rate) * FLAT_BAND ? "FLAT" : change > 0 ? "RISING" : "FALLING";
+    Math.abs(perYear) <= Math.abs(last.rate) * FLAT_BAND ? "FLAT" : perYear > 0 ? "RISING" : "FALLING";
   return { lastRate: last.rate, predictedRate, direction, points: sorted.length };
 }

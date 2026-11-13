@@ -9,6 +9,7 @@ import { boqItemsRouter, boqRouter } from "../modules/boq/boq.module.js";
 import { businessesRouter } from "../modules/businesses/businesses.module.js";
 import { categoriesRouter } from "../modules/categories/categories.module.js";
 import { classificationRouter } from "../modules/classification/classification.module.js";
+import { competitorsRouter } from "../modules/competitors/competitors.module.js";
 import { contactsRouter } from "../modules/contacts/contacts.module.js";
 import { documentGenerationRouter } from "../modules/document-generation/document-generation.module.js";
 import {
@@ -57,6 +58,7 @@ v1Router.use("/settings", settingsRouter);
 v1Router.use("/bills", billsRouter);
 v1Router.use("/tenders", tendersRouter);
 v1Router.use("/portal-bids", portalBidRouter);
+v1Router.use("/competitors", competitorsRouter);
 v1Router.use("/tenders", documentGenerationRouter);
 v1Router.use("/tenders", boqRouter);
 v1Router.use("/boq-items", boqItemsRouter);

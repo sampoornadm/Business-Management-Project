@@ -34,6 +34,18 @@ describe("forecastRate", () => {
     expect(f.points).toBe(3);
   });
 
+  it("reports the trend of the history, however soon the next tender is", () => {
+    const f = forecastRate(
+      [
+        { at: d("2025-08-02"), rate: 168.5 },
+        { at: d("2026-03-11"), rate: 163.5 },
+        { at: d("2026-10-23"), rate: 160 },
+      ],
+      d("2026-10-24"),
+    )!;
+    expect(f.direction).toBe("FALLING");
+  });
+
   it("extends a rising line", () => {
     const f = forecastRate(
       [
