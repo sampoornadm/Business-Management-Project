@@ -1,9 +1,11 @@
+import type { TrendDirection } from "@bmp/types";
+
 export interface RatePoint {
   at: Date;
   rate: number;
 }
 
-export type TrendDirection = "RISING" | "FALLING" | "FLAT";
+export type { TrendDirection };
 
 export interface RateForecast {
   lastRate: number;
