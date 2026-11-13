@@ -3,9 +3,18 @@ import { asyncHandler } from "../../shared/middleware/asyncHandler.js";
 
 import type { CompetitorsService } from "./competitors.service.js";
 import type { ListItemsQuery, UpdateCompetitorBody } from "./competitors.validation.js";
+import type { StatementFetchService } from "./statement-fetch.service.js";
 
 export class CompetitorsController {
-  constructor(private readonly competitors: CompetitorsService) {}
+  constructor(
+    private readonly competitors: CompetitorsService,
+    private readonly statements: StatementFetchService,
+  ) {}
+
+  fetchStatement = asyncHandler(async (req, res) => {
+    const result = await this.statements.fetch(req.user!.businessId, req.params.tenderId!, req.user!.id);
+    sendSuccess(res, result, "Comparative statement saved");
+  });
 
   list = asyncHandler(async (req, res) => {
     sendSuccess(res, await this.competitors.list(req.user!.businessId), "Competitors retrieved");

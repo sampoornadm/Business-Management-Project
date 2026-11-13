@@ -38,7 +38,7 @@ export function createCompetitorsRouter(controller: CompetitorsController): Rout
    *     parameters:
    *       - { in: query, name: search, schema: { type: string } }
    *     responses:
-   *       200: { description: Item code, description, competitor count and tender count }
+   *       200: { description: "Item code, description, competitor count and tender count" }
    * /competitors/items/{itemCode}:
    *   get:
    *     tags: [Competitors]
@@ -47,7 +47,7 @@ export function createCompetitorsRouter(controller: CompetitorsController): Rout
    *     parameters:
    *       - { in: path, name: itemCode, required: true, schema: { type: string } }
    *     responses:
-   *       200: { description: Columns (our firm first) with trend and predicted rate, rows per tender }
+   *       200: { description: "Columns (our firm first) with trend and predicted rate, rows per tender" }
    *       404: { description: No competitor has quoted this item }
    */
   router.get(
@@ -88,6 +88,30 @@ export function createCompetitorsRouter(controller: CompetitorsController): Rout
 
   /**
    * @openapi
+   * /competitors/tenders/{tenderId}/fetch-statement:
+   *   post:
+   *     tags: [Competitors]
+   *     summary: Read a won/lost tender's comparative statement from the portal browser window and save it
+   *     description: "Uses the portal login already in that window; never logs in itself. Replaces a statement saved earlier."
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - { in: path, name: tenderId, required: true, schema: { type: string, format: uuid } }
+   *     responses:
+   *       200: { description: "Bidder and item counts, the lowest overall bidder, and whether our own bid was found" }
+   *       400: { description: "The tender is not won or lost, or the statement is for another RFx" }
+   *       409: { description: "The portal needs a login, or the statement is not available yet. Nothing was saved" }
+   *       422: { description: The page could not be read as a comparative statement. Nothing was saved }
+   */
+  router.post(
+    "/tenders/:tenderId/fetch-statement",
+    authenticateMiddleware,
+    requirePermission("tenders:fill_portal"),
+    validate(tenderIdParamsSchema, "params"),
+    controller.fetchStatement,
+  );
+
+  /**
+   * @openapi
    * /competitors/{id}:
    *   get:
    *     tags: [Competitors]
@@ -96,7 +120,7 @@ export function createCompetitorsRouter(controller: CompetitorsController): Rout
    *     parameters:
    *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
    *     responses:
-   *       200: { description: Items with per-tender rates, rank, trend and predicted next rate }
+   *       200: { description: "Items with per-tender rates, rank, trend and predicted next rate" }
    *       404: { description: No such competitor in this business }
    *   patch:
    *     tags: [Competitors]

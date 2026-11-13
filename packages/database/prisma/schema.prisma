@@ -1839,6 +1839,9 @@ model ComparativeStatement {
   // ComparativeBid.id of the lowest overall quote (not necessarily who was awarded). No FK:
   // the bids are created after the statement row, in the same transaction.
   lowestBidId       String?
+  // The grid exactly as read from the portal (rows of cells), so a parser fix can be re-run
+  // without the portal.
+  rawGrid           Json?
   fetchedAt         DateTime         @default(now())
   bids              ComparativeBid[]
 

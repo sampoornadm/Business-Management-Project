@@ -178,7 +178,12 @@ export class CompetitorsService {
   }
 
   /** Saves a statement read from the portal against its tender. Refuses one for another RFx. */
-  async store(businessId: string, tenderId: string, statement: ParsedStatement): Promise<FetchStatementResultDto> {
+  async store(
+    businessId: string,
+    tenderId: string,
+    statement: ParsedStatement,
+    rawGrid: string[][] | null = null,
+  ): Promise<FetchStatementResultDto> {
     const tender = await this.competitors.findTender(businessId, tenderId);
     if (!tender) throw new NotFoundError("Tender not found");
     if (statement.rfxNumber !== tender.tenderNumber) {
@@ -193,6 +198,7 @@ export class CompetitorsService {
       openedAt: statement.bidEnd ?? this.now(),
       usQuotationRef: tender.portalResponseNumber,
       boqItemIdByCode: new Map(tender.boqItems.map((item) => [item.itemCode, item.id])),
+      rawGrid,
     });
     return {
       tenderId,

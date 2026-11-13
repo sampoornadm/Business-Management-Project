@@ -12,6 +12,8 @@ export interface StoreStatementInput {
   usQuotationRef: string | null;
   /** Current BOQ lines by portal item code, to link a competitor's rate to our own line. */
   boqItemIdByCode: Map<string, string>;
+  /** The grid as read from the portal, kept so the statement can be re-parsed later. */
+  rawGrid: string[][] | null;
 }
 
 export interface StoredStatement {
@@ -157,6 +159,7 @@ export class CompetitorsRepository implements ICompetitorsRepository {
           description: statement.description,
           openedAt: input.openedAt,
           basisOfEvaluation: statement.basisOfEvaluation,
+          ...(input.rawGrid ? { rawGrid: input.rawGrid } : {}),
         },
       });
 
