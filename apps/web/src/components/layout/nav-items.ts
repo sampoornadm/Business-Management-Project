@@ -14,6 +14,7 @@ import {
   Settings,
   ShieldCheck,
   ShoppingCart,
+  Swords,
   Truck,
   Users2,
 } from "lucide-react";
@@ -31,6 +32,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Tenders", href: "/tenders", icon: FileText, permission: "tenders:read" },
   { label: "Organizations", href: "/organizations", icon: Building2, permission: "organizations:read" },
   { label: "Vendors", href: "/vendors", icon: Truck, permission: "vendors:read" },
+  { label: "Competitors", href: "/competitors", icon: Swords, permission: "competitors:read" },
   { label: "RFQs", href: "/rfqs", icon: FileSpreadsheet, permission: "rfq:read" },
   { label: "Items", href: "/items", icon: Package, permission: "rfq:read" },
   {
