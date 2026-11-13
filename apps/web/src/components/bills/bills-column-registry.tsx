@@ -1,7 +1,7 @@
 "use client";
 
 import type { BillListItemDto } from "@bmp/types";
-import { Button, formatDate, SortableHeader } from "@bmp/ui";
+import { Button, formatDate, formatMoney, SortableHeader } from "@bmp/ui";
 import type { FilterableColumnDef } from "@bmp/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Download } from "lucide-react";
@@ -67,7 +67,7 @@ export const BILL_COLUMNS: BillColumnConfig[] = [
     sortable: false,
     filterable: false,
     defaultVisible: true,
-    cell: ({ row }) => row.original.total.toLocaleString(),
+    cell: ({ row }) => formatMoney(row.original.total),
   },
   {
     key: "itemCount",

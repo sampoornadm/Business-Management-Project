@@ -1,6 +1,6 @@
 "use client";
 
-import { useToast } from "@bmp/ui";
+import { PageHeader, useToast } from "@bmp/ui";
 import { useRouter } from "next/navigation";
 
 import {
@@ -30,10 +30,10 @@ export default function NewOrganizationPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Add Organization</h1>
-        <p className="text-sm text-muted-foreground">Create a new client organization.</p>
-      </div>
+      <PageHeader
+        title="Add organization"
+        description="Create a new client organization."
+      />
       <OrganizationForm onSubmit={handleSubmit} isSubmitting={createOrganization.isPending} />
     </div>
   );

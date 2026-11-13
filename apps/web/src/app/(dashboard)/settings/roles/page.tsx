@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@bmp/ui";
+import { Badge, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@bmp/ui";
 
 import { useRoles } from "@/hooks/use-roles";
 
@@ -9,12 +9,10 @@ export default function RolesPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Roles &amp; Permissions</h1>
-        <p className="text-sm text-muted-foreground">
-          System-defined roles and the permissions granted to each. Roles cannot be edited in Phase 1.
-        </p>
-      </div>
+      <PageHeader
+        title={<>Roles &amp; Permissions</>}
+        description="System-defined roles and the permissions granted to each. Roles cannot be edited in Phase 1."
+      />
 
       {rolesQuery.isLoading ? (
         <div className="grid gap-4 md:grid-cols-2">

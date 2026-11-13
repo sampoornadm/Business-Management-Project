@@ -5,6 +5,7 @@ import {
   Card,
   CardContent,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -84,8 +85,13 @@ function AddMaterialUsageDialog({ projectId }: { projectId: string }) {
           />
         </div>
         <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
           <Button onClick={handleSubmit} disabled={addUsage.isPending}>
-            Record
+            Add entry
           </Button>
         </DialogFooter>
       </DialogContent>

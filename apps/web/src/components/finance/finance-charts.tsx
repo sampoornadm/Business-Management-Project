@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle, cn, Skeleton } from "@bmp/ui";
+import { Card, CardContent, CardHeader, CardTitle, cn, formatMoney, Skeleton } from "@bmp/ui";
 import type { ReactNode } from "react";
 import {
   Bar,
@@ -38,7 +38,7 @@ const tooltipStyle = {
   },
 } as const;
 const CHART_HEIGHT = 260;
-const money = (value: number): string => value.toLocaleString();
+const money = (value: number): string => formatMoney(value);
 const truncateLabel = (value: string): string => (value.length > 16 ? `${value.slice(0, 15)}…` : value);
 
 function ChartCard({

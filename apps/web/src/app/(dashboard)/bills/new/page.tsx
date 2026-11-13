@@ -1,7 +1,7 @@
 "use client";
 
 import type { BoqItemDto, CreateBillItemInput } from "@bmp/types";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast } from "@bmp/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, FormActions, Input, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast } from "@bmp/ui";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
@@ -89,12 +89,10 @@ export default function NewBillPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Create Bill</h1>
-        <p className="text-sm text-muted-foreground">
-          {tenderQuery.data ? `Against ${tenderQuery.data.tenderNumber} — ${tenderQuery.data.title}` : "Select the items being billed."}
-        </p>
-      </div>
+      <PageHeader
+        title="Create bill"
+        description={<>{tenderQuery.data ? `Against ${tenderQuery.data.tenderNumber} — ${tenderQuery.data.title}` : "Select the items being billed."}</>}
+      />
 
       <Card>
         <CardHeader>
@@ -169,9 +167,11 @@ export default function NewBillPage() {
         </CardContent>
       </Card>
 
-      <Button onClick={handleSubmit} disabled={createBill.isPending}>
-        {createBill.isPending ? "Creating…" : "Create Bill"}
-      </Button>
+      <FormActions onCancel={() => window.history.back()}>
+        <Button onClick={handleSubmit} disabled={createBill.isPending}>
+          {createBill.isPending ? "Creating…" : "Create bill"}
+        </Button>
+      </FormActions>
     </div>
   );
 }

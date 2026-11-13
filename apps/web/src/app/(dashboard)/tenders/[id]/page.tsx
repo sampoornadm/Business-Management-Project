@@ -10,7 +10,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
   Badge,
   Button,
   Card,
@@ -18,22 +17,30 @@ import {
   CardHeader,
   CardTitle,
   DeadlineProgress,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
   EMPTY_VALUE,
   formatDate,
   formatDateTime,
-  Skeleton,
+  formatMoney,
+  PageHeader,
+  PageSkeleton,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
   useToast,
 } from "@bmp/ui";
-import { Pencil, Receipt, ScrollText, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Receipt, ScrollText, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { ConvertToProjectDialog } from "@/components/projects/convert-to-project-dialog";
+import { humanize } from "@/components/status-badge";
 import { LinkedBudgetaryQuotationCard } from "@/components/tenders/linked-budgetary-quotation-card";
 import { PinnedTenderNotes } from "@/components/tenders/pinned-tender-notes";
 import { OpenPortalBrowserButton, PortalFillButton } from "@/components/tenders/portal-fill-button";
@@ -56,7 +63,7 @@ import {
 } from "@/hooks/use-tenders";
 import { useAuthStore } from "@/lib/auth-store";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
-import { daysUntil, deadlineLabel, isPastDue } from "@/lib/deadline";
+import { daysUntil, timeLeftLabel, isPastDue } from "@/lib/deadline";
 import { hasPermission } from "@/lib/permissions";
 import { tenderKindBadgeVariant, tenderPriorityBadgeVariant } from "@/lib/tender-status";
 
@@ -76,6 +83,7 @@ export default function TenderDetailPage() {
   const pinNote = usePinTenderNote(params.id);
   const unpinNote = useUnpinTenderNote(params.id);
   const [pendingLineText, setPendingLineText] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const canUpdate = hasPermission(roleName, "tenders:update");
   const canDelete = hasPermission(roleName, "tenders:delete");
@@ -122,80 +130,94 @@ export default function TenderDetailPage() {
   }
 
   if (tenderQuery.isLoading || !tenderQuery.data) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   const tender = tenderQuery.data;
 
+  // Header actions follow the tender's stage: the one filled button is the next step
+  // (fill the bid while Draft, bill once Won); rarely used actions sit in the "More" menu.
+  const isDraft = tender.status === "DRAFT";
+  const isWon = tender.status === "WON";
+  // Portal bid actions only matter until a result is in.
+  const bidOpen = isDraft || tender.status === "SUBMITTED";
+  const showPortalInMenu = canFillPortal && bidOpen && !isDraft;
+  const showDelete = canDelete && isDraft;
+  const hasMoreActions = canViewBills || showPortalInMenu || showDelete;
+
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{tender.title}</h1>
+      <PageHeader
+        title={tender.title}
+        badges={
+          <>
             {tender.kind === "BUDGETARY" && (
               <Badge variant={tenderKindBadgeVariant(tender.kind)}>{TENDER_KIND_LABELS.BUDGETARY}</Badge>
             )}
-            <Badge variant={tenderPriorityBadgeVariant(tender.priority)}>{tender.priority}</Badge>
+            <Badge variant={tenderPriorityBadgeVariant(tender.priority)}>{humanize(tender.priority)}</Badge>
             {tender.deliveryPeriodNeedsReview && (
               <Badge variant="signal">
                 Check delivery period: tender asks {tender.tenderDeliveryDays} days, we offer{" "}
                 {tender.deliveryPeriodDays}
               </Badge>
             )}
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {tender.tenderNumber} · {tender.client.name}
-          </p>
-          <div className="mt-3">
-            <TenderStatusTracker
-              tender={tender}
-              canChange={canChangeStatus}
-              canRevert={canRevertStatus}
-              canViewBoq={canViewBoq}
-            />
-          </div>
-        </div>
-        <div className="flex flex-wrap justify-end gap-2">
-          {canCreateProject && tender.status === "WON" && (
-            <ConvertToProjectDialog tenderId={tender.id} />
-          )}
-          {canCreateBill && tender.status === "WON" && (
-            <Button variant="outline" asChild>
-              <Link href={`/bills/new?tenderId=${tender.id}`}>
-                <Receipt className="mr-2 h-4 w-4" /> Create Bill
-              </Link>
-            </Button>
-          )}
-          {canViewBills && (
-            <Button variant="outline" asChild>
-              <Link href={`/bills?tenderId=${tender.id}`}>
-                <ScrollText className="mr-2 h-4 w-4" /> View Bills
-              </Link>
-            </Button>
-          )}
-          {canGenerateDocument && <TenderDownloadMenu tenderId={tender.id} tenderNumber={tender.tenderNumber} />}
-          {canFillPortal && <OpenPortalBrowserButton />}
-          {canFillPortal && <PortalFillButton tenderId={tender.id} />}
-          {canUpdate && (
-            <Button variant="outline" asChild>
-              <Link href={`/tenders/${tender.id}/edit`}>
-                <Pencil className="mr-2 h-4 w-4" /> Edit
-              </Link>
-            </Button>
-          )}
-          {canDelete && tender.status === "DRAFT" && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive">
-                  <Trash2 className="mr-2 h-4 w-4" /> Delete
+          </>
+        }
+        actions={
+          <>
+            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+              {hasMoreActions && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" aria-label="More actions">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {canViewBills && (
+                      <DropdownMenuItem asChild>
+                        <Link href={`/bills?tenderId=${tender.id}`}>
+                          <ScrollText className="mr-2 h-4 w-4" /> View bills
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    {showPortalInMenu && <OpenPortalBrowserButton menuItem />}
+                    {showDelete && (
+                      <>
+                        {(canViewBills || showPortalInMenu) && <DropdownMenuSeparator />}
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onSelect={() => setDeleteOpen(true)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" /> Delete tender
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              {canUpdate && (
+                <Button variant="outline" asChild>
+                  <Link href={`/tenders/${tender.id}/edit`}>
+                    <Pencil className="mr-2 h-4 w-4" /> Edit
+                  </Link>
                 </Button>
-              </AlertDialogTrigger>
+              )}
+              {canGenerateDocument && <TenderDownloadMenu tenderId={tender.id} tenderNumber={tender.tenderNumber} />}
+              {canFillPortal && isDraft && <OpenPortalBrowserButton />}
+              {canFillPortal && bidOpen && (
+                <PortalFillButton tenderId={tender.id} variant={isDraft ? "default" : "outline"} />
+              )}
+              {canCreateProject && isWon && <ConvertToProjectDialog tenderId={tender.id} />}
+              {canCreateBill && isWon && (
+                <Button asChild>
+                  <Link href={`/bills/new?tenderId=${tender.id}`}>
+                    <Receipt className="mr-2 h-4 w-4" /> Create bill
+                  </Link>
+                </Button>
+              )}
+            </div>
+            <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete this tender?</AlertDialogTitle>
@@ -207,17 +229,21 @@ export default function TenderDetailPage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-          )}
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          {tender.tenderNumber} · {tender.client.name}
+        </p>
+        <div className="mt-3">
+          <TenderStatusTracker
+            tender={tender}
+            canChange={canChangeStatus}
+            canRevert={canRevertStatus}
+            canViewBoq={canViewBoq}
+          />
         </div>
-      </div>
-
-      {tender.kind === "TENDER" && canUpdate && (
-        <LinkedBudgetaryQuotationCard
-          tenderId={tender.id}
-          clientId={tender.client.id}
-          convertedFrom={tender.convertedFrom}
-        />
-      )}
+      </PageHeader>
 
       <Tabs defaultValue={initialTab}>
         <TabsList>
@@ -250,13 +276,13 @@ export default function TenderDetailPage() {
               </div>
               <div>
                 <p className="text-muted-foreground">Estimated cost</p>
-                <p>{tender.estimatedCost?.toLocaleString() ?? EMPTY_VALUE}</p>
+                <p>{formatMoney(tender.estimatedCost)}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">EMD / Tender fee / Doc fee</p>
                 <p>
-                  {tender.emdAmount?.toLocaleString() ?? "-"} / {tender.tenderFee?.toLocaleString() ?? "-"} /{" "}
-                  {tender.documentFee?.toLocaleString() ?? "-"}
+                  {formatMoney(tender.emdAmount)} / {formatMoney(tender.tenderFee)} /{" "}
+                  {formatMoney(tender.documentFee)}
                 </p>
               </div>
               <div>
@@ -265,7 +291,7 @@ export default function TenderDetailPage() {
                   <DeadlineProgress
                     dateText={formatDateTime(tender.submissionDate)}
                     daysLeft={daysUntil(tender.submissionDate)}
-                    label={deadlineLabel(daysUntil(tender.submissionDate), isPastDue(tender.submissionDate))}
+                    label={timeLeftLabel(tender.submissionDate)}
                     pastDue={isPastDue(tender.submissionDate)}
                   />
                 ) : (
@@ -306,7 +332,7 @@ export default function TenderDetailPage() {
                   <p className="text-muted-foreground">Winner</p>
                   <p>
                     {tender.winnerName}
-                    {tender.winningBidAmount ? ` · ${tender.winningBidAmount.toLocaleString()}` : ""}
+                    {tender.winningBidAmount ? ` · ${formatMoney(tender.winningBidAmount)}` : ""}
                   </p>
                 </div>
               )}
@@ -357,6 +383,14 @@ export default function TenderDetailPage() {
             onChange={(tagIds) => setTags.mutate(tagIds)}
             canUpdate={canUpdate}
           />
+
+          {tender.kind === "TENDER" && canUpdate && (
+            <LinkedBudgetaryQuotationCard
+              tenderId={tender.id}
+              clientId={tender.client.id}
+              convertedFrom={tender.convertedFrom}
+            />
+          )}
         </TabsContent>
 
         {canViewBoq && (

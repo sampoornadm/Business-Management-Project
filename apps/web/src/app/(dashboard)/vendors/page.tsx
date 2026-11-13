@@ -203,7 +203,7 @@ export default function VendorsPage() {
   const addVendorButton = (
     <Button asChild>
       <Link href="/vendors/new">
-        <UserPlus className="mr-2 h-4 w-4" /> Add Vendor
+        <UserPlus className="mr-2 h-4 w-4" /> Add vendor
       </Link>
     </Button>
   );

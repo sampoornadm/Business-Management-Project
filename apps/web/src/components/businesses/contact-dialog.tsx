@@ -4,6 +4,7 @@ import {
   Button,
   Checkbox,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -150,6 +151,11 @@ export function ContactDialog({ trigger, contact, onSubmit }: ContactDialogProps
               )}
             />
             <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  Cancel
+                </Button>
+              </DialogClose>
               <Button type="submit">Save</Button>
             </DialogFooter>
           </form>

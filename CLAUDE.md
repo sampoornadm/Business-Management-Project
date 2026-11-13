@@ -70,6 +70,25 @@ from `apps/web/src/lib/permissions.ts` (mirrors the same matrix — server is st
 enforcement point). `packages/ui` components must stay domain-agnostic (no "tender"/"user" strings
 in there) so every future module reuses the same DataTable/Form/Tabs/Stepper/MultiSelect/etc.
 
+**Buttons** (one rule set, applied on every page): header actions sit in a single right-aligned
+wrapping group — quiet `destructiveOutline` Delete leftmost, `outline` secondary actions, the one
+filled primary action rightmost (at most one per header). Filled `destructive` is only for the
+confirming button inside a dialog. Full-page forms end in `FormActions` from `@bmp/ui` (sticky
+bottom bar: primary first, then Cancel); dialogs put Cancel left of the primary, right-aligned.
+Labels are sentence case, verb + noun ("Add expense", "Cancel order" — never a bare "Add"/"Cancel"
+for an action that changes data). Icon-only buttons need `aria-label`; `Button` reuses it as the
+hover tooltip. Anything that deletes asks first (`AlertDialog` in headers, `confirmAction` in rows).
+
+**Shared look — reuse, don't hand-build** (all in `@bmp/ui` unless noted): every page starts with
+`PageHeader` (`title`, `badges`, `description`, `actions`, `back`, children for extra lines) — never
+a hand-rolled `<h1>`. Page-level loading is `<PageSkeleton />`. A status is `<StatusBadge status>`
+(`apps/web/src/components/status-badge.tsx` — the one status→colour map; add new statuses there) and
+any other stored code shown to a person goes through `humanize()`. Money is `formatMoney()` (₹,
+lakh/crore grouping, two decimals); counts/quantities are not money. "Are you sure?" is
+`await confirmAction({...})` (host mounted in the root layout), never `window.confirm`. Dialog
+footers carry a `DialogClose` Cancel before the submit button. In-progress labels use the ellipsis
+character ("Saving…"), not three dots.
+
 **Money/dates**: tender monetary fields are `Float` in Prisma, not `Decimal` — deliberate, revisit
 when Phase 6 (Finance) designs real ledger precision. Numeric form fields are kept as plain strings
 in React Hook Form state (converted at submit time) — avoids RHF+zodResolver's 3-generic

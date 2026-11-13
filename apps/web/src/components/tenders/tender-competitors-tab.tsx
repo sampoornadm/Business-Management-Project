@@ -5,13 +5,16 @@ import {
   Badge,
   Button,
   Checkbox,
+  confirmAction,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
   Form,
+  formatMoney,
   FormControl,
   FormField,
   FormItem,
@@ -73,6 +76,7 @@ export function TenderCompetitorsTab({ tender }: { tender: TenderDto }) {
   }
 
   async function handleDelete(competitorId: string) {
+    if (!(await confirmAction({ title: "Remove this competitor?", confirmLabel: "Remove competitor" }))) return;
     await deleteCompetitor.mutateAsync(competitorId);
     toast({ title: "Competitor removed" });
   }
@@ -144,6 +148,11 @@ export function TenderCompetitorsTab({ tender }: { tender: TenderDto }) {
                   )}
                 />
                 <DialogFooter>
+                  <DialogClose asChild>
+                    <Button type="button" variant="outline">
+                      Cancel
+                    </Button>
+                  </DialogClose>
                   <Button type="submit">Save</Button>
                 </DialogFooter>
               </form>
@@ -164,12 +173,17 @@ export function TenderCompetitorsTab({ tender }: { tender: TenderDto }) {
                   {competitor.isWinningBid && <Badge>Winning bid</Badge>}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {competitor.bidAmount ? `Bid: ${competitor.bidAmount.toLocaleString()}` : "No bid amount"}
+                  {competitor.bidAmount ? `Bid: ${formatMoney(competitor.bidAmount)}` : "No bid amount"}
                   {competitor.remarks ? ` · ${competitor.remarks}` : ""}
                 </p>
               </div>
               {canEdit && (
-                <Button size="sm" variant="ghost" onClick={() => handleDelete(competitor.id)}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label="Remove competitor"
+                  onClick={() => handleDelete(competitor.id)}
+                >
                   <Trash2 className="h-4 w-4" />
                 </Button>
               )}

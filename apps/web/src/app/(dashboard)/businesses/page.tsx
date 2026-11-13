@@ -202,7 +202,7 @@ export default function BusinessesPage() {
   const addBusinessButton = (
     <Button asChild>
       <Link href="/businesses/new">
-        <Briefcase className="mr-2 h-4 w-4" /> Add Business
+        <Briefcase className="mr-2 h-4 w-4" /> Add business
       </Link>
     </Button>
   );

@@ -80,7 +80,7 @@ export default function ForgotPasswordPage() {
           </CardContent>
           <CardFooter className="flex flex-col gap-3">
             <Button type="submit" className="w-full" disabled={forgotPassword.isPending}>
-              {forgotPassword.isPending ? "Sending..." : "Send reset link"}
+              {forgotPassword.isPending ? "Sending…" : "Send reset link"}
             </Button>
             <Link href="/login" className="text-sm text-muted-foreground hover:underline">
               Back to sign in

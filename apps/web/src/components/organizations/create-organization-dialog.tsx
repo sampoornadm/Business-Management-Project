@@ -4,6 +4,7 @@ import { ORGANIZATION_TYPES, type OrganizationDto } from "@bmp/types";
 import {
   Button,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -121,8 +122,13 @@ export function CreateOrganizationDialog({ trigger, defaultName, onCreated }: Cr
               )}
             />
             <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  Cancel
+                </Button>
+              </DialogClose>
               <Button type="submit" disabled={createOrganization.isPending}>
-                {createOrganization.isPending ? "Creating..." : "Create"}
+                {createOrganization.isPending ? "Creating…" : "Create"}
               </Button>
             </DialogFooter>
           </form>

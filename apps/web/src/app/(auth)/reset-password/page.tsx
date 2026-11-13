@@ -134,7 +134,7 @@ function ResetPasswordForm() {
           </CardContent>
           <CardFooter>
             <Button type="submit" className="w-full" disabled={resetPassword.isPending}>
-              {resetPassword.isPending ? "Saving..." : "Set password"}
+              {resetPassword.isPending ? "Saving…" : "Set password"}
             </Button>
           </CardFooter>
         </form>
