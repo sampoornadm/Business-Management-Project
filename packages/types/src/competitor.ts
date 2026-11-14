@@ -1,3 +1,5 @@
+import type { TenderStatus } from "./tender.js";
+
 // Competitor rates read from the client portal's comparative statement (SAIL ISP). All rates
 // are the basic price per unit unless a field says otherwise.
 
@@ -120,8 +122,52 @@ export interface TenderRatesToBeatDto {
   ourFirmKnown: boolean;
 }
 
+/** Where we stand in a tender's price opening, by total quote. Read from the stored statement. */
+export interface TenderStandingDto {
+  fetchedAt: string;
+  basisOfEvaluation: string | null;
+  bidders: number;
+  /** False until one of the bidders is recognised as our own firm. */
+  usIdentified: boolean;
+  /** 1 = lowest total. Null when our bid is not identified or does not cover every item. */
+  ourRank: number | null;
+  ourTotal: number | null;
+  /** The lowest overall quote: the probable winner, not a confirmed award. */
+  lowest: { competitorId: string; name: string; total: number; isSelf: boolean } | null;
+}
+
+/** A tender's price opening as one table. Rates are basic price per unit. */
+export interface TenderStatementDto {
+  fetchedAt: string;
+  rfxNumber: string;
+  basisOfEvaluation: string | null;
+  /** Our own bid first, then the others by total quote, lowest first; partial bids last. */
+  bidders: {
+    competitorId: string;
+    name: string;
+    isSelf: boolean;
+    total: number | null;
+    /** By total, among bids covering every item; null for a partial bid. */
+    rank: number | null;
+    lowestOverall: boolean;
+    deliveryText: string | null;
+  }[];
+  /** In the statement's own serial order, which is the tender's item order. */
+  items: {
+    slNo: string;
+    itemCode: string;
+    description: string;
+    unit: string | null;
+    quantity: number | null;
+    /** competitorId -> basic rate; a bidder who did not quote the item has no entry. */
+    rates: Record<string, number>;
+  }[];
+}
+
 export interface FetchStatementResultDto {
   tenderId: string;
+  /** The tender's status after the fetch: a Submitted tender moves to Price opened. */
+  status: TenderStatus;
   bidders: number;
   items: number;
   lowestBidder: string | null;

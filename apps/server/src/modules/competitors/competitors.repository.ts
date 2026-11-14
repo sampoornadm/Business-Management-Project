@@ -8,8 +8,8 @@ export interface StoreStatementInput {
   tenderId: string;
   statement: ParsedStatement;
   openedAt: Date;
-  /** Our own quotation reference number on the portal, when the app knows it. */
-  usQuotationRef: string | null;
+  /** The portal vendor code of the bid recognised as our own on this statement, if any. */
+  usVendorCode: string | null;
   /** Current BOQ lines by portal item code, to link a competitor's rate to our own line. */
   boqItemIdByCode: Map<string, string>;
   /** The grid as read from the portal, kept so the statement can be re-parsed later. */
@@ -42,6 +42,31 @@ export interface RateRow {
   lowestBidId: string | null;
 }
 
+export interface StatementSummary {
+  fetchedAt: Date;
+  rfxNumber: string;
+  basisOfEvaluation: string | null;
+  lowestBidId: string | null;
+  /** Distinct items quoted across the statement; a bid covering fewer is a partial bid. */
+  itemCount: number;
+  bids: {
+    bidId: string;
+    competitorId: string;
+    name: string;
+    isSelf: boolean;
+    total: number | null;
+    deliveryText: string | null;
+    items: {
+      slNo: string;
+      itemCode: string;
+      description: string;
+      unit: string | null;
+      quantity: number | null;
+      basicRate: number;
+    }[];
+  }[];
+}
+
 export interface CompetitorRecord {
   id: string;
   vendorCode: string;
@@ -54,6 +79,7 @@ export interface TenderForStatement {
   id: string;
   tenderNumber: string;
   status: string;
+  businessName: string;
   /** Our response number on the SAIL ISP portal, saved when the bid was filled through the app. */
   portalResponseNumber: string | null;
   /** Item-coded lines of the tender's current BOQ. */
@@ -72,6 +98,8 @@ export interface ICompetitorsRepository {
   /** Every bidder's rates for these items, our own firm included. */
   ratesByItemCodes(businessId: string, itemCodes: string[]): Promise<RateRow[]>;
   listItems(businessId: string, search?: string): Promise<CompetitorItemSummaryDto[]>;
+  /** Every bid of a tender's stored statement with its total, for the tender's standing. */
+  findStatementSummary(businessId: string, tenderId: string): Promise<StatementSummary | null>;
 }
 
 /**
@@ -129,6 +157,7 @@ export class CompetitorsRepository implements ICompetitorsRepository {
         id: true,
         tenderNumber: true,
         status: true,
+        business: { select: { name: true } },
         portalBids: { where: { portalCode: "SAIL_ISP" }, select: { responseNumber: true } },
         boqs: {
           where: { isCurrent: true },
@@ -141,6 +170,7 @@ export class CompetitorsRepository implements ICompetitorsRepository {
       id: tender.id,
       tenderNumber: tender.tenderNumber,
       status: tender.status,
+      businessName: tender.business.name,
       portalResponseNumber: tender.portalBids[0]?.responseNumber ?? null,
       boqItems: tender.boqs.flatMap((boq) =>
         boq.items.flatMap((item) => (item.itemCode ? [{ id: item.id, itemCode: item.itemCode }] : [])),
@@ -169,12 +199,12 @@ export class CompetitorsRepository implements ICompetitorsRepository {
       let lowestBidId: string | null = null;
       let usFound = false;
       for (const [index, bid] of statement.bids.entries()) {
-        const matchedByRef = input.usQuotationRef !== null && bid.quotationRef === input.usQuotationRef;
+        const recognised = input.usVendorCode !== null && bid.vendorCode === input.usVendorCode;
         const competitor = await tx.competitor.upsert({
           where: { businessId_vendorCode: { businessId, vendorCode: bid.vendorCode } },
-          create: { businessId, vendorCode: bid.vendorCode, name: bid.vendorName, isSelf: matchedByRef },
-          // A quotation-reference match teaches us which portal vendor is our own firm.
-          update: { name: bid.vendorName, ...(matchedByRef ? { isSelf: true } : {}) },
+          create: { businessId, vendorCode: bid.vendorCode, name: bid.vendorName, isSelf: recognised },
+          // Recognising our bid once teaches us which portal vendor code is our own firm.
+          update: { name: bid.vendorName, ...(recognised ? { isSelf: true } : {}) },
         });
         usFound ||= competitor.isSelf;
         const createdBid = await tx.comparativeBid.create({
@@ -192,6 +222,7 @@ export class CompetitorsRepository implements ICompetitorsRepository {
             items: {
               create: bid.items.map((item) => ({
                 businessId,
+                slNo: item.slNo,
                 itemCode: item.itemCode,
                 description: item.description,
                 unit: item.unit,
@@ -281,6 +312,37 @@ export class CompetitorsRepository implements ICompetitorsRepository {
       include: rateRowInclude,
     });
     return items.map(toRateRow);
+  }
+
+  async findStatementSummary(businessId: string, tenderId: string): Promise<StatementSummary | null> {
+    const statement = await this.prisma.comparativeStatement.findFirst({
+      where: { businessId, tenderId },
+      include: { bids: { include: { competitor: true, items: true } } },
+    });
+    if (!statement) return null;
+    return {
+      fetchedAt: statement.fetchedAt,
+      rfxNumber: statement.rfxNumber,
+      basisOfEvaluation: statement.basisOfEvaluation,
+      lowestBidId: statement.lowestBidId,
+      itemCount: new Set(statement.bids.flatMap((bid) => bid.items.map((item) => item.itemCode))).size,
+      bids: statement.bids.map((bid) => ({
+        bidId: bid.id,
+        competitorId: bid.competitorId,
+        name: bid.competitor.name,
+        isSelf: bid.competitor.isSelf,
+        total: bid.total,
+        deliveryText: bid.deliveryText,
+        items: bid.items.map((item) => ({
+          slNo: item.slNo,
+          itemCode: item.itemCode,
+          description: item.description,
+          unit: item.unit,
+          quantity: item.rfqQuantity,
+          basicRate: item.basicRate,
+        })),
+      })),
+    };
   }
 
   async listItems(businessId: string, search?: string): Promise<CompetitorItemSummaryDto[]> {

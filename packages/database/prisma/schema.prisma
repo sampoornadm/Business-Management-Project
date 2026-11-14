@@ -493,6 +493,7 @@ model TenderTag {
 enum TenderStatus {
   DRAFT
   SUBMITTED
+  PRICE_OPENED
   WON
   LOST
   CANCELLED
@@ -1879,6 +1880,8 @@ model ComparativeBidItem {
   businessId    String
   bidId         String
   bid           ComparativeBid @relation(fields: [bidId], references: [id], onDelete: Cascade)
+  // The statement's own serial number for the item ("001"), which is the tender's item order.
+  slNo          String         @default("")
   itemCode      String
   description   String
   unit          String?

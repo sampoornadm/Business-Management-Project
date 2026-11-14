@@ -10,6 +10,7 @@ import type {
   CompetitorRecord,
   ICompetitorsRepository,
   RateRow,
+  StatementSummary,
   StoredStatement,
   StoreStatementInput,
   TenderForStatement,
@@ -77,6 +78,10 @@ class FakeCompetitorsRepository implements ICompetitorsRepository {
   tenders = new Map<string, TenderForStatement>();
   stored: StoreStatementInput[] = [];
   selfKnown = true;
+  summaries = new Map<string, StatementSummary>();
+  findStatementSummary(_businessId: string, tenderId: string) {
+    return Promise.resolve(this.summaries.get(tenderId) ?? null);
+  }
   hasSelf() {
     return Promise.resolve(this.selfKnown);
   }
@@ -118,6 +123,7 @@ const NEW_TENDER: TenderForStatement = {
   id: "tender-new",
   tenderNumber: "1400000017",
   status: "DRAFT",
+  businessName: "Alpha Spring Works",
   portalResponseNumber: null,
   boqItems: [
     { id: "boq-a", itemCode: COIL },
@@ -258,6 +264,7 @@ describe("CompetitorsService.store", () => {
     id: "tender-351",
     tenderNumber: "1400000013",
     status: "LOST",
+    businessName: "Some Other Trading Co",
     portalResponseNumber: "8100000002",
     boqItems: [{ id: "boq-coil", itemCode: COIL }],
   };
@@ -266,7 +273,8 @@ describe("CompetitorsService.store", () => {
     repository.tenders.set(lostTender.id, lostTender);
     const result = await service.store(BIZ, lostTender.id, parsed);
     const input = repository.stored[0]!;
-    expect(input).toMatchObject({ businessId: BIZ, tenderId: "tender-351", usQuotationRef: "8100000002" });
+    // 8100000002 is Beta's quotation reference on this statement.
+    expect(input).toMatchObject({ businessId: BIZ, tenderId: "tender-351", usVendorCode: "1000000002" });
     expect(input.boqItemIdByCode.get(COIL)).toBe("boq-coil");
     expect(input.openedAt.toISOString()).toBe("2026-10-23T09:30:00.000Z");
     expect(result).toEqual({
@@ -281,7 +289,44 @@ describe("CompetitorsService.store", () => {
   it("passes no quotation reference when the bid was not filled through the app", async () => {
     repository.tenders.set(lostTender.id, { ...lostTender, portalResponseNumber: null });
     await service.store(BIZ, lostTender.id, parsed);
-    expect(repository.stored[0]!.usQuotationRef).toBeNull();
+    expect(repository.stored[0]!.usVendorCode).toBeNull();
+  });
+
+  it("finds us by business name when no firm is marked as ours yet", async () => {
+    repository.selfKnown = false;
+    repository.tenders.set(lostTender.id, {
+      ...lostTender,
+      portalResponseNumber: null,
+      businessName: "Epsilon Industries",
+    });
+    await service.store(BIZ, lostTender.id, parsed);
+    expect(repository.stored[0]!.usVendorCode).toBe("1000000005");
+  });
+
+  it("matches the business name loosely on case, punctuation and '&' but not on a different firm", async () => {
+    repository.selfKnown = false;
+    repository.tenders.set(lostTender.id, {
+      ...lostTender,
+      portalResponseNumber: null,
+      businessName: "alpha spring works",
+    });
+    await service.store(BIZ, lostTender.id, parsed);
+    expect(repository.stored[0]!.usVendorCode).toBe("1000000001");
+
+    repository.tenders.set(lostTender.id, { ...lostTender, portalResponseNumber: null, businessName: "Alpha" });
+    await service.store(BIZ, lostTender.id, parsed);
+    expect(repository.stored[1]!.usVendorCode).toBeNull();
+  });
+
+  it("does not guess by name once a firm is already marked as ours", async () => {
+    repository.selfKnown = true;
+    repository.tenders.set(lostTender.id, {
+      ...lostTender,
+      portalResponseNumber: null,
+      businessName: "Epsilon Industries",
+    });
+    await service.store(BIZ, lostTender.id, parsed);
+    expect(repository.stored[0]!.usVendorCode).toBeNull();
   });
 
   it("uses the fetch time when the statement has no bid end date", async () => {
@@ -299,6 +344,137 @@ describe("CompetitorsService.store", () => {
 
   it("404s for an unknown tender", async () => {
     await expect(service.store(BIZ, "tender-missing", parsed)).rejects.toThrow(NotFoundError);
+  });
+});
+
+describe("CompetitorsService.standing", () => {
+  const bid = (competitorId: string, total: number | null, itemsQuoted = 1, isSelf = false) => ({
+    bidId: `bid-${competitorId}`,
+    competitorId,
+    name: NAMES[competitorId]!,
+    isSelf,
+    total,
+    deliveryText: null,
+    items: Array.from({ length: itemsQuoted }, (_unused, index) => ({
+      slNo: `00${index + 1}`,
+      itemCode: `CODE-${index + 1}`,
+      description: `ITEM ${index + 1}`,
+      unit: "EA",
+      quantity: 10,
+      basicRate: (total ?? 0) / 10,
+    })),
+  });
+  const summary = (bids: ReturnType<typeof bid>[], lowest: string | null = BETA) => ({
+    fetchedAt: new Date("2026-10-24T05:00:00Z"),
+    rfxNumber: "1400000013",
+    basisOfEvaluation: "Overall",
+    lowestBidId: lowest ? `bid-${lowest}` : null,
+    itemCount: 1,
+    bids,
+  });
+
+  it("is null before a statement has been fetched", async () => {
+    expect(await service.standing(BIZ, "tender-x")).toBeNull();
+  });
+
+  it("gives our rank by total and the lowest bidder", async () => {
+    repository.summaries.set(
+      "tender-x",
+      summary([bid(SELF, 891000, 1, true), bid(BETA, 528000), bid(GAMMA, 610500), bid(DELTA, 561000), bid(EPSILON, 940500)]),
+    );
+    expect(await service.standing(BIZ, "tender-x")).toEqual({
+      fetchedAt: "2026-10-24T05:00:00.000Z",
+      basisOfEvaluation: "Overall",
+      bidders: 5,
+      usIdentified: true,
+      ourRank: 4,
+      ourTotal: 891000,
+      lowest: { competitorId: BETA, name: NAMES[BETA], total: 528000, isSelf: false },
+    });
+  });
+
+  it("ranks us first when ours is the lowest total", async () => {
+    repository.summaries.set("tender-x", summary([bid(SELF, 500, 1, true), bid(BETA, 600)], SELF));
+    const standing = await service.standing(BIZ, "tender-x");
+    expect(standing).toMatchObject({ ourRank: 1, lowest: { competitorId: SELF, isSelf: true } });
+  });
+
+  it("does not rank us against bidders who skipped items", async () => {
+    const two = { ...summary([bid(SELF, 900, 2, true), bid(BETA, 100, 1), bid(DELTA, 800, 2)], DELTA), itemCount: 2 };
+    repository.summaries.set("tender-x", two);
+    expect(await service.standing(BIZ, "tender-x")).toMatchObject({ ourRank: 2, bidders: 3 });
+  });
+
+  it("has no rank when our bid is not identified or does not cover every item", async () => {
+    repository.summaries.set("tender-x", summary([bid(BETA, 528000), bid(DELTA, 561000)]));
+    expect(await service.standing(BIZ, "tender-x")).toMatchObject({ usIdentified: false, ourRank: null, ourTotal: null });
+    repository.summaries.set("tender-y", { ...summary([bid(SELF, 50, 1, true), bid(BETA, 600, 2)]), itemCount: 2 });
+    expect(await service.standing(BIZ, "tender-y")).toMatchObject({ usIdentified: true, ourRank: null, ourTotal: 50 });
+  });
+});
+
+describe("CompetitorsService.statement", () => {
+  const item = (slNo: string, itemCode: string, basicRate: number) => ({
+    slNo,
+    itemCode,
+    description: `ITEM ${itemCode}`,
+    unit: "EA",
+    quantity: 10,
+    basicRate,
+  });
+  const bid = (competitorId: string, total: number | null, items: ReturnType<typeof item>[], deliveryText: string | null = null) => ({
+    bidId: `bid-${competitorId}`,
+    competitorId,
+    name: NAMES[competitorId]!,
+    isSelf: competitorId === SELF,
+    total,
+    deliveryText,
+    items,
+  });
+  const stored = {
+    fetchedAt: new Date("2026-10-24T05:00:00Z"),
+    rfxNumber: "1400000015",
+    basisOfEvaluation: "Overall",
+    lowestBidId: `bid-${DELTA}`,
+    itemCount: 3,
+    bids: [
+      // Stored out of order on purpose, items too.
+      bid(BETA, 900, [item("003", "C", 30), item("001", "A", 10), item("002", "B", 20)], "240"),
+      bid(SELF, 800, [item("002", "B", 21), item("001", "A", 12), item("003", "C", 25)]),
+      bid(DELTA, 700, [item("001", "A", 9), item("002", "B", 25), item("003", "C", 26)]),
+      bid(EPSILON, 100, [item("010", "J", 5)]),
+    ],
+  };
+
+  it("is null before a statement has been fetched", async () => {
+    expect(await service.statement(BIZ, "tender-x")).toBeNull();
+  });
+
+  it("puts our bid first, then the others by total, partial bids last", async () => {
+    repository.summaries.set("tender-x", stored);
+    const statement = (await service.statement(BIZ, "tender-x"))!;
+    expect(statement.bidders.map((b) => [b.competitorId, b.rank, b.lowestOverall])).toEqual([
+      [SELF, 2, false],
+      [DELTA, 1, true],
+      [BETA, 3, false],
+      [EPSILON, null, false],
+    ]);
+    expect(statement.bidders[2]).toMatchObject({ name: NAMES[BETA], total: 900, deliveryText: "240", isSelf: false });
+    expect(statement).toMatchObject({ rfxNumber: "1400000015", fetchedAt: "2026-10-24T05:00:00.000Z" });
+  });
+
+  it("lists items in the statement's own serial order with every bidder's rate", async () => {
+    repository.summaries.set("tender-x", stored);
+    const { items } = (await service.statement(BIZ, "tender-x"))!;
+    expect(items.map((i) => [i.slNo, i.itemCode])).toEqual([
+      ["001", "A"],
+      ["002", "B"],
+      ["003", "C"],
+      ["010", "J"],
+    ]);
+    expect(items[0]).toMatchObject({ description: "ITEM A", unit: "EA", quantity: 10 });
+    expect(items[0]!.rates).toEqual({ [SELF]: 12, [DELTA]: 9, [BETA]: 10 });
+    expect(items[3]!.rates).toEqual({ [EPSILON]: 5 });
   });
 });
 

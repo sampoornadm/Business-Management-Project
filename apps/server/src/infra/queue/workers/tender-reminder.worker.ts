@@ -15,7 +15,7 @@ const REMINDER_WINDOW_HOURS = 1;
 // A tender stops needing deadline reminders once it's no longer waiting to be submitted —
 // SUBMITTED included deliberately (not just the generally-terminal WON/LOST/CANCELLED): once
 // the bid is in, a reminder about its own deadline is noise, not a nudge.
-const NON_REMINDABLE_STATUSES = ["SUBMITTED", "WON", "LOST", "CANCELLED"] as const;
+const NON_REMINDABLE_STATUSES = ["SUBMITTED", "PRICE_OPENED", "WON", "LOST", "CANCELLED"] as const;
 
 type TenderForReminder = {
   id: string;

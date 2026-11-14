@@ -91,17 +91,57 @@ export function createCompetitorsRouter(controller: CompetitorsController): Rout
    * /competitors/tenders/{tenderId}/fetch-statement:
    *   post:
    *     tags: [Competitors]
-   *     summary: Read a won/lost tender's comparative statement from the portal browser window and save it
-   *     description: "Uses the portal login already in that window; never logs in itself. Replaces a statement saved earlier."
+   *     summary: Read a submitted tender's comparative statement from the portal browser window and save it
+   *     description: "Uses the portal login already in that window; never logs in itself. Replaces a statement saved earlier. A Submitted tender moves to Price opened; Won/Lost is never set here."
    *     security: [{ bearerAuth: [] }]
    *     parameters:
    *       - { in: path, name: tenderId, required: true, schema: { type: string, format: uuid } }
    *     responses:
    *       200: { description: "Bidder and item counts, the lowest overall bidder, and whether our own bid was found" }
-   *       400: { description: "The tender is not won or lost, or the statement is for another RFx" }
+   *       400: { description: "The tender has not been submitted, or the statement is for another RFx" }
    *       409: { description: "The portal needs a login, or the statement is not available yet. Nothing was saved" }
    *       422: { description: The page could not be read as a comparative statement. Nothing was saved }
    */
+  /**
+   * @openapi
+   * /competitors/tenders/{tenderId}/standing:
+   *   get:
+   *     tags: [Competitors]
+   *     summary: Our rank by total quote in a tender's price opening, and the lowest bidder
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - { in: path, name: tenderId, required: true, schema: { type: string, format: uuid } }
+   *     responses:
+   *       200: { description: "The standing, or null when no comparative statement has been fetched" }
+   */
+  router.get(
+    "/tenders/:tenderId/standing",
+    authenticateMiddleware,
+    requirePermission("competitors:read"),
+    validate(tenderIdParamsSchema, "params"),
+    controller.getStanding,
+  );
+
+  /**
+   * @openapi
+   * /competitors/tenders/{tenderId}/statement:
+   *   get:
+   *     tags: [Competitors]
+   *     summary: A tender's stored comparative statement as one table
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - { in: path, name: tenderId, required: true, schema: { type: string, format: uuid } }
+   *     responses:
+   *       200: { description: "Bidders (our bid first) and items in the tender's order with each bidder's basic rate; null when none is stored" }
+   */
+  router.get(
+    "/tenders/:tenderId/statement",
+    authenticateMiddleware,
+    requirePermission("competitors:read"),
+    validate(tenderIdParamsSchema, "params"),
+    controller.getStatement,
+  );
+
   router.post(
     "/tenders/:tenderId/fetch-statement",
     authenticateMiddleware,

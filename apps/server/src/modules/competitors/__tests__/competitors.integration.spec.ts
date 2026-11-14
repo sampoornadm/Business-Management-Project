@@ -86,6 +86,7 @@ describe("competitor rates (integration)", () => {
     expect(response.status).toBe(200);
     expect(response.body.data).toEqual({
       tenderId,
+      status: "LOST",
       bidders: 5,
       items: 1,
       lowestBidder: "BETA ENGINEERING CORPORATION",
@@ -188,15 +189,83 @@ describe("competitor rates (integration)", () => {
     expect(await prisma.comparativeStatement.count({ where: { businessId: testUser.businessId } })).toBe(0);
   });
 
-  it("refuses a tender whose result is not in yet, without touching the portal", async () => {
+  it("refuses a tender that has not been submitted, without touching the portal", async () => {
     let reads = 0;
     statementSource.read = () => {
       reads += 1;
       return Promise.resolve(matrix());
     };
-    const response = await fetchStatement(openTenderId);
+    await prisma.tender.update({ where: { id: tenderId }, data: { status: "DRAFT" } });
+    const response = await fetchStatement();
+    await prisma.tender.update({ where: { id: tenderId }, data: { status: "LOST" } });
     expect(response.status).toBe(400);
+    expect(response.body.error.message).toMatch(/submitted/);
     expect(reads).toBe(0);
+  });
+
+  it("moves a submitted tender to Price opened and reports our standing, without setting a result", async () => {
+    await prisma.tender.update({ where: { id: tenderId }, data: { status: "SUBMITTED" } });
+    const response = await fetchStatement();
+    const after = await prisma.tender.findUniqueOrThrow({ where: { id: tenderId } });
+    const history = await prisma.auditLog.findFirst({
+      where: { entityId: tenderId, action: "TENDER_STATUS_CHANGED" },
+      orderBy: { createdAt: "desc" },
+    });
+    await prisma.tender.update({ where: { id: tenderId }, data: { status: "LOST" } });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.status).toBe("PRICE_OPENED");
+    expect(after.status).toBe("PRICE_OPENED");
+    expect(after.winnerName).toBeNull();
+    expect(history?.metadata).toMatchObject({ from: "SUBMITTED", to: "PRICE_OPENED" });
+
+    const standing = (await request(app).get(`/api/v1/competitors/tenders/${tenderId}/standing`).set(auth())).body.data;
+    expect(standing).toMatchObject({
+      bidders: 5,
+      usIdentified: true,
+      ourRank: 4,
+      ourTotal: 891000,
+      lowest: { name: "BETA ENGINEERING CORPORATION", total: 528000, isSelf: false },
+    });
+  });
+
+  it("has no standing before a statement is fetched", async () => {
+    const response = await request(app).get(`/api/v1/competitors/tenders/${tenderId}/standing`).set(auth());
+    expect(response.status).toBe(200);
+    expect(response.body.data).toBeNull();
+  });
+
+  it("serves the statement per tender: our bid first, items in the tender's order", async () => {
+    await fetchStatement();
+    const statement = (await request(app).get(`/api/v1/competitors/tenders/${tenderId}/statement`).set(auth())).body.data;
+    expect(statement.bidders.map((b: { name: string }) => b.name)).toEqual([
+      "ALPHA SPRING WORKS",
+      "BETA ENGINEERING CORPORATION",
+      "DELTA ENTERPRISES",
+      "GAMMA ENGINEERING WORKS",
+      "EPSILON INDUSTRIES",
+    ]);
+    expect(statement.bidders[0]).toMatchObject({ isSelf: true, rank: 4, total: 891000, deliveryText: "180 DAYS" });
+    expect(statement.bidders[1]).toMatchObject({ rank: 1, lowestOverall: true });
+    expect(statement.items).toHaveLength(1);
+    expect(statement.items[0]).toMatchObject({ slNo: "001", itemCode: COIL, unit: "EA", quantity: 3300 });
+    expect(Object.values(statement.items[0].rates).sort()).toEqual([160, 170, 185, 270, 285]);
+  });
+
+  it("recognises our bid by business name when the bid was filed outside the app", async () => {
+    const business = await prisma.business.findUniqueOrThrow({ where: { id: testUser.businessId } });
+    await prisma.portalBid.deleteMany({ where: { tenderId } });
+    await prisma.business.update({ where: { id: business.id }, data: { name: "Epsilon Industries" } });
+    const response = await fetchStatement();
+    await prisma.business.update({ where: { id: business.id }, data: { name: business.name } });
+    await prisma.portalBid.create({
+      data: { businessId: testUser.businessId, tenderId, portalCode: "SAIL_ISP", responseNumber: "8100000001" },
+    });
+    expect(response.body.data.usFound).toBe(true);
+    const epsilon = await prisma.competitor.findFirstOrThrow({
+      where: { businessId: testUser.businessId, vendorCode: "1000000005" },
+    });
+    expect(epsilon.isSelf).toBe(true);
   });
 
   it("refuses a tender whose number is not a portal RFx number, without touching the portal", async () => {

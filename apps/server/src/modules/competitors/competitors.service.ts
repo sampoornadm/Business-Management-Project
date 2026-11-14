@@ -9,12 +9,19 @@ import type {
   RateForecastDto,
   RateToBeatDto,
   TenderRatesToBeatDto,
+  TenderStandingDto,
+  TenderStatementDto,
 } from "@bmp/types";
 
 import { BadRequestError, NotFoundError } from "../../core/errors/HttpErrors.js";
 
 import type { ParsedStatement } from "./comparative-statement.parser.js";
-import type { ICompetitorsRepository, RateRow } from "./competitors.repository.js";
+import type {
+  ICompetitorsRepository,
+  RateRow,
+  StatementSummary,
+  TenderForStatement,
+} from "./competitors.repository.js";
 import { forecastRate } from "./rate-trend.js";
 
 function groupBy<T>(rows: T[], key: (row: T) => string): Map<string, T[]> {
@@ -25,6 +32,24 @@ function groupBy<T>(rows: T[], key: (row: T) => string): Map<string, T[]> {
     else groups.set(key(row), [row]);
   }
   return groups;
+}
+
+/** A firm name reduced to what identifies it: case, punctuation and "&" vs "and" do not matter. */
+const firmNameKey = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "");
+
+/**
+ * A bid's place by total quote (1 = lowest) among bids covering every item: only those compare
+ * like for like. Null for a partial bid or one with no total.
+ */
+function rankByTotal(summary: StatementSummary, bid: StatementSummary["bids"][number]): number | null {
+  const covers = (candidate: StatementSummary["bids"][number]) =>
+    candidate.total !== null && candidate.items.length >= summary.itemCount;
+  if (!covers(bid)) return null;
+  return 1 + summary.bids.filter((other) => covers(other) && other.total! < bid.total!).length;
 }
 
 const newestFirst = (a: RateRow, b: RateRow) => b.openedAt.getTime() - a.openedAt.getTime();
@@ -183,7 +208,7 @@ export class CompetitorsService {
     tenderId: string,
     statement: ParsedStatement,
     rawGrid: string[][] | null = null,
-  ): Promise<FetchStatementResultDto> {
+  ): Promise<Omit<FetchStatementResultDto, "status">> {
     const tender = await this.competitors.findTender(businessId, tenderId);
     if (!tender) throw new NotFoundError("Tender not found");
     if (statement.rfxNumber !== tender.tenderNumber) {
@@ -196,7 +221,7 @@ export class CompetitorsService {
       tenderId,
       statement,
       openedAt: statement.bidEnd ?? this.now(),
-      usQuotationRef: tender.portalResponseNumber,
+      usVendorCode: await this.recogniseOurBid(businessId, tender, statement),
       boqItemIdByCode: new Map(tender.boqItems.map((item) => [item.itemCode, item.id])),
       rawGrid,
     });
@@ -207,6 +232,98 @@ export class CompetitorsService {
       lowestBidder: stored.lowestBidder,
       usFound: stored.usFound,
     };
+  }
+
+  /** Where we stand in a tender's price opening; null until its statement has been fetched. */
+  async standing(businessId: string, tenderId: string): Promise<TenderStandingDto | null> {
+    const summary = await this.competitors.findStatementSummary(businessId, tenderId);
+    if (!summary) return null;
+    // Only bids covering every item compare like for like on total.
+    const ours = summary.bids.find((bid) => bid.isSelf);
+    const lowest = summary.bids.find((bid) => bid.bidId === summary.lowestBidId);
+    return {
+      fetchedAt: summary.fetchedAt.toISOString(),
+      basisOfEvaluation: summary.basisOfEvaluation,
+      bidders: summary.bids.length,
+      usIdentified: Boolean(ours),
+      ourRank: ours ? rankByTotal(summary, ours) : null,
+      ourTotal: ours?.total ?? null,
+      lowest:
+        lowest && lowest.total !== null
+          ? { competitorId: lowest.competitorId, name: lowest.name, total: lowest.total, isSelf: lowest.isSelf }
+          : null,
+    };
+  }
+
+  /**
+   * A tender's price opening as one table: our bid first, then the others by total; items in the
+   * statement's own serial order, which is the tender's item order. Null until fetched.
+   */
+  async statement(businessId: string, tenderId: string): Promise<TenderStatementDto | null> {
+    const summary = await this.competitors.findStatementSummary(businessId, tenderId);
+    if (!summary) return null;
+
+    const bidders = summary.bids
+      .map((bid) => ({
+        competitorId: bid.competitorId,
+        name: bid.name,
+        isSelf: bid.isSelf,
+        total: bid.total,
+        rank: rankByTotal(summary, bid),
+        lowestOverall: bid.bidId === summary.lowestBidId,
+        deliveryText: bid.deliveryText,
+      }))
+      .sort(
+        (a, b) =>
+          Number(b.isSelf) - Number(a.isSelf) ||
+          (a.rank ?? Infinity) - (b.rank ?? Infinity) ||
+          (a.total ?? Infinity) - (b.total ?? Infinity) ||
+          a.name.localeCompare(b.name),
+      );
+
+    const items = new Map<string, TenderStatementDto["items"][number]>();
+    for (const bid of summary.bids) {
+      for (const item of bid.items) {
+        const key = `${item.slNo}|${item.itemCode}`;
+        const row = items.get(key) ?? {
+          slNo: item.slNo,
+          itemCode: item.itemCode,
+          description: item.description,
+          unit: item.unit,
+          quantity: item.quantity,
+          rates: {},
+        };
+        row.rates[bid.competitorId] = item.basicRate;
+        items.set(key, row);
+      }
+    }
+
+    return {
+      fetchedAt: summary.fetchedAt.toISOString(),
+      rfxNumber: summary.rfxNumber,
+      basisOfEvaluation: summary.basisOfEvaluation,
+      bidders,
+      items: [...items.values()].sort(
+        (a, b) => a.slNo.localeCompare(b.slNo, undefined, { numeric: true }) || a.itemCode.localeCompare(b.itemCode),
+      ),
+    };
+  }
+
+  /**
+   * Which bid on the statement is ours: the one filed under our saved portal response number,
+   * else, while no portal vendor is yet marked as our firm, the one whose supplier name is our
+   * business name. (Once a firm is marked, the repository recognises it by vendor code.)
+   */
+  private async recogniseOurBid(
+    businessId: string,
+    tender: TenderForStatement,
+    statement: ParsedStatement,
+  ): Promise<string | null> {
+    const byReference = statement.bids.find((bid) => bid.quotationRef === tender.portalResponseNumber);
+    if (byReference) return byReference.vendorCode;
+    if (await this.competitors.hasSelf(businessId)) return null;
+    const ourName = firmNameKey(tender.businessName);
+    return statement.bids.find((bid) => firmNameKey(bid.vendorName) === ourName)?.vendorCode ?? null;
   }
 
   private forecast(rows: RateRow[]): RateForecastDto {

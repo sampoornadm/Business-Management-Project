@@ -1,4 +1,4 @@
-import { isSailRfxNumber, type FetchStatementResultDto } from "@bmp/types";
+import { isSailRfxNumber, type FetchStatementResultDto, type TenderStatus } from "@bmp/types";
 
 import {
   BadRequestError,
@@ -19,12 +19,21 @@ export interface StatementSource {
   read(rfxNumber: string): Promise<string[][]>;
 }
 
-/** A result is only published once the client has opened the tender. */
-const RESULT_STATUSES = new Set(["WON", "LOST"]);
+/** The price bids have been opened: from Submitted on, a statement may exist on the portal. */
+const FETCHABLE_STATUSES = new Set(["SUBMITTED", "PRICE_OPENED", "WON", "LOST"]);
+
+export interface FetchContext {
+  businessId: string;
+  roleId: string;
+  ipAddress?: string | undefined;
+  userAgent?: string | undefined;
+}
 
 /**
  * Reads a tender's comparative statement from the portal and saves it. All or nothing: a page
- * that cannot be read with confidence stores nothing, and the caller is told why.
+ * that cannot be read with confidence stores nothing, and the caller is told why. A tender that
+ * was still Submitted moves on to Price opened; the result (Won/Lost) is never set here, because
+ * the lowest quote is not always who gets the order.
  */
 export class StatementFetchService {
   constructor(
@@ -33,16 +42,18 @@ export class StatementFetchService {
       competitors: CompetitorsService;
       source: StatementSource;
       audit: AuditService;
+      /** Moves the tender Submitted -> Price opened through the normal status-change path. */
+      markPriceOpened: (tenderId: string, actorId: string, context: FetchContext) => Promise<unknown>;
     },
   ) {}
 
-  async fetch(businessId: string, tenderId: string, actorId: string): Promise<FetchStatementResultDto> {
+  async fetch(tenderId: string, actorId: string, context: FetchContext): Promise<FetchStatementResultDto> {
+    const { businessId } = context;
     const tender = await this.deps.repository.findTender(businessId, tenderId);
     if (!tender) throw new NotFoundError("Tender not found");
-    if (!RESULT_STATUSES.has(tender.status)) {
-      throw new BadRequestError("The comparative statement can be fetched once the tender is marked Won or Lost");
+    if (!FETCHABLE_STATUSES.has(tender.status)) {
+      throw new BadRequestError("The comparative statement can be fetched once the tender has been submitted");
     }
-
     if (!isSailRfxNumber(tender.tenderNumber)) {
       throw new BadRequestError(
         `Tender number ${tender.tenderNumber} is not a SAIL ISP RFx number, so there is no comparative statement to fetch`,
@@ -70,7 +81,7 @@ export class StatementFetchService {
       );
     }
 
-    const result = await this.deps.competitors.store(businessId, tenderId, statement, grid);
+    const stored = await this.deps.competitors.store(businessId, tenderId, statement, grid);
     await this.deps.audit.log({
       actorId,
       action: "COMPARATIVE_STATEMENT_FETCHED",
@@ -78,8 +89,14 @@ export class StatementFetchService {
       entityId: tenderId,
       entityCode: tender.tenderNumber,
       businessId,
-      metadata: { bidders: result.bidders, items: result.items, lowestBidder: result.lowestBidder },
+      metadata: { bidders: stored.bidders, items: stored.items, lowestBidder: stored.lowestBidder },
     });
-    return result;
+
+    let status = tender.status as TenderStatus;
+    if (status === "SUBMITTED") {
+      await this.deps.markPriceOpened(tenderId, actorId, context);
+      status = "PRICE_OPENED";
+    }
+    return { ...stored, status };
   }
 }

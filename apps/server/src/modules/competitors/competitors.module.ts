@@ -1,6 +1,7 @@
 import { prisma } from "../../infra/prisma/client.js";
 import { auditService } from "../audit/audit.module.js";
 import { portalBrowser } from "../portal-bid/portal-bid.module.js";
+import { tendersService } from "../tenders/tenders.module.js";
 
 import { CompetitorsController } from "./competitors.controller.js";
 import { CompetitorsRepository } from "./competitors.repository.js";
@@ -24,6 +25,13 @@ const statementFetchService = new StatementFetchService({
   competitors: competitorsService,
   source: statementSource,
   audit: auditService,
+  markPriceOpened: (tenderId, actorId, context) =>
+    tendersService.changeStatus(
+      tenderId,
+      { status: "PRICE_OPENED", remarks: "Comparative statement read from the portal" },
+      actorId,
+      context,
+    ),
 });
 
 export const competitorsRouter = createCompetitorsRouter(

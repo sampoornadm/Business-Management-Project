@@ -12,7 +12,12 @@ export class CompetitorsController {
   ) {}
 
   fetchStatement = asyncHandler(async (req, res) => {
-    const result = await this.statements.fetch(req.user!.businessId, req.params.tenderId!, req.user!.id);
+    const result = await this.statements.fetch(req.params.tenderId!, req.user!.id, {
+      businessId: req.user!.businessId,
+      roleId: req.user!.roleId,
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+    });
     sendSuccess(res, result, "Comparative statement saved");
   });
 
@@ -33,6 +38,16 @@ export class CompetitorsController {
   getRatesToBeat = asyncHandler(async (req, res) => {
     const rates = await this.competitors.ratesToBeat(req.user!.businessId, req.params.tenderId!);
     sendSuccess(res, rates, "Rates to beat retrieved");
+  });
+
+  getStanding = asyncHandler(async (req, res) => {
+    const standing = await this.competitors.standing(req.user!.businessId, req.params.tenderId!);
+    sendSuccess(res, standing, "Tender standing retrieved");
+  });
+
+  getStatement = asyncHandler(async (req, res) => {
+    const statement = await this.competitors.statement(req.user!.businessId, req.params.tenderId!);
+    sendSuccess(res, statement, "Comparative statement retrieved");
   });
 
   getById = asyncHandler(async (req, res) => {
