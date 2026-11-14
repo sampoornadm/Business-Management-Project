@@ -77,6 +77,16 @@ describe("parseComparativeMatrix", () => {
     expect(s.bids[1]!.items).toHaveLength(1);
   });
 
+  it("treats a zero rate as not quoted", () => {
+    const s = parseComparativeMatrix(setCell(matrix, "Basic Price Per Unit", 2, "0.00"));
+    expect(s.bids[1]!.items).toEqual([]);
+  });
+
+  it("counts the items the statement lists, whoever quoted them", () => {
+    expect(parseComparativeMatrix(matrix).itemCount).toBe(1);
+    expect(parseComparativeMatrix(blankCell(withSecondItem(matrix), "Basic Price Per Unit", 1)).itemCount).toBe(2);
+  });
+
   it("parses Indian-grouped numbers", () => {
     const s = parseComparativeMatrix(setCell(matrix, "Basic Price Per Unit", 1, "1,23,456.50"));
     expect(s.bids[0]!.items[0]!.basicRate).toBe(123456.5);

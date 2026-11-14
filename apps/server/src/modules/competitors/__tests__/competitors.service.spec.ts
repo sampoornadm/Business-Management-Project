@@ -76,6 +76,10 @@ class FakeCompetitorsRepository implements ICompetitorsRepository {
   rows: RateRow[] = ROWS;
   tenders = new Map<string, TenderForStatement>();
   stored: StoreStatementInput[] = [];
+  selfKnown = true;
+  hasSelf() {
+    return Promise.resolve(this.selfKnown);
+  }
   selfCalls: [string, boolean][] = [];
 
   findTender(_businessId: string, tenderId: string) {
@@ -218,6 +222,13 @@ describe("CompetitorsService.ratesToBeat", () => {
     expect(likelyBidders[0]).toEqual({ competitorId: BETA, name: NAMES[BETA], itemsQuoted: 2 });
     expect(likelyBidders.map((bidder) => bidder.competitorId)).not.toContain(SELF);
     expect(likelyBidders).toHaveLength(4);
+  });
+
+  it("says when no portal vendor is marked as our own firm yet", async () => {
+    expect((await service.ratesToBeat(BIZ, NEW_TENDER.id)).ourFirmKnown).toBe(true);
+    repository.rows = ROWS.map((r) => ({ ...r, isSelf: false }));
+    repository.selfKnown = false;
+    expect((await service.ratesToBeat(BIZ, NEW_TENDER.id)).ourFirmKnown).toBe(false);
   });
 
   it("lists each BOQ item code once", async () => {

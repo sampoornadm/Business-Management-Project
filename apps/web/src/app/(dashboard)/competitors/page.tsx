@@ -22,6 +22,7 @@ import { Swords } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { OurFirmUnknownNotice } from "@/components/competitors/rate-to-beat";
 import { useCompetitorItems, useCompetitors } from "@/hooks/use-competitors";
 
 const NOTHING_YET = "They are saved when a tender is marked Won or Lost.";
@@ -31,39 +32,59 @@ function ByCompetitor() {
   if (competitors.isLoading) return <PageSkeleton />;
   const rows = competitors.data ?? [];
   if (rows.length === 0) {
-    return <EmptyState icon={Swords} title="No comparative statements yet" description={NOTHING_YET} />;
+    return (
+      <EmptyState
+        icon={Swords}
+        title="No comparative statements yet"
+        description={NOTHING_YET}
+      />
+    );
   }
   return (
-    <div className="rounded-lg border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>SAIL vendor code</TableHead>
-            <TableHead className="text-right">Tenders met</TableHead>
-            <TableHead className="text-right">Lowest bidder in</TableHead>
-            <TableHead>Last seen</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((competitor) => (
-            <TableRow key={competitor.id}>
-              <TableCell>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Link href={`/competitors/${competitor.id}`} className="font-medium hover:underline">
-                    {competitor.name}
-                  </Link>
-                  {competitor.isSelf && <Badge variant="secondary">Us</Badge>}
-                </div>
-              </TableCell>
-              <TableCell className="tabular-nums">{competitor.vendorCode}</TableCell>
-              <TableCell className="text-right tabular-nums">{competitor.tenderCount}</TableCell>
-              <TableCell className="text-right tabular-nums">{competitor.lowestCount}</TableCell>
-              <TableCell>{formatDate(competitor.lastSeenAt)}</TableCell>
+    <div className="space-y-3">
+      {!rows.some((competitor) => competitor.isSelf) && (
+        <OurFirmUnknownNotice />
+      )}
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>SAIL vendor code</TableHead>
+              <TableHead className="text-right">Tenders met</TableHead>
+              <TableHead className="text-right">Lowest bidder in</TableHead>
+              <TableHead>Last seen</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {rows.map((competitor) => (
+              <TableRow key={competitor.id}>
+                <TableCell>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/competitors/${competitor.id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {competitor.name}
+                    </Link>
+                    {competitor.isSelf && <Badge variant="secondary">Us</Badge>}
+                  </div>
+                </TableCell>
+                <TableCell className="tabular-nums">
+                  {competitor.vendorCode}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {competitor.tenderCount}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {competitor.lowestCount}
+                </TableCell>
+                <TableCell>{formatDate(competitor.lastSeenAt)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
@@ -93,7 +114,11 @@ function ByItem() {
         <EmptyState
           icon={Swords}
           title={debounced ? "No items match" : "No comparative statements yet"}
-          description={debounced ? "Try a shorter description or the item code." : NOTHING_YET}
+          description={
+            debounced
+              ? "Try a shorter description or the item code."
+              : NOTHING_YET
+          }
         />
       ) : (
         <div className="rounded-lg border">
@@ -117,9 +142,15 @@ function ByItem() {
                       {item.description || item.itemCode}
                     </Link>
                   </TableCell>
-                  <TableCell className="tabular-nums">{item.itemCode}</TableCell>
-                  <TableCell className="text-right tabular-nums">{item.competitorCount}</TableCell>
-                  <TableCell className="text-right tabular-nums">{item.tenderCount}</TableCell>
+                  <TableCell className="tabular-nums">
+                    {item.itemCode}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {item.competitorCount}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {item.tenderCount}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

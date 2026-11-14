@@ -27,6 +27,8 @@ export interface ParsedStatement {
   bidStart: Date | null;
   bidEnd: Date | null;
   basisOfEvaluation: string | null;
+  /** Items the statement lists, whoever quoted them; a bid covering fewer is a partial bid. */
+  itemCount: number;
   bids: ParsedBid[];
 }
 
@@ -138,8 +140,8 @@ export function parseComparativeMatrix(matrix: string[][]): ParsedStatement {
     const items = blocks.flatMap((block): ParsedBidItem[] => {
       const itemCode = text(block.itemCode[column]);
       const basicRate = number(block.basicRate[column]);
-      // An empty rate cell means this bidder did not quote the item.
-      if (itemCode === null || basicRate === null) return [];
+      // An empty (or zero) rate cell means this bidder did not quote the item.
+      if (itemCode === null || basicRate === null || basicRate <= 0) return [];
       return [
         {
           slNo: text(block.slNo[column]) ?? "",
@@ -173,6 +175,7 @@ export function parseComparativeMatrix(matrix: string[][]): ParsedStatement {
     bidStart: istDate(detail("BID Start Date") ?? undefined),
     bidEnd: istDate(detail("BID End Date") ?? undefined),
     basisOfEvaluation: detail("Basis of Evaluation"),
+    itemCount: blocks.length,
     bids,
   };
 }

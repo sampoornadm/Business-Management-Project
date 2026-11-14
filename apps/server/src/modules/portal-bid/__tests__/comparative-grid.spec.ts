@@ -92,6 +92,46 @@ describe("readComparativeGrid", () => {
     await expect(readComparativeGrid(page(new FakeFrame({})), fast)).rejects.toThrow(StatementNotAvailableError);
   });
 
+  it("refuses a grid whose declared size it cannot find", async () => {
+    const frame = new FakeFrame({ snapshots: [grid([[0, 0, "a"], [1, 0, "b"]], 0, 0)] });
+    await expect(readComparativeGrid(page(frame), fast)).rejects.toThrow(StatementNotAvailableError);
+    await expect(readComparativeGrid(page(frame), fast)).rejects.toThrow(/size/);
+  });
+
+  it("surfaces a script error from the page instead of reporting the statement as unpublished", async () => {
+    const broken = { evaluate: () => Promise.reject(new ReferenceError("__name is not defined")) };
+    await expect(readComparativeGrid({ frames: () => [broken] } as unknown as Page, fast)).rejects.toThrow(
+      /__name is not defined/,
+    );
+  });
+
+  it("keeps waiting through a frame that is navigating", async () => {
+    let calls = 0;
+    const navigating = {
+      evaluate: (fn: unknown) => {
+        calls += 1;
+        if (calls <= 2) return Promise.reject(new Error("Execution context was destroyed, most likely because of a navigation"));
+        return Promise.resolve(fn === readGridInPage ? grid([[0, 0, "a"]], 1, 1) : false);
+      },
+    };
+    expect(await readComparativeGrid({ frames: () => [navigating] } as unknown as Page, fast)).toEqual([["a"]]);
+  });
+
+  // These three are serialised into the portal page. The server runs under tsx, whose bundler
+  // wraps every *named* inner function in a `__name(...)` helper that does not exist in the page,
+  // so a nested named function makes the whole read throw there (see portal-session.ts).
+  it.each([
+    ["readGridInPage", readGridInPage],
+    ["hasLoginFormInPage", hasLoginFormInPage],
+    ["scrollGridInPage", scrollGridInPage],
+  ])("%s declares no named inner function", (_name, fn) => {
+    const source = fn.toString();
+    const body = source.slice(source.indexOf("{") + 1);
+    expect(source).not.toContain("__name");
+    expect(body).not.toMatch(/\b(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*(?::[^=]+)?=>/);
+    expect(body).not.toMatch(/\bfunction\s+\w+\s*\(/);
+  });
+
   it("waits for a grid that appears late", async () => {
     let reads = 0;
     const late = {

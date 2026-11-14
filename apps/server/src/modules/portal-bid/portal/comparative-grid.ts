@@ -27,7 +27,10 @@ export interface ReadGridOptions {
 }
 
 // The three functions below run inside the portal page (Playwright serialises them), so they
-// may only use the DOM and their own locals.
+// may only use the DOM and their own locals. They must not declare a *named* inner function
+// (`const f = () => ...`, `function f() {}`): the server runs under tsx, whose bundler wraps
+// those in a `__name(...)` helper that does not exist in the page, and the read then throws
+// there. Inline anonymous callbacks are fine. A test checks this.
 
 /**
  * The comparative statement is an SAP WebGUI ALV grid. Every cell is a
@@ -42,15 +45,15 @@ export function readGridInPage(): GridSnapshot | null {
     Number(td.getAttribute("lsmatrixcolindex")),
     (td.textContent ?? "").replace(/[\s\u00a0]+/g, " ").trim(),
   ]);
-  const meta = Array.from(document.querySelectorAll('[lsdata*="totalRows"]'))
-    .map((element) => element.getAttribute("lsdata") ?? "")
-    .concat(document.documentElement.innerHTML)
-    .find((text) => /totalRows\D{1,8}\d+/.test(text));
-  const declared = (name: string) => {
-    const match = new RegExp(`${name}\\D{1,8}(\\d+)`).exec(meta ?? "");
-    return match ? Number(match[1]) : 0;
-  };
-  return { cells, totalRows: declared("totalRows"), totalColumns: declared("totalColumns") };
+  const meta =
+    Array.from(document.querySelectorAll('[lsdata*="totalRows"]'))
+      .map((element) => element.getAttribute("lsdata") ?? "")
+      .concat(document.documentElement.innerHTML)
+      .find((text) => /totalRows\D{1,8}\d+/.test(text)) ?? "";
+  // No named helper here on purpose: see the note above these three functions.
+  const rows = /totalRows\D{1,8}(\d+)/.exec(meta);
+  const columns = /totalColumns\D{1,8}(\d+)/.exec(meta);
+  return { cells, totalRows: rows ? Number(rows[1]) : 0, totalColumns: columns ? Number(columns[1]) : 0 };
 }
 
 export function hasLoginFormInPage(): boolean {
@@ -76,6 +79,21 @@ export function scrollGridInPage(): void {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+type PortalFrame = ReturnType<Page["frames"]>[number];
+
+/**
+ * Runs an in-page probe. A frame that is mid-navigation or gone is simply "nothing there yet";
+ * any other failure is a real fault and must surface, not pass for "statement not published".
+ */
+async function probe<T>(frame: PortalFrame, fn: () => T): Promise<T | null> {
+  try {
+    return (await frame.evaluate(fn)) as T;
+  } catch (error) {
+    if (/detached|destroyed|navigat|closed/i.test(String(error))) return null;
+    throw error;
+  }
+}
+
 /**
  * Waits for the statement grid in any frame of `page` and returns it as a dense matrix
  * (`matrix[row][column]`, `""` for an empty cell). Never returns a partial grid.
@@ -84,16 +102,16 @@ export async function readComparativeGrid(page: Page, options: ReadGridOptions =
   const { timeoutMs = 30_000, pollMs = 500, settleMs = 400, maxScrolls = 200 } = options;
   const deadline = Date.now() + timeoutMs;
 
-  let found: { frame: ReturnType<Page["frames"]>[number]; snapshot: GridSnapshot } | undefined;
+  let found: { frame: PortalFrame; snapshot: GridSnapshot } | undefined;
   while (!found) {
     let login = false;
     for (const frame of page.frames()) {
-      const snapshot = await frame.evaluate(readGridInPage).catch(() => null);
+      const snapshot = await probe(frame, readGridInPage);
       if (snapshot && snapshot.cells.length > 0) {
         found = { frame, snapshot };
         break;
       }
-      login ||= await frame.evaluate(hasLoginFormInPage).catch(() => false);
+      login ||= Boolean(await probe(frame, hasLoginFormInPage));
     }
     if (found) break;
     if (login) throw new PortalLoginRequiredError();
@@ -123,11 +141,15 @@ export async function readComparativeGrid(page: Page, options: ReadGridOptions =
   const complete = () => rows.size >= totalRows && columns.size >= totalColumns;
 
   absorb(found.snapshot);
+  // Without the grid's own size there is no telling a full grid from a partly loaded one.
+  if (totalRows === 0 || totalColumns === 0) {
+    throw new StatementNotAvailableError("Could not confirm the size of the comparative statement grid");
+  }
   for (let scrolls = 0, stalled = 0; !complete() && scrolls < maxScrolls && stalled < 3; scrolls += 1) {
-    await found.frame.evaluate(scrollGridInPage).catch(() => undefined);
+    await probe(found.frame, scrollGridInPage);
     await sleep(settleMs);
     const before = cells.size;
-    absorb(await found.frame.evaluate(readGridInPage).catch(() => null));
+    absorb(await probe(found.frame, readGridInPage));
     stalled = cells.size === before ? stalled + 1 : 0;
   }
   if (!complete()) {

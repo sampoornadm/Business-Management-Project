@@ -113,6 +113,11 @@ export interface RateToBeatDto {
 export interface TenderRatesToBeatDto {
   items: RateToBeatDto[];
   likelyBidders: { competitorId: string; name: string; itemsQuoted: number }[];
+  /**
+   * False until a portal vendor is marked as our own firm. Until then our own past bids are
+   * indistinguishable from a competitor's and may be counted among the rates to beat.
+   */
+  ourFirmKnown: boolean;
 }
 
 export interface FetchStatementResultDto {

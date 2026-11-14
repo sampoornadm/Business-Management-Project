@@ -66,6 +66,8 @@ export interface ICompetitorsRepository {
   listCompetitors(businessId: string): Promise<CompetitorListItemDto[]>;
   findCompetitor(businessId: string, id: string): Promise<CompetitorRecord | null>;
   setSelf(businessId: string, id: string, isSelf: boolean): Promise<void>;
+  /** Whether any portal vendor is marked as our own firm; until then our bids look like a competitor's. */
+  hasSelf(businessId: string): Promise<boolean>;
   ratesByCompetitor(businessId: string, competitorId: string): Promise<RateRow[]>;
   /** Every bidder's rates for these items, our own firm included. */
   ratesByItemCodes(businessId: string, itemCodes: string[]): Promise<RateRow[]>;
@@ -73,14 +75,14 @@ export interface ICompetitorsRepository {
 }
 
 /**
- * The lowest overall quote: smallest total among bidders who quoted every item (a bidder who
- * skipped an item has a smaller total for the wrong reason). Returns an index into `bids`.
+ * The lowest overall quote: smallest total among bidders who quoted every item the statement
+ * lists (a bidder who skipped an item has a smaller total for the wrong reason). Returns an index
+ * into `bids`, or null when nobody quoted the whole tender.
  */
-export function lowestOverallIndex(bids: Pick<ParsedBid, "total" | "items">[]): number | null {
-  const fullCount = Math.max(0, ...bids.map((bid) => bid.items.length));
+export function lowestOverallIndex(bids: Pick<ParsedBid, "total" | "items">[], itemCount: number): number | null {
   let lowest: number | null = null;
   bids.forEach((bid, index) => {
-    if (bid.total === null || bid.items.length === 0 || bid.items.length < fullCount) return;
+    if (itemCount === 0 || bid.total === null || bid.items.length < itemCount) return;
     if (lowest === null || bid.total < bids[lowest]!.total!) lowest = index;
   });
   return lowest;
@@ -163,7 +165,7 @@ export class CompetitorsRepository implements ICompetitorsRepository {
         },
       });
 
-      const lowestIndex = lowestOverallIndex(statement.bids);
+      const lowestIndex = lowestOverallIndex(statement.bids, statement.itemCount);
       let lowestBidId: string | null = null;
       let usFound = false;
       for (const [index, bid] of statement.bids.entries()) {
@@ -258,6 +260,10 @@ export class CompetitorsRepository implements ICompetitorsRepository {
       this.prisma.competitor.updateMany({ where: { id, businessId }, data: { isSelf } }),
       this.prisma.comparativeBid.updateMany({ where: { competitorId: id, businessId }, data: { isUs: isSelf } }),
     ]);
+  }
+
+  async hasSelf(businessId: string): Promise<boolean> {
+    return (await this.prisma.competitor.count({ where: { businessId, isSelf: true } })) > 0;
   }
 
   async ratesByCompetitor(businessId: string, competitorId: string): Promise<RateRow[]> {

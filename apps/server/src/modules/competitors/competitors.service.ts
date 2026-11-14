@@ -174,7 +174,7 @@ export class CompetitorsService {
       }))
       .sort((a, b) => b.itemsQuoted - a.itemsQuoted || a.name.localeCompare(b.name));
 
-    return { items, likelyBidders };
+    return { items, likelyBidders, ourFirmKnown: await this.competitors.hasSelf(businessId) };
   }
 
   /** Saves a statement read from the portal against its tender. Refuses one for another RFx. */

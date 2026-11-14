@@ -1,6 +1,10 @@
 "use client";
 
-import type { LikelyBidderDto, RateToBeatDto, TenderRatesToBeatDto } from "@bmp/types";
+import type {
+  LikelyBidderDto,
+  RateToBeatDto,
+  TenderRatesToBeatDto,
+} from "@bmp/types";
 import {
   Badge,
   Button,
@@ -27,23 +31,36 @@ import { useState } from "react";
 
 import { PredictedRate, TrendLabel } from "./trend-label";
 
-function BidderRow({ bidder, us = false }: { bidder: LikelyBidderDto; us?: boolean }) {
+function BidderRow({
+  bidder,
+  us = false,
+}: {
+  bidder: LikelyBidderDto;
+  us?: boolean;
+}) {
   return (
     <TableRow className={cn(us && "bg-primary/5 font-medium")}>
       <TableCell>
         {us ? (
           "Us"
         ) : (
-          <Link href={`/competitors/${bidder.competitorId}`} className="hover:underline">
+          <Link
+            href={`/competitors/${bidder.competitorId}`}
+            className="hover:underline"
+          >
             {bidder.name}
           </Link>
         )}
       </TableCell>
-      <TableCell className="text-right tabular-nums">{formatMoney(bidder.lastRate)}</TableCell>
+      <TableCell className="text-right tabular-nums">
+        {formatMoney(bidder.lastRate)}
+      </TableCell>
       <TableCell>
         {bidder.lastTenderNumber} · {formatDate(bidder.lastOpenedAt)}
       </TableCell>
-      <TableCell className="text-right tabular-nums">{bidder.tenders}</TableCell>
+      <TableCell className="text-right tabular-nums">
+        {bidder.tenders}
+      </TableCell>
       <TableCell>
         <TrendLabel forecast={bidder.forecast} />
       </TableCell>
@@ -70,17 +87,27 @@ export function RateToBeatHint({
 }) {
   const [open, setOpen] = useState(false);
   if (!entry) return null;
-  if (entry.rateToBeat === null) return <span className="block text-xs text-muted-foreground">no history</span>;
+  if (entry.rateToBeat === null)
+    return (
+      <span className="block text-xs text-muted-foreground">no history</span>
+    );
 
   const tone =
-    ourRate === null ? "text-muted-foreground" : ourRate > entry.rateToBeat ? "text-destructive" : "text-success";
+    ourRate === null
+      ? "text-muted-foreground"
+      : ourRate > entry.rateToBeat
+        ? "text-destructive"
+        : "text-success";
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Show competitor rates for this item"
-        className={cn("ml-auto flex items-center gap-0.5 text-xs tabular-nums hover:underline", tone)}
+        className={cn(
+          "ml-auto flex items-center gap-0.5 text-xs tabular-nums hover:underline",
+          tone,
+        )}
       >
         beat {formatMoney(entry.rateToBeat)}
         <ChevronDown className="h-3 w-3" aria-hidden />
@@ -92,7 +119,10 @@ export function RateToBeatHint({
             <DialogDescription asChild>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">Item {entry.itemCode}</Badge>
-                <span>Basic rates per unit, before GST, from past comparative statements.</span>
+                <span>
+                  Basic rates per unit, before GST, from past comparative
+                  statements.
+                </span>
               </div>
             </DialogDescription>
           </DialogHeader>
@@ -117,12 +147,17 @@ export function RateToBeatHint({
             </Table>
           </div>
           <p className="text-sm text-muted-foreground">
-            Rate to beat {formatMoney(entry.rateToBeat)} = lowest predicted next rate among likely bidders (their
-            last rate where there is too little history to predict).
+            Rate to beat {formatMoney(entry.rateToBeat)} = lowest predicted next
+            rate among likely bidders (their last rate where there is too little
+            history to predict).
           </p>
           <DialogFooter>
             <Button variant="outline" asChild>
-              <Link href={`/competitors/items/${encodeURIComponent(entry.itemCode)}`}>Open in Competitors</Link>
+              <Link
+                href={`/competitors/items/${encodeURIComponent(entry.itemCode)}`}
+              >
+                Open in Competitors
+              </Link>
             </Button>
             <DialogClose asChild>
               <Button>Close</Button>
@@ -135,21 +170,51 @@ export function RateToBeatHint({
 }
 
 /** Who has quoted this tender's items before, most items first. */
-export function LikelyBiddersLine({ rates }: { rates: TenderRatesToBeatDto | undefined }) {
+export function LikelyBiddersLine({
+  rates,
+}: {
+  rates: TenderRatesToBeatDto | undefined;
+}) {
   const bidders = rates?.likelyBidders.slice(0, 5) ?? [];
-  if (bidders.length === 0) return null;
+  if (!rates || bidders.length === 0) return null;
   return (
-    <p className="text-sm text-muted-foreground">
-      Likely bidders:{" "}
-      {bidders.map((bidder, index) => (
-        <span key={bidder.competitorId}>
-          {index > 0 && ", "}
-          <Link href={`/competitors/${bidder.competitorId}`} className="text-foreground hover:underline">
-            {bidder.name}
-          </Link>{" "}
-          ({bidder.itemsQuoted} {bidder.itemsQuoted === 1 ? "item" : "items"})
-        </span>
-      ))}
+    <div className="space-y-1">
+      {!rates.ourFirmKnown && <OurFirmUnknownNotice />}
+      <p className="text-sm text-muted-foreground">
+        Likely bidders:{" "}
+        {bidders.map((bidder, index) => (
+          <span key={bidder.competitorId}>
+            {index > 0 && ", "}
+            <Link
+              href={`/competitors/${bidder.competitorId}`}
+              className="text-foreground hover:underline"
+            >
+              {bidder.name}
+            </Link>{" "}
+            ({bidder.itemsQuoted} {bidder.itemsQuoted === 1 ? "item" : "items"})
+          </span>
+        ))}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Shown while no portal vendor is marked as our own firm: until then our own past bids count as
+ * a competitor's, so a "rate to beat" may be our own rate.
+ */
+export function OurFirmUnknownNotice() {
+  return (
+    <p
+      role="status"
+      className="rounded-md border border-signal/40 bg-signal/10 px-3 py-2 text-sm"
+    >
+      Our own firm is not marked yet, so our past bids are being counted as a
+      competitor&apos;s. Open it on the{" "}
+      <Link href="/competitors" className="font-medium underline">
+        Competitors
+      </Link>{" "}
+      page and choose “Mark as our firm”.
     </p>
   );
 }
