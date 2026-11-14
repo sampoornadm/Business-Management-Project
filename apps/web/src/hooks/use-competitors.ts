@@ -8,6 +8,8 @@ import type {
   FetchStatementResultDto,
   ItemComparisonDto,
   TenderRatesToBeatDto,
+  TenderStandingDto,
+  TenderStatementDto,
 } from "@bmp/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -90,6 +92,34 @@ export function useRatesToBeat(tenderId: string | undefined, enabled = true) {
   });
 }
 
+/** Our rank and the lowest bidder in a tender's price opening; null until the statement is fetched. */
+export function useTenderStanding(tenderId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["competitors", "standing", tenderId],
+    queryFn: async () => {
+      const response = await apiClient.get<ApiResponse<TenderStandingDto | null>>(
+        `/competitors/tenders/${tenderId}/standing`,
+      );
+      return unwrap(response.data);
+    },
+    enabled: enabled && Boolean(tenderId),
+  });
+}
+
+/** A tender's stored comparative statement as one table; null until fetched. */
+export function useTenderStatement(tenderId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["competitors", "statement", tenderId],
+    queryFn: async () => {
+      const response = await apiClient.get<ApiResponse<TenderStatementDto | null>>(
+        `/competitors/tenders/${tenderId}/statement`,
+      );
+      return unwrap(response.data);
+    },
+    enabled: enabled && Boolean(tenderId),
+  });
+}
+
 /** Reads the tender's comparative statement from the portal browser window and saves it. */
 export function useFetchComparativeStatement(tenderId: string) {
   const queryClient = useQueryClient();
@@ -105,6 +135,8 @@ export function useFetchComparativeStatement(tenderId: string) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["competitors"] });
+      // A Submitted tender moves to Price opened on the server.
+      void queryClient.invalidateQueries({ queryKey: ["tenders"] });
     },
   });
 }

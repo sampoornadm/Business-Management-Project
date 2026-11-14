@@ -10,6 +10,7 @@ export function tenderStatusBadgeVariant(status: TenderStatus): BadgeVariant {
     case "CANCELLED":
       return "destructive";
     case "SUBMITTED":
+    case "PRICE_OPENED":
       return "secondary";
     case "WON":
       return "success";
@@ -22,6 +23,8 @@ export function tenderStatusChartColor(status: TenderStatus): string {
       return "hsl(var(--muted-foreground))";
     case "SUBMITTED":
       return "hsl(var(--primary))";
+    case "PRICE_OPENED":
+      return "hsl(var(--signal))";
     case "WON":
       return "hsl(var(--success))";
     case "LOST":

@@ -16,6 +16,7 @@ const STATUS_TONE: Record<string, Tone> = {
   SENT: "secondary",
   ISSUED: "secondary",
   SUBMITTED: "secondary",
+  PRICE_OPENED: "secondary",
   APPROVED: "secondary",
   IN_PROGRESS: "secondary",
   ON_HOLD: "secondary",

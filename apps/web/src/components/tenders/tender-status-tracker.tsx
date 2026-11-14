@@ -25,6 +25,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 
 import { useFetchStatementAction } from "@/components/competitors/fetch-statement";
 import { useCurrentBoq } from "@/hooks/use-boq";
+import { useTenderStanding } from "@/hooks/use-competitors";
 import { useChangeTenderStatus, useTenderStatusHistory } from "@/hooks/use-tenders";
 import { canRevertTo } from "@/lib/tender-stepper";
 
@@ -119,8 +120,10 @@ export interface TenderStatusTrackerProps {
   canChange: boolean;
   canRevert: boolean;
   canViewBoq: boolean;
-  /** May read the client's comparative statement from the portal once a result is in. */
+  /** May read the client's comparative statement from the portal once the bid is submitted. */
   canFetchStatement?: boolean;
+  /** May see where we stand in the price opening (rank, lowest bidder). */
+  canViewStanding?: boolean;
 }
 
 /**
@@ -134,6 +137,7 @@ export function TenderStatusTracker({
   canRevert,
   canViewBoq,
   canFetchStatement = false,
+  canViewStanding = false,
 }: TenderStatusTrackerProps) {
   const { toast } = useToast();
   const changeStatus = useChangeTenderStatus(tender.id);
@@ -157,10 +161,14 @@ export function TenderStatusTracker({
   const history = useTenderStatusHistory(status === "CANCELLED" ? tender.id : undefined, 1, 1);
   const submittedSkipped = status === "CANCELLED" && history.data?.items[0]?.fromStatus === "DRAFT";
   const reachedSubmitted = status !== "DRAFT" && !submittedSkipped;
-  const boq = useCurrentBoq(canViewBoq && status === "SUBMITTED" ? tender.id : undefined);
+  const awaitingResult = status === "SUBMITTED" || status === "PRICE_OPENED";
+  const boq = useCurrentBoq(canViewBoq && awaitingResult ? tender.id : undefined);
+  // What the price opening showed: fills in the Won/Lost form and tells whether that stage happened.
+  const standing = useTenderStanding(tender.id, canViewStanding && status !== "DRAFT").data ?? null;
+  const readsFromPortal = canFetchStatement && isSailRfxNumber(tender.tenderNumber);
   const itemsTotal = boq.data?.totalAmount ? Math.round(boq.data.totalAmount * 100) / 100 : undefined;
 
-  const busy = changeStatus.isPending || committing !== null;
+  const busy = changeStatus.isPending || committing !== null || fetchStatement.isPending;
   const ratesFinalized = tender.ratesLockedAt !== null;
   // A fresh submission (not undoing a Won/Lost result) records its reference number.
   const asksReference = formFor === "SUBMITTED" && (status === "DRAFT" || status === "CANCELLED");
@@ -187,9 +195,8 @@ export function TenderStatusTracker({
       });
       // The client publishes every bidder's rates once the tender is opened. The status is
       // already saved; this follows on its own and reports through its own toasts.
-      if (canFetchStatement && (to === "WON" || to === "LOST") && isSailRfxNumber(tender.tenderNumber)) {
-        void fetchStatement.run();
-      }
+      // A result recorded straight from Submitted: pick up the statement too, if there is none yet.
+      if (readsFromPortal && (to === "WON" || to === "LOST") && !standing) void fetchStatement.run();
     } catch (error) {
       setCommitting(null);
       toast({
@@ -270,7 +277,40 @@ export function TenderStatusTracker({
     submittedStage = <Stage {...COMPLETE} label="Submitted" {...revertProps("SUBMITTED")} />;
   }
 
-  const canOpenBand = status === "SUBMITTED" && canChange && !busy;
+  // For a SAIL ISP tender the stage is reached by reading the comparative statement (the server
+  // moves the tender on once it is saved); any other tender is simply marked.
+  function openPrices() {
+    if (readsFromPortal) void fetchStatement.run();
+    else void move("PRICE_OPENED");
+  }
+
+  let priceStage: ReactNode;
+  if (status === "PRICE_OPENED") {
+    priceStage = <Stage {...CURRENT} label="Price opened" />;
+  } else if (status === "SUBMITTED" && canChange) {
+    priceStage = (
+      <Stage
+        {...NEXT}
+        label="Price opened"
+        hoverLabel={readsFromPortal ? "Read price opening →" : "Mark Price opened →"}
+        title={readsFromPortal ? "Read the comparative statement from the portal" : undefined}
+        onClick={busy ? undefined : openPrices}
+      />
+    );
+  } else if (isOutcome(status) && reachedSubmitted) {
+    priceStage = <Stage {...(standing ? COMPLETE : SKIPPED)} label="Price opened" {...revertProps("PRICE_OPENED")} />;
+  } else {
+    priceStage = <Stage {...UPCOMING} label="Price opened" />;
+  }
+
+  // Won/Lost form defaults: what the price opening showed, editable before confirming.
+  const probableWinner = standing?.lowest && !standing.lowest.isSelf ? standing.lowest : null;
+  const winnerDefault = formFor === "WON" ? "Us" : (probableWinner?.name ?? "");
+  const amountDefault = formFor === "WON" ? (standing?.ourTotal ?? itemsTotal) : probableWinner?.total;
+  const lossReasonDefault =
+    standing?.ourRank != null ? `L${standing.ourRank} of ${standing.bidders} at price opening` : "";
+
+  const canOpenBand = awaitingResult && canChange && !busy;
   const resultStage = (
     <span
       className={cn(
@@ -328,6 +368,8 @@ export function TenderStatusTracker({
           {draftStage}
           <Connector done={reachedSubmitted} />
           {submittedStage}
+          <Connector done={status === "PRICE_OPENED" || (isOutcome(status) && reachedSubmitted)} />
+          {priceStage}
           <Connector done={isOutcome(status) && reachedSubmitted} />
           {resultStage}
           {status === "DRAFT" && canChange && (
@@ -349,7 +391,7 @@ export function TenderStatusTracker({
       </PopoverAnchor>
       <PopoverContent className="w-72">
         {formFor && (
-          <form onSubmit={submitForm} className="space-y-3 text-sm">
+          <form key={formFor} onSubmit={submitForm} className="space-y-3 text-sm">
             <p className="font-medium">
               {reverting
                 ? `Move back to ${TENDER_STATUS_LABELS[formFor]}?`
@@ -385,9 +427,14 @@ export function TenderStatusTracker({
                   <Input
                     id="tracker-winner"
                     name="winnerName"
-                    defaultValue={formFor === "WON" ? "Us" : ""}
+                    defaultValue={winnerDefault}
                     placeholder="Winning bidder"
                   />
+                  {formFor === "LOST" && probableWinner && (
+                    <p className="text-xs text-muted-foreground">
+                      Probable winner: the lowest bidder at the price opening. Change it if the order went elsewhere.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="tracker-amount">Winning bid amount</Label>
@@ -397,10 +444,12 @@ export function TenderStatusTracker({
                     type="number"
                     step="0.01"
                     min="0"
-                    defaultValue={formFor === "WON" ? itemsTotal : undefined}
+                    defaultValue={amountDefault}
                   />
-                  {formFor === "WON" && itemsTotal !== undefined && (
-                    <p className="text-xs text-muted-foreground">Filled in from the Items total.</p>
+                  {formFor === "WON" && amountDefault !== undefined && (
+                    <p className="text-xs text-muted-foreground">
+                      {standing?.ourTotal != null ? "Our total at the price opening." : "Filled in from the Items total."}
+                    </p>
                   )}
                 </div>
               </>
@@ -408,7 +457,12 @@ export function TenderStatusTracker({
             {formFor === "LOST" && (
               <div className="space-y-1">
                 <Label htmlFor="tracker-loss-reason">Reason lost</Label>
-                <Input id="tracker-loss-reason" name="lossReason" placeholder="e.g. L2 by 1.8%" />
+                <Input
+                  id="tracker-loss-reason"
+                  name="lossReason"
+                  defaultValue={lossReasonDefault}
+                  placeholder="e.g. L2 by 1.8%"
+                />
               </div>
             )}
             {formFor !== "LOST" && (

@@ -23,6 +23,13 @@ import { LowestBidderCrown } from "@/components/competitors/lowest-bidder-crown"
 import { PredictedRate, TrendLabel } from "@/components/competitors/trend-label";
 import { useItemComparison } from "@/hooks/use-competitors";
 
+// Tender, date and our own rate stay put while the competitors scroll sideways.
+const FIXED = {
+  tender: "sticky left-0 z-10 w-32 min-w-32 bg-background",
+  opened: "sticky left-32 z-10 w-28 min-w-28 bg-background",
+  us: "sticky left-60 z-10 w-32 min-w-32 border-r bg-background",
+};
+
 export default function ItemComparisonPage() {
   const params = useParams<{ itemCode: string }>();
   const itemCode = decodeURIComponent(params.itemCode);
@@ -56,10 +63,10 @@ export default function ItemComparisonPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Tender</TableHead>
-              <TableHead>Opened</TableHead>
+              <TableHead className={FIXED.tender}>Tender</TableHead>
+              <TableHead className={FIXED.opened}>Opened</TableHead>
               {comparison.columns.map((column) => (
-                <TableHead key={column.competitorId} className={cn("text-right", column.isSelf && "bg-primary/5")}>
+                <TableHead key={column.competitorId} className={cn("text-right", column.isSelf && FIXED.us)}>
                   {column.isSelf ? (
                     "Us"
                   ) : (
@@ -76,18 +83,18 @@ export default function ItemComparisonPage() {
               const lowest = Math.min(...Object.values(row.rates));
               return (
                 <TableRow key={row.tenderId}>
-                  <TableCell>
+                  <TableCell className={FIXED.tender}>
                     <Link href={`/tenders/${row.tenderId}`} className="hover:underline">
                       {row.tenderNumber}
                     </Link>
                   </TableCell>
-                  <TableCell>{formatDate(row.openedAt)}</TableCell>
+                  <TableCell className={FIXED.opened}>{formatDate(row.openedAt)}</TableCell>
                   {comparison.columns.map((column) => {
                     const rate = row.rates[column.competitorId];
                     return (
                       <TableCell
                         key={column.competitorId}
-                        className={cn("text-right tabular-nums", column.isSelf && "bg-primary/5")}
+                        className={cn("text-right tabular-nums", column.isSelf && FIXED.us)}
                       >
                         {rate === undefined ? (
                           <span className="text-muted-foreground" title="Did not bid">
@@ -106,10 +113,10 @@ export default function ItemComparisonPage() {
               );
             })}
             <TableRow className="bg-muted/40">
-              <TableCell className="font-medium">Predicted next</TableCell>
-              <TableCell className="text-muted-foreground">From trend</TableCell>
+              <TableCell className={cn(FIXED.tender, "font-medium")}>Predicted next</TableCell>
+              <TableCell className={cn(FIXED.opened, "text-muted-foreground")}>From trend</TableCell>
               {comparison.columns.map((column) => (
-                <TableCell key={column.competitorId} className={cn("text-right", column.isSelf && "bg-primary/5")}>
+                <TableCell key={column.competitorId} className={cn("text-right", column.isSelf && FIXED.us)}>
                   <PredictedRate forecast={column.forecast} />
                   <div className="text-xs text-muted-foreground">
                     <TrendLabel forecast={column.forecast} />

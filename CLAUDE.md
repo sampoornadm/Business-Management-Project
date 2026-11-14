@@ -202,10 +202,15 @@ receiving status.
   parser a plain `string[][]` and refuses a grid smaller than the grid's own `totalRows`/`totalColumns`
   metadata; scrolling for grids SAP pages from the server (> ~4000 cells) is best-effort and was never
   seen live. The app **never logs in**: a logon form means a 409 telling the user to log in and retry.
-  The fetch runs from the web app *after* the Won/Lost status change has saved, only for 10-digit tender
-  numbers (`isSailRfxNumber`). "Us" is the bid whose quotation reference equals `PortalBid.responseNumber`,
-  or any bid of a `Competitor` with `isSelf` (set by that match, or by hand on the competitor page for
-  bids filed outside the app). Rank, trend, predicted rate and rate to beat are derived on read, never
+  Tender status `PRICE_OPENED` sits between Submitted and Won/Lost: fetching the statement on a Submitted
+  tender (tracker's "Price opened" stage, or More → Fetch comparative statement) stores it and moves the
+  tender there through `tendersService.changeStatus`; a failed fetch leaves it Submitted. The fetch **never
+  sets Won/Lost** — the lowest quote is not always who gets the order (MSE price matching) — it only
+  pre-fills the Won/Lost form (probable winner = lowest bidder). Only 10-digit tender numbers
+  (`isSailRfxNumber`) read from the portal; other tenders can be marked Price opened by hand. "Us" is the
+  bid whose quotation reference equals `PortalBid.responseNumber`, else (while no firm is marked yet) the
+  bid whose supplier name equals the business name, and from then on any bid of a `Competitor` with
+  `isSelf` (also settable by hand on the competitor page). Rank, trend, predicted rate and rate to beat are derived on read, never
   stored; the crown is the lowest overall *quote*, not who was awarded the order.
 - Repeatedly re-running integration tests against the same Redis burns through the login rate
   limiter (`RATE_LIMITS.LOGIN`) and integration tests will start failing with 429s that look like

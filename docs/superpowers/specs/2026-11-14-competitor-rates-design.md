@@ -146,3 +146,21 @@ Follow the repo's module conventions (`CLAUDE.md`).
   portal closed or logged out, the status still changes and the user is told what to do.
 - Competitors page shows both views; BOQ grid shows the rate to beat for items with history.
 - Typecheck, lint and tests pass.
+
+## Addendum, 2026-11-14: Price opened stage (decided with the owner after the first build)
+
+- The fetch is triggered by the price opening, not by Won/Lost. New tender status **Price opened**
+  between Submitted and the result. Fetching the statement on a Submitted tender stores it and moves
+  the tender to Price opened; a failed fetch leaves it Submitted.
+- The app never sets Won/Lost. The owner marks Won when the client confirms the order, or Lost
+  otherwise; the lowest bidder at the price opening is offered as the probable winner (pre-filled,
+  editable). Automating Won from an order confirmation is deferred.
+- The tender shows our overall standing (L-rank by total quote) and the lowest bidder. Per-item
+  rank stays on the comparison tables: green = lowest for that item, crown = lowest total quote.
+- Per-tender table (tender page, Competitors tab): item number, item, then **our bid in a fixed
+  column**, then competitors scrolling sideways; items in the tender's own order.
+- Our bid is recognised by saved response number, else by business name equal to the supplier
+  name, and remembered by portal vendor code (my call: no vendor-code field was added to Business).
+- Supersedes above: goal 1's "after a tender is marked Won or Lost", and the anti-goal wording
+  about Won/Lost never depending on the portal (still true: a result can be recorded straight
+  from Submitted, and then fetches the statement only if none is stored).

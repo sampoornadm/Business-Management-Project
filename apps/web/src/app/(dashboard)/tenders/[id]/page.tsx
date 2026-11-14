@@ -40,6 +40,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { FetchStatementMenuItem } from "@/components/competitors/fetch-statement";
+import { PriceOpeningTable, TenderStandingLine } from "@/components/competitors/price-opening";
 import { ConvertToProjectDialog } from "@/components/projects/convert-to-project-dialog";
 import { humanize } from "@/components/status-badge";
 import { LinkedBudgetaryQuotationCard } from "@/components/tenders/linked-budgetary-quotation-card";
@@ -144,9 +145,10 @@ export default function TenderDetailPage() {
   // afterwards, because the client's comparative statement only appears there once the tender is opened.
   const bidOpen = isDraft || tender.status === "SUBMITTED";
   const showPortalInMenu = canFillPortal && !isDraft;
-  // The client's comparative statement exists only for SAIL ISP tenders, once a result is in.
+  // The client's comparative statement exists only for SAIL ISP tenders, from the price opening on.
   const showFetchStatement =
-    canFillPortal && (isWon || tender.status === "LOST") && isSailRfxNumber(tender.tenderNumber);
+    canFillPortal && !isDraft && tender.status !== "CANCELLED" && isSailRfxNumber(tender.tenderNumber);
+  const canViewCompetitors = hasPermission(roleName, "competitors:read");
   const showDelete = canDelete && isDraft;
   const hasMoreActions = canViewBills || showPortalInMenu || showDelete;
 
@@ -248,7 +250,9 @@ export default function TenderDetailPage() {
             canRevert={canRevertStatus}
             canViewBoq={canViewBoq}
             canFetchStatement={canFillPortal}
+            canViewStanding={canViewCompetitors}
           />
+          <TenderStandingLine tenderId={tender.id} enabled={canViewCompetitors && !isDraft} />
         </div>
       </PageHeader>
 
@@ -415,7 +419,10 @@ export default function TenderDetailPage() {
         </TabsContent>
 
         <TabsContent value="competitors">
-          <TenderCompetitorsTab tender={tender} />
+          <div className="space-y-6">
+            <PriceOpeningTable tenderId={tender.id} enabled={canViewCompetitors && !isDraft} />
+            <TenderCompetitorsTab tender={tender} />
+          </div>
         </TabsContent>
 
         <TabsContent value="history">
