@@ -194,6 +194,19 @@ receiving status.
   fail with "Open the portal browser..." there. Chromium comes from `pnpm portal:browser:install`, not
   `pnpm install`. The `portal:fill`/`portal:action` CLIs are separate processes and still attach over CDP
   (`--cdp`, a Chrome started with `--remote-debugging-port`); they cannot see the server's window.
+- Competitor rates (`modules/competitors/`) come from SAIL ISP's **comparative statement**, read out of
+  the same server-launched portal window as the bid fill (`portal/comparative-grid.ts`), so the same
+  "needs a desktop, not Docker" limit applies. The page is an SAP WebGUI ALV grid in an iframe; cells are
+  `td[lsmatrixrowindex][lsmatrixcolindex]` and the grid is **transposed** (one row per field, one column
+  per bidder), so values are always read by column — a bidder's cell can be empty. The reader hands the
+  parser a plain `string[][]` and refuses a grid smaller than the grid's own `totalRows`/`totalColumns`
+  metadata; scrolling for grids SAP pages from the server (> ~4000 cells) is best-effort and was never
+  seen live. The app **never logs in**: a logon form means a 409 telling the user to log in and retry.
+  The fetch runs from the web app *after* the Won/Lost status change has saved, only for 10-digit tender
+  numbers (`isSailRfxNumber`). "Us" is the bid whose quotation reference equals `PortalBid.responseNumber`,
+  or any bid of a `Competitor` with `isSelf` (set by that match, or by hand on the competitor page for
+  bids filed outside the app). Rank, trend, predicted rate and rate to beat are derived on read, never
+  stored; the crown is the lowest overall *quote*, not who was awarded the order.
 - Repeatedly re-running integration tests against the same Redis burns through the login rate
   limiter (`RATE_LIMITS.LOGIN`) and integration tests will start failing with 429s that look like
   real bugs. `docker compose exec redis redis-cli FLUSHALL` before a fresh run if that happens.
