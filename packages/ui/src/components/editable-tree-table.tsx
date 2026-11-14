@@ -28,6 +28,8 @@ export interface EditableTreeColumn<TRow extends EditableTreeRow> {
   inputType?: "text" | "number" | "textarea";
   getValue?: (row: TRow) => string | number | null;
   onCommit?: (row: TRow, value: string) => void;
+  /** Extra content under the cell's value, shown whether or not the cell is editable (a hint, a link). */
+  renderBelow?: (row: TRow) => React.ReactNode;
 }
 
 export interface EditableTreeTableProps<TRow extends EditableTreeRow> {
@@ -331,6 +333,7 @@ export function EditableTreeTable<TRow extends EditableTreeRow>({
                       ) : (
                         (column.render?.(row) ?? column.getValue?.(row) ?? "")
                       )}
+                      {column.renderBelow?.(row)}
                     </TableCell>
                   ))}
                   {renderRowActions && <TableCell className="w-10">{renderRowActions(row)}</TableCell>}

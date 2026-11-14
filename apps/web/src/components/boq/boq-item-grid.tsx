@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { LikelyBiddersLine, RateToBeatHint } from "@/components/competitors/rate-to-beat";
 import {
   useBulkUpdateBoqItems,
   useConfirmRateSource,
@@ -14,6 +15,7 @@ import {
   useRejectRateSource,
   useUpdateBoqItem,
 } from "@/hooks/use-boq";
+import { useRatesToBeat } from "@/hooks/use-competitors";
 import { useSuggestRfqVendors } from "@/hooks/use-rfq";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
@@ -55,6 +57,8 @@ export function BoqItemGrid({
   const canEdit = hasPermission(roleName, "boq:update") && boq.isCurrent;
   const canEditPricing = canEdit && !ratesLocked;
   const canSendRfq = hasPermission(roleName, "rfq:create");
+  const ratesToBeat = useRatesToBeat(tenderId, hasPermission(roleName, "competitors:read")).data;
+  const rateToBeatByCode = new Map(ratesToBeat?.items.map((entry) => [entry.itemCode, entry]));
 
   const updateItem = useUpdateBoqItem(tenderId);
   const deleteItem = useDeleteBoqItem(tenderId);
@@ -301,6 +305,15 @@ export function BoqItemGrid({
       inputType: "number",
       getValue: (item) => item.rate,
       onCommit: (item, value) => void commitField(item, "rate", value),
+      // Lowest rate a likely bidder is expected to quote for this item (see Competitors).
+      renderBelow: (item) =>
+        item.itemCode && isLeaf(item) ? (
+          <RateToBeatHint
+            entry={rateToBeatByCode.get(item.itemCode)}
+            ourRate={item.rate}
+            description={item.description}
+          />
+        ) : null,
     },
     {
       key: "gstRate",
@@ -472,6 +485,8 @@ export function BoqItemGrid({
           </Button>
         </div>
       )}
+
+      <LikelyBiddersLine rates={ratesToBeat} />
 
       <EditableTreeTable
         data={boq.items}
