@@ -200,8 +200,11 @@ receiving status.
   `td[lsmatrixrowindex][lsmatrixcolindex]` and the grid is **transposed** (one row per field, one column
   per bidder), so values are always read by column — a bidder's cell can be empty. The reader hands the
   parser a plain `string[][]` and refuses a grid smaller than the grid's own `totalRows`/`totalColumns`
-  metadata; scrolling for grids SAP pages from the server (> ~4000 cells) is best-effort and was never
-  seen live. The app **never logs in**: a logon form means a 409 telling the user to log in and retry.
+  metadata; a statement over ~4000 cells (seen live: 166 of 350+ rows
+  loaded) only fetches the rest from SAP when the grid is really scrolled, and the grid has its own
+  scrollbar (`scrollTop` does nothing), so the reader sends real mouse-wheel input, falls back to the
+  scrollbar arrow button, and requires every cell (`totalRows x totalColumns`) before it returns. A
+  failed read saves the page's frames to `~/.bmp-portal-capture/<RFx>/` for diagnosis. The app **never logs in**: a logon form means a 409 telling the user to log in and retry.
   Tender status `PRICE_OPENED` sits between Submitted and Won/Lost: fetching the statement on a Submitted
   tender (tracker's "Price opened" stage, or More → Fetch comparative statement) stores it and moves the
   tender there through `tendersService.changeStatus`; a failed fetch leaves it Submitted. The fetch **never

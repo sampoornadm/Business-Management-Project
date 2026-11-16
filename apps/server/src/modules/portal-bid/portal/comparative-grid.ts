@@ -17,16 +17,24 @@ export interface GridSnapshot {
   /** What the grid itself says its full size is. */
   totalRows: number;
   totalColumns: number;
+  /** Changes whenever the grid is scrolled; tells "still moving" from "at the end". */
+  position?: string;
 }
+
+export type ScrollMove = "down" | "up" | "right";
+type PortalFrame = ReturnType<Page["frames"]>[number];
 
 export interface ReadGridOptions {
   timeoutMs?: number;
   pollMs?: number;
   settleMs?: number;
+  /** How long to wait after a scroll for the grid to move or fetch its next rows from SAP. */
+  loadWaitMs?: number;
   maxScrolls?: number;
+  scroll?: (page: Page, frame: PortalFrame, move: ScrollMove, viaButton: boolean) => Promise<void>;
 }
 
-// The three functions below run inside the portal page (Playwright serialises them), so they
+// The two functions below run inside the portal page (Playwright serialises them), so they
 // may only use the DOM and their own locals. They must not declare a *named* inner function
 // (`const f = () => ...`, `function f() {}`): the server runs under tsx, whose bundler wraps
 // those in a `__name(...)` helper that does not exist in the page, and the read then throws
@@ -34,17 +42,27 @@ export interface ReadGridOptions {
 
 /**
  * The comparative statement is an SAP WebGUI ALV grid. Every cell is a
- * `<td lsmatrixrowindex lsmatrixcolindex>`, and the grid's own metadata carries `totalRows` /
- * `totalColumns`, which is how a partly loaded grid is told apart from a complete one.
+ * `<td id="grid#C102#<row>,<column>" lsmatrixrowindex lsmatrixcolindex>`, and the grid's own
+ * metadata carries `totalRows` / `totalColumns`, which is how a partly loaded grid is told apart
+ * from a complete one. The id carries SAP's own 1-based row and column, so it is preferred over
+ * the matrix attributes, which may count from the start of a lazily loaded fragment.
  */
 export function readGridInPage(): GridSnapshot | null {
   const tds = Array.from(document.querySelectorAll("td[lsmatrixrowindex][lsmatrixcolindex]"));
   if (tds.length === 0) return null;
-  const cells = tds.map((td): [number, number, string] => [
-    Number(td.getAttribute("lsmatrixrowindex")),
-    Number(td.getAttribute("lsmatrixcolindex")),
-    (td.textContent ?? "").replace(/[\s\u00a0]+/g, " ").trim(),
-  ]);
+  const cells = tds.map((td): [number, number, string] => {
+    const id = /#(\d+),(\d+)$/.exec(td.id);
+    return [
+      id ? Number(id[1]) - 1 : Number(td.getAttribute("lsmatrixrowindex")),
+      id ? Number(id[2]) - 1 : Number(td.getAttribute("lsmatrixcolindex")),
+      (td.textContent ?? "").replace(/[\s\u00a0]+/g, " ").trim(),
+    ];
+  });
+  // Rows scrolled out of view are `display:none`; sideways the content block is shifted by style.
+  const position = [
+    String(tds.findIndex((td) => (td as HTMLElement).offsetParent !== null)),
+    ...Array.from(document.querySelectorAll("[bisposelement]")).map((element) => element.getAttribute("style") ?? ""),
+  ].join("|");
   const meta =
     Array.from(document.querySelectorAll('[lsdata*="totalRows"]'))
       .map((element) => element.getAttribute("lsdata") ?? "")
@@ -53,33 +71,34 @@ export function readGridInPage(): GridSnapshot | null {
   // No named helper here on purpose: see the note above these three functions.
   const rows = /totalRows\D{1,8}(\d+)/.exec(meta);
   const columns = /totalColumns\D{1,8}(\d+)/.exec(meta);
-  return { cells, totalRows: rows ? Number(rows[1]) : 0, totalColumns: columns ? Number(columns[1]) : 0 };
+  return { cells, totalRows: rows ? Number(rows[1]) : 0, totalColumns: columns ? Number(columns[1]) : 0, position };
 }
 
 export function hasLoginFormInPage(): boolean {
   return document.querySelector('form#certLogonForm, form[name="logonForm"], input[type="password"]') !== null;
 }
 
-/** Moves the grid's scroll areas on by most of a screen, so a long grid loads its next rows. */
-export function scrollGridInPage(): void {
-  // ponytail: best-effort scrolling, not yet seen against a grid large enough for SAP to page it
-  // from the server (> ~4000 cells). The caller's completeness check is what guards the data.
-  const cell = document.querySelector("td[lsmatrixrowindex]");
-  for (let node = cell?.parentElement; node; node = node.parentElement) {
-    if (node.scrollHeight > node.clientHeight + 1) {
-      const before = node.scrollTop;
-      node.scrollTop += Math.max(40, Math.floor(node.clientHeight * 0.8));
-      if (node.scrollTop === before && node.scrollWidth > node.clientWidth + 1) {
-        node.scrollLeft += Math.max(40, Math.floor(node.clientWidth * 0.8));
-        node.scrollTop = 0;
-      }
-    }
+const SCROLL_BUTTON: Record<ScrollMove, string> = { down: "vscroll-Nxt", up: "vscroll-Prev", right: "hscroll-Nxt" };
+
+/**
+ * Scrolls the grid the way a person does. It has its own scrollbar (`scrollTop` does nothing), and
+ * only fetches rows past its first ~4000 cells from SAP when it is really scrolled, so this sends
+ * real mouse-wheel input over the bidder columns, or presses the scrollbar's arrow button.
+ */
+async function scrollGrid(page: Page, frame: PortalFrame, move: ScrollMove, viaButton: boolean): Promise<void> {
+  if (viaButton) {
+    const button = frame.locator(`[id$="_${SCROLL_BUTTON[move]}"]`).first();
+    await button.click({ clickCount: 5, delay: 40, timeout: 2_000 }).catch(() => undefined);
+    return;
   }
+  const box = await frame.locator('[id$="-mrss-cont-none"]').first().boundingBox().catch(() => null);
+  if (!box) return;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const [dx, dy] = move === "right" ? [300, 0] : [0, move === "down" ? 300 : -300];
+  for (let turn = 0; turn < 5; turn += 1) await page.mouse.wheel(dx, dy);
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-type PortalFrame = ReturnType<Page["frames"]>[number];
 
 /**
  * Runs an in-page probe. A frame that is mid-navigation or gone is simply "nothing there yet";
@@ -99,7 +118,8 @@ async function probe<T>(frame: PortalFrame, fn: () => T): Promise<T | null> {
  * (`matrix[row][column]`, `""` for an empty cell). Never returns a partial grid.
  */
 export async function readComparativeGrid(page: Page, options: ReadGridOptions = {}): Promise<string[][]> {
-  const { timeoutMs = 30_000, pollMs = 500, settleMs = 400, maxScrolls = 200 } = options;
+  const { timeoutMs = 30_000, pollMs = 500, settleMs = 400, loadWaitMs = 3_000, maxScrolls = 200 } = options;
+  const scroll = options.scroll ?? scrollGrid;
   const deadline = Date.now() + timeoutMs;
 
   let found: { frame: PortalFrame; snapshot: GridSnapshot } | undefined;
@@ -133,28 +153,57 @@ export async function readComparativeGrid(page: Page, options: ReadGridOptions =
     totalRows = Math.max(totalRows, snapshot.totalRows);
     totalColumns = Math.max(totalColumns, snapshot.totalColumns);
     for (const [row, column, text] of snapshot.cells) {
+      const known = cells.get(`${row}:${column}`);
+      // One cell, two different values: the row numbering shifted under us. Store nothing.
+      if (known && text && known !== text) {
+        throw new StatementNotAvailableError("The comparative statement changed while it was being read");
+      }
+      if (known && !text) continue;
       cells.set(`${row}:${column}`, text);
       rows.add(row);
       columns.add(column);
     }
   };
-  const complete = () => rows.size >= totalRows && columns.size >= totalColumns;
+  // Every cell, not just every row and column: a grid loaded in blocks can have seen each row and
+  // each bidder while a whole block of rates is still missing.
+  const complete = () => cells.size >= totalRows * totalColumns;
 
   absorb(found.snapshot);
   // Without the grid's own size there is no telling a full grid from a partly loaded one.
   if (totalRows === 0 || totalColumns === 0) {
     throw new StatementNotAvailableError("Could not confirm the size of the comparative statement grid");
   }
-  for (let scrolls = 0, stalled = 0; !complete() && scrolls < maxScrolls && stalled < 3; scrolls += 1) {
-    await probe(found.frame, scrollGridInPage);
-    await sleep(settleMs);
-    const before = cells.size;
-    absorb(await probe(found.frame, readGridInPage));
-    stalled = cells.size === before ? stalled + 1 : 0;
+  // Down the rows first; when that runs out, one step right and back the other way, until a step
+  // right moves nothing either. Each step tries the wheel, then the scrollbar button.
+  let move: ScrollMove = "down";
+  let vertical: "down" | "up" = "down";
+  let position = found.snapshot.position ?? "";
+  for (let scrolls = 0, idle = 0; !complete() && scrolls < maxScrolls; scrolls += 1) {
+    await scroll(page, found.frame, move, idle === 1);
+    const waitUntil = Date.now() + loadWaitMs;
+    let moved = false;
+    do {
+      await sleep(settleMs);
+      const before = cells.size;
+      const snapshot = await probe(found.frame, readGridInPage);
+      absorb(snapshot);
+      moved = cells.size > before || (snapshot?.position ?? position) !== position;
+      position = snapshot?.position ?? position;
+    } while (!moved && Date.now() < waitUntil);
+    if (moved) {
+      idle = 0;
+      move = vertical;
+    } else if (++idle === 2) {
+      if (move === "right") break;
+      vertical = vertical === "down" ? "up" : "down";
+      move = "right";
+      idle = 0;
+    }
   }
   if (!complete()) {
     throw new StatementNotAvailableError(
-      `Read only ${rows.size} of ${totalRows} rows and ${columns.size} of ${totalColumns} columns of the comparative statement`,
+      `Read only ${rows.size} of ${totalRows} rows and ${columns.size} of ${totalColumns} columns ` +
+        `(${cells.size} of ${totalRows * totalColumns} cells) of the comparative statement`,
     );
   }
 

@@ -1,10 +1,11 @@
+import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import type { PortalBrowserStatusDto } from "@bmp/types";
 import { chromium, type BrowserContext } from "playwright-core";
 
-import { readComparativeGrid, type ReadGridOptions } from "./comparative-grid.js";
+import { readComparativeGrid, type ReadGridOptions, StatementNotAvailableError } from "./comparative-grid.js";
 import { PortalSession } from "./portal-session.js";
 
 type LaunchOptions = NonNullable<Parameters<typeof chromium.launchPersistentContext>[1]>;
@@ -78,7 +79,21 @@ export class PortalBrowser {
     // Always navigate, even in a tab already showing it: a re-fetch must read the current statement.
     await page.goto(`${this.config.portalUrl}${COMPARATIVE_STATEMENT_PATH}?${marker}`).catch(() => undefined);
     await page.bringToFront();
-    return readComparativeGrid(page, options);
+    try {
+      return await readComparativeGrid(page, options);
+    } catch (error) {
+      // Keep what the page looked like, so a statement the reader cannot handle can be studied
+      // without another trip to the portal. Stays on this machine, next to the browser profile.
+      if (error instanceof StatementNotAvailableError) {
+        const dir = path.join(path.dirname(this.config.profileDir), ".bmp-portal-capture", rfxNumber);
+        await mkdir(dir, { recursive: true }).catch(() => undefined);
+        for (const [index, frame] of page.frames().entries()) {
+          const html = await frame.content().catch(() => null);
+          if (html) await writeFile(path.join(dir, `frame-${index}.html`), html).catch(() => undefined);
+        }
+      }
+      throw error;
+    }
   }
 
   /** The bid response the user has open in the window, or null if the window or the response is not there. */

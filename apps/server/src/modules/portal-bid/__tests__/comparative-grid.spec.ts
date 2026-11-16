@@ -7,7 +7,6 @@ import {
   PortalLoginRequiredError,
   readComparativeGrid,
   readGridInPage,
-  scrollGridInPage,
   StatementNotAvailableError,
 } from "../portal/comparative-grid.js";
 
@@ -25,10 +24,6 @@ class FakeFrame {
   ) {}
   evaluate(fn: unknown): Promise<unknown> {
     if (fn === hasLoginFormInPage) return Promise.resolve(Boolean(this.script.login));
-    if (fn === scrollGridInPage) {
-      this.scrolls += 1;
-      return Promise.resolve();
-    }
     if (fn === readGridInPage) {
       const snapshots = this.script.snapshots ?? [null];
       return Promise.resolve(snapshots[Math.min(this.scrolls, snapshots.length - 1)]);
@@ -38,8 +33,20 @@ class FakeFrame {
 }
 
 const page = (...frames: FakeFrame[]) => ({ frames: () => frames }) as unknown as Page;
-const fast = { timeoutMs: 60, pollMs: 5, settleMs: 0 };
-const grid = (cells: Cell[], totalRows: number, totalColumns: number): GridSnapshot => ({ cells, totalRows, totalColumns });
+/** Stands in for the mouse: every scroll moves the fake frame on to its next snapshot. */
+const moves: string[] = [];
+const scroll = (_page: Page, frame: unknown, move: string, viaButton: boolean) => {
+  moves.push(viaButton ? `${move} button` : move);
+  (frame as FakeFrame).scrolls += 1;
+  return Promise.resolve();
+};
+const fast = { timeoutMs: 60, pollMs: 5, settleMs: 0, loadWaitMs: 0, scroll };
+const grid = (cells: Cell[], totalRows: number, totalColumns: number, position?: string): GridSnapshot => ({
+  cells,
+  totalRows,
+  totalColumns,
+  ...(position === undefined ? {} : { position }),
+});
 
 describe("readComparativeGrid", () => {
   it("returns the grid as a dense matrix, empty cells included", async () => {
@@ -51,6 +58,7 @@ describe("readComparativeGrid", () => {
             [0, 1, "( 1 ) A"],
             [0, 2, "( 2 ) B"],
             [1, 0, "IGST"],
+            [1, 1, ""],
             [1, 2, "18"],
           ],
           2,
@@ -74,6 +82,57 @@ describe("readComparativeGrid", () => {
       ],
     });
     expect(await readComparativeGrid(page(frame), fast)).toEqual([["a"], ["b"], ["c"], ["d"]]);
+  });
+
+  it("keeps scrolling through rows it already has until the grid loads the next ones", async () => {
+    const loaded: Cell[] = [[0, 0, "a"], [1, 0, "b"]];
+    const frame = new FakeFrame({
+      snapshots: [
+        grid(loaded, 3, 1, "row 0"),
+        grid(loaded, 3, 1, "row 1"),
+        grid(loaded, 3, 1, "row 2"),
+        grid(loaded, 3, 1, "row 3"),
+        grid(loaded, 3, 1, "row 4"),
+        grid(loaded, 3, 1, "row 5"),
+        grid([[2, 0, "c"]], 3, 1, "row 6"),
+      ],
+    });
+    expect(await readComparativeGrid(page(frame), fast)).toEqual([["a"], ["b"], ["c"]]);
+  });
+
+  it("presses the scrollbar button when the mouse wheel moves nothing", async () => {
+    const frame = new FakeFrame({
+      snapshots: [grid([[0, 0, "a"]], 2, 1, "row 0"), grid([[0, 0, "a"]], 2, 1, "row 0"), grid([[1, 0, "b"]], 2, 1, "row 1")],
+    });
+    moves.length = 0;
+    expect(await readComparativeGrid(page(frame), fast)).toEqual([["a"], ["b"]]);
+    expect(moves).toEqual(["down", "down button"]);
+  });
+
+  it("scrolls sideways for bidder columns the grid has not loaded", async () => {
+    const frame = new FakeFrame({
+      snapshots: [
+        grid([[0, 0, "a"], [1, 0, "b"]], 2, 2, "left"),
+        grid([[0, 0, "a"], [1, 0, "b"]], 2, 2, "left"),
+        grid([[0, 0, "a"], [1, 0, "b"]], 2, 2, "left"),
+        grid([[0, 1, "c"], [1, 1, "d"]], 2, 2, "right"),
+      ],
+    });
+    moves.length = 0;
+    expect(await readComparativeGrid(page(frame), fast)).toEqual([["a", "c"], ["b", "d"]]);
+    expect(moves.at(-1)).toMatch(/^right/);
+  });
+
+  it("refuses a grid with every row and column seen but cells still missing", async () => {
+    const frame = new FakeFrame({ snapshots: [grid([[0, 0, "a"], [1, 1, "d"]], 2, 2)] });
+    await expect(readComparativeGrid(page(frame), fast)).rejects.toThrow(/2 of 4 cells/);
+  });
+
+  it("refuses a grid whose cell changes between two reads", async () => {
+    const frame = new FakeFrame({
+      snapshots: [grid([[0, 0, "Basic Price"], [0, 1, "180.50"]], 2, 2, "row 0"), grid([[0, 1, "207.00"], [1, 0, "x"], [1, 1, "y"]], 2, 2, "row 1")],
+    });
+    await expect(readComparativeGrid(page(frame), fast)).rejects.toThrow(/changed while it was being read/);
   });
 
   it("refuses a grid it could not read completely", async () => {
@@ -117,13 +176,12 @@ describe("readComparativeGrid", () => {
     expect(await readComparativeGrid({ frames: () => [navigating] } as unknown as Page, fast)).toEqual([["a"]]);
   });
 
-  // These three are serialised into the portal page. The server runs under tsx, whose bundler
+  // These two are serialised into the portal page. The server runs under tsx, whose bundler
   // wraps every *named* inner function in a `__name(...)` helper that does not exist in the page,
   // so a nested named function makes the whole read throw there (see portal-session.ts).
   it.each([
     ["readGridInPage", readGridInPage],
     ["hasLoginFormInPage", hasLoginFormInPage],
-    ["scrollGridInPage", scrollGridInPage],
   ])("%s declares no named inner function", (_name, fn) => {
     const source = fn.toString();
     const body = source.slice(source.indexOf("{") + 1);
