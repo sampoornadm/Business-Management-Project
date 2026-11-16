@@ -25,13 +25,7 @@ const statementFetchService = new StatementFetchService({
   competitors: competitorsService,
   source: statementSource,
   audit: auditService,
-  markPriceOpened: (tenderId, actorId, context) =>
-    tendersService.changeStatus(
-      tenderId,
-      { status: "PRICE_OPENED", remarks: "Comparative statement read from the portal" },
-      actorId,
-      context,
-    ),
+  changeStatus: (tenderId, input, actorId, context) => tendersService.changeStatus(tenderId, input, actorId, context),
 });
 
 export const competitorsRouter = createCompetitorsRouter(

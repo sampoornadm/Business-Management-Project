@@ -161,6 +161,11 @@ Follow the repo's module conventions (`CLAUDE.md`).
   column**, then competitors scrolling sideways; items in the tender's own order.
 - Our bid is recognised by saved response number, else by business name equal to the supplier
   name, and remembered by portal vendor code (my call: no vendor-code field was added to Business).
+- Changed by the owner, 2026-11-16: when the price opening shows we are not the lowest bidder,
+  mark the tender Lost at once (winner = lowest bidder); the owner reopens it if the order is
+  offered to us after all. My calls: only on the first read of a Submitted tender, only when our
+  bid is recognised and covers every item, and only when the basis of evaluation is Overall.
+  Won is still never set by the app.
 - Supersedes above: goal 1's "after a tender is marked Won or Lost", and the anti-goal wording
   about Won/Lost never depending on the portal (still true: a result can be recorded straight
   from Submitted, and then fetches the statement only if none is stored).

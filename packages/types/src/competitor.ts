@@ -166,8 +166,13 @@ export interface TenderStatementDto {
 
 export interface FetchStatementResultDto {
   tenderId: string;
-  /** The tender's status after the fetch: a Submitted tender moves to Price opened. */
+  /**
+   * The tender's status after the fetch: a Submitted tender moves to Price opened, and on to Lost
+   * when we are not the lowest bidder.
+   */
   status: TenderStatus;
+  /** Our rank by total quote at the price opening, 1 = lowest; null when not known. */
+  ourRank: number | null;
   bidders: number;
   items: number;
   lowestBidder: string | null;

@@ -208,7 +208,7 @@ export class CompetitorsService {
     tenderId: string,
     statement: ParsedStatement,
     rawGrid: string[][] | null = null,
-  ): Promise<Omit<FetchStatementResultDto, "status">> {
+  ): Promise<Omit<FetchStatementResultDto, "status" | "ourRank">> {
     const tender = await this.competitors.findTender(businessId, tenderId);
     if (!tender) throw new NotFoundError("Tender not found");
     if (statement.rfxNumber !== tender.tenderNumber) {

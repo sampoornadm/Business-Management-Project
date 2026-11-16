@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import type { FetchStatementResultDto } from "@bmp/types";
+import type { FetchStatementResultDto, TenderStandingDto } from "@bmp/types";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { BadRequestError, ConflictError, UnprocessableEntityError } from "../../../core/errors/HttpErrors.js";
@@ -16,7 +16,21 @@ const matrix = JSON.parse(
 ) as string[][];
 const CONTEXT = { businessId: "biz-1", roleId: "role-1" };
 
-function setup(status: string, grid: () => Promise<string[][]> = () => Promise.resolve(matrix)) {
+const STANDING: TenderStandingDto = {
+  fetchedAt: "2026-11-16T00:00:00.000Z",
+  basisOfEvaluation: "Overall",
+  bidders: 5,
+  usIdentified: true,
+  ourRank: 4,
+  ourTotal: 891000,
+  lowest: { competitorId: "c-2", name: "BETA ENGINEERING CORPORATION", total: 528000, isSelf: false },
+};
+
+function setup(
+  status: string,
+  grid: () => Promise<string[][]> = () => Promise.resolve(matrix),
+  standing: TenderStandingDto | null = null,
+) {
   const tender: TenderForStatement = {
     id: "tender-1",
     tenderNumber: "1400000013",
@@ -25,8 +39,8 @@ function setup(status: string, grid: () => Promise<string[][]> = () => Promise.r
     portalResponseNumber: null,
     boqItems: [],
   };
-  const calls = { read: 0, stored: 0, advanced: [] as string[], audited: [] as string[] };
-  const stored: Omit<FetchStatementResultDto, "status"> = {
+  const calls = { read: 0, stored: 0, advanced: [] as Record<string, unknown>[], audited: [] as string[] };
+  const stored: Omit<FetchStatementResultDto, "status" | "ourRank"> = {
     tenderId: tender.id,
     bidders: 5,
     items: 1,
@@ -40,6 +54,7 @@ function setup(status: string, grid: () => Promise<string[][]> = () => Promise.r
         calls.stored += 1;
         return Promise.resolve(stored);
       },
+      standing: () => Promise.resolve(standing),
     } as unknown as CompetitorsService,
     source: {
       read: () => {
@@ -53,8 +68,8 @@ function setup(status: string, grid: () => Promise<string[][]> = () => Promise.r
         return Promise.resolve();
       },
     } as unknown as AuditService,
-    markPriceOpened: (tenderId) => {
-      calls.advanced.push(tenderId);
+    changeStatus: (_tenderId, input) => {
+      calls.advanced.push(input);
       return Promise.resolve();
     },
   });
@@ -69,9 +84,42 @@ describe("StatementFetchService.fetch", () => {
 
   it("moves a submitted tender to Price opened once its statement is saved", async () => {
     const result = await run.service.fetch("tender-1", "user-1", CONTEXT);
-    expect(run.calls).toMatchObject({ read: 1, stored: 1, advanced: ["tender-1"] });
+    expect(run.calls).toMatchObject({ read: 1, stored: 1, advanced: [{ status: "PRICE_OPENED" }] });
     expect(result).toMatchObject({ status: "PRICE_OPENED", bidders: 5 });
     expect(run.calls.audited).toEqual(["COMPARATIVE_STATEMENT_FETCHED"]);
+  });
+
+  it("marks the tender Lost to the lowest bidder when we are not the lowest", async () => {
+    run = setup("SUBMITTED", undefined, STANDING);
+    const result = await run.service.fetch("tender-1", "user-1", CONTEXT);
+    expect(result).toMatchObject({ status: "LOST", ourRank: 4 });
+    expect(run.calls.advanced).toMatchObject([
+      { status: "PRICE_OPENED" },
+      {
+        status: "LOST",
+        winnerName: "BETA ENGINEERING CORPORATION",
+        winningBidAmount: 528000,
+        lossReason: "L4 of 5 at price opening",
+      },
+    ]);
+  });
+
+  it.each([
+    ["we are the lowest", { ...STANDING, ourRank: 1, lowest: { ...STANDING.lowest!, isSelf: true } }],
+    ["our bid is not recognised", { ...STANDING, usIdentified: false, ourRank: null }],
+    ["bids are evaluated item by item", { ...STANDING, basisOfEvaluation: "Item Wise" }],
+    ["nobody quoted every item", { ...STANDING, lowest: null }],
+  ])("leaves the result open when %s", async (_name, standing) => {
+    run = setup("SUBMITTED", undefined, standing);
+    const result = await run.service.fetch("tender-1", "user-1", CONTEXT);
+    expect(result.status).toBe("PRICE_OPENED");
+    expect(run.calls.advanced).toMatchObject([{ status: "PRICE_OPENED" }]);
+  });
+
+  it("does not mark a reopened tender Lost again on a re-read", async () => {
+    run = setup("PRICE_OPENED", undefined, STANDING);
+    expect((await run.service.fetch("tender-1", "user-1", CONTEXT)).status).toBe("PRICE_OPENED");
+    expect(run.calls.advanced).toEqual([]);
   });
 
   it.each(["PRICE_OPENED", "WON", "LOST"])("re-reads a %s tender without changing its status", async (status) => {

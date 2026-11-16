@@ -87,6 +87,7 @@ describe("competitor rates (integration)", () => {
     expect(response.body.data).toEqual({
       tenderId,
       status: "LOST",
+      ourRank: 4,
       bidders: 5,
       items: 1,
       lowestBidder: "BETA ENGINEERING CORPORATION",
@@ -203,7 +204,7 @@ describe("competitor rates (integration)", () => {
     expect(reads).toBe(0);
   });
 
-  it("moves a submitted tender to Price opened and reports our standing, without setting a result", async () => {
+  it("marks a submitted tender Lost to the lowest bidder when we are not the lowest, and reports our standing", async () => {
     await prisma.tender.update({ where: { id: tenderId }, data: { status: "SUBMITTED" } });
     const response = await fetchStatement();
     const after = await prisma.tender.findUniqueOrThrow({ where: { id: tenderId } });
@@ -214,10 +215,12 @@ describe("competitor rates (integration)", () => {
     await prisma.tender.update({ where: { id: tenderId }, data: { status: "LOST" } });
 
     expect(response.status).toBe(200);
-    expect(response.body.data.status).toBe("PRICE_OPENED");
-    expect(after.status).toBe("PRICE_OPENED");
-    expect(after.winnerName).toBeNull();
-    expect(history?.metadata).toMatchObject({ from: "SUBMITTED", to: "PRICE_OPENED" });
+    expect(response.body.data).toMatchObject({ status: "LOST", ourRank: 4 });
+    expect(after.status).toBe("LOST");
+    expect(after.winnerName).toBe("BETA ENGINEERING CORPORATION");
+    expect(after.winningBidAmount).toBe(528000);
+    expect(after.lossReason).toBe("L4 of 5 at price opening");
+    expect(history?.metadata).toMatchObject({ from: "PRICE_OPENED", to: "LOST" });
 
     const standing = (await request(app).get(`/api/v1/competitors/tenders/${tenderId}/standing`).set(auth())).body.data;
     expect(standing).toMatchObject({

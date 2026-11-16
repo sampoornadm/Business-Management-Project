@@ -207,9 +207,12 @@ receiving status.
   failed read saves the page's frames to `~/.bmp-portal-capture/<RFx>/` for diagnosis. The app **never logs in**: a logon form means a 409 telling the user to log in and retry.
   Tender status `PRICE_OPENED` sits between Submitted and Won/Lost: fetching the statement on a Submitted
   tender (tracker's "Price opened" stage, or More → Fetch comparative statement) stores it and moves the
-  tender there through `tendersService.changeStatus`; a failed fetch leaves it Submitted. The fetch **never
-  sets Won/Lost** — the lowest quote is not always who gets the order (MSE price matching) — it only
-  pre-fills the Won/Lost form (probable winner = lowest bidder). Only 10-digit tender numbers
+  tender there through `tendersService.changeStatus`; a failed fetch leaves it Submitted. On that first
+  read only, a tender where we quoted every item, are not the lowest overall and the basis of
+  evaluation is Overall goes straight on to **Lost** (winner = lowest bidder, reason "L4 of 5 at
+  price opening"); the owner reopens it (Lost → Price opened) if the order comes to us, and a
+  re-read never marks it Lost again. The fetch **never sets Won** — the lowest quote is not always
+  who gets the order (MSE price matching) — it only pre-fills the Won form. Only 10-digit tender numbers
   (`isSailRfxNumber`) read from the portal; other tenders can be marked Price opened by hand. "Us" is the
   bid whose quotation reference equals `PortalBid.responseNumber`, else (while no firm is marked yet) the
   bid whose supplier name equals the business name, and from then on any bid of a `Competitor` with

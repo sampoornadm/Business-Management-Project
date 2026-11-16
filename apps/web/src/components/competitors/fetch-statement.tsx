@@ -7,8 +7,9 @@ import { useFetchComparativeStatement } from "@/hooks/use-competitors";
 
 /**
  * Reads a tender's comparative statement from the portal and reports the outcome as toasts. A
- * Submitted tender moves to Price opened on success and stays Submitted on failure; the result
- * (Won/Lost) is never set here. The user can always retry from the tender's More menu.
+ * Submitted tender moves to Price opened on success (and on to Lost when we are not the lowest
+ * bidder) and stays Submitted on failure. Won is never set here. The user can always retry from
+ * the tender's More menu.
  */
 export function useFetchStatementAction(tenderId: string) {
   const { toast } = useToast();
@@ -22,11 +23,14 @@ export function useFetchStatementAction(tenderId: string) {
     try {
       const result = await fetchStatement.mutateAsync();
       toast({
-        title: `${result.status === "PRICE_OPENED" ? "Price opening read" : "Comparative statement saved"}: ${result.bidders} bidders, ${result.items} ${result.items === 1 ? "item" : "items"}`,
+        title: `${result.status === "WON" ? "Comparative statement saved" : "Price opening read"}: ${result.bidders} bidders, ${result.items} ${result.items === 1 ? "item" : "items"}`,
         description: [
           result.lowestBidder ? `Lowest overall bidder: ${result.lowestBidder}.` : null,
           result.status === "PRICE_OPENED"
             ? "Tender moved to Price opened; mark Won or Lost once the order is known."
+            : null,
+          result.status === "LOST" && result.ourRank
+            ? `We are L${result.ourRank}: tender marked Lost. Reopen it from the status tracker if the order comes to us.`
             : null,
           result.usFound ? null : "Our own bid was not recognised. Mark our firm on the Competitors page.",
         ]
