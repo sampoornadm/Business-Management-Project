@@ -81,7 +81,15 @@ describe("readComparativeGrid", () => {
         grid([[2, 0, "c"], [3, 0, "d"]], 4, 1),
       ],
     });
-    expect(await readComparativeGrid(page(frame), fast)).toEqual([["a"], ["b"], ["c"], ["d"]]);
+    const lines: string[] = [];
+    expect(await readComparativeGrid(page(frame), { ...fast, onProgress: (line) => lines.push(line) })).toEqual([
+      ["a"],
+      ["b"],
+      ["c"],
+      ["d"],
+    ]);
+    expect(lines[0]).toMatch(/4 rows x 1 columns.*2 of 4 rows/);
+    expect(lines.at(-1)).toMatch(/^Complete: 4 of 4 rows/);
   });
 
   it("keeps scrolling through rows it already has until the grid loads the next ones", async () => {

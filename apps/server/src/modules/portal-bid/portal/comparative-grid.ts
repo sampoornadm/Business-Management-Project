@@ -32,6 +32,8 @@ export interface ReadGridOptions {
   loadWaitMs?: number;
   maxScrolls?: number;
   scroll?: (page: Page, frame: PortalFrame, move: ScrollMove, viaButton: boolean) => Promise<void>;
+  /** One line per step of the read, for the log the user follows. */
+  onProgress?: (line: string) => void;
 }
 
 // The two functions below run inside the portal page (Playwright serialises them), so they
@@ -88,14 +90,16 @@ const SCROLL_BUTTON: Record<ScrollMove, string> = { down: "vscroll-Nxt", up: "vs
 async function scrollGrid(page: Page, frame: PortalFrame, move: ScrollMove, viaButton: boolean): Promise<void> {
   if (viaButton) {
     const button = frame.locator(`[id$="_${SCROLL_BUTTON[move]}"]`).first();
-    await button.click({ clickCount: 5, delay: 40, timeout: 2_000 }).catch(() => undefined);
+    await button.click({ timeout: 2_000 }).catch(() => undefined);
     return;
   }
   const box = await frame.locator('[id$="-mrss-cont-none"]').first().boundingBox().catch(() => null);
   if (!box) return;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  const [dx, dy] = move === "right" ? [300, 0] : [0, move === "down" ? 300 : -300];
-  for (let turn = 0; turn < 5; turn += 1) await page.mouse.wheel(dx, dy);
+  // One notch of a mouse wheel and no more: the grid only fetches the rows it comes to rest on, so
+  // a jump longer than a screenful leaves a hole (seen live: rows 166-206 of 351 never loaded).
+  const [dx, dy] = move === "right" ? [120, 0] : [0, move === "down" ? 120 : -120];
+  await page.mouse.wheel(dx, dy);
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -118,8 +122,9 @@ async function probe<T>(frame: PortalFrame, fn: () => T): Promise<T | null> {
  * (`matrix[row][column]`, `""` for an empty cell). Never returns a partial grid.
  */
 export async function readComparativeGrid(page: Page, options: ReadGridOptions = {}): Promise<string[][]> {
-  const { timeoutMs = 30_000, pollMs = 500, settleMs = 400, loadWaitMs = 3_000, maxScrolls = 200 } = options;
+  const { timeoutMs = 30_000, pollMs = 500, settleMs = 250, loadWaitMs = 3_000, maxScrolls = 500 } = options;
   const scroll = options.scroll ?? scrollGrid;
+  const say = options.onProgress ?? (() => undefined);
   const deadline = Date.now() + timeoutMs;
 
   let found: { frame: PortalFrame; snapshot: GridSnapshot } | undefined;
@@ -178,7 +183,10 @@ export async function readComparativeGrid(page: Page, options: ReadGridOptions =
   let move: ScrollMove = "down";
   let vertical: "down" | "up" = "down";
   let position = found.snapshot.position ?? "";
+  const progress = () => `${rows.size} of ${totalRows} rows, ${cells.size} of ${totalRows * totalColumns} cells`;
+  say(`Statement grid found: ${totalRows} rows x ${totalColumns} columns. In the page so far: ${progress()}`);
   for (let scrolls = 0, idle = 0; !complete() && scrolls < maxScrolls; scrolls += 1) {
+    const before = cells.size;
     await scroll(page, found.frame, move, idle === 1);
     const waitUntil = Date.now() + loadWaitMs;
     let moved = false;
@@ -190,6 +198,10 @@ export async function readComparativeGrid(page: Page, options: ReadGridOptions =
       moved = cells.size > before || (snapshot?.position ?? position) !== position;
       position = snapshot?.position ?? position;
     } while (!moved && Date.now() < waitUntil);
+    say(
+      `Scroll ${scrolls + 1} ${move}${idle === 1 ? " (scrollbar button)" : ""}: ` +
+        `${cells.size > before ? "new cells" : moved ? "moved" : "nothing moved"}; ${progress()}`,
+    );
     if (moved) {
       idle = 0;
       move = vertical;
@@ -200,6 +212,7 @@ export async function readComparativeGrid(page: Page, options: ReadGridOptions =
       idle = 0;
     }
   }
+  say(complete() ? `Complete: ${progress()}` : `Gave up incomplete: ${progress()}`);
   if (!complete()) {
     throw new StatementNotAvailableError(
       `Read only ${rows.size} of ${totalRows} rows and ${columns.size} of ${totalColumns} columns ` +

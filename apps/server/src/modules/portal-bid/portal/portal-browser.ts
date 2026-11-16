@@ -1,9 +1,12 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import type { PortalBrowserStatusDto } from "@bmp/types";
 import { chromium, type BrowserContext } from "playwright-core";
+
+import { logger } from "../../../shared/logger/logger.js";
 
 import { readComparativeGrid, type ReadGridOptions, StatementNotAvailableError } from "./comparative-grid.js";
 import { PortalSession } from "./portal-session.js";
@@ -79,14 +82,28 @@ export class PortalBrowser {
     // Always navigate, even in a tab already showing it: a re-fetch must read the current statement.
     await page.goto(`${this.config.portalUrl}${COMPARATIVE_STATEMENT_PATH}?${marker}`).catch(() => undefined);
     await page.bringToFront();
+    // Every step goes to the server log and to `read.log` in the capture folder, so a slow or
+    // failed read can be followed (`tail -f`) and studied afterwards.
+    const dir = path.join(path.dirname(this.config.profileDir), ".bmp-portal-capture", rfxNumber);
+    const log = (line: string) => {
+      logger.info({ rfxNumber }, line);
+      try {
+        mkdirSync(dir, { recursive: true });
+        appendFileSync(path.join(dir, "read.log"), `${new Date().toISOString()} ${line}\n`);
+      } catch {
+        // The log is a convenience; the read does not depend on it.
+      }
+    };
+    log(`Opening comparative statement ${rfxNumber}`);
     try {
-      return await readComparativeGrid(page, options);
+      const matrix = await readComparativeGrid(page, { onProgress: log, ...options });
+      log(`Read ${matrix.length} rows`);
+      return matrix;
     } catch (error) {
+      log(`Failed: ${error instanceof Error ? error.message : String(error)}`);
       // Keep what the page looked like, so a statement the reader cannot handle can be studied
       // without another trip to the portal. Stays on this machine, next to the browser profile.
       if (error instanceof StatementNotAvailableError) {
-        const dir = path.join(path.dirname(this.config.profileDir), ".bmp-portal-capture", rfxNumber);
-        await mkdir(dir, { recursive: true }).catch(() => undefined);
         for (const [index, frame] of page.frames().entries()) {
           const html = await frame.content().catch(() => null);
           if (html) await writeFile(path.join(dir, `frame-${index}.html`), html).catch(() => undefined);
