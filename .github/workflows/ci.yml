@@ -78,14 +78,14 @@ jobs:
       - name: Install poppler-utils
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
 
+      - name: Generate Prisma client (lint and typecheck read the generated types)
+        run: pnpm --filter @bmp/database generate
+
       - name: Lint
         run: pnpm lint
 
       - name: Typecheck
         run: pnpm typecheck
-
-      - name: Generate Prisma client
-        run: pnpm --filter @bmp/database generate
 
       - name: Run database migrations
         run: pnpm --filter @bmp/database migrate:deploy
