@@ -2,7 +2,9 @@ import type { APIRequestContext, Page } from "@playwright/test";
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 export const SUPERADMIN_EMAIL = "superadmin@bmp.local";
-export const SUPERADMIN_PASSWORD = "REDACTED";
+// The seeded users' password comes from the environment (SEED_USER_PASSWORD), never from the repo.
+export const SUPERADMIN_PASSWORD = process.env.SEED_USER_PASSWORD ?? "";
+if (!SUPERADMIN_PASSWORD) throw new Error("Set SEED_USER_PASSWORD to the password the database was seeded with");
 
 export async function login(page: Page, email = SUPERADMIN_EMAIL, password = SUPERADMIN_PASSWORD): Promise<void> {
   await page.goto("/login");

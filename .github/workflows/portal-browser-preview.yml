@@ -26,7 +26,6 @@ env:
   ACCESS_TOKEN_SECRET: preview_access_token_secret_change_me
   WEB_APP_URL: http://localhost:3000
   NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
-  SEED_USER_PASSWORD: REDACTED
 
 jobs:
   preview:

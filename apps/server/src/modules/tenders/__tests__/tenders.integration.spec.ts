@@ -9,6 +9,7 @@ import {
   cleanupIntegrationTestUser,
   createIntegrationTestUser,
   type IntegrationTestUser,
+  TEST_PASSWORD,
 } from "../../../shared/test-utils/integration-auth.js";
 
 /**
@@ -176,7 +177,7 @@ describe("Tender workflow (integration)", () => {
   it("does not return another business's tenders", async () => {
     const otherLogin = await request(app).post("/api/v1/auth/login").send({
       email: testUser.email,
-      password: "REDACTED",
+      password: TEST_PASSWORD,
     });
     // switch to the second business this same test user also belongs to
     const switchResponse = await request(app)
@@ -212,7 +213,7 @@ describe("Tender workflow (integration)", () => {
   it("does not include another business's tenders in dashboard stats", async () => {
     const otherLogin = await request(app).post("/api/v1/auth/login").send({
       email: testUser.email,
-      password: "REDACTED",
+      password: TEST_PASSWORD,
     });
     const switchResponse = await request(app)
       .post("/api/v1/auth/switch-business")

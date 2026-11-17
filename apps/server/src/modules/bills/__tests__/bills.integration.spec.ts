@@ -14,6 +14,7 @@ import {
   createIntegrationTestUser,
   switchToSecondBusiness,
   type IntegrationTestUser,
+  TEST_PASSWORD,
 } from "../../../shared/test-utils/integration-auth.js";
 import { hashPassword } from "../../../shared/utils/hash.js";
 
@@ -86,7 +87,7 @@ describe("Bills (integration)", () => {
     noPermsRoleId = noPermsRole.id;
 
     const noPermsEmail = `integration-noperms-${randomUUID()}@example.com`;
-    const noPermsPassword = "REDACTED";
+    const noPermsPassword = TEST_PASSWORD;
     const noPermsUser = await prisma.user.create({
       data: {
         id: randomUUID(),

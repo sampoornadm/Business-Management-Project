@@ -14,6 +14,9 @@ import type { CreateRefreshTokenData, IAuthRepository } from "../auth.repository
 import { AuthService } from "../auth.service.js";
 import { TokenService } from "../token.service.js";
 
+/** Throwaway password for the fake users in this spec; made up per run. */
+const TEST_PASSWORD = `Pw-${randomUUID()}`;
+
 const BUSINESS_ID = "business-1";
 const ROLE_ID = "role-admin";
 const ROLE_NAME = "ADMIN";
@@ -174,7 +177,7 @@ describe("AuthService", () => {
     rolesRepository = new FakeRolesRepository();
     auditService = { log: vi.fn().mockResolvedValue(undefined) } as unknown as AuditService;
 
-    user = buildUser({ passwordHash: await hashPassword("REDACTED") });
+    user = buildUser({ passwordHash: await hashPassword(TEST_PASSWORD) });
     usersRepository.users.set(user.id, user);
     businessesRepository.addMembership(user.id, BUSINESS_ID, ROLE_ID);
 
@@ -198,7 +201,7 @@ describe("AuthService", () => {
   });
 
   it("logs in successfully with correct credentials", async () => {
-    const result = await authService.login("jane@example.com", "REDACTED", {});
+    const result = await authService.login("jane@example.com", TEST_PASSWORD, {});
     expect(result.accessToken).toBeTruthy();
     expect(result.refreshToken).toBeTruthy();
     expect(result.user.email).toBe("jane@example.com");
@@ -213,7 +216,7 @@ describe("AuthService", () => {
     const SECOND_BUSINESS_ID = "business-2";
     businessesRepository.addMembership(user.id, SECOND_BUSINESS_ID, ROLE_ID);
 
-    const result = await authService.login("jane@example.com", "REDACTED", {});
+    const result = await authService.login("jane@example.com", TEST_PASSWORD, {});
     expect(result.availableBusinesses.map((b) => b.businessId).sort()).toEqual(
       [BUSINESS_ID, SECOND_BUSINESS_ID].sort(),
     );
@@ -227,20 +230,20 @@ describe("AuthService", () => {
 
   it("rejects login for a deactivated account", async () => {
     user.isActive = false;
-    await expect(authService.login("jane@example.com", "REDACTED", {})).rejects.toThrow(
+    await expect(authService.login("jane@example.com", TEST_PASSWORD, {})).rejects.toThrow(
       UnauthorizedError,
     );
   });
 
   it("rejects login for a user with no business memberships", async () => {
     businessesRepository.memberships.delete(user.id);
-    await expect(authService.login("jane@example.com", "REDACTED", {})).rejects.toThrow(
+    await expect(authService.login("jane@example.com", TEST_PASSWORD, {})).rejects.toThrow(
       UnauthorizedError,
     );
   });
 
   it("rotates the refresh token on refresh", async () => {
-    const { refreshToken } = await authService.login("jane@example.com", "REDACTED", {});
+    const { refreshToken } = await authService.login("jane@example.com", TEST_PASSWORD, {});
     const result = await authService.refresh(refreshToken, {});
     expect(result.refreshToken).not.toBe(refreshToken);
     expect(result.activeBusinessId).toBe(BUSINESS_ID);
@@ -255,7 +258,7 @@ describe("AuthService", () => {
   });
 
   it("carries the same activeBusinessId forward when rotating the refresh token", async () => {
-    const { refreshToken } = await authService.login("jane@example.com", "REDACTED", {});
+    const { refreshToken } = await authService.login("jane@example.com", TEST_PASSWORD, {});
     await authService.refresh(refreshToken, {});
 
     const rows = [...authRepository.refreshTokens.values()];
@@ -263,7 +266,7 @@ describe("AuthService", () => {
   });
 
   it("detects refresh token reuse and revokes the whole family", async () => {
-    const { refreshToken } = await authService.login("jane@example.com", "REDACTED", {});
+    const { refreshToken } = await authService.login("jane@example.com", TEST_PASSWORD, {});
     await authService.refresh(refreshToken, {});
 
     // Replaying the already-rotated (now revoked) token must fail and nuke the family.

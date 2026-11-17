@@ -3872,7 +3872,7 @@ existing imports.
 
 - [ ] **Step 3: Manually verify in the browser**
 
-Run: `pnpm dev`, then log in as `superadmin@bmp.local` / `REDACTED` and confirm the switcher
+Run: `pnpm dev`, then log in as `superadmin@bmp.local` with your `SEED_USER_PASSWORD` and confirm the switcher
 appears (2 businesses) and switching reloads the Tenders list scoped to the new business; log in
 as `tender.manager@bmp.local` and confirm the switcher does **not** appear (single business).
 

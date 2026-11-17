@@ -37,7 +37,7 @@ pnpm db:seed         # idempotent: roles/permissions/sample users from @bmp/type
 docker compose up -d # postgres, redis, minio(+init), mailhog, nginx
 ```
 
-Seeded users (password `REDACTED`): `superadmin@bmp.local`, `admin@bmp.local`,
+Seeded users (password: `SEED_USER_PASSWORD` in your local, git-ignored `.env`): `superadmin@bmp.local`, `admin@bmp.local`,
 `tender.manager@bmp.local`, `estimator@bmp.local`, `purchase.manager@bmp.local`,
 `accounts@bmp.local`, `project.manager@bmp.local`, `viewer@bmp.local`.
 

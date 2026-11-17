@@ -7,6 +7,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../../../app.js";
 import { hashPassword } from "../../../shared/utils/hash.js";
 
+/** Throwaway password for the fake users in this spec; made up per run. */
+const TEST_PASSWORD = `Pw-${randomUUID()}`;
+
 /**
  * Requires a real Postgres + Redis reachable via the DATABASE_URL / REDIS_URL
  * in .env.test, with migrations applied (`pnpm db:migrate` against the test
@@ -15,7 +18,7 @@ import { hashPassword } from "../../../shared/utils/hash.js";
 describe("Auth flow (integration)", () => {
   const app = createApp();
   const email = `integration-${randomUUID()}@example.com`;
-  const password = "REDACTED";
+  const password = TEST_PASSWORD;
   let roleId: string;
   let userId: string;
   let firstBusinessId: string;
