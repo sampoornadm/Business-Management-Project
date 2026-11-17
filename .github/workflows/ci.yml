@@ -90,6 +90,15 @@ jobs:
       - name: Run database migrations
         run: pnpm --filter @bmp/database migrate:deploy
 
+      # Integration tests rely on seeded roles/permissions (otherwise parallel files race to create
+      # them) and on the local-docs sync system user.
+      - name: Seed database
+        run: pnpm --filter @bmp/database seed
+
+      # The portal-browser and portal-session specs drive a real (headless) Chromium.
+      - name: Install Chromium for the portal specs
+        run: pnpm --filter @bmp/server exec playwright-core install --with-deps chromium
+
       - name: Build
         run: pnpm build
 
