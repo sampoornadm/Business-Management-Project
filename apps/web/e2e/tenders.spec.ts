@@ -40,7 +40,7 @@ test.describe("Tenders", () => {
     }
     await page.fill('input[name="estimatedCost"]', "500000");
 
-    const submissionDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const submissionDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16); // datetime-local wants YYYY-MM-DDTHH:mm
     await page.fill('input[name="submissionDate"]', submissionDate);
 
     await page.click('button:text-is("Create tender")');
