@@ -2177,7 +2177,7 @@ export interface IntegrationTestUser {
 
 export async function createIntegrationTestUser(app: Express): Promise<IntegrationTestUser> {
   const email = `integration-${randomUUID()}@example.com`;
-  const password = "REDACTED";
+  const password = TEST_PASSWORD;
 
   const permission = await prisma.permission.upsert({
     where: { key: WILDCARD_PERMISSION },
@@ -2302,7 +2302,7 @@ Add to `tenders.integration.spec.ts` (using `testUser.secondBusinessId` from Tas
   it("does not return another business's tenders", async () => {
     const otherLogin = await request(app).post("/api/v1/auth/login").send({
       email: testUser.email,
-      password: "REDACTED",
+      password: TEST_PASSWORD,
     });
     // switch to the second business this same test user also belongs to
     const switchResponse = await request(app)
@@ -3199,7 +3199,7 @@ Add to `reports.integration.spec.ts` (using the Task 11 helper's `businessId`/`s
       .set("Authorization", `Bearer ${accessToken}`)
       .send({ /* same payload as this file's existing tender-creation setup */ });
 
-    const otherLogin = await request(app).post("/api/v1/auth/login").send({ email: testUser.email, password: "REDACTED" });
+    const otherLogin = await request(app).post("/api/v1/auth/login").send({ email: testUser.email, password: TEST_PASSWORD });
     const switchResponse = await request(app)
       .post("/api/v1/auth/switch-business")
       .set("Authorization", `Bearer ${otherLogin.body.data.accessToken}`)
@@ -3872,7 +3872,7 @@ existing imports.
 
 - [ ] **Step 3: Manually verify in the browser**
 
-Run: `pnpm dev`, then log in as `superadmin@bmp.local` / `REDACTED` and confirm the switcher
+Run: `pnpm dev`, then log in as `superadmin@bmp.local` with your `SEED_USER_PASSWORD` and confirm the switcher
 appears (2 businesses) and switching reloads the Tenders list scoped to the new business; log in
 as `tender.manager@bmp.local` and confirm the switcher does **not** appear (single business).
 

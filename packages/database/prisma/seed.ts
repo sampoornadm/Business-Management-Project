@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
 import {
   PERMISSION_DEFINITIONS,
@@ -13,7 +13,10 @@ import { PrismaClient } from "../generated/client/index.js";
 
 const prisma = new PrismaClient();
 
-const SEED_PASSWORD = process.env.SEED_USER_PASSWORD ?? "REDACTED";
+// No password lives in the repository: set SEED_USER_PASSWORD in your own .env, or one is generated
+// and printed once at the end of the run.
+const GENERATED_PASSWORD = !process.env.SEED_USER_PASSWORD;
+const SEED_PASSWORD = process.env.SEED_USER_PASSWORD || randomBytes(12).toString("base64url");
 
 const SAMPLE_USERS: Array<{ role: (typeof ROLE_NAMES)[number]; email: string; firstName: string; lastName: string }> = [
   { role: "SUPER_ADMIN", email: "superadmin@bmp.local", firstName: "Super", lastName: "Admin" },
@@ -244,7 +247,11 @@ async function main() {
   console.warn("Seeding local docs sync system user...");
   await seedLocalDocsSyncUser(roleByName, businessByCode);
 
-  console.warn(`Done. Seeded ${SAMPLE_USERS.length} users with password "${SEED_PASSWORD}".`);
+  console.warn(
+    GENERATED_PASSWORD
+      ? `Done. Seeded ${SAMPLE_USERS.length} users with the generated password "${SEED_PASSWORD}" (set SEED_USER_PASSWORD to choose your own).`
+      : `Done. Seeded ${SAMPLE_USERS.length} users with the password from SEED_USER_PASSWORD.`,
+  );
 }
 
 main()

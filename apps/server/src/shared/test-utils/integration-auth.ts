@@ -7,6 +7,9 @@ import request from "supertest";
 import { prisma } from "../../infra/prisma/client.js";
 import { hashPassword } from "../utils/hash.js";
 
+/** A throwaway password for the users these helpers create; made up per run, never a real credential. */
+export const TEST_PASSWORD = `Pw-${randomUUID()}`;
+
 export interface IntegrationTestUser {
   userId: string;
   email: string;
@@ -17,7 +20,7 @@ export interface IntegrationTestUser {
 
 export async function createIntegrationTestUser(app: Express): Promise<IntegrationTestUser> {
   const email = `integration-${randomUUID()}@example.com`;
-  const password = "REDACTED";
+  const password = TEST_PASSWORD;
 
   const permission = await prisma.permission.upsert({
     where: { key: WILDCARD_PERMISSION },
@@ -92,7 +95,7 @@ export async function cleanupIntegrationTestUser(testUser: IntegrationTestUser):
 export async function switchToSecondBusiness(app: Express, testUser: IntegrationTestUser): Promise<string> {
   const otherLogin = await request(app).post("/api/v1/auth/login").send({
     email: testUser.email,
-    password: "REDACTED",
+    password: TEST_PASSWORD,
   });
   const switchResponse = await request(app)
     .post("/api/v1/auth/switch-business")

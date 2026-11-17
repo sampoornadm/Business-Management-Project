@@ -11,6 +11,9 @@ export function createRateLimiter(name: string, windowMs: number, max: number): 
     max,
     standardHeaders: true,
     legacyHeaders: false,
+    // The integration and e2e suites log in far more than 10 times from one address; limiting
+    // there only makes unrelated tests fail with 429s that look like real bugs.
+    skip: () => process.env.NODE_ENV === "test" || process.env.DISABLE_RATE_LIMIT === "true",
     store: new RedisStore({
       prefix: `ratelimit:${name}:`,
       sendCommand: (...args: string[]) =>

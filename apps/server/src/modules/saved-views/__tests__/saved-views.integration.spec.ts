@@ -7,6 +7,7 @@ import {
   cleanupIntegrationTestUser,
   createIntegrationTestUser,
   type IntegrationTestUser,
+  TEST_PASSWORD,
 } from "../../../shared/test-utils/integration-auth.js";
 
 /**
@@ -108,7 +109,7 @@ describe("Saved views (integration)", () => {
     });
     const login = await request(app)
       .post("/api/v1/auth/login")
-      .send({ email: userTwo.email, password: "REDACTED" });
+      .send({ email: userTwo.email, password: TEST_PASSWORD });
     const switchResponse = await request(app)
       .post("/api/v1/auth/switch-business")
       .set("Authorization", `Bearer ${login.body.data.accessToken}`)

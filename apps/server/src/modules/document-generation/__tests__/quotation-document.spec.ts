@@ -58,7 +58,7 @@ describe("buildQuotationCsv", () => {
 
     const csv = buildQuotationCsv(rows, 1000).toString("utf-8");
     // Strip the leading UTF-8 BOM before splitting into lines.
-    const lines = csv.replace(/^﻿/, "").split("\r\n");
+    const lines = csv.replace(/^\uFEFF/, "").split("\r\n");
 
     expect(lines[0]).toBe("Sl. No.,Description,Unit,Quantity,Rate,Amount");
     // amount formats as "1,000" (en-IN grouping) — its own comma makes escapeCsvField quote the

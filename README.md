@@ -71,7 +71,7 @@ pnpm db:seed                # creates roles, permissions, and one sample user pe
 pnpm dev                    # runs web (:3000), server (:4000), and the email worker
 ```
 
-Seeded accounts (password printed by the seed script, default `REDACTED`):
+Seeded accounts (password from `SEED_USER_PASSWORD` in your `.env`, or generated and printed by the seed script):
 
 | Role | Email |
 |---|---|

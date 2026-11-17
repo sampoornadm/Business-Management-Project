@@ -29,26 +29,28 @@ test.describe("Tenders", () => {
     await page.locator('button[role="combobox"]', { hasText: "Select a client organization" }).click();
     await page.getByRole("option", { name: organizationName }).click();
 
-    await page.locator('button[role="combobox"]', { hasText: "Select type" }).click();
-    await page.getByRole("option").first().click();
-
-    await page.locator('button[role="combobox"]', { hasText: "Select category" }).click();
-    await page.getByRole("option").first().click();
-
-    await page.fill('input[name="location"]', "Test City");
-    await page.fill('input[name="state"]', "Test State");
+    // Type, category, state and city are dropdowns; take the first option of each that is still
+    // unset (a field with a default no longer shows its placeholder). City follows state.
+    for (const placeholder of ["Select type", "Select category", "Select state", "Select city"]) {
+      const trigger = page.locator('button[role="combobox"]', { hasText: placeholder });
+      if ((await trigger.count()) > 0) {
+        await trigger.click();
+        await page.getByRole("option").first().click();
+      }
+    }
     await page.fill('input[name="estimatedCost"]', "500000");
 
-    const submissionDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const submissionDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16); // datetime-local wants YYYY-MM-DDTHH:mm
     await page.fill('input[name="submissionDate"]', submissionDate);
 
     await page.click('button:text-is("Create tender")');
     await page.waitForURL(/\/tenders\/(?!new)[a-f0-9-]+$/, { timeout: 15_000 });
     await expect(page.getByRole("heading", { name: tenderTitle })).toBeVisible();
 
-    // DRAFT -> SUBMITTED is one click on the status tracker's next stage.
+    // Submitting needs the rates finalized first, so a fresh tender's Submitted stage explains
+    // that instead of moving. (Finalizing and submitting is covered by the server's integration tests.)
     await page.getByRole("button", { name: "Submitted", exact: true }).click();
-    await expect(page.getByText("Marked Submitted")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("Finalize rates first").first()).toBeVisible({ timeout: 10_000 });
 
     await page.goto("/tenders");
     await expect(page.getByText(tenderTitle)).toBeVisible();

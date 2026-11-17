@@ -21,7 +21,6 @@ env:
   ACCESS_TOKEN_SECRET: ci_access_token_secret_change_me
   WEB_APP_URL: http://localhost:3000
   NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
-  SEED_USER_PASSWORD: REDACTED
 
 jobs:
   build-and-test:
@@ -52,7 +51,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       minio:
-        image: bitnami/minio:latest
+        image: bitnamilegacy/minio:latest
         env:
           MINIO_ROOT_USER: bmp_minio
           MINIO_ROOT_PASSWORD: bmp_minio_password
@@ -63,8 +62,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+
+      # The seeded demo users' password is made up per run, never stored in the repository.
+      - name: Make up the seed password
+        run: |
+          pw="$(openssl rand -hex 16)"
+          echo "::add-mask::$pw"
+          echo "SEED_USER_PASSWORD=$pw" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
@@ -80,17 +84,26 @@ jobs:
       - name: Install poppler-utils
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
 
+      - name: Generate Prisma client (lint and typecheck read the generated types)
+        run: pnpm --filter @bmp/database generate
+
       - name: Lint
         run: pnpm lint
 
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Generate Prisma client
-        run: pnpm --filter @bmp/database generate
-
       - name: Run database migrations
         run: pnpm --filter @bmp/database migrate:deploy
+
+      # Integration tests rely on seeded roles/permissions (otherwise parallel files race to create
+      # them) and on the local-docs sync system user.
+      - name: Seed database
+        run: pnpm --filter @bmp/database seed
+
+      # The portal-browser and portal-session specs drive a real (headless) Chromium.
+      - name: Install Chromium for the portal specs
+        run: pnpm --filter @bmp/server exec playwright-core install --with-deps chromium
 
       - name: Build
         run: pnpm build
@@ -117,8 +130,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
@@ -173,7 +184,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       minio:
-        image: bitnami/minio:latest
+        image: bitnamilegacy/minio:latest
         env:
           MINIO_ROOT_USER: bmp_minio
           MINIO_ROOT_PASSWORD: bmp_minio_password
@@ -184,8 +195,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+
+      # The seeded demo users' password is made up per run, never stored in the repository.
+      - name: Make up the seed password
+        run: |
+          pw="$(openssl rand -hex 16)"
+          echo "::add-mask::$pw"
+          echo "SEED_USER_PASSWORD=$pw" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
@@ -211,6 +227,8 @@ jobs:
         run: pnpm build
 
       - name: Start server
+        env:
+          DISABLE_RATE_LIMIT: "true" # the e2e specs log in more often than the login limiter allows
         run: nohup pnpm --filter @bmp/server start > server.log 2>&1 &
 
       - name: Start web
@@ -223,6 +241,8 @@ jobs:
       - name: Run Playwright E2E suite
         env:
           CI: "true"
+          # The stack is already running (started above); stop Playwright starting a second web server.
+          E2E_BASE_URL: http://localhost:3000
         run: pnpm --filter @bmp/web test:e2e
 
       - name: Upload Playwright report

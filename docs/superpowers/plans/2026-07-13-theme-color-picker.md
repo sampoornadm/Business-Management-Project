@@ -1178,7 +1178,7 @@ Add this new `Card` between the "Personal information" card and the "Change pass
 pnpm --filter @bmp/web dev
 ```
 
-Log in (any seeded user, e.g. `admin@bmp.local` / `REDACTED`), go to `/profile`. Confirm:
+Log in (any seeded user, e.g. `admin@bmp.local` with your `SEED_USER_PASSWORD`), go to `/profile`. Confirm:
 - A "Theme color" card renders with one swatch-grid row per business the user belongs to.
 - Clicking a swatch updates `--primary`/`--ring` across the whole app immediately (e.g. primary buttons, the active nav item, focus rings) — no page reload.
 - Reloading the page keeps the picked color (persisted via the DB, reconciled through `AuthProvider`'s silent refresh → `availableBusinesses`).
