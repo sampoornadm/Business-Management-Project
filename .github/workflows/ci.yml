@@ -214,6 +214,8 @@ jobs:
         run: pnpm build
 
       - name: Start server
+        env:
+          DISABLE_RATE_LIMIT: "true" # the e2e specs log in more often than the login limiter allows
         run: nohup pnpm --filter @bmp/server start > server.log 2>&1 &
 
       - name: Start web

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { tenderPriorityBadgeVariant, tenderStatusBadgeVariant } from "./tender-status";
+import {
+  tenderKindBadgeVariant,
+  tenderPriorityBadgeVariant,
+  tenderStatusBadgeVariant,
+  tenderStatusChartColor,
+} from "./tender-status";
 
 describe("tenderStatusBadgeVariant", () => {
   it("returns outline for draft", () => {
@@ -24,5 +29,22 @@ describe("tenderPriorityBadgeVariant", () => {
     expect(tenderPriorityBadgeVariant("MEDIUM")).toBe("secondary");
     expect(tenderPriorityBadgeVariant("HIGH")).toBe("default");
     expect(tenderPriorityBadgeVariant("URGENT")).toBe("destructive");
+  });
+});
+
+describe("tenderStatusChartColor", () => {
+  it("colours each status by its meaning, with lost and cancelled sharing one colour", () => {
+    expect(tenderStatusChartColor("DRAFT")).toBe("hsl(var(--muted-foreground))");
+    expect(tenderStatusChartColor("SUBMITTED")).toBe("hsl(var(--primary))");
+    expect(tenderStatusChartColor("WON")).toBe("hsl(var(--success))");
+    expect(tenderStatusChartColor("LOST")).toBe("hsl(var(--destructive))");
+    expect(tenderStatusChartColor("CANCELLED")).toBe(tenderStatusChartColor("LOST"));
+  });
+});
+
+describe("tenderKindBadgeVariant", () => {
+  it("marks a budgetary quotation apart from a tender", () => {
+    expect(tenderKindBadgeVariant("BUDGETARY")).toBe("secondary");
+    expect(tenderKindBadgeVariant("TENDER")).toBe("outline");
   });
 });

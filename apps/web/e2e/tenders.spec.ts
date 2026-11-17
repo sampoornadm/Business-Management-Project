@@ -29,14 +29,15 @@ test.describe("Tenders", () => {
     await page.locator('button[role="combobox"]', { hasText: "Select a client organization" }).click();
     await page.getByRole("option", { name: organizationName }).click();
 
-    await page.locator('button[role="combobox"]', { hasText: "Select type" }).click();
-    await page.getByRole("option").first().click();
-
-    await page.locator('button[role="combobox"]', { hasText: "Select category" }).click();
-    await page.getByRole("option").first().click();
-
-    await page.fill('input[name="location"]', "Test City");
-    await page.fill('input[name="state"]', "Test State");
+    // Type, category, state and city are dropdowns; take the first option of each that is still
+    // unset (a field with a default no longer shows its placeholder). City follows state.
+    for (const placeholder of ["Select type", "Select category", "Select state", "Select city"]) {
+      const trigger = page.locator('button[role="combobox"]', { hasText: placeholder });
+      if ((await trigger.count()) > 0) {
+        await trigger.click();
+        await page.getByRole("option").first().click();
+      }
+    }
     await page.fill('input[name="estimatedCost"]', "500000");
 
     const submissionDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
