@@ -47,9 +47,10 @@ test.describe("Tenders", () => {
     await page.waitForURL(/\/tenders\/(?!new)[a-f0-9-]+$/, { timeout: 15_000 });
     await expect(page.getByRole("heading", { name: tenderTitle })).toBeVisible();
 
-    // DRAFT -> SUBMITTED is one click on the status tracker's next stage.
+    // Submitting needs the rates finalized first, so a fresh tender's Submitted stage explains
+    // that instead of moving. (Finalizing and submitting is covered by the server's integration tests.)
     await page.getByRole("button", { name: "Submitted", exact: true }).click();
-    await expect(page.getByText("Marked Submitted")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("Finalize rates first").first()).toBeVisible({ timeout: 10_000 });
 
     await page.goto("/tenders");
     await expect(page.getByText(tenderTitle)).toBeVisible();
