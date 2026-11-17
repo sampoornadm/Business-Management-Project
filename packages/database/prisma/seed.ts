@@ -26,10 +26,15 @@ const SAMPLE_USERS: Array<{ role: (typeof ROLE_NAMES)[number]; email: string; fi
   { role: "VIEWER", email: "viewer@bmp.local", firstName: "Vera", lastName: "Viewer" },
 ];
 
-const SAMPLE_BUSINESSES = [
-  { name: "Business One", code: "BIZ1" },
-  { name: "Business Two", code: "BIZ2" },
-];
+// The two businesses the sample users belong to. Real names stay out of the repository: set
+// SEED_BUSINESSES="Name One:CODE1;Name Two:CODE2" in your own (git-ignored) .env to seed yours.
+const SAMPLE_BUSINESSES = (process.env.SEED_BUSINESSES ?? "Business One:BIZ1;Business Two:BIZ2")
+  .split(";")
+  .map((entry) => {
+    const [name, code] = entry.split(":").map((part) => part.trim());
+    return { name: name ?? "", code: code ?? "" };
+  })
+  .filter((business) => business.name && business.code);
 
 // Starter classification taxonomy (top-level trade -> subcategories). Only the initial
 // contents live here — the tree is editable in-app after seeding, so this is a floor, not
@@ -156,8 +161,7 @@ async function seedBusinesses(): Promise<Map<string, string>> {
 
 async function seedUsers(roleByName: Map<string, string>, businessByCode: Map<string, string>) {
   const passwordHash = await bcrypt.hash(SEED_PASSWORD, 12);
-  const bizOneId = businessByCode.get("BIZ1")!;
-  const bizTwoId = businessByCode.get("BIZ2")!;
+  const [bizOneId, bizTwoId] = SAMPLE_BUSINESSES.map((business) => businessByCode.get(business.code)!) as [string, string];
 
   for (const sample of SAMPLE_USERS) {
     const roleId = roleByName.get(sample.role);
@@ -205,7 +209,7 @@ async function seedLocalDocsSyncUser(
   const roleId = roleByName.get("VIEWER");
   if (!roleId) return;
 
-  const bizOneId = businessByCode.get("BIZ1")!;
+  const bizOneId = businessByCode.get(SAMPLE_BUSINESSES[0]!.code)!;
 
   const passwordHash = await bcrypt.hash(randomUUID(), 12);
   const user = await prisma.user.upsert({
