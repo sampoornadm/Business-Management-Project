@@ -217,6 +217,8 @@ jobs:
       - name: Run Playwright E2E suite
         env:
           CI: "true"
+          # The stack is already running (started above); stop Playwright starting a second web server.
+          E2E_BASE_URL: http://localhost:3000
         run: pnpm --filter @bmp/web test:e2e
 
       - name: Upload Playwright report
