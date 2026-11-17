@@ -25,7 +25,8 @@ export interface EditableTreeColumn<TRow extends EditableTreeRow> {
   /** true/false for the whole column, or decided per row (e.g. only rows that have a value to edit). */
   editable?: boolean | ((row: TRow) => boolean);
   /** "textarea" wraps and auto-grows — use it for long free text that a single line can't show. */
-  inputType?: "text" | "number" | "textarea";
+  /** "money" is a rate/amount box shown in Indian accounting format (see `Input`'s `money`). */
+  inputType?: "text" | "number" | "money" | "textarea";
   getValue?: (row: TRow) => string | number | null;
   onCommit?: (row: TRow, value: string) => void;
   /** Extra content under the cell's value, shown whether or not the cell is editable (a hint, a link). */
@@ -140,6 +141,7 @@ function EditableCell<TRow extends EditableTreeRow>({
   return (
     <Input
       type={column.inputType === "number" ? "number" : "text"}
+      money={column.inputType === "money"}
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onBlur={commit}

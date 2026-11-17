@@ -153,7 +153,7 @@ export default function NewBillPage() {
                     <TableCell>
                       {checked && (
                         <Input
-                          type="number"
+                          money
                           value={lines[item.id]?.rate ?? ""}
                           onChange={(e) => updateLine(item.id, { rate: e.target.value })}
                         />

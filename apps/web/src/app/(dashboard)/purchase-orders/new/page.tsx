@@ -209,8 +209,7 @@ export default function NewPurchaseOrderPage() {
                   </TableCell>
                   <TableCell>
                     <Input
-                      type="number"
-                      step="0.01"
+                      money
                       value={item.rate}
                       onChange={(e) => updateItem(index, { rate: e.target.value })}
                     />

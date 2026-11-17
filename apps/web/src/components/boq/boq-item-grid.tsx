@@ -302,7 +302,7 @@ export function BoqItemGrid({
       header: "Rate",
       align: "right",
       editable: canEditPricing,
-      inputType: "number",
+      inputType: "money",
       getValue: (item) => item.rate,
       onCommit: (item, value) => void commitField(item, "rate", value),
       // Lowest rate a likely bidder is expected to quote for this item (see Competitors).

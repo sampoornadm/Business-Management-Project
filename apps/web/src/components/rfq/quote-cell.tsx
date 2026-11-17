@@ -38,8 +38,7 @@ export function QuoteCell({
   return (
     <div className="flex items-center gap-1">
       <Input
-        type="number"
-        step="0.01"
+        money
         value={value}
         disabled={disabled}
         onChange={(e) => setValue(e.target.value)}
