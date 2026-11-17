@@ -11,6 +11,7 @@ import {
   createIntegrationTestUser,
   type IntegrationTestUser,
 } from "../../../shared/test-utils/integration-auth.js";
+import { ITEM_TABLE_HEADER_ROW } from "../quote-sheet.js";
 
 /**
  * Requires a real Postgres + Redis + MinIO reachable via .env.test
@@ -80,9 +81,17 @@ describe("RFQ quote sheet export/import (integration)", () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(sheet.body as unknown as ArrayBuffer);
     const ws = workbook.worksheets[0]!;
-    ws.getCell("G7").value = 152.5; // Rate for the first item
-    ws.getCell("J7").value = "N";
-    ws.getCell("J8").value = "Y"; // Second item: regret
+    // Columns are found by header, not letter: the sheet has gained columns before (Sl. No., Instructions).
+    const header = ws.getRow(ITEM_TABLE_HEADER_ROW);
+    const column = (name: string) => {
+      const index = (header.values as unknown[]).findIndex((value) => value === name);
+      if (index < 0) throw new Error(`quote sheet has no "${name}" column`);
+      return index;
+    };
+    const firstItem = ITEM_TABLE_HEADER_ROW + 1;
+    ws.getCell(firstItem, column("Rate")).value = 152.5; // Rate for the first item
+    ws.getCell(firstItem, column("Regret (Y/N)")).value = "N";
+    ws.getCell(firstItem + 1, column("Regret (Y/N)")).value = "Y"; // Second item: regret
     const filled = Buffer.from(await workbook.xlsx.writeBuffer());
 
     const imported = await request(app)

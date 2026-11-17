@@ -252,7 +252,6 @@ describe("POST /tenders/:id/documents/quotation (integration)", () => {
         groupId: boqId,
         version: 1,
         isCurrent: true,
-        status: "DRAFT",
         items: {
           create: [
             {
