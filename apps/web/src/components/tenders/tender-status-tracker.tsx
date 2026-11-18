@@ -91,8 +91,30 @@ function Stage({ dot, dotClass, label, labelClass, hoverLabel, title, onClick, c
       >
         {dot}
       </span>
-      <span className={cn(labelClass, hoverLabel && "group-hover:hidden")}>{label}</span>
-      {hoverLabel && <span className="hidden font-medium text-primary group-hover:inline">{hoverLabel}</span>}
+      {hoverLabel ? (
+        // On hover the label collapses and the hover label opens (grid 0fr <-> 1fr), so the button
+        // grows rightward from its fixed left edge in one slow motion instead of snapping.
+        <span className="flex">
+          <span
+            className={cn(
+              "grid grid-cols-[1fr] transition-[grid-template-columns,opacity] duration-500 group-hover:grid-cols-[0fr] group-hover:opacity-0 motion-reduce:transition-none",
+              EASE,
+            )}
+          >
+            <span className={cn("min-w-0 overflow-hidden", labelClass)}>{label}</span>
+          </span>
+          <span
+            className={cn(
+              "grid grid-cols-[0fr] opacity-0 transition-[grid-template-columns,opacity] duration-500 group-hover:grid-cols-[1fr] group-hover:opacity-100 motion-reduce:transition-none",
+              EASE,
+            )}
+          >
+            <span className="min-w-0 overflow-hidden font-medium text-primary">{hoverLabel}</span>
+          </span>
+        </span>
+      ) : (
+        <span className={labelClass}>{label}</span>
+      )}
     </button>
   );
 }
@@ -364,7 +386,7 @@ export function TenderStatusTracker({
   return (
     <Popover open={formFor !== null} onOpenChange={(open) => !open && setFormFor(null)}>
       <PopoverAnchor asChild>
-        <div className="inline-flex flex-wrap items-center">
+        <div className="inline-flex flex-nowrap items-center whitespace-nowrap">
           {draftStage}
           <Connector done={reachedSubmitted} />
           {submittedStage}

@@ -243,18 +243,21 @@ export default function TenderDetailPage() {
         <p className="text-sm text-muted-foreground">
           {tender.tenderNumber} · {tender.client.name}
         </p>
-        <div className="mt-3">
-          <TenderStatusTracker
-            tender={tender}
-            canChange={canChangeStatus}
-            canRevert={canRevertStatus}
-            canViewBoq={canViewBoq}
-            canFetchStatement={canFillPortal}
-            canViewStanding={canViewCompetitors}
-          />
-          <TenderStandingLine tenderId={tender.id} enabled={canViewCompetitors && !isDraft} />
-        </div>
       </PageHeader>
+
+      {/* Own full-width row (not inside the header's title column): the tracker grows on hover and
+          has up to five stages, so it must not share width with the title or the action buttons. */}
+      <div className="-mt-3">
+        <TenderStatusTracker
+          tender={tender}
+          canChange={canChangeStatus}
+          canRevert={canRevertStatus}
+          canViewBoq={canViewBoq}
+          canFetchStatement={canFillPortal}
+          canViewStanding={canViewCompetitors}
+        />
+        <TenderStandingLine tenderId={tender.id} enabled={canViewCompetitors && !isDraft} />
+      </div>
 
       <Tabs defaultValue={initialTab}>
         <TabsList>
