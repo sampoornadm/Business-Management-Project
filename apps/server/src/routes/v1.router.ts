@@ -9,6 +9,10 @@ import { boqItemsRouter, boqRouter } from "../modules/boq/boq.module.js";
 import { businessesRouter } from "../modules/businesses/businesses.module.js";
 import { categoriesRouter } from "../modules/categories/categories.module.js";
 import { classificationRouter } from "../modules/classification/classification.module.js";
+import {
+  clientPurchaseOrdersRouter,
+  projectClientPurchaseOrdersRouter,
+} from "../modules/client-purchase-orders/client-purchase-orders.module.js";
 import { competitorsRouter } from "../modules/competitors/competitors.module.js";
 import { contactsRouter } from "../modules/contacts/contacts.module.js";
 import { documentGenerationRouter } from "../modules/document-generation/document-generation.module.js";
@@ -74,6 +78,8 @@ v1Router.use("/rfq-items", rfqItemsRouter);
 v1Router.use("/purchase-orders", purchaseOrdersRouter);
 v1Router.use("/purchase-orders", purchaseOrderPaymentsRouter);
 v1Router.use("/projects", projectsRouter);
+v1Router.use("/projects", projectClientPurchaseOrdersRouter);
+v1Router.use("/client-purchase-orders", clientPurchaseOrdersRouter);
 v1Router.use("/bank-accounts", bankAccountsRouter);
 v1Router.use("/invoices", invoicesRouter);
 v1Router.use("/expenses", expensesRouter);

@@ -63,6 +63,11 @@ export class ProjectsController {
     sendSuccess(res, project, "Project retrieved");
   });
 
+  getOverview = asyncHandler(async (req, res) => {
+    const overview = await this.projectsService.getOverview(req.params.id!, req.user!.businessId);
+    sendSuccess(res, overview, "Project overview retrieved");
+  });
+
   createFromTender = asyncHandler(async (req, res) => {
     const body = req.body as CreateProjectFromTenderBody;
     const project = await this.projectsService.createFromTender(body, req.user!.id, {

@@ -10,6 +10,7 @@ import {
   type ProjectCostingDto,
   type ProjectDto,
   type ProjectListItemDto,
+  type ProjectOverviewDto,
   type ProjectProgressDto,
   type UpdateMilestoneInput,
   type UpdateProjectInput,
@@ -29,6 +30,7 @@ import {
   toMaterialUsageDto,
   toProjectDto,
   toProjectListItemDto,
+  toProjectOverviewDto,
 } from "./projects.mapper.js";
 import type { IProjectsRepository, ProjectDetail, ProjectFilters } from "./projects.repository.js";
 
@@ -72,6 +74,13 @@ export class ProjectsService {
 
   async getById(id: string, businessId: string): Promise<ProjectDto> {
     return toProjectDto(await this.getDetailOrThrow(id, businessId));
+  }
+
+  async getOverview(id: string, businessId: string): Promise<ProjectOverviewDto> {
+    const project = await this.getDetailOrThrow(id, businessId);
+    const data = await this.projectsRepository.findOverviewData(project.tenderId, businessId);
+    if (!data) throw new NotFoundError("The project's tender was not found");
+    return toProjectOverviewDto(data);
   }
 
   async createFromTender(

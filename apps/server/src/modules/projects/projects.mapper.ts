@@ -5,8 +5,12 @@ import type {
   ProjectListItemDto,
   ProjectMaterialUsageDto,
   ProjectMilestoneDto,
+  ProjectOverviewDto,
+  ProjectRfqVendorSummaryDto,
+  ProjectVendorSummaryDto,
 } from "@bmp/types";
 
+import { round2 } from "../../shared/utils/math.js";
 import type { ExportableTable } from "../../shared/utils/table-export.js";
 
 import type {
@@ -14,6 +18,7 @@ import type {
   LaborEntryWithRecorder,
   MaterialUsageWithRecorder,
   ProjectDetail,
+  ProjectOverviewData,
 } from "./projects.repository.js";
 
 function toMilestoneDto(entity: ProjectDetail["milestones"][number]): ProjectMilestoneDto {
@@ -148,5 +153,81 @@ export function toBillDto(entity: BillWithCreator): ProjectBillDto {
       lastName: entity.createdBy.lastName,
     },
     createdAt: entity.createdAt.toISOString(),
+  };
+}
+
+export function toProjectOverviewDto(data: ProjectOverviewData): ProjectOverviewDto {
+  const { tender } = data;
+  const vendors = new Map<string, ProjectVendorSummaryDto>();
+  const vendorEntry = (vendor: { id: string; name: string }) => {
+    let entry = vendors.get(vendor.id);
+    if (!entry) {
+      entry = { id: vendor.id, name: vendor.name, rfqCount: 0, purchaseOrderCount: 0, purchaseOrderValue: 0 };
+      vendors.set(vendor.id, entry);
+    }
+    return entry;
+  };
+
+  const rfqs = data.rfqs.map((rfq) => {
+    const replies: ProjectRfqVendorSummaryDto[] = rfq.vendorInvites.map((invite) => {
+      vendorEntry(invite.vendor).rfqCount += 1;
+      const quotes = rfq.items.flatMap((item) =>
+        item.quotes
+          .filter((quote) => quote.vendorId === invite.vendor.id && quote.rate !== null)
+          .map((quote) => ({ ...quote, quantity: item.quantity })),
+      );
+      return {
+        vendorId: invite.vendor.id,
+        vendorName: invite.vendor.name,
+        status: invite.status,
+        quotedItems: quotes.length,
+        quotedTotal: round2(quotes.reduce((sum, quote) => sum + quote.quantity * (quote.rate ?? 0), 0)),
+        selectedItems: quotes.filter((quote) => quote.isSelected).length,
+      };
+    });
+    return { id: rfq.id, title: rfq.title, status: rfq.status, itemCount: rfq.items.length, vendors: replies };
+  });
+
+  let orderedValue = 0;
+  let receivedValue = 0;
+  const vendorPurchaseOrders = data.purchaseOrders.map((po) => {
+    const totalAmount = round2(po.items.reduce((sum, item) => sum + item.quantity * item.rate, 0));
+    const receivedAmount = round2(po.items.reduce((sum, item) => sum + item.receivedQuantity * item.rate, 0));
+    if (po.status !== "CANCELLED") {
+      const entry = vendorEntry(po.vendor);
+      entry.purchaseOrderCount += 1;
+      entry.purchaseOrderValue = round2(entry.purchaseOrderValue + totalAmount);
+      orderedValue += totalAmount;
+      receivedValue += receivedAmount;
+    }
+    return {
+      id: po.id,
+      poNumber: po.poNumber,
+      vendorId: po.vendor.id,
+      vendorName: po.vendor.name,
+      status: po.status,
+      totalAmount,
+      receivedAmount,
+      expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.toISOString() : null,
+    };
+  });
+
+  return {
+    tender: {
+      id: tender.id,
+      tenderNumber: tender.tenderNumber,
+      title: tender.title,
+      clientName: tender.client.name,
+      evaluationCriteria: tender.evaluationCriteria,
+      winningBidAmount: tender.winningBidAmount,
+      submissionReference: tender.submissionReference,
+      deliveryPeriodDays: tender.deliveryPeriodDays,
+      wonItemsCount: Array.isArray(tender.wonItems) ? tender.wonItems.length : 0,
+      wonItemsTotal: tender.wonItemsTotal,
+    },
+    rfqs,
+    vendors: [...vendors.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    vendorPurchaseOrders,
+    procurement: { orderedValue: round2(orderedValue), receivedValue: round2(receivedValue) },
   };
 }

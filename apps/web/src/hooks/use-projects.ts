@@ -15,6 +15,7 @@ import type {
   ProjectLaborEntryDto,
   ProjectListItemDto,
   ProjectMaterialUsageDto,
+  ProjectOverviewDto,
   ProjectProgressDto,
   UpdateBillStatusInput,
   UpdateMilestoneInput,
@@ -49,6 +50,17 @@ export function useProject(id: string | undefined) {
     queryKey: ["projects", id],
     queryFn: async () => {
       const response = await apiClient.get<ApiResponse<ProjectDto>>(`/projects/${id}`);
+      return unwrap(response.data);
+    },
+    enabled: Boolean(id),
+  });
+}
+
+export function useProjectOverview(id: string | undefined) {
+  return useQuery({
+    queryKey: ["projects", id, "overview"],
+    queryFn: async () => {
+      const response = await apiClient.get<ApiResponse<ProjectOverviewDto>>(`/projects/${id}/overview`);
       return unwrap(response.data);
     },
     enabled: Boolean(id),

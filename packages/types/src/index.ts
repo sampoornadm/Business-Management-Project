@@ -14,6 +14,7 @@ export * from "./item.js";
 export * from "./notification.js";
 export * from "./organization.js";
 export * from "./permission.js";
+export * from "./client-purchase-order.js";
 export * from "./project.js";
 export * from "./purchase-order.js";
 export * from "./rbac.js";
