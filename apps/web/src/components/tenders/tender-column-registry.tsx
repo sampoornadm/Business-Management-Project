@@ -1,7 +1,7 @@
 "use client";
 
 import type { TenderListItemDto } from "@bmp/types";
-import { TENDER_EVALUATION_CRITERIA_LABELS, TENDER_PRIORITIES, TENDER_STATUS_LABELS, TENDER_STATUSES } from "@bmp/types";
+import { TENDER_EVALUATION_CRITERIA, TENDER_EVALUATION_CRITERIA_LABELS, TENDER_PRIORITIES, TENDER_STATUS_LABELS, TENDER_STATUSES } from "@bmp/types";
 import { Badge, DeadlineProgress, formatDateTime, SortableHeader } from "@bmp/ui";
 import type { FilterableColumnDef } from "@bmp/ui";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -83,10 +83,12 @@ export const TENDER_COLUMNS: TenderColumnConfig[] = [
   {
     key: "evaluationCriteria",
     label: "Evaluation",
-    type: "text",
-    sortable: false,
-    filterable: false,
+    type: "enum",
+    sortable: true,
+    filterable: true,
+    nullable: true,
     defaultVisible: true,
+    enumOptions: TENDER_EVALUATION_CRITERIA.map((c) => ({ value: c, label: TENDER_EVALUATION_CRITERIA_LABELS[c] })),
     cell: ({ row }) =>
       row.original.evaluationCriteria ? TENDER_EVALUATION_CRITERIA_LABELS[row.original.evaluationCriteria] : "-",
   },

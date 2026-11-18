@@ -85,6 +85,7 @@ export const TENDER_FILTER_FIELDS = [
   "clientName",
   "status",
   "priority",
+  "evaluationCriteria",
   "department",
   "submissionDate",
 ] as const;
@@ -96,6 +97,7 @@ export const TENDER_SORT_FIELDS = [
   "clientName",
   "status",
   "priority",
+  "evaluationCriteria",
   "submissionDate",
   "createdAt",
   "assigneeCount",

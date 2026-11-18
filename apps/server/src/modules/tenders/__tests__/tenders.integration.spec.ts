@@ -387,6 +387,7 @@ describe("Tender workflow (integration)", () => {
           estimatedCost: 1_000_000,
           submissionDate: new Date().toISOString(),
           priority: "HIGH",
+          evaluationCriteria: "INDIVIDUAL",
         });
       alphaId = createAlpha.body.data.id;
 
@@ -430,6 +431,28 @@ describe("Tender workflow (integration)", () => {
       const ids = response.body.data.items.map((t: { id: string }) => t.id);
       expect(ids).toContain(betaId);
       expect(ids).not.toContain(alphaId);
+    });
+
+    it("filters and sorts tenders by evaluation criteria, with unstated ones last", async () => {
+      const filters = JSON.stringify([{ columnKey: "evaluationCriteria", operator: "is", value: "INDIVIDUAL" }]);
+      const filtered = await request(app)
+        .get("/api/v1/tenders")
+        .query({ filters, pageSize: 100 })
+        .set("Authorization", `Bearer ${accessToken}`);
+      expect(filtered.status).toBe(200);
+      const filteredIds = filtered.body.data.items.map((t: { id: string }) => t.id);
+      expect(filteredIds).toContain(alphaId);
+      expect(filteredIds).not.toContain(betaId);
+
+      for (const sortDir of ["asc", "desc"]) {
+        const sorted = await request(app)
+          .get("/api/v1/tenders")
+          .query({ sortBy: "evaluationCriteria", sortDir, pageSize: 100 })
+          .set("Authorization", `Bearer ${accessToken}`);
+        expect(sorted.status).toBe(200);
+        const ids: string[] = sorted.body.data.items.map((t: { id: string }) => t.id);
+        expect(ids.indexOf(alphaId)).toBeLessThan(ids.indexOf(betaId));
+      }
     });
 
     it("sorts tenders by title ascending", async () => {

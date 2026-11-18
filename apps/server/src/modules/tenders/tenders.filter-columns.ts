@@ -13,6 +13,8 @@ export const TENDER_FILTER_COLUMNS: Record<TenderFilterField, FilterableColumnDe
   clientName: { type: "enum", prismaPath: ["client", "name"] },
   status: { type: "enum", prismaPath: ["status"] },
   priority: { type: "enum", prismaPath: ["priority"] },
+  // Stored as OVERALL / INDIVIDUAL (every writer normalises), null when the tender does not say.
+  evaluationCriteria: { type: "enum", prismaPath: ["evaluationCriteria"], nullable: true },
   department: { type: "text", prismaPath: ["department"], nullable: true },
   submissionDate: { type: "date", prismaPath: ["submissionDate"], nullable: true },
 };
@@ -27,6 +29,7 @@ export const TENDER_SORT_COLUMNS: Record<TenderSortField, OrderByBuilder> = {
   clientName: (dir) => ({ client: { name: dir } }),
   status: (dir) => ({ status: dir }),
   priority: (dir) => ({ priority: dir }),
+  evaluationCriteria: (dir) => ({ evaluationCriteria: { sort: dir, nulls: "last" } }),
   submissionDate: (dir) => ({ submissionDate: dir }),
   createdAt: (dir) => ({ createdAt: dir }),
   assigneeCount: (dir) => ({ assignees: { _count: dir } }),
