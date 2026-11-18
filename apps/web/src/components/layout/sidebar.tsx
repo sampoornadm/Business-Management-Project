@@ -38,7 +38,7 @@ export function Sidebar({ mobileOpen, onMobileOpenChange }: SidebarProps) {
           "fixed inset-y-0 left-0 z-50 flex h-screen w-64 flex-col border-r bg-card transition-transform duration-200",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
           "md:static md:translate-x-0 md:transition-[width]",
-          collapsed ? "md:w-16" : "md:w-64",
+          collapsed ? "md:w-16" : "md:w-56",
         )}
       >
         <div className="flex h-14 items-center justify-between border-b px-4">
@@ -75,15 +75,24 @@ export function Sidebar({ mobileOpen, onMobileOpenChange }: SidebarProps) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-md border-l-2 py-2 pl-[10px] pr-3 text-sm font-medium transition-colors",
+                  "group flex items-center gap-3 rounded-md border-l-2 py-2 pl-[10px] pr-3 text-sm font-medium transition-colors",
                   isActive
                     ? "border-l-primary bg-primary/10 text-primary"
                     : "border-l-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                 )}
-                title={collapsed ? item.label : undefined}
+                aria-label={item.label}
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {(!collapsed || mobileOpen) && <span className="truncate md:inline">{item.label}</span>}
+                {collapsed && (
+                  // `fixed` with no offsets: stays beside its icon but escapes the nav's scroll clipping.
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none fixed z-50 ml-12 hidden whitespace-nowrap rounded-md border bg-popover px-2 py-1 text-xs font-medium text-popover-foreground shadow-md md:group-hover:block md:group-focus-visible:block"
+                  >
+                    {item.label}
+                  </span>
+                )}
               </Link>
             );
           })}

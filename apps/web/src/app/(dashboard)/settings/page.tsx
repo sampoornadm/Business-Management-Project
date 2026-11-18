@@ -1,7 +1,7 @@
 "use client";
 
 import type { SettingDto } from "@bmp/types";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Skeleton, Switch, useToast } from "@bmp/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, formatDateTime, Input, PageHeader, Skeleton, Switch, useToast } from "@bmp/ui";
 import { Brain, CheckCircle2, CircleAlert, Loader2, RefreshCw, Upload, XCircle } from "lucide-react";
 import { useRef } from "react";
 
@@ -60,7 +60,7 @@ function HsnSacCard({ canManage }: { canManage: boolean }) {
           <div className="text-sm text-muted-foreground">
             <p>
               {statusQuery.data.hsnRowCount.toLocaleString()} HSN / {statusQuery.data.sacRowCount.toLocaleString()}{" "}
-              SAC codes · last imported {new Date(statusQuery.data.importedAt).toLocaleString()}
+              SAC codes · last imported {formatDateTime(statusQuery.data.importedAt)}
               {statusQuery.data.triggeredByName ? ` by ${statusQuery.data.triggeredByName}` : " (scheduled)"}
             </p>
             <p className="mt-1 truncate">Source: {statusQuery.data.sourceUrl}</p>
@@ -219,7 +219,7 @@ function ClassificationCard({ canManage }: { canManage: boolean }) {
             )}
 
             <p className="text-xs text-muted-foreground">
-              {new Date(run.startedAt).toLocaleString()}
+              {formatDateTime(run.startedAt)}
               {run.triggeredBy && ` · started by ${run.triggeredBy}`}
             </p>
           </div>
@@ -246,7 +246,7 @@ function ClassificationCard({ canManage }: { canManage: boolean }) {
                 onClick={() => void handleCancel()}
                 disabled={cancel.isPending}
               >
-                <XCircle className="mr-2 h-4 w-4" /> Cancel
+                <XCircle className="mr-2 h-4 w-4" /> Cancel rebuild
               </Button>
             )}
           </div>
@@ -330,10 +330,10 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">System configuration — visible and editable by administrators only.</p>
-      </div>
+      <PageHeader
+        title="Settings"
+        description="System configuration — visible and editable by administrators only."
+      />
 
       <HsnSacCard canManage={canManage} />
 

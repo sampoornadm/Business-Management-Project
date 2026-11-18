@@ -1,12 +1,15 @@
 import type { FilterCondition } from "./filtering.js";
 
-export const TENDER_STATUSES = ["DRAFT", "SUBMITTED", "WON", "LOST", "CANCELLED"] as const;
+// PRICE_OPENED: the client has opened the price bids and published every bidder's rates, but
+// has not said who gets the order. Our standing (L1, L2, ...) is known; the result is not.
+export const TENDER_STATUSES = ["DRAFT", "SUBMITTED", "PRICE_OPENED", "WON", "LOST", "CANCELLED"] as const;
 
 export type TenderStatus = (typeof TENDER_STATUSES)[number];
 
 export const TENDER_STATUS_LABELS: Record<TenderStatus, string> = {
   DRAFT: "Draft",
   SUBMITTED: "Submitted",
+  PRICE_OPENED: "Price opened",
   WON: "Won",
   LOST: "Lost",
   CANCELLED: "Cancelled",
@@ -18,15 +21,24 @@ export const TENDER_STATUS_LABELS: Record<TenderStatus, string> = {
  */
 export const TENDER_STATUS_TRANSITIONS: Record<TenderStatus, TenderStatus[]> = {
   DRAFT: ["SUBMITTED", "CANCELLED"],
-  SUBMITTED: ["WON", "LOST", "CANCELLED", "DRAFT"],
-  WON: ["SUBMITTED"],
-  LOST: ["SUBMITTED"],
+  // A result can still be recorded straight from Submitted: not every client publishes a price opening.
+  SUBMITTED: ["PRICE_OPENED", "WON", "LOST", "CANCELLED", "DRAFT"],
+  PRICE_OPENED: ["WON", "LOST", "CANCELLED", "SUBMITTED"],
+  WON: ["PRICE_OPENED", "SUBMITTED"],
+  LOST: ["PRICE_OPENED", "SUBMITTED"],
   CANCELLED: ["DRAFT", "SUBMITTED"],
 };
 
 export const TENDER_TERMINAL_STATUSES: TenderStatus[] = ["WON", "LOST", "CANCELLED"];
 
-const TENDER_STATUS_STAGE: Record<TenderStatus, number> = { DRAFT: 0, SUBMITTED: 1, WON: 2, LOST: 2, CANCELLED: 2 };
+const TENDER_STATUS_STAGE: Record<TenderStatus, number> = {
+  DRAFT: 0,
+  SUBMITTED: 1,
+  PRICE_OPENED: 2,
+  WON: 3,
+  LOST: 3,
+  CANCELLED: 3,
+};
 
 /** A move to an earlier stage (un-submitting, reopening a result) — needs tenders:revert_status. */
 export function isTenderStatusReversal(from: TenderStatus, to: TenderStatus): boolean {
@@ -360,6 +372,49 @@ export interface TenderStatusHistoryEntryDto {
   remarks: string | null;
   changedBy: { id: string; firstName: string; lastName: string } | null;
   changedAt: string;
+  /** Set when this status change was a fresh submission (DRAFT → SUBMITTED, …). */
+  submission: { number: number; reference: string | null; summary: string } | null;
+}
+
+/** One leaf BOQ line as frozen in a tender submission. */
+export interface TenderSubmissionLineDto {
+  boqItemId: string;
+  description: string;
+  unit: string | null;
+  quantity: number | null;
+  rate: number | null;
+  amount: number | null;
+  baseRate: number | null;
+  markupPercent: number | null;
+  vendorId: string | null;
+  vendorName: string | null;
+  hsnCode: string | null;
+  technicalDeviation: string | null;
+}
+
+export type SubmissionLineField =
+  | "rate"
+  | "baseRate"
+  | "markupPercent"
+  | "vendor"
+  | "quantity"
+  | "hsnCode"
+  | "technicalDeviation";
+
+/** A line present in both submissions, with the fields that differ. */
+export interface SubmissionLineDiff {
+  before: TenderSubmissionLineDto;
+  after: TenderSubmissionLineDto;
+  changed: SubmissionLineField[];
+}
+
+/** What changed between a submission and the one immediately before it. */
+export interface SubmissionChanges {
+  reference: { before: string | null; after: string | null } | null;
+  total: { before: number; after: number } | null;
+  lines: SubmissionLineDiff[];
+  added: TenderSubmissionLineDto[];
+  removed: TenderSubmissionLineDto[];
 }
 
 export interface TenderDashboardStatsDto {

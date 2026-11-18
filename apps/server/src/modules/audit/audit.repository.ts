@@ -12,6 +12,10 @@ export interface CreateAuditLogData {
   action: string;
   entityType?: string | null;
   entityId?: string | null;
+  /** Readable entity code; resolved by AuditService.log when omitted. */
+  entityCode?: string | null;
+  /** Owning business; resolved with entityCode when omitted. Null = global (visible to all admins). */
+  businessId?: string | null;
   metadata?: Prisma.InputJsonValue;
   ipAddress?: string | null;
   userAgent?: string | null;
@@ -25,6 +29,8 @@ export interface AuditLogFilters {
   filters?: FilterCondition[];
   sortBy?: AuditLogSortField;
   sortDir?: "asc" | "desc";
+  /** Set for non-Super-Admin viewers: only this business's rows plus global (null-business) rows. */
+  visibleBusinessId?: string;
 }
 
 const auditLogWithActor = {
@@ -35,6 +41,8 @@ export type AuditLogWithActor = Prisma.AuditLogGetPayload<typeof auditLogWithAct
 
 export interface IAuditRepository {
   create(data: CreateAuditLogData): Promise<void>;
+  /** Code + business from the most recent row that recorded a code for this entity, if any. */
+  findLatestEntityRef(entityType: string, entityId: string): Promise<{ code: string | null; businessId: string | null } | null>;
   findMany(
     pagination: PaginationParams,
     filters: AuditLogFilters,
@@ -51,11 +59,25 @@ export class AuditRepository implements IAuditRepository {
         action: data.action,
         entityType: data.entityType ?? null,
         entityId: data.entityId ?? null,
+        entityCode: data.entityCode ?? null,
+        businessId: data.businessId ?? null,
         metadata: data.metadata,
         ipAddress: data.ipAddress ?? null,
         userAgent: data.userAgent ?? null,
       },
     });
+  }
+
+  async findLatestEntityRef(
+    entityType: string,
+    entityId: string,
+  ): Promise<{ code: string | null; businessId: string | null } | null> {
+    const row = await this.prisma.auditLog.findFirst({
+      where: { entityType, entityId, entityCode: { not: null } },
+      orderBy: { createdAt: "desc" },
+      select: { entityCode: true, businessId: true },
+    });
+    return row ? { code: row.entityCode, businessId: row.businessId } : null;
   }
 
   async findMany(
@@ -67,6 +89,9 @@ export class AuditRepository implements IAuditRepository {
       entityId: filters.entityId,
       actorId: filters.actorId,
       action: filters.action,
+      ...(filters.visibleBusinessId
+        ? { OR: [{ businessId: filters.visibleBusinessId }, { businessId: null }] }
+        : {}),
     };
 
     const chipWhere = buildPrismaFilterWhere(

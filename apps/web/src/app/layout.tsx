@@ -1,6 +1,6 @@
 import "./globals.css";
 
-import { Toaster } from "@bmp/ui";
+import { ConfirmHost, Toaster } from "@bmp/ui";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import type { PropsWithChildren } from "react";
@@ -63,6 +63,7 @@ export default function RootLayout({ children }: PropsWithChildren) {
             <AuthProvider>
               {children}
               <Toaster />
+              <ConfirmHost />
             </AuthProvider>
           </QueryProvider>
         </ThemeProvider>

@@ -40,9 +40,10 @@ model User {
 
   createdTenders         Tender[]               @relation("TenderCreatedBy")
   ratesLockedTenders     Tender[]               @relation("TenderRatesLockedBy")
+  tenderSubmissions      TenderSubmission[]     @relation("TenderSubmittedBy")
   tenderAssignments      TenderAssignee[]       @relation("TenderAssignee")
   tenderAssignmentsGiven TenderAssignee[]       @relation("TenderAssignedBy")
-  pinnedTenderNotes      TenderPinnedNote[]      @relation("TenderPinnedBy")
+  pinnedTenderNotes      TenderPinnedNote[]     @relation("TenderPinnedBy")
   createdOrganizations   Organization[]         @relation("OrganizationCreatedBy")
   notifications          Notification[]         @relation("NotificationRecipient")
   savedViews             SavedView[]            @relation("SavedViewOwner")
@@ -142,23 +143,26 @@ model Business {
   userBusinesses       UserBusiness[]
   refreshTokens        RefreshToken[]
 
-  tenders         Tender[]
-  projects        Project[]
-  boqs            Boq[]
-  historicalRates HistoricalRate[]
-  items           Item[]
-  rfqs            Rfq[]
-  purchaseOrders  PurchaseOrder[]
-  goodsReceipts   GoodsReceipt[]
-  bankAccounts    BankAccount[]
-  invoices        Invoice[]
-  expenses        Expense[]
-  payments        Payment[]
-  bills           Bill[]
-  notifications   Notification[]
-  savedViews      SavedView[]
-  portalBids      PortalBid[]
-  portalProfiles  PortalProfile[]
+  tenders               Tender[]
+  projects              Project[]
+  boqs                  Boq[]
+  historicalRates       HistoricalRate[]
+  items                 Item[]
+  rfqs                  Rfq[]
+  purchaseOrders        PurchaseOrder[]
+  goodsReceipts         GoodsReceipt[]
+  bankAccounts          BankAccount[]
+  invoices              Invoice[]
+  expenses              Expense[]
+  payments              Payment[]
+  bills                 Bill[]
+  notifications         Notification[]
+  savedViews            SavedView[]
+  portalBids            PortalBid[]
+  competitors           Competitor[]
+  comparativeStatements ComparativeStatement[]
+  portalProfiles        PortalProfile[]
+  tenderSubmissions     TenderSubmission[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -264,6 +268,13 @@ model AuditLog {
   action     String
   entityType String?
   entityId   String?
+  // Human-readable code of the entity (tender number, PO number, item code, …), resolved and stored
+  // when the row is written (AuditService.log) so it survives the entity being deleted.
+  entityCode String?
+  // Business the entity belongs to (resolved with entityCode); null for global entities (users,
+  // vendors, organizations) and entity-less events. Non-Super-Admins see only their active
+  // business's rows plus null ones. Plain id, no FK — same convention as entityId.
+  businessId String?
   metadata   Json?
   ipAddress  String?
   userAgent  String?
@@ -272,6 +283,8 @@ model AuditLog {
 
   @@index([actorId])
   @@index([entityType, entityId])
+  @@index([entityCode])
+  @@index([businessId])
   @@index([createdAt])
   @@map("audit_logs")
 }
@@ -316,9 +329,9 @@ model Attachment {
   // embeddingVector below via pgvector ANN (see reports.repository.ts#findNearestAttachments) —
   // this Float[] is kept only per the design doc's Non-goals (smaller diff; nothing reads it as a
   // plain array anymore), not because anything still needs it.
-  extractedText String?
-  embedding     Float[]
-  embeddedAt    DateTime?
+  extractedText   String?
+  embedding       Float[]
+  embeddedAt      DateTime?
   // pgvector column kept in sync with `embedding` on every write — see
   // docs/superpowers/specs/2026-08-28-pdf-extraction-and-ann-search-design.md. `Float[]` above
   // stays for now; this column is what ANN reads actually query.
@@ -480,6 +493,7 @@ model TenderTag {
 enum TenderStatus {
   DRAFT
   SUBMITTED
+  PRICE_OPENED
   WON
   LOST
   CANCELLED
@@ -554,16 +568,16 @@ model Tender {
   // Set on a TENDER-kind row once the estimator tags it back to the BUDGETARY-kind row it grew
   // from. One tender links to at most one budgetary quotation; a budgetary quotation can still be
   // revised any number of times via ordinary BOQ versioning, linked or not.
-  convertedFromId String?
-  convertedFrom   Tender?  @relation("BudgetaryConversion", fields: [convertedFromId], references: [id], onDelete: SetNull)
-  convertedTo     Tender[] @relation("BudgetaryConversion")
+  convertedFromId     String?
+  convertedFrom       Tender?        @relation("BudgetaryConversion", fields: [convertedFromId], references: [id], onDelete: SetNull)
+  convertedTo         Tender[]       @relation("BudgetaryConversion")
 
   // Rates lock ("Finalize rates" on the Items tab). Set = the current BOQ's pricing is frozen;
   // moving to SUBMITTED requires it, and it can only be toggled while DRAFT. See
   // docs/superpowers/specs/2026-11-11-rate-finalization-design.md.
-  ratesLockedAt   DateTime?
-  ratesLockedById String?
-  ratesLockedBy   User?     @relation("TenderRatesLockedBy", fields: [ratesLockedById], references: [id], onDelete: SetNull)
+  ratesLockedAt       DateTime?
+  ratesLockedById     String?
+  ratesLockedBy       User?     @relation("TenderRatesLockedBy", fields: [ratesLockedById], references: [id], onDelete: SetNull)
   // Reference number of the latest submission (the owner's quotation/bid reference). Asked for on
   // DRAFT/CANCELLED → SUBMITTED; kept across reverts so a resubmission can prefill it.
   submissionReference String?
@@ -571,16 +585,18 @@ model Tender {
   createdById String
   createdBy   User   @relation("TenderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  assignees      TenderAssignee[]
-  competitors    TenderCompetitor[]
-  tags           TenderTag[]
-  pinnedNotes    TenderPinnedNote[]
-  portalBids     PortalBid[]
-  boqs           Boq[]
-  rfqs           Rfq[]
-  purchaseOrders PurchaseOrder[]
-  bills          Bill[]
-  project        Project?
+  assignees            TenderAssignee[]
+  competitors          TenderCompetitor[]
+  tags                 TenderTag[]
+  pinnedNotes          TenderPinnedNote[]
+  portalBids           PortalBid[]
+  comparativeStatement ComparativeStatement?
+  boqs                 Boq[]
+  rfqs                 Rfq[]
+  purchaseOrders       PurchaseOrder[]
+  bills                Bill[]
+  submissions          TenderSubmission[]
+  project              Project?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -592,6 +608,33 @@ model Tender {
   @@index([kind])
   @@index([convertedFromId])
   @@map("tenders")
+}
+
+// One fresh submission of a tender (DRAFT → SUBMITTED, or CANCELLED → SUBMITTED before any
+// submission exists): a frozen copy of the current BOQ's leaf lines plus what changed since the
+// previous submission, rendered once into `summary`. Never updated after insert.
+// See docs/superpowers/specs/2026-11-12-submission-history-design.md.
+model TenderSubmission {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  tenderId   String
+  tender     Tender   @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+
+  number              Int
+  submissionReference String?
+  totalAmount         Float
+  lines               Json // TenderSubmissionLineDto[]
+  changes             Json? // SubmissionChanges vs the previous submission; null for #1
+  summary             String
+
+  submittedById String?
+  submittedBy   User?    @relation("TenderSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
+  submittedAt   DateTime @default(now())
+
+  @@unique([tenderId, number])
+  @@index([businessId])
+  @@map("tender_submissions")
 }
 
 model TenderAssignee {
@@ -696,8 +739,8 @@ model SavedView {
 }
 
 model HsnCode {
-  id              String    @id @default(uuid())
-  code            String    @unique
+  id              String                       @id @default(uuid())
+  code            String                       @unique
   description     String
   codeLength      Int
   embedding       Float[]
@@ -707,23 +750,23 @@ model HsnCode {
   gstRate         Float?
   /// Where the rate came from: "notification-9/2025", "chapter-default" or "manual".
   gstRateSource   String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
 
   @@index([codeLength])
   @@map("hsn_codes")
 }
 
 model SacCode {
-  id              String    @id @default(uuid())
-  code            String    @unique
+  id              String                       @id @default(uuid())
+  code            String                       @unique
   description     String
   codeLength      Int
   embedding       Float[]
   embeddedAt      DateTime?
   embeddingVector Unsupported("vector(1024)")?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
 
   @@index([codeLength])
   @@map("sac_codes")
@@ -748,11 +791,11 @@ model ReferenceDataImport {
 /// The UI polls this; there is no job-progress mechanism in this codebase, and ReferenceDataImport
 /// is the established precedent for "a row per run, read back by a status endpoint".
 model ClassificationRun {
-  id     String @id @default(uuid())
+  id      String  @id @default(uuid())
   /// Which step it is on, so a stalled run says where it stalled rather than just "running".
-  stage  String
+  stage   String
   /// queued | running | succeeded | failed | skipped
-  status String
+  status  String
   /// Human-readable detail for the card: what happened, or why it refused to deploy.
   message String?
 
@@ -790,17 +833,17 @@ model Setting {
 // ---------------------------------------------------------------------------
 
 model Boq {
-  id                 String    @id @default(uuid())
+  id                 String   @id @default(uuid())
   businessId         String
-  business           Business  @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  business           Business @relation(fields: [businessId], references: [id], onDelete: Restrict)
   tenderId           String
-  tender             Tender    @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  tender             Tender   @relation(fields: [tenderId], references: [id], onDelete: Cascade)
   sourceAttachmentId String?
   // Version-chain pattern, mirrors Attachment.documentGroupId: version 1 sets
   // groupId to its own id, so "all versions" is always `WHERE groupId = X`.
   groupId            String?
-  version            Int       @default(1)
-  isCurrent          Boolean   @default(true)
+  version            Int      @default(1)
+  isCurrent          Boolean  @default(true)
 
   createdById String
   createdBy   User   @relation("BoqCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
@@ -843,14 +886,14 @@ model BoqItem {
   // rate/suggestedRate/rateSourceConfirmed below. `hsnCode` is the estimator-owned final
   // value (set either by typing it directly or by applying suggestedHsnCode); it is never
   // written by the enrichment worker.
-  hsnCode          String?
-  suggestedHsnCode String?
-  suggestedGstRate Float?
+  hsnCode            String?
+  suggestedHsnCode   String?
+  suggestedGstRate   Float?
   // Which confirmed catalog Item a suggestedHsnCode was borrowed from (its canonicalName), null
   // when it came from the classifier/keyword/ANN path. Lets the grid say where a suggestion came
   // from so the estimator can judge whether the neighbour is really the same kind of item.
   suggestedHsnSource String?
-  hsnCodeConfirmed Boolean @default(false)
+  hsnCodeConfirmed   Boolean @default(false)
 
   // AI enrichment (optional, written only by the ai-enrichment worker). Deliberately
   // separate from `category` above: that one is estimator-typed and must never be
@@ -882,7 +925,8 @@ model BoqItem {
   baseRateQuoteId String?
   baseRateQuote   RfqQuote? @relation(fields: [baseRateQuoteId], references: [id], onDelete: SetNull)
 
-  rateBreakdown BoqItemRateBreakdown?
+  rateBreakdown       BoqItemRateBreakdown?
+  comparativeBidItems ComparativeBidItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -950,8 +994,8 @@ model HistoricalRate {
   // now queries embeddingVector below via pgvector ANN (see boq-enrichment.service.ts) — this
   // Float[] is kept only per the design doc's Non-goals (smaller diff; nothing reads it as a
   // plain array anymore), not because anything still needs it.
-  embedding  Float[]
-  embeddedAt DateTime?
+  embedding       Float[]
+  embeddedAt      DateTime?
   // pgvector column kept in sync with `embedding` on every write — see
   // docs/superpowers/specs/2026-08-28-pdf-extraction-and-ann-search-design.md.
   embeddingVector Unsupported("vector(1024)")?
@@ -1152,8 +1196,8 @@ model Item {
   // Embedding of canonicalName, populated lazily at classify time (same pattern as
   // HistoricalRate.embedding). Used to find a human-confirmed sibling item to copy the
   // category from before ever calling the LLM — see items.service classify path.
-  embedding  Float[]
-  embeddedAt DateTime?
+  embedding       Float[]
+  embeddedAt      DateTime?
   embeddingVector Unsupported("vector(1024)")?
 
   rfqItems        RfqItem[]
@@ -1190,13 +1234,13 @@ model Category {
   sortOrder Int    @default(0)
 
   /// 2-digit chapter or 4-digit heading. Null only for pre-tariff legacy nodes.
-  code String? @unique
+  code                String? @unique
   /// Verbatim CBIC text. `name` is the shortened, editable label shown in pickers.
   officialDescription String?
   /// GST percent for this code, from the lookup sheet.
-  gstRate Float?
+  gstRate             Float?
   /// False hides a chapter/heading the business never buys from, without losing coverage.
-  active Boolean @default(true)
+  active              Boolean @default(true)
 
   items Item[]
 
@@ -1256,8 +1300,11 @@ model RfqQuote {
   // fixes a typo.
   quotedAt DateTime @default(now())
 
-  remarks   String?
-  updatedAt DateTime @updatedAt
+  // The vendor's technical deviation for this line ("Technical deviation (if any)" on the quote
+  // sheet). Normalised on write: "No"/"NA"/"Nil"/blank are stored as null (technical-deviation.ts).
+  // Column kept as `remarks` — it held the same free text before the rename.
+  technicalDeviation String?  @map("remarks")
+  updatedAt          DateTime @updatedAt
 
   isSelected Boolean @default(false)
 
@@ -1592,15 +1639,15 @@ model Invoice {
 }
 
 model Bill {
-  id          String    @id @default(uuid())
-  businessId  String
-  business    Business  @relation(fields: [businessId], references: [id], onDelete: Restrict)
-  tenderId    String
-  tender      Tender    @relation(fields: [tenderId], references: [id], onDelete: Restrict)
-  billNumber  String    @unique
-  billDate    DateTime  @default(now())
-  grnNumber   String?
-  grnDate     DateTime?
+  id         String    @id @default(uuid())
+  businessId String
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  tenderId   String
+  tender     Tender    @relation(fields: [tenderId], references: [id], onDelete: Restrict)
+  billNumber String    @unique
+  billDate   DateTime  @default(now())
+  grnNumber  String?
+  grnDate    DateTime?
 
   items BillItem[]
 
@@ -1753,4 +1800,99 @@ model PortalProfile {
 
   @@unique([businessId, portalCode])
   @@map("portal_profiles")
+}
+
+// ── Competitor rates ────────────────────────────────────────────────────────────────────────
+// What the client's portal publishes once a tender is opened: every bidder and their rate for
+// every item (the SAIL ISP "comparative statement"). Kept apart from our own BOQ/RFQ data and
+// from Vendor (the firms we buy from). Trend, predicted rate and per-item ranking are derived on
+// read, never stored. See modules/competitors.
+
+// A firm we have met as a bidder, identified by the portal's vendor code.
+model Competitor {
+  id         String           @id @default(uuid())
+  businessId String
+  business   Business         @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  vendorCode String
+  name       String
+  // Our own firm as the portal lists it. Its bids are "us", not a competitor to beat.
+  isSelf     Boolean          @default(false)
+  bids       ComparativeBid[]
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([businessId, vendorCode])
+  @@map("competitors")
+}
+
+// One per tender; re-fetching replaces it.
+model ComparativeStatement {
+  id                String           @id @default(uuid())
+  businessId        String
+  business          Business         @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  tenderId          String           @unique
+  tender            Tender           @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  rfxNumber         String
+  description       String?
+  // The bid end date; the fetch time when the statement states none. The x-axis of every trend.
+  openedAt          DateTime
+  basisOfEvaluation String?
+  // ComparativeBid.id of the lowest overall quote (not necessarily who was awarded). No FK:
+  // the bids are created after the statement row, in the same transaction.
+  lowestBidId       String?
+  // The grid exactly as read from the portal (rows of cells), so a parser fix can be re-run
+  // without the portal.
+  rawGrid           Json?
+  fetchedAt         DateTime         @default(now())
+  bids              ComparativeBid[]
+
+  @@index([businessId])
+  @@map("comparative_statements")
+}
+
+model ComparativeBid {
+  id           String               @id @default(uuid())
+  businessId   String
+  statementId  String
+  statement    ComparativeStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  competitorId String
+  competitor   Competitor           @relation(fields: [competitorId], references: [id], onDelete: Restrict)
+  isUs         Boolean              @default(false)
+  quotationRef String
+  submittedBy  String?
+  total        Float?
+  deliveryText String?
+  mseStatus    String?
+  // Every other header-level answer, keyed by the portal's own question text.
+  answers      Json
+  items        ComparativeBidItem[]
+
+  @@unique([statementId, competitorId])
+  @@index([businessId])
+  @@index([competitorId])
+  @@map("comparative_bids")
+}
+
+// The statement's own code/description/quantity are stored here so the history survives even
+// when our BOQ has no matching line; boqItemId is only a convenience link.
+model ComparativeBidItem {
+  id            String         @id @default(uuid())
+  businessId    String
+  bidId         String
+  bid           ComparativeBid @relation(fields: [bidId], references: [id], onDelete: Cascade)
+  // The statement's own serial number for the item ("001"), which is the tender's item order.
+  slNo          String         @default("")
+  itemCode      String
+  description   String
+  unit          String?
+  rfqQuantity   Float?
+  offerQuantity Float?
+  basicRate     Float
+  landedRate    Float?
+  boqItemId     String?
+  boqItem       BoqItem?       @relation(fields: [boqItemId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, itemCode])
+  @@index([bidId])
+  @@map("comparative_bid_items")
 }

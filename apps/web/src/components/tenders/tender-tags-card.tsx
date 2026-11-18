@@ -1,12 +1,13 @@
 "use client";
 
 import type { TagDto } from "@bmp/types";
-import { Button, Card, CardContent, Input, MultiSelect, useToast } from "@bmp/ui";
-import { Plus } from "lucide-react";
+import { Badge, Button, Card, CardContent, Input, Popover, PopoverContent, PopoverTrigger, useToast } from "@bmp/ui";
+import { Plus, X } from "lucide-react";
 import { useState } from "react";
 
 import { useCreateTag } from "@/hooks/use-tags";
 
+/** One row: the tender's tags as removable chips, plus an "Add tag" popover that searches or creates. */
 export function TenderTagsCard({
   allTags,
   selectedTagIds,
@@ -20,25 +21,28 @@ export function TenderTagsCard({
 }) {
   const { toast } = useToast();
   const createTag = useCreateTag();
+  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
 
-  async function handleCreate() {
-    const trimmed = name.trim();
+  const trimmed = name.trim();
+  const selected = allTags.filter((tag) => selectedTagIds.includes(tag.id));
+  const matches = allTags.filter(
+    (tag) => !selectedTagIds.includes(tag.id) && tag.name.toLowerCase().includes(trimmed.toLowerCase()),
+  );
+  // Re-typing an existing tag's name attaches that tag instead of tripping the unique constraint.
+  const exact = allTags.find((tag) => tag.name.toLowerCase() === trimmed.toLowerCase());
+
+  function add(tagId: string) {
+    if (!selectedTagIds.includes(tagId)) onChange([...selectedTagIds, tagId]);
+    setName("");
+  }
+
+  async function addTyped() {
     if (!trimmed) return;
-
-    // If a tag with this name already exists, just attach it rather than erroring on the
-    // unique constraint — "add custom tag" should be forgiving about re-typing an existing one.
-    const existing = allTags.find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
-    if (existing) {
-      if (!selectedTagIds.includes(existing.id)) onChange([...selectedTagIds, existing.id]);
-      setName("");
-      return;
-    }
-
+    if (exact) return add(exact.id);
     try {
       const tag = await createTag.mutateAsync({ name: trimmed });
-      onChange([...selectedTagIds, tag.id]);
-      setName("");
+      add(tag.id);
     } catch (error) {
       toast({
         variant: "destructive",
@@ -50,37 +54,71 @@ export function TenderTagsCard({
 
   return (
     <Card>
-      <CardContent className="space-y-2 pt-6">
-        <p className="text-sm font-medium">Tags</p>
-        <MultiSelect
-          options={allTags.map((tag) => ({ value: tag.id, label: tag.name }))}
-          selected={selectedTagIds}
-          onChange={onChange}
-          placeholder={allTags.length ? "Add tags" : "No tags yet — create one below"}
-          className="max-w-sm"
-        />
+      <CardContent className="flex flex-wrap items-center gap-2 py-3">
+        <span className="mr-1 text-sm font-medium">Tags</span>
+        {selected.map((tag) => (
+          <Badge key={tag.id} variant="secondary" className="gap-1">
+            {tag.name}
+            {canUpdate && (
+              <button
+                type="button"
+                aria-label={`Remove tag ${tag.name}`}
+                className="rounded-full opacity-60 hover:opacity-100"
+                onClick={() => onChange(selectedTagIds.filter((id) => id !== tag.id))}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </Badge>
+        ))}
+        {selected.length === 0 && !canUpdate && <span className="text-sm text-muted-foreground">None</span>}
         {canUpdate && (
-          <div className="flex max-w-sm gap-2">
-            <Input
-              placeholder="New tag name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void handleCreate();
-                }
-              }}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void handleCreate()}
-              disabled={!name.trim() || createTag.isPending}
-            >
-              <Plus className="mr-1 h-4 w-4" /> Add
-            </Button>
-          </div>
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground">
+                <Plus className="mr-1 h-3.5 w-3.5" /> Add tag
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-64 space-y-2 p-2">
+              <Input
+                autoFocus
+                placeholder="Search or create a tag"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void addTyped();
+                  }
+                }}
+              />
+              <div className="max-h-48 overflow-y-auto">
+                {matches.map((tag) => (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    className="block w-full truncate rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+                    onClick={() => add(tag.id)}
+                  >
+                    {tag.name}
+                  </button>
+                ))}
+                {trimmed && !exact && (
+                  <button
+                    type="button"
+                    className="block w-full truncate rounded-sm px-2 py-1.5 text-left text-sm text-primary hover:bg-accent"
+                    disabled={createTag.isPending}
+                    onClick={() => void addTyped()}
+                  >
+                    Create “{trimmed}”
+                  </button>
+                )}
+                {matches.length === 0 && !trimmed && (
+                  <p className="px-2 py-1.5 text-sm text-muted-foreground">Type a name to create a tag.</p>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
         )}
       </CardContent>
     </Card>

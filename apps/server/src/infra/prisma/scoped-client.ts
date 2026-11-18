@@ -16,6 +16,11 @@ export const SCOPED_MODELS = new Set([
   "SavedView",
   "PortalBid",
   "PortalProfile",
+  "TenderSubmission",
+  "Competitor",
+  "ComparativeStatement",
+  "ComparativeBid",
+  "ComparativeBidItem",
 ]);
 
 const READ_ACTIONS = new Set(["findFirst", "findFirstOrThrow", "findMany", "findUnique", "findUniqueOrThrow", "count", "aggregate", "groupBy", "updateMany", "deleteMany"]);

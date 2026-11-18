@@ -8,6 +8,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DropdownMenuItem,
   useToast,
 } from "@bmp/ui";
 import { CheckCircle2, Globe, Loader2, TriangleAlert, Upload } from "lucide-react";
@@ -34,7 +35,13 @@ function Issues({ title, items }: { title: string; items: string[] }) {
  * its own progress bar: green fills left to right, the first half for the Questions page and the
  * second for the item prices. It never saves or submits on the portal.
  */
-export function PortalFillButton({ tenderId }: { tenderId: string }) {
+export function PortalFillButton({
+  tenderId,
+  variant = "outline",
+}: {
+  tenderId: string;
+  variant?: "default" | "outline";
+}) {
   const { toast } = useToast();
   const start = useStartPortalFill();
   const [jobId, setJobId] = useState<string | null>(null);
@@ -69,7 +76,7 @@ export function PortalFillButton({ tenderId }: { tenderId: string }) {
   return (
     <>
       <Button
-        variant="outline"
+        variant={variant}
         onClick={handleClick}
         disabled={running}
         className="relative overflow-hidden"
@@ -134,7 +141,7 @@ export function PortalFillButton({ tenderId }: { tenderId: string }) {
 }
 
 /** Opens the app's own browser window on the machine the server runs on, to log into the portal. */
-export function OpenPortalBrowserButton() {
+export function OpenPortalBrowserButton({ menuItem = false }: { menuItem?: boolean }) {
   const { toast } = useToast();
   const open = useOpenPortalBrowser();
 
@@ -155,6 +162,14 @@ export function OpenPortalBrowserButton() {
           error instanceof Error ? error.message : "Run `pnpm portal:browser:install` on the server, then try again.",
       });
     }
+  }
+
+  if (menuItem) {
+    return (
+      <DropdownMenuItem onSelect={() => void handleClick()}>
+        <Globe className="mr-2 h-4 w-4" /> Open portal browser
+      </DropdownMenuItem>
+    );
   }
 
   return (

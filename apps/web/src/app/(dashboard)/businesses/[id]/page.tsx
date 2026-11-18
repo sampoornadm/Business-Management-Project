@@ -16,7 +16,9 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  Skeleton,
+  confirmAction,
+  PageHeader,
+  PageSkeleton,
   useToast,
 } from "@bmp/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
@@ -72,62 +74,62 @@ export default function BusinessDetailPage() {
   }
 
   if (businessQuery.isLoading || !businessQuery.data) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   const business = businessQuery.data;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{business.name}</h1>
+      <PageHeader
+        title={business.name}
+        badges={
+          <>
             <Badge variant={business.isActive ? "success" : "secondary"}>
               {business.isActive ? "Active" : "Inactive"}
             </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {[business.city, business.state].filter(Boolean).join(", ") || "No address on file"}
-          </p>
-        </div>
-        {canUpdate && (
-          <div className="flex gap-2">
-            <Button variant="outline" asChild>
-              <Link href={`/businesses/${business.id}/edit`}>
-                <Pencil className="mr-2 h-4 w-4" /> Edit
-              </Link>
-            </Button>
-            {canDelete && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive">
-                    <Trash2 className="mr-2 h-4 w-4" /> Delete
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete this business?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This can&apos;t be undone. Businesses with existing tenders can&apos;t be
-                      deleted.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+          </>
+        }
+        actions={
+          <>
+            {canUpdate && (
+              <div className="flex gap-2">
+                {canDelete && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructiveOutline">
+                        <Trash2 className="mr-2 h-4 w-4" /> Delete
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete this business?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This can&apos;t be undone. Businesses with existing tenders can&apos;t be
+                          deleted.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+                <Button variant="outline" asChild>
+                  <Link href={`/businesses/${business.id}/edit`}>
+                    <Pencil className="mr-2 h-4 w-4" /> Edit
+                  </Link>
+                </Button>
+              </div>
             )}
-          </div>
-        )}
-      </div>
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          {[business.city, business.state].filter(Boolean).join(", ") || "No address on file"}
+        </p>
+      </PageHeader>
 
       <Card>
         <CardHeader>
@@ -228,7 +230,7 @@ export default function BusinessDetailPage() {
                         <ContactDialog
                           contact={contact}
                           trigger={
-                            <Button size="sm" variant="ghost">
+                            <Button size="sm" variant="ghost" aria-label="Edit contact">
                               <Pencil className="h-4 w-4" />
                             </Button>
                           }
@@ -240,7 +242,9 @@ export default function BusinessDetailPage() {
                         <Button
                           size="sm"
                           variant="ghost"
+                          aria-label="Delete contact"
                           onClick={async () => {
+                            if (!(await confirmAction({ title: `Delete contact "${contact.name}"?`, confirmLabel: "Delete contact" }))) return;
                             await deleteContact.mutateAsync(contact.id);
                             toast({ title: "Contact removed" });
                           }}

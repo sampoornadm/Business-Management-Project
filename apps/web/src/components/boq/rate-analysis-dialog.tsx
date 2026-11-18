@@ -5,13 +5,15 @@ import { HISTORICAL_RATE_CATEGORIES } from "@bmp/types";
 import {
   Button,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  formatDate,
   Form,
+  formatDate,
+  formatMoney,
   FormControl,
   FormField,
   FormItem,
@@ -169,7 +171,7 @@ export function RateAnalysisDialog({ tenderId, item }: { tenderId: string; item:
 
             <div className="rounded-md border bg-muted/30 p-3 text-sm">
               <span className="text-muted-foreground">Computed rate: </span>
-              <span className="font-semibold">{computedRate.toLocaleString()}</span>
+              <span className="font-semibold">{formatMoney(computedRate)}</span>
             </div>
 
             <div className="space-y-2 rounded-md border p-3">
@@ -198,7 +200,7 @@ export function RateAnalysisDialog({ tenderId, item }: { tenderId: string; item:
               {suggestions.data?.map((suggestion) => (
                 <div key={suggestion.id} className="flex items-center justify-between text-sm">
                   <span>
-                    {suggestion.itemName} — {suggestion.rate.toLocaleString()}/{suggestion.unit} (
+                    {suggestion.itemName} — {formatMoney(suggestion.rate)}/{suggestion.unit} (
                     {formatDate(suggestion.effectiveDate)})
                   </span>
                   <Button
@@ -216,6 +218,11 @@ export function RateAnalysisDialog({ tenderId, item }: { tenderId: string; item:
             </div>
 
             <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  Cancel
+                </Button>
+              </DialogClose>
               <Button type="submit" disabled={upsert.isPending}>
                 {upsert.isPending ? "Saving…" : "Save"}
               </Button>

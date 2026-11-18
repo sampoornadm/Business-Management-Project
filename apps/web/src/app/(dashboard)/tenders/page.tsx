@@ -231,7 +231,7 @@ export default function TendersPage() {
   const newTenderButton = (
     <Button asChild>
       <Link href="/tenders/new">
-        <FilePlus className="mr-2 h-4 w-4" /> New Tender
+        <FilePlus className="mr-2 h-4 w-4" /> New tender
       </Link>
     </Button>
   );

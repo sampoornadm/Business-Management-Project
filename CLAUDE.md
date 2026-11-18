@@ -70,6 +70,25 @@ from `apps/web/src/lib/permissions.ts` (mirrors the same matrix — server is st
 enforcement point). `packages/ui` components must stay domain-agnostic (no "tender"/"user" strings
 in there) so every future module reuses the same DataTable/Form/Tabs/Stepper/MultiSelect/etc.
 
+**Buttons** (one rule set, applied on every page): header actions sit in a single right-aligned
+wrapping group — quiet `destructiveOutline` Delete leftmost, `outline` secondary actions, the one
+filled primary action rightmost (at most one per header). Filled `destructive` is only for the
+confirming button inside a dialog. Full-page forms end in `FormActions` from `@bmp/ui` (sticky
+bottom bar: primary first, then Cancel); dialogs put Cancel left of the primary, right-aligned.
+Labels are sentence case, verb + noun ("Add expense", "Cancel order" — never a bare "Add"/"Cancel"
+for an action that changes data). Icon-only buttons need `aria-label`; `Button` reuses it as the
+hover tooltip. Anything that deletes asks first (`AlertDialog` in headers, `confirmAction` in rows).
+
+**Shared look — reuse, don't hand-build** (all in `@bmp/ui` unless noted): every page starts with
+`PageHeader` (`title`, `badges`, `description`, `actions`, `back`, children for extra lines) — never
+a hand-rolled `<h1>`. Page-level loading is `<PageSkeleton />`. A status is `<StatusBadge status>`
+(`apps/web/src/components/status-badge.tsx` — the one status→colour map; add new statuses there) and
+any other stored code shown to a person goes through `humanize()`. Money is `formatMoney()` (₹,
+lakh/crore grouping, two decimals); counts/quantities are not money. "Are you sure?" is
+`await confirmAction({...})` (host mounted in the root layout), never `window.confirm`. Dialog
+footers carry a `DialogClose` Cancel before the submit button. In-progress labels use the ellipsis
+character ("Saving…"), not three dots.
+
 **Money/dates**: tender monetary fields are `Float` in Prisma, not `Decimal` — deliberate, revisit
 when Phase 6 (Finance) designs real ledger precision. Numeric form fields are kept as plain strings
 in React Hook Form state (converted at submit time) — avoids RHF+zodResolver's 3-generic
@@ -175,6 +194,30 @@ receiving status.
   fail with "Open the portal browser..." there. Chromium comes from `pnpm portal:browser:install`, not
   `pnpm install`. The `portal:fill`/`portal:action` CLIs are separate processes and still attach over CDP
   (`--cdp`, a Chrome started with `--remote-debugging-port`); they cannot see the server's window.
+- Competitor rates (`modules/competitors/`) come from SAIL ISP's **comparative statement**, read out of
+  the same server-launched portal window as the bid fill (`portal/comparative-grid.ts`), so the same
+  "needs a desktop, not Docker" limit applies. The page is an SAP WebGUI ALV grid in an iframe; cells are
+  `td[lsmatrixrowindex][lsmatrixcolindex]` and the grid is **transposed** (one row per field, one column
+  per bidder), so values are always read by column — a bidder's cell can be empty. The reader hands the
+  parser a plain `string[][]` and refuses a grid smaller than the grid's own `totalRows`/`totalColumns`
+  metadata; a statement over ~4000 cells (seen live: 166 of 350+ rows
+  loaded) only fetches the rest from SAP when the grid is really scrolled, and the grid has its own
+  scrollbar (`scrollTop` does nothing), so the reader sends real mouse-wheel input, falls back to the
+  scrollbar arrow button, and requires every cell (`totalRows x totalColumns`) before it returns. A
+  failed read saves the page's frames to `~/.bmp-portal-capture/<RFx>/` for diagnosis. The app **never logs in**: a logon form means a 409 telling the user to log in and retry.
+  Tender status `PRICE_OPENED` sits between Submitted and Won/Lost: fetching the statement on a Submitted
+  tender (tracker's "Price opened" stage, or More → Fetch comparative statement) stores it and moves the
+  tender there through `tendersService.changeStatus`; a failed fetch leaves it Submitted. On that first
+  read only, a tender where we quoted every item, are not the lowest overall and the basis of
+  evaluation is Overall goes straight on to **Lost** (winner = lowest bidder, reason "L4 of 5 at
+  price opening"); the owner reopens it (Lost → Price opened) if the order comes to us, and a
+  re-read never marks it Lost again. The fetch **never sets Won** — the lowest quote is not always
+  who gets the order (MSE price matching) — it only pre-fills the Won form. Only 10-digit tender numbers
+  (`isSailRfxNumber`) read from the portal; other tenders can be marked Price opened by hand. "Us" is the
+  bid whose quotation reference equals `PortalBid.responseNumber`, else (while no firm is marked yet) the
+  bid whose supplier name equals the business name, and from then on any bid of a `Competitor` with
+  `isSelf` (also settable by hand on the competitor page). Rank, trend, predicted rate and rate to beat are derived on read, never
+  stored; the crown is the lowest overall *quote*, not who was awarded the order.
 - Repeatedly re-running integration tests against the same Redis burns through the login rate
   limiter (`RATE_LIMITS.LOGIN`) and integration tests will start failing with 429s that look like
   real bugs. `docker compose exec redis redis-cli FLUSHALL` before a fresh run if that happens.

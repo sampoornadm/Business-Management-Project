@@ -1,13 +1,14 @@
 "use client";
 
 import {
-  Badge,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   formatDate,
-  Skeleton,
+  formatMoney,
+  PageHeader,
+  PageSkeleton,
   Tabs,
   TabsContent,
   TabsList,
@@ -20,15 +21,9 @@ import { BillsTab } from "@/components/projects/bills-tab";
 import { LaborEntriesTab } from "@/components/projects/labor-entries-tab";
 import { MaterialUsageTab } from "@/components/projects/material-usage-tab";
 import { MilestonesTab } from "@/components/projects/milestones-tab";
+import { StatusBadge } from "@/components/status-badge";
 import { useProject, useProjectCosting, useProjectProgress } from "@/hooks/use-projects";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
-
-const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
-  ACTIVE: "success",
-  ON_HOLD: "secondary",
-  COMPLETED: "success",
-  CANCELLED: "destructive",
-};
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
@@ -38,32 +33,30 @@ export default function ProjectDetailPage() {
   const progressQuery = useProjectProgress(params.id);
 
   if (projectQuery.isLoading || !projectQuery.data) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   const project = projectQuery.data;
 
   return (
     <div className="space-y-6">
-      <div>
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
-          <Badge variant={STATUS_VARIANT[project.status]}>{project.status}</Badge>
-        </div>
+      <PageHeader
+        title={project.name}
+        badges={
+          <>
+            <StatusBadge status={project.status} />
+          </>
+        }
+      >
         <p className="text-sm text-muted-foreground">
-          Budget: {project.budget.toLocaleString()} · Started{" "}
+          Budget: {formatMoney(project.budget)} · Started{" "}
           {formatDate(project.startDate)}
           {" · "}
           <Link href={`/tenders/${project.tenderId}`} className="hover:underline">
             View source tender
           </Link>
         </p>
-      </div>
+      </PageHeader>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Card>
@@ -88,11 +81,11 @@ export default function ProjectDetailPage() {
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Total actual cost</p>
             <p className="text-2xl font-semibold">
-              {costingQuery.data?.totalActualCost.toLocaleString() ?? "-"}
+              {formatMoney(costingQuery.data?.totalActualCost) ?? "-"}
             </p>
             <p className="text-xs text-muted-foreground">
-              PO: {costingQuery.data?.purchaseOrdersTotal.toLocaleString() ?? "-"} · Labor:{" "}
-              {costingQuery.data?.laborTotal.toLocaleString() ?? "-"}
+              PO: {formatMoney(costingQuery.data?.purchaseOrdersTotal) ?? "-"} · Labor:{" "}
+              {formatMoney(costingQuery.data?.laborTotal) ?? "-"}
             </p>
           </CardContent>
         </Card>
@@ -104,10 +97,10 @@ export default function ProjectDetailPage() {
                 (costingQuery.data?.variance ?? 0) < 0 ? "text-destructive" : ""
               }`}
             >
-              {costingQuery.data?.variance.toLocaleString() ?? "-"}
+              {formatMoney(costingQuery.data?.variance) ?? "-"}
             </p>
             <p className="text-xs text-muted-foreground">
-              BOQ estimate: {costingQuery.data?.boqEstimateTotal.toLocaleString() ?? "-"}
+              BOQ estimate: {formatMoney(costingQuery.data?.boqEstimateTotal) ?? "-"}
             </p>
           </CardContent>
         </Card>

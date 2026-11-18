@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, Input, useToast } from "@bmp/ui";
+import { Button, Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, Input, useToast } from "@bmp/ui";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 
@@ -75,8 +75,13 @@ export function CreateInvoiceDialog() {
           </div>
         </div>
         <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
           <Button onClick={handleSubmit} disabled={createInvoice.isPending}>
-            Create
+            Create invoice
           </Button>
         </DialogFooter>
       </DialogContent>

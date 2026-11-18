@@ -53,6 +53,7 @@ const STATUS_WORDS: Array<{ re: RegExp; value: string; hint: AssistantEntity | n
   { re: /\b(?:partially|partly)\s+received\b/gi, value: "PARTIALLY_RECEIVED", hint: "purchase_order" },
   { re: /\b(?:won|win|wins|winning|awarded)\b/gi, value: "WON", hint: "tender" },
   { re: /\blost\b/gi, value: "LOST", hint: "tender" },
+  { re: /\bprice[- ]?(?:bid\s+)?open(?:ed|ing)\b/gi, value: "PRICE_OPENED", hint: "tender" },
   { re: /\bcancell?ed\b/gi, value: "CANCELLED", hint: null },
   { re: /\bdrafts?\b/gi, value: "DRAFT", hint: null },
   { re: /\b(?:sent|dispatched)\b/gi, value: "SENT", hint: "rfq" },

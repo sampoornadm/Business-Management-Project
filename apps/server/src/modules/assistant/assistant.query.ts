@@ -8,7 +8,7 @@ import { z } from "zod";
 
 /** Statuses a document kind can actually have — the only values a filter may carry for it. */
 export const ENTITY_STATUSES: Record<AssistantEntity, readonly string[]> = {
-  tender: ["DRAFT", "SUBMITTED", "WON", "LOST", "CANCELLED"],
+  tender: ["DRAFT", "SUBMITTED", "PRICE_OPENED", "WON", "LOST", "CANCELLED"],
   rfq: ["DRAFT", "SENT", "CLOSED", "CANCELLED"],
   purchase_order: ["DRAFT", "ISSUED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"],
   bill: [],

@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  formatMoney,
   Skeleton,
   useToast,
 } from "@bmp/ui";
@@ -84,7 +85,7 @@ export function RateMatchCandidatesDialog({
               <div className="min-w-0 flex-1">
                 <p className="break-words font-medium">{candidate.itemName}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {candidate.rate.toLocaleString()}/{candidate.unit} ·{" "}
+                  {formatMoney(candidate.rate)}/{candidate.unit} ·{" "}
                   {Math.round(candidate.similarity * 100)}% similar
                 </p>
               </div>

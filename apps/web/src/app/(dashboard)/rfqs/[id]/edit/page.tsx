@@ -8,9 +8,10 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  FormActions,
   Input,
   PageHeader,
-  Skeleton,
+  PageSkeleton,
   Table,
   TableBody,
   TableCell,
@@ -128,7 +129,7 @@ export default function EditRfqPage() {
   }
 
   if (rfqQuery.isLoading || !rfqQuery.data) {
-    return <Skeleton className="h-96 w-full max-w-3xl" />;
+    return <PageSkeleton className="max-w-3xl" />;
   }
 
   const rfq = rfqQuery.data;
@@ -247,14 +248,14 @@ export default function EditRfqPage() {
         </CardContent>
       </Card>
 
-      <div className="flex gap-2">
+      <FormActions>
         <Button onClick={handleSubmit} disabled={updateRfq.isPending}>
           {updateRfq.isPending ? "Saving…" : "Save changes"}
         </Button>
         <Button variant="outline" asChild>
           <Link href={`/rfqs/${rfq.id}`}>Cancel</Link>
         </Button>
-      </div>
+      </FormActions>
     </div>
   );
 }

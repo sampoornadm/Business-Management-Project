@@ -1,9 +1,14 @@
+import { appendFileSync, mkdirSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import type { PortalBrowserStatusDto } from "@bmp/types";
 import { chromium, type BrowserContext } from "playwright-core";
 
+import { logger } from "../../../shared/logger/logger.js";
+
+import { readComparativeGrid, type ReadGridOptions, StatementNotAvailableError } from "./comparative-grid.js";
 import { PortalSession } from "./portal-session.js";
 
 type LaunchOptions = NonNullable<Parameters<typeof chromium.launchPersistentContext>[1]>;
@@ -36,6 +41,9 @@ export function portalLaunchOptions(executablePath?: string): LaunchOptions {
 }
 
 const PORTAL_HOST = /sailisp\.co\.in/;
+/** SAIL ISP's comparative statement dashboard; the RFx number goes in `P_OBJ_ID`. */
+const COMPARATIVE_STATEMENT_PATH =
+  "/irj/servlet/prt/portal/prtroot/pcd!3aportal_content!2fIISCO!2fIISCO_Iview!2fzsrm_dashboard_0";
 
 /**
  * Owns the one browser window the app fills bids in. The user logs into the portal in it once; the
@@ -59,6 +67,50 @@ export class PortalBrowser {
     const page = pages.find((candidate) => PORTAL_HOST.test(candidate.url())) ?? pages[0] ?? (await context.newPage());
     if (page.url() === "about:blank") await page.goto(this.config.portalUrl).catch(() => undefined);
     await page.bringToFront();
+  }
+
+  /**
+   * Opens the client's comparative statement for an RFx in a tab of the portal window and returns
+   * its grid as a matrix. Uses the user's own portal login; if the portal asks for one, this
+   * throws `PortalLoginRequiredError` rather than logging in. The tab is left open to look at.
+   */
+  async readComparativeMatrix(rfxNumber: string, options?: ReadGridOptions): Promise<string[][]> {
+    if (!/^\d{6,12}$/.test(rfxNumber)) throw new Error(`"${rfxNumber}" is not an RFx number`);
+    const context = this.context ?? (await (this.launching ??= this.launch()));
+    const marker = `P_OBJ_ID=${rfxNumber}`;
+    const page = context.pages().find((candidate) => candidate.url().includes(marker)) ?? (await context.newPage());
+    // Always navigate, even in a tab already showing it: a re-fetch must read the current statement.
+    await page.goto(`${this.config.portalUrl}${COMPARATIVE_STATEMENT_PATH}?${marker}`).catch(() => undefined);
+    await page.bringToFront();
+    // Every step goes to the server log and to `read.log` in the capture folder, so a slow or
+    // failed read can be followed (`tail -f`) and studied afterwards.
+    const dir = path.join(path.dirname(this.config.profileDir), ".bmp-portal-capture", rfxNumber);
+    const log = (line: string) => {
+      logger.info({ rfxNumber }, line);
+      try {
+        mkdirSync(dir, { recursive: true });
+        appendFileSync(path.join(dir, "read.log"), `${new Date().toISOString()} ${line}\n`);
+      } catch {
+        // The log is a convenience; the read does not depend on it.
+      }
+    };
+    log(`Opening comparative statement ${rfxNumber}`);
+    try {
+      const matrix = await readComparativeGrid(page, { onProgress: log, ...options });
+      log(`Read ${matrix.length} rows`);
+      return matrix;
+    } catch (error) {
+      log(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+      // Keep what the page looked like, so a statement the reader cannot handle can be studied
+      // without another trip to the portal. Stays on this machine, next to the browser profile.
+      if (error instanceof StatementNotAvailableError) {
+        for (const [index, frame] of page.frames().entries()) {
+          const html = await frame.content().catch(() => null);
+          if (html) await writeFile(path.join(dir, `frame-${index}.html`), html).catch(() => undefined);
+        }
+      }
+      throw error;
+    }
   }
 
   /** The bid response the user has open in the window, or null if the window or the response is not there. */

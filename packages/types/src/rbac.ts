@@ -35,6 +35,7 @@ export const PERMISSION_KEYS = [
   "tenders:revert_status",
   "tenders:generate_document",
   "tenders:fill_portal",
+  "competitors:read",
   "organizations:create",
   "organizations:read",
   "organizations:update",
@@ -105,6 +106,7 @@ const ALL_STANDARD_PERMISSIONS: PermissionKey[] = PERMISSION_KEYS.filter(
 
 const TENDER_VIEW_BASELINE: PermissionKey[] = [
   "tenders:read",
+  "competitors:read",
   "organizations:read",
   "tags:read",
   "boq:read",
@@ -139,6 +141,7 @@ const TENDER_MANAGER_PERMISSIONS: PermissionKey[] = [
   "tenders:change_status",
   "tenders:generate_document",
   "tenders:fill_portal",
+  "competitors:read",
   "organizations:create",
   "organizations:update",
   "tags:create",

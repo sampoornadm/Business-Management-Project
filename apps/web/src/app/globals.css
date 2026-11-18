@@ -124,3 +124,15 @@
     text-wrap: pretty;
   }
 }
+
+/* Number boxes never show the browser's up/down stepper: it is easy to hit by accident and
+   Input already blocks stepping by arrow keys and by the scroll wheel. */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

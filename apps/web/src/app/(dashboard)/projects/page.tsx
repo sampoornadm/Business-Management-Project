@@ -182,7 +182,7 @@ export default function ProjectsPage() {
 
   const goToTendersButton = (
     <Button asChild variant="outline">
-      <Link href="/tenders">Go to Tenders</Link>
+      <Link href="/tenders">Go to tenders</Link>
     </Button>
   );
 

@@ -64,6 +64,7 @@ export function buildBoqItemTree(items: BoqItemWithBreakdown[]): BoqItemDto[] {
             make: item.baseRateQuote.make,
             model: item.baseRateQuote.model,
             quotedAt: item.baseRateQuote.quotedAt.toISOString(),
+            technicalDeviation: item.baseRateQuote.technicalDeviation,
           }
         : null,
       children: [],

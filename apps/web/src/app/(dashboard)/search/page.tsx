@@ -1,6 +1,6 @@
 "use client";
 
-import { Input } from "@bmp/ui";
+import { Input, PageHeader } from "@bmp/ui";
 import { Search } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -26,10 +26,10 @@ export default function SearchPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
-        <p className="text-sm text-muted-foreground">Find tenders, organizations, vendors, and projects.</p>
-      </div>
+      <PageHeader
+        title="Search"
+        description="Find tenders, organizations, vendors, and projects."
+      />
 
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

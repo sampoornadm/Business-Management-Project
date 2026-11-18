@@ -42,7 +42,7 @@ const itemPriceArgs = {
     make: true,
     model: true,
     quotedAt: true,
-    remarks: true,
+    technicalDeviation: true,
     vendor: { select: { id: true, name: true } },
     rfqItem: {
       select: {
@@ -131,7 +131,7 @@ export interface UpsertQuoteData {
   make?: string;
   model?: string;
   quotedAt?: Date;
-  remarks?: string | null;
+  technicalDeviation?: string | null;
 }
 
 export interface RfqFilters {
@@ -351,8 +351,9 @@ export class RfqRepository implements IRfqRepository {
     const payload = {
       rate: data.rate,
       regretted: data.regretted,
-      remarks: data.remarks ?? null,
-      // Omit rather than pass undefined so the column defaults apply on create.
+      // Omit rather than pass undefined so the column defaults apply on create — and so a
+      // rate-only edit (the RFQ page's quote cell) keeps the vendor's technical deviation.
+      ...(data.technicalDeviation !== undefined ? { technicalDeviation: data.technicalDeviation } : {}),
       ...(data.make !== undefined ? { make: data.make } : {}),
       ...(data.model !== undefined ? { model: data.model } : {}),
       ...(data.quotedAt !== undefined ? { quotedAt: data.quotedAt } : {}),

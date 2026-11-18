@@ -276,7 +276,7 @@ export default function NewTenderPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <PageHeader title="New Tender" description="Create a new tender record." />
+      <PageHeader title="New tender" description="Create a new tender record." />
 
       <Card>
         <CardContent className="flex items-center gap-2 pt-6">
