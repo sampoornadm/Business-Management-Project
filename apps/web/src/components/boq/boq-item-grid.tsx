@@ -45,9 +45,12 @@ export function BoqItemGrid({
   tenderId,
   boq,
   ratesLocked,
+  wonLineIds,
 }: {
   tenderId: string;
   boq: BoqDto;
+  /** Lines the tender was won on (Individual evaluation); tinted and badged. */
+  wonLineIds?: Set<string>;
   /** Tender rates are finalized: every pricing edit (rate, markup, quantity, add/delete) is off. */
   ratesLocked: boolean;
 }) {
@@ -228,7 +231,16 @@ export function BoqItemGrid({
       widthClassName: "w-[26%] min-w-[14rem]",
       getValue: (item) => item.description,
       onCommit: (item, value) => void commitField(item, "description", value),
-      render: (item) => <span className="whitespace-pre-wrap break-words">{item.description}</span>,
+      render: (item) => (
+        <span className="whitespace-pre-wrap break-words">
+          {item.description}
+          {wonLineIds?.has(item.id) && (
+            <Badge variant="success" className="ml-2 align-middle">
+              Won
+            </Badge>
+          )}
+        </span>
+      ),
     },
     {
       key: "unit",
@@ -495,6 +507,7 @@ export function BoqItemGrid({
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
         isRowSelectable={isLeaf}
+        rowClassName={(item) => (wonLineIds?.has(item.id) ? "bg-success/10" : undefined)}
         renderRowActions={
           canEditPricing
             ? (item) => (

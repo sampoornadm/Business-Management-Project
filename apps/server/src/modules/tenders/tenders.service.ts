@@ -10,6 +10,7 @@ import {
   type TenderListItemDto,
   type TenderStatus,
   type TenderStatusHistoryEntryDto,
+  type TenderWonItemDto,
   type SubmissionChanges,
   type TenderSubmissionLineDto,
 } from "@bmp/types";
@@ -299,13 +300,27 @@ export class TendersService {
       }
     }
 
+    // Won on only some items (Individual evaluation): snapshot the picked BOQ lines server-side
+    // rather than trusting client-sent figures. Anything other than a fresh Won clears them.
+    const wonSnapshot =
+      input.status === "WON" && input.wonItemIds?.length
+        ? await this.snapshotWonItems(id, context.businessId, input.wonItemIds)
+        : null;
+    const wonItems = wonSnapshot?.items ?? [];
+
     // Leaving a result (reopen/undo) clears it, so a later Won/Lost never inherits stale fields.
     const keepsResult = TENDER_TERMINAL_STATUSES.includes(input.status);
     const updated = await this.tendersRepository.updateStatus(id, {
       status: input.status,
       statusChangedAt: new Date(),
+      wonItems,
+      wonItemsTotal: wonSnapshot?.total ?? null,
       winnerName: keepsResult ? input.winnerName : null,
-      winningBidAmount: keepsResult ? input.winningBidAmount : null,
+      // Won on some items: the order value is those items' amount unless the owner typed one.
+      winningBidAmount: keepsResult
+        ? (input.winningBidAmount ??
+          (wonItems.length ? round2(wonItems.reduce((sum, item) => sum + (item.amount ?? 0), 0)) : undefined))
+        : null,
       lossReason: keepsResult ? input.lossReason : null,
       ...(input.submissionReference ? { submissionReference: input.submissionReference } : {}),
     });
@@ -333,6 +348,7 @@ export class TendersService {
         from: previousStatus,
         to: input.status,
         remarks: input.remarks ?? null,
+        ...(wonItems.length ? { wonItems: wonItems.map((item) => item.description) } : {}),
         submissionReference: submission ? submission.snapshot.reference : (input.submissionReference ?? null),
         ...(submission ? { submissionNumber: submission.number, summary: submission.summary } : {}),
       },
@@ -357,6 +373,31 @@ export class TendersService {
     }
 
     return toTenderDto(updated);
+  }
+
+  private async snapshotWonItems(
+    tenderId: string,
+    businessId: string,
+    ids: string[],
+  ): Promise<{ items: TenderWonItemDto[]; total: number }> {
+    const boqItems = await this.currentBoqItems(tenderId, businessId);
+    const byId = new Map(boqItems.map((item) => [item.id, item]));
+    const parentIds = new Set(boqItems.map((item) => item.parentId));
+    const total = boqItems.filter((item) => !parentIds.has(item.id)).length;
+    const items = [...new Set(ids)].map((boqItemId) => {
+      const item = byId.get(boqItemId);
+      if (!item) throw new BadRequestError("A selected item is not in the tender's current BOQ");
+      return {
+        boqItemId,
+        itemCode: item.itemCode,
+        description: item.description,
+        unit: item.unit,
+        quantity: item.quantity,
+        rate: item.rate,
+        amount: item.amount,
+      };
+    });
+    return { items, total };
   }
 
   /** "My rate" per priced line of the current BOQ, written to the item inventory on submission. */

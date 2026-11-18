@@ -1,6 +1,6 @@
 "use client";
 
-import type { TenderStatementDto } from "@bmp/types";
+import type { TenderEvaluationCriteria, TenderStatementDto } from "@bmp/types";
 import {
   cn,
   formatDateTime,
@@ -23,9 +23,28 @@ import { LowestBidderCrown } from "./lowest-bidder-crown";
  * Where we stand after the client opened the price bids: our rank by total and the lowest bidder.
  * The lowest quote is the probable winner, not a confirmed award, and is worded that way.
  */
-export function TenderStandingLine({ tenderId, enabled }: { tenderId: string; enabled: boolean }) {
+export function TenderStandingLine({
+  tenderId,
+  enabled,
+  evaluationCriteria,
+}: {
+  tenderId: string;
+  enabled: boolean;
+  evaluationCriteria: TenderEvaluationCriteria | null;
+}) {
   const standing = useTenderStanding(tenderId, enabled).data;
   if (!standing) return null;
+  // Item-wise evaluation: the overall rank decides nothing, so don't present it as the standing.
+  if (evaluationCriteria === "INDIVIDUAL") {
+    return (
+      <p className="mt-2 text-sm">
+        <span className="font-medium">Price opening:</span>{" "}
+        <span className="text-muted-foreground">
+          evaluated item by item, so the overall rank does not decide the order. See the items we could win below.
+        </span>
+      </p>
+    );
+  }
   const { lowest } = standing;
   return (
     <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
@@ -70,6 +89,84 @@ const STICKY = {
   us: "sticky left-[19.5rem] z-10 w-36 min-w-36 border-r bg-background",
 };
 
+/** Items where our quote is the lowest (or tied for it): the ones an item-wise order can come to us for. */
+function winnableItems(statement: TenderStatementDto, ourId: string) {
+  return statement.items.flatMap((item) => {
+    const ourRate = item.rates[ourId];
+    if (ourRate === undefined) return [];
+    const others = Object.entries(item.rates)
+      .filter(([id]) => id !== ourId)
+      .map(([, rate]) => rate);
+    const nextBest = others.length ? Math.min(...others) : null;
+    if (nextBest !== null && nextBest < ourRate) return [];
+    return [{ item, ourRate, nextBest, tied: nextBest === ourRate }];
+  });
+}
+
+/** Item codes we are the lowest (or tied lowest) quote on; empty when our bid is not identified. */
+export function lowestItemCodes(statement: TenderStatementDto): Set<string> {
+  const us = statement.bidders.find((bidder) => bidder.isSelf);
+  if (!us) return new Set();
+  return new Set(winnableItems(statement, us.competitorId).map(({ item }) => item.itemCode));
+}
+
+/** Individual-evaluation tenders only: which items we are lowest on, so which orders could come to us. */
+function WinnableItems({ statement }: { statement: TenderStatementDto }) {
+  const us = statement.bidders.find((bidder) => bidder.isSelf);
+  if (!us) {
+    return (
+      <p className="rounded-lg border p-3 text-sm text-muted-foreground">
+        Our bid is not identified in this statement, so we cannot tell which items we could win.{" "}
+        <Link href="/competitors" className="underline">
+          Mark our firm
+        </Link>
+      </p>
+    );
+  }
+  const winnable = winnableItems(statement, us.competitorId);
+  const quoted = statement.items.filter((item) => item.rates[us.competitorId] !== undefined).length;
+  return (
+    <div className="space-y-2 rounded-lg border p-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold">Items we could win</h3>
+        <p className="text-xs text-muted-foreground">
+          Evaluated item by item · lowest on {winnable.length} of {quoted} items we quoted
+        </p>
+      </div>
+      {winnable.length === 0 ? (
+        <p className="text-sm text-muted-foreground">We are not the lowest bidder on any item.</p>
+      ) : (
+        <ul className="divide-y text-sm">
+          {winnable.map(({ item, ourRate, nextBest, tied }) => (
+            <li key={`${item.slNo}-${item.itemCode}`} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-1.5">
+              <span>
+                <span className="tabular-nums text-muted-foreground">{item.slNo}</span>{" "}
+                <span className="font-medium">{item.description || item.itemCode}</span>
+                {item.quantity !== null && (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {item.quantity.toLocaleString("en-IN")} {item.unit ?? ""}
+                  </span>
+                )}
+              </span>
+              <span className="tabular-nums">
+                <span className="font-medium text-success">{formatMoney(ourRate)}</span>
+                <span className="text-muted-foreground">
+                  {nextBest === null
+                    ? " · no other bidder"
+                    : tied
+                      ? " · tied for lowest"
+                      : ` · next lowest ${formatMoney(nextBest)} (${(((nextBest - ourRate) / nextBest) * 100).toFixed(1)}% below)`}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function rankIn(rates: Record<string, number>, competitorId: string): number | null {
   const own = rates[competitorId];
   if (own === undefined) return null;
@@ -80,7 +177,15 @@ function rankIn(rates: Record<string, number>, competitorId: string): number | n
  * The price opening as one table: items in the tender's own order, our bid fixed straight after
  * the item, every competitor to the right of it (that part scrolls sideways).
  */
-export function PriceOpeningTable({ tenderId, enabled }: { tenderId: string; enabled: boolean }) {
+export function PriceOpeningTable({
+  tenderId,
+  enabled,
+  evaluationCriteria,
+}: {
+  tenderId: string;
+  enabled: boolean;
+  evaluationCriteria: TenderEvaluationCriteria | null;
+}) {
   const query = useTenderStatement(tenderId, enabled);
   if (!enabled) return null;
   if (query.isLoading) return <Skeleton className="h-40 w-full" />;
@@ -91,7 +196,8 @@ export function PriceOpeningTable({ tenderId, enabled }: { tenderId: string; ena
   const others = statement.bidders.filter((bidder) => !bidder.isSelf);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      {evaluationCriteria === "INDIVIDUAL" && <WinnableItems statement={statement} />}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold">Price opening</h3>
         <p className="text-xs text-muted-foreground">

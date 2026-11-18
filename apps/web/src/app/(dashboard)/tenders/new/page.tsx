@@ -82,6 +82,7 @@ function toFormDefaults(result: TenderExtractionResultDto): Partial<TenderFormVa
   if (fields.title) defaults.title = fields.title;
   if (fields.department) defaults.department = fields.department;
   if (fields.notes) defaults.notes = fields.notes;
+  if (fields.evaluationCriteria) defaults.evaluationCriteria = fields.evaluationCriteria;
   if (fields.dealingOfficerName) defaults.dealingOfficerName = fields.dealingOfficerName;
   if (fields.dealingOfficerEmail) defaults.dealingOfficerEmail = fields.dealingOfficerEmail;
   if (fields.dealingOfficerPhone) defaults.dealingOfficerPhone = fields.dealingOfficerPhone;

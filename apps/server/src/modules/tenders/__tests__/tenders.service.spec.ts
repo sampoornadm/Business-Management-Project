@@ -616,6 +616,32 @@ describe("TendersService", () => {
       expect(second.summary).toContain("Rates changed (1):");
     });
 
+    it("Won on some items snapshots those lines, totals them, and clears them on reopen", async () => {
+      const created = await createLocked();
+      boqRepository.itemsByTender.set(created.id, [boqLine("a", "XLPE 16", 100), boqLine("b", "XLPE 25", 150)]);
+      await submit(created.id, "ABC/123");
+
+      const won = await service.changeStatus(created.id, { status: "WON", wonItemIds: ["b"] }, actorId, ctx);
+
+      expect(won.wonItems).toMatchObject([{ boqItemId: "b", description: "XLPE 25", rate: 150, amount: 300 }]);
+      expect(won.winningBidAmount).toBe(300);
+      expect(won).toMatchObject({ wonItemCount: 1, wonItemsTotal: 2, wonItemNames: ["XLPE 25"] });
+
+      const reopened = await service.changeStatus(created.id, { status: "SUBMITTED" }, actorId, ctx);
+      expect(reopened.wonItems).toEqual([]);
+      expect(reopened.wonItemsTotal).toBeNull();
+    });
+
+    it("refuses a Won item that is not in the current BOQ", async () => {
+      const created = await createLocked();
+      boqRepository.itemsByTender.set(created.id, [boqLine("a", "XLPE 16", 100)]);
+      await submit(created.id, "ABC/123");
+
+      await expect(
+        service.changeStatus(created.id, { status: "WON", wonItemIds: ["nope"] }, actorId, ctx),
+      ).rejects.toThrow("not in the tender's current BOQ");
+    });
+
     it("WON → SUBMITTED records only the status change", async () => {
       const created = await createLocked();
       await submit(created.id);

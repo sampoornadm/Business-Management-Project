@@ -2,6 +2,8 @@
 
 import {
   TENDER_CATEGORIES,
+  TENDER_EVALUATION_CRITERIA,
+  TENDER_EVALUATION_CRITERIA_LABELS,
   TENDER_PRIORITIES,
   TENDER_TYPES,
   type CreateTenderInput,
@@ -90,6 +92,7 @@ function tenderFormSchema(requireTenderNumber: boolean) {
     dealingOfficerName: z.string().optional(),
     dealingOfficerEmail: z.string().optional(),
     dealingOfficerPhone: z.string().optional(),
+    evaluationCriteria: z.union([z.enum(TENDER_EVALUATION_CRITERIA), z.literal("")]).optional(),
   });
 }
 
@@ -126,6 +129,7 @@ export function toCreateTenderInput(values: TenderFormValues): CreateTenderInput
     dealingOfficerName: values.dealingOfficerName || undefined,
     dealingOfficerEmail: values.dealingOfficerEmail || undefined,
     dealingOfficerPhone: values.dealingOfficerPhone || undefined,
+    evaluationCriteria: values.evaluationCriteria || undefined,
   };
 }
 
@@ -154,6 +158,7 @@ const DEFAULT_VALUES: TenderFormValues = {
   dealingOfficerName: "",
   dealingOfficerEmail: "",
   dealingOfficerPhone: "",
+  evaluationCriteria: "",
 };
 
 export interface TenderFormProps {
@@ -354,6 +359,30 @@ export function TenderForm({
                         {TENDER_PRIORITIES.map((priority) => (
                           <SelectItem key={priority} value={priority}>
                             {priority}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="evaluationCriteria"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Evaluation criteria</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Not stated" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {TENDER_EVALUATION_CRITERIA.map((criteria) => (
+                          <SelectItem key={criteria} value={criteria}>
+                            {TENDER_EVALUATION_CRITERIA_LABELS[criteria]}
                           </SelectItem>
                         ))}
                       </SelectContent>

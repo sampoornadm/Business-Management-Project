@@ -30,11 +30,13 @@ function setup(
   status: string,
   grid: () => Promise<string[][]> = () => Promise.resolve(matrix),
   standing: TenderStandingDto | null = null,
+  evaluationCriteria: string | null = null,
 ) {
   const tender: TenderForStatement = {
     id: "tender-1",
     tenderNumber: "1400000013",
     status,
+    evaluationCriteria,
     businessName: "Acme",
     portalResponseNumber: null,
     boqItems: [],
@@ -113,6 +115,12 @@ describe("StatementFetchService.fetch", () => {
     run = setup("SUBMITTED", undefined, standing);
     const result = await run.service.fetch("tender-1", "user-1", CONTEXT);
     expect(result.status).toBe("PRICE_OPENED");
+    expect(run.calls.advanced).toMatchObject([{ status: "PRICE_OPENED" }]);
+  });
+
+  it("never marks an Individual-evaluation tender Lost on total rank", async () => {
+    run = setup("SUBMITTED", undefined, STANDING, "INDIVIDUAL");
+    expect((await run.service.fetch("tender-1", "user-1", CONTEXT)).status).toBe("PRICE_OPENED");
     expect(run.calls.advanced).toMatchObject([{ status: "PRICE_OPENED" }]);
   });
 

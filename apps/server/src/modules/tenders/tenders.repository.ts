@@ -8,7 +8,7 @@ import type {
   TenderPriority,
   TenderStatus,
 } from "@bmp/database";
-import type { FilterCondition, TenderSortField } from "@bmp/types";
+import type { FilterCondition, TenderSortField, TenderWonItemDto } from "@bmp/types";
 
 import type { PaginationParams } from "../../core/interfaces/pagination.js";
 import { buildPrismaFilterWhere } from "../../shared/utils/filtering.js";
@@ -83,6 +83,7 @@ export interface CreateTenderData {
   dealingOfficerName?: string | null;
   dealingOfficerEmail?: string | null;
   dealingOfficerPhone?: string | null;
+  evaluationCriteria?: string | null;
   businessId: string;
   createdById: string;
 }
@@ -111,6 +112,8 @@ export interface StatusChangeData {
   winnerName?: string | null;
   winningBidAmount?: number | null;
   lossReason?: string | null;
+  wonItems?: TenderWonItemDto[];
+  wonItemsTotal?: number | null;
   submissionReference?: string;
 }
 
@@ -260,7 +263,12 @@ export class TendersRepository implements ITendersRepository {
   }
 
   updateStatus(id: string, data: StatusChangeData): Promise<TenderDetail> {
-    return this.prisma.tender.update({ where: { id }, data, ...tenderDetailArgs });
+    const { wonItems, ...rest } = data;
+    return this.prisma.tender.update({
+      where: { id },
+      data: { ...rest, ...(wonItems ? { wonItems: wonItems as unknown as Prisma.InputJsonValue } : {}) },
+      ...tenderDetailArgs,
+    });
   }
 
   setRatesLock(id: string, data: RatesLockData): Promise<TenderDetail> {

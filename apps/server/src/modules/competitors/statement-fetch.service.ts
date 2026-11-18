@@ -45,7 +45,9 @@ export interface PriceOpeningStatusChange {
  */
 function lostAtPriceOpening(
   standing: TenderStandingDto | null,
+  evaluationCriteria: string | null,
 ): standing is TenderStandingDto & { ourRank: number; lowest: NonNullable<TenderStandingDto["lowest"]> } {
+  if (evaluationCriteria === "INDIVIDUAL") return false;
   if (!standing?.lowest || standing.lowest.isSelf || standing.ourRank === null || standing.ourRank <= 1) return false;
   return !standing.basisOfEvaluation || /^overall$/i.test(standing.basisOfEvaluation.trim());
 }
@@ -130,7 +132,7 @@ export class StatementFetchService {
         context,
       );
       status = "PRICE_OPENED";
-      if (lostAtPriceOpening(standing)) {
+      if (lostAtPriceOpening(standing, tender.evaluationCriteria)) {
         await this.deps.changeStatus(
           tenderId,
           {

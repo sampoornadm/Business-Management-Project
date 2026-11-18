@@ -562,6 +562,13 @@ model Tender {
   dealingOfficerName  String?
   dealingOfficerEmail String?
   dealingOfficerPhone String?
+  // How the client evaluates bids, as the document words it: "Overall" (whole bid, L1 gets the order)
+  // or "Individual" (per item). Free text on purpose — clients may use other wording.
+  evaluationCriteria  String?
+  // BOQ lines an Individual-evaluation tender was won on (snapshots); [] = the whole tender or no win.
+  wonItems            Json           @default("[]")
+  // How many priceable BOQ lines the tender had when it was won on some of them ("1 of 4"); null otherwise.
+  wonItemsTotal       Int?
   winnerName          String?
   winningBidAmount    Float?
   lossReason          String?

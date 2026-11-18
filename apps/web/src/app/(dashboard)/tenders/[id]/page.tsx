@@ -1,6 +1,6 @@
 "use client";
 
-import { isSailRfxNumber, TENDER_KIND_LABELS } from "@bmp/types";
+import { isSailRfxNumber, TENDER_EVALUATION_CRITERIA_LABELS, TENDER_KIND_LABELS } from "@bmp/types";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -256,7 +256,11 @@ export default function TenderDetailPage() {
           canFetchStatement={canFillPortal}
           canViewStanding={canViewCompetitors}
         />
-        <TenderStandingLine tenderId={tender.id} enabled={canViewCompetitors && !isDraft} />
+        <TenderStandingLine
+          tenderId={tender.id}
+          enabled={canViewCompetitors && !isDraft}
+          evaluationCriteria={tender.evaluationCriteria}
+        />
       </div>
 
       <Tabs defaultValue={initialTab}>
@@ -287,6 +291,10 @@ export default function TenderDetailPage() {
                 <p>
                   {tender.location}, {tender.state}
                 </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Evaluation criteria</p>
+                <p>{tender.evaluationCriteria ? TENDER_EVALUATION_CRITERIA_LABELS[tender.evaluationCriteria] : EMPTY_VALUE}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Estimated cost</p>
@@ -423,7 +431,11 @@ export default function TenderDetailPage() {
 
         <TabsContent value="competitors">
           <div className="space-y-6">
-            <PriceOpeningTable tenderId={tender.id} enabled={canViewCompetitors && !isDraft} />
+            <PriceOpeningTable
+              tenderId={tender.id}
+              enabled={canViewCompetitors && !isDraft}
+              evaluationCriteria={tender.evaluationCriteria}
+            />
             <TenderCompetitorsTab tender={tender} />
           </div>
         </TabsContent>

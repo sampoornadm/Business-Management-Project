@@ -53,6 +53,29 @@ export const TENDER_KIND_LABELS: Record<TenderKind, string> = {
   BUDGETARY: "Budgetary Quotation",
 };
 
+/** How the client picks winners: the whole bid (L1 overall gets the order) or item by item. */
+export const TENDER_EVALUATION_CRITERIA = ["OVERALL", "INDIVIDUAL"] as const;
+export type TenderEvaluationCriteria = (typeof TENDER_EVALUATION_CRITERIA)[number];
+export const TENDER_EVALUATION_CRITERIA_LABELS: Record<TenderEvaluationCriteria, string> = {
+  OVERALL: "Overall",
+  INDIVIDUAL: "Individual",
+};
+
+/**
+ * Maps the document's own wording onto the two criteria, or undefined when it is neither (the
+ * caller may then ask the AI). "Individual" is tested first: "item-wise, not overall" must not
+ * read as Overall.
+ */
+export function matchEvaluationCriteria(text: string | null | undefined): TenderEvaluationCriteria | undefined {
+  const value = text?.trim().toLowerCase();
+  if (!value) return undefined;
+  if (/individual|item[\s-]*wise|per[\s-]*item|each item|line[\s-]*item|separately/.test(value)) return "INDIVIDUAL";
+  if (/overall|all items|whole|total|lump|package|composite|combined|single order/.test(value)) {
+    return "OVERALL";
+  }
+  return undefined;
+}
+
 export const TENDER_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
 export type TenderPriority = (typeof TENDER_PRIORITIES)[number];
 
@@ -189,6 +212,12 @@ export interface TenderListItemDto {
   estimatedCost: number | null;
   submissionDate: string | null;
   assigneeCount: number;
+  evaluationCriteria: TenderEvaluationCriteria | null;
+  /** Items won on an Individual-evaluation tender won on only some of them; 0 for a whole-tender win. */
+  wonItemCount: number;
+  /** Priceable BOQ lines when it was won on some of them; null when unknown (whole win, or older result). */
+  wonItemsTotal: number | null;
+  wonItemNames: string[];
   createdAt: string;
 }
 
@@ -197,6 +226,17 @@ export interface TenderLinkedBudgetaryDto {
   tenderNumber: string;
   title: string;
   updatedAt: string;
+}
+
+/** A BOQ line we won, as it stood when the result was recorded (the BOQ may change later). */
+export interface TenderWonItemDto {
+  boqItemId: string;
+  itemCode: string | null;
+  description: string;
+  unit: string | null;
+  quantity: number | null;
+  rate: number | null;
+  amount: number | null;
 }
 
 export interface TenderDto extends TenderListItemDto {
@@ -220,6 +260,8 @@ export interface TenderDto extends TenderListItemDto {
   dealingOfficerName: string | null;
   dealingOfficerEmail: string | null;
   dealingOfficerPhone: string | null;
+  /** The items we won, for an Individual-evaluation tender won on only some of them; empty otherwise. */
+  wonItems: TenderWonItemDto[];
   winnerName: string | null;
   winningBidAmount: number | null;
   lossReason: string | null;
@@ -262,6 +304,7 @@ export interface CreateTenderInput {
   dealingOfficerName?: string;
   dealingOfficerEmail?: string;
   dealingOfficerPhone?: string;
+  evaluationCriteria?: TenderEvaluationCriteria;
 }
 
 export type UpdateTenderInput = Partial<CreateTenderInput> & { convertedFromId?: string | null };
@@ -288,6 +331,7 @@ export interface TenderExtractionFields {
   dealingOfficerName?: string;
   dealingOfficerEmail?: string;
   dealingOfficerPhone?: string;
+  evaluationCriteria?: TenderEvaluationCriteria;
 }
 
 export interface ExtractedTenderItem {
@@ -326,6 +370,8 @@ export interface ChangeTenderStatusInput {
   winnerName?: string;
   winningBidAmount?: number;
   lossReason?: string;
+  /** On Won: the BOQ lines the order came for, when it is not the whole tender (Individual evaluation). */
+  wonItemIds?: string[];
   /** Required on DRAFT/CANCELLED → SUBMITTED for TENDER kind; kept from the last submission otherwise. */
   submissionReference?: string;
 }

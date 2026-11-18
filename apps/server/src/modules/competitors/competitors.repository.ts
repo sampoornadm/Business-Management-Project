@@ -79,6 +79,8 @@ export interface TenderForStatement {
   id: string;
   tenderNumber: string;
   status: string;
+  /** Overall or Individual; null when not recorded. Item-wise tenders are never lost on total rank. */
+  evaluationCriteria: string | null;
   businessName: string;
   /** Our response number on the SAIL ISP portal, saved when the bid was filled through the app. */
   portalResponseNumber: string | null;
@@ -157,6 +159,7 @@ export class CompetitorsRepository implements ICompetitorsRepository {
         id: true,
         tenderNumber: true,
         status: true,
+        evaluationCriteria: true,
         business: { select: { name: true } },
         portalBids: { where: { portalCode: "SAIL_ISP" }, select: { responseNumber: true } },
         boqs: {
@@ -170,6 +173,7 @@ export class CompetitorsRepository implements ICompetitorsRepository {
       id: tender.id,
       tenderNumber: tender.tenderNumber,
       status: tender.status,
+      evaluationCriteria: tender.evaluationCriteria,
       businessName: tender.business.name,
       portalResponseNumber: tender.portalBids[0]?.responseNumber ?? null,
       boqItems: tender.boqs.flatMap((boq) =>

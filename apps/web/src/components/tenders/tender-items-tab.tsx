@@ -23,6 +23,7 @@ import { useAddBoqItem, useBoqVersions, useCurrentBoq } from "@/hooks/use-boq";
 import { useSetTenderRatesLock } from "@/hooks/use-tenders";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
+import { wonLineIds } from "@/lib/won-items";
 
 function AddItemForm({ tenderId }: { tenderId: string }) {
   const { toast } = useToast();
@@ -176,6 +177,11 @@ export function TenderItemsTab({ tender }: { tender: TenderDto }) {
               Version {boqQuery.data.version} · {versionsQuery.data?.length ?? 1} version(s)
             </span>
             <span className="text-sm font-medium">Total: {formatMoney(boqQuery.data.totalAmount)}</span>
+            {tender.wonItems.length > 0 && tender.winningBidAmount !== null && (
+              <span className="text-sm font-medium text-success">
+                Order value: {formatMoney(tender.winningBidAmount)}
+              </span>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <RatesLockSwitch tender={tender} />
@@ -195,7 +201,12 @@ export function TenderItemsTab({ tender }: { tender: TenderDto }) {
 
       {canCreate && <AddItemForm tenderId={tender.id} />}
 
-      <BoqItemGrid tenderId={tender.id} boq={boqQuery.data} ratesLocked={ratesLocked} />
+      <BoqItemGrid
+        tenderId={tender.id}
+        boq={boqQuery.data}
+        ratesLocked={ratesLocked}
+        wonLineIds={wonLineIds(boqQuery.data.items, tender.wonItems)}
+      />
     </div>
   );
 }

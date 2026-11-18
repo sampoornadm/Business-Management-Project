@@ -9,8 +9,11 @@ import {
   type TenderStatus,
 } from "@bmp/types";
 import {
+  Badge,
   Button,
+  Checkbox,
   cn,
+  formatMoney,
   Input,
   Label,
   Popover,
@@ -25,9 +28,12 @@ import { useState, type FormEvent, type ReactNode } from "react";
 
 import { useFetchStatementAction } from "@/components/competitors/fetch-statement";
 import { useCurrentBoq } from "@/hooks/use-boq";
-import { useTenderStanding } from "@/hooks/use-competitors";
+import { lowestItemCodes } from "@/components/competitors/price-opening";
+import { useTenderStanding, useTenderStatement } from "@/hooks/use-competitors";
 import { useChangeTenderStatus, useTenderStatusHistory } from "@/hooks/use-tenders";
 import { canRevertTo } from "@/lib/tender-stepper";
+import { tenderStatusText } from "@/lib/tender-status";
+import { boqLeaves } from "@/lib/won-items";
 
 type Outcome = "WON" | "LOST" | "CANCELLED";
 
@@ -168,6 +174,8 @@ export function TenderStatusTracker({
   const [bandOpen, setBandOpen] = useState(false);
   const [committing, setCommitting] = useState<Outcome | null>(null);
   const [formFor, setFormFor] = useState<TenderStatus | null>(null);
+  // Items ticked in the Won form; null until touched, when the lowest-quote items are the default.
+  const [pickedItems, setPickedItems] = useState<Set<string> | null>(null);
 
   // Reset the band once the new status lands. The Result slot keeps the same elements across
   // Submitted -> outcome, so the picked circle stays put while the others finish collapsing.
@@ -177,6 +185,7 @@ export function TenderStatusTracker({
     setBandOpen(false);
     setCommitting(null);
     setFormFor(null);
+    setPickedItems(null);
   }
 
   // A cancelled tender may never have been submitted; only its latest history row says so.
@@ -188,6 +197,18 @@ export function TenderStatusTracker({
   // What the price opening showed: fills in the Won/Lost form and tells whether that stage happened.
   const standing = useTenderStanding(tender.id, canViewStanding && status !== "DRAFT").data ?? null;
   const readsFromPortal = canFetchStatement && isSailRfxNumber(tender.tenderNumber);
+  // Item-wise tenders are won item by item: list the lines, our lowest quotes ticked first.
+  const individual = tender.evaluationCriteria === "INDIVIDUAL";
+  const statement = useTenderStatement(tender.id, individual && canViewStanding && awaitingResult).data ?? null;
+  const lowestCodes = statement ? lowestItemCodes(statement) : new Set<string>();
+  const wonCandidates = (boq.data ? boqLeaves(boq.data.items) : [])
+    .map((item) => ({ item, lowest: item.itemCode !== null && lowestCodes.has(item.itemCode) }))
+    .sort((a, b) => Number(b.lowest) - Number(a.lowest));
+  const askWonItems = formFor === "WON" && individual && wonCandidates.length > 0;
+  const pickedNow = pickedItems ?? new Set(wonCandidates.filter((c) => c.lowest).map((c) => c.item.id));
+  const pickedTotal = Math.round(
+    wonCandidates.filter((c) => pickedNow.has(c.item.id)).reduce((sum, c) => sum + (c.item.amount ?? 0), 0) * 100,
+  ) / 100;
   const itemsTotal = boq.data?.totalAmount ? Math.round(boq.data.totalAmount * 100) / 100 : undefined;
 
   const busy = changeStatus.isPending || committing !== null || fetchStatement.isPending;
@@ -250,6 +271,7 @@ export function TenderStatusTracker({
     const text = (name: string) => (data.get(name) as string | null)?.trim() || undefined;
     const amount = text("winningBidAmount");
     const to = formFor;
+    const wonItemIds = askWonItems && to === "WON" ? [...pickedNow] : undefined;
     setFormFor(null);
     if (bandOpen && isOutcome(to)) {
       setBandOpen(false);
@@ -260,6 +282,7 @@ export function TenderStatusTracker({
       winnerName: text("winnerName"),
       winningBidAmount: amount ? Number(amount) : undefined,
       lossReason: text("lossReason"),
+      wonItemIds,
       submissionReference: text("submissionReference"),
     });
   }
@@ -328,7 +351,12 @@ export function TenderStatusTracker({
   // Won/Lost form defaults: what the price opening showed, editable before confirming.
   const probableWinner = standing?.lowest && !standing.lowest.isSelf ? standing.lowest : null;
   const winnerDefault = formFor === "WON" ? "Us" : (probableWinner?.name ?? "");
-  const amountDefault = formFor === "WON" ? (standing?.ourTotal ?? itemsTotal) : probableWinner?.total;
+  const amountDefault =
+    formFor === "WON"
+      ? askWonItems
+        ? pickedTotal
+        : (standing?.ourTotal ?? itemsTotal)
+      : probableWinner?.total;
   const lossReasonDefault =
     standing?.ourRank != null ? `L${standing.ourRank} of ${standing.bidders} at price opening` : "";
 
@@ -358,7 +386,11 @@ export function TenderStatusTracker({
           <Stage
             dot={outcome.icon}
             dotClass={outcome.dot}
-            label={TENDER_STATUS_LABELS[outcome.status]}
+            label={
+              outcome.status === "WON" && tender.wonItems.length > 0
+                ? tenderStatusText(tender).replace("Won ·", "Won in")
+                : TENDER_STATUS_LABELS[outcome.status]
+            }
             labelClass={cn("font-medium", outcome.label)}
             onClick={bandOpen ? () => setFormFor(outcome.status) : undefined}
             className={cn(bandOpen && "hover:bg-background", formFor === outcome.status && "bg-background shadow-sm")}
@@ -411,7 +443,7 @@ export function TenderStatusTracker({
           )}
         </div>
       </PopoverAnchor>
-      <PopoverContent className="w-72">
+      <PopoverContent className={cn("w-72", askWonItems && "w-96")}>
         {formFor && (
           <form key={formFor} onSubmit={submitForm} className="space-y-3 text-sm">
             <p className="font-medium">
@@ -442,6 +474,45 @@ export function TenderStatusTracker({
                 />
               </div>
             )}
+            {askWonItems && (
+              <div className="space-y-1">
+                <Label>Items we won</Label>
+                <ul className="max-h-48 divide-y overflow-y-auto rounded-md border">
+                  {wonCandidates.map(({ item, lowest }) => (
+                    <li key={item.id}>
+                      <label className="flex cursor-pointer items-start gap-2 p-2 text-xs hover:bg-muted/50">
+                        <Checkbox
+                          className="mt-0.5"
+                          checked={pickedNow.has(item.id)}
+                          onCheckedChange={(on) => {
+                            const next = new Set(pickedNow);
+                            if (on) next.add(item.id);
+                            else next.delete(item.id);
+                            setPickedItems(next);
+                          }}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block max-w-[24ch] truncate" title={item.description}>
+                            {item.description}
+                          </span>
+                          {item.rate !== null && (
+                            <span className="block truncate text-muted-foreground">
+                              {item.quantity !== null && `${item.quantity.toLocaleString("en-IN")} ${item.unit ?? ""} × `}
+                              {formatMoney(item.rate)}
+                            </span>
+                          )}
+                        </span>
+                        {lowest && <Badge variant="success">Lowest</Badge>}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted-foreground">
+                  {statement ? "Our lowest quotes at the price opening are ticked. " : ""}
+                  {pickedNow.size} selected.
+                </p>
+              </div>
+            )}
             {(formFor === "WON" || formFor === "LOST") && (
               <>
                 <div className="space-y-1">
@@ -466,11 +537,14 @@ export function TenderStatusTracker({
                     type="number"
                     step="0.01"
                     min="0"
+                    key={askWonItems ? pickedTotal : "amount"}
                     defaultValue={amountDefault}
                   />
                   {formFor === "WON" && amountDefault !== undefined && (
                     <p className="text-xs text-muted-foreground">
-                      {standing?.ourTotal != null ? "Our total at the price opening." : "Filled in from the Items total."}
+                      {askWonItems
+                        ? "Total of the ticked items."
+                        : standing?.ourTotal != null ? "Our total at the price opening." : "Filled in from the Items total."}
                     </p>
                   )}
                 </div>
@@ -500,6 +574,7 @@ export function TenderStatusTracker({
               <Button
                 type="submit"
                 size="sm"
+                disabled={askWonItems && formFor === "WON" && pickedNow.size === 0}
                 variant={formFor === "LOST" ? "destructive" : formFor === "CANCELLED" ? "secondary" : "default"}
                 className={cn(formFor === "WON" && "bg-success text-success-foreground hover:bg-success/90")}
               >

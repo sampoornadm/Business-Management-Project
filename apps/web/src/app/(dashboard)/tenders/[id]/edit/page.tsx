@@ -77,6 +77,7 @@ export default function EditTenderPage() {
           dealingOfficerName: tender.dealingOfficerName ?? "",
           dealingOfficerEmail: tender.dealingOfficerEmail ?? "",
           dealingOfficerPhone: tender.dealingOfficerPhone ?? "",
+          evaluationCriteria: tender.evaluationCriteria ?? "",
         }}
         onSubmit={handleSubmit}
         isSubmitting={updateTender.isPending}

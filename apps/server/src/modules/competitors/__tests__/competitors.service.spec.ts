@@ -123,6 +123,7 @@ const NEW_TENDER: TenderForStatement = {
   id: "tender-new",
   tenderNumber: "1400000017",
   status: "DRAFT",
+  evaluationCriteria: null,
   businessName: "Alpha Spring Works",
   portalResponseNumber: null,
   boqItems: [
@@ -264,6 +265,7 @@ describe("CompetitorsService.store", () => {
     id: "tender-351",
     tenderNumber: "1400000013",
     status: "LOST",
+    evaluationCriteria: null,
     businessName: "Some Other Trading Co",
     portalResponseNumber: "8100000002",
     boqItems: [{ id: "boq-coil", itemCode: COIL }],

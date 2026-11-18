@@ -1,7 +1,7 @@
 "use client";
 
 import type { TenderListItemDto } from "@bmp/types";
-import { TENDER_PRIORITIES, TENDER_STATUS_LABELS, TENDER_STATUSES } from "@bmp/types";
+import { TENDER_EVALUATION_CRITERIA_LABELS, TENDER_PRIORITIES, TENDER_STATUS_LABELS, TENDER_STATUSES } from "@bmp/types";
 import { Badge, DeadlineProgress, formatDateTime, SortableHeader } from "@bmp/ui";
 import type { FilterableColumnDef } from "@bmp/ui";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -10,7 +10,7 @@ import Link from "next/link";
 import { humanize } from "@/components/status-badge";
 import { TenderDownloadMenu } from "@/components/tenders/tender-download-menu";
 import { daysUntil, timeLeftLabel, isPastDue } from "@/lib/deadline";
-import { tenderPriorityBadgeVariant, tenderStatusBadgeVariant } from "@/lib/tender-status";
+import { tenderPriorityBadgeVariant, tenderStatusBadgeVariant, tenderStatusText } from "@/lib/tender-status";
 
 export interface TenderColumnConfig extends FilterableColumnDef {
   sortable: boolean;
@@ -60,8 +60,11 @@ export const TENDER_COLUMNS: TenderColumnConfig[] = [
     defaultVisible: true,
     enumOptions: TENDER_STATUSES.map((s) => ({ value: s, label: TENDER_STATUS_LABELS[s] })),
     cell: ({ row }) => (
-      <Badge variant={tenderStatusBadgeVariant(row.original.status)}>
-        {TENDER_STATUS_LABELS[row.original.status]}
+      <Badge
+        variant={tenderStatusBadgeVariant(row.original.status)}
+        title={row.original.wonItemNames.length ? row.original.wonItemNames.join("\n") : undefined}
+      >
+        {tenderStatusText(row.original)}
       </Badge>
     ),
   },
@@ -76,6 +79,16 @@ export const TENDER_COLUMNS: TenderColumnConfig[] = [
     cell: ({ row }) => (
       <Badge variant={tenderPriorityBadgeVariant(row.original.priority)}>{humanize(row.original.priority)}</Badge>
     ),
+  },
+  {
+    key: "evaluationCriteria",
+    label: "Evaluation",
+    type: "text",
+    sortable: false,
+    filterable: false,
+    defaultVisible: true,
+    cell: ({ row }) =>
+      row.original.evaluationCriteria ? TENDER_EVALUATION_CRITERIA_LABELS[row.original.evaluationCriteria] : "-",
   },
   {
     key: "department",

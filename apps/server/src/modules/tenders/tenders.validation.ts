@@ -1,6 +1,7 @@
 import {
   FILTER_OPERATORS,
   TENDER_ASSIGNEE_ROLES,
+  TENDER_EVALUATION_CRITERIA,
   TENDER_FILTER_FIELDS,
   TENDER_KINDS,
   TENDER_PRIORITIES,
@@ -59,6 +60,7 @@ const createTenderBaseSchema = z.object({
   dealingOfficerName: z.string().max(200).optional(),
   dealingOfficerEmail: z.string().email().max(200).optional(),
   dealingOfficerPhone: z.string().max(30).optional(),
+  evaluationCriteria: z.enum(TENDER_EVALUATION_CRITERIA).optional(),
 });
 
 // tenderNumber is required for a real tender (hand-typed, off the government notice) but not for
@@ -88,6 +90,7 @@ export const changeTenderStatusSchema = z.object({
   winnerName: z.string().max(200).optional(),
   winningBidAmount: z.coerce.number().nonnegative().optional(),
   lossReason: z.string().max(2000).optional(),
+  wonItemIds: z.array(z.string().uuid()).max(500).optional(),
   // Asked for on DRAFT/CANCELLED → SUBMITTED (required there for TENDER kind, see TendersService).
   submissionReference: z.string().trim().min(1).max(200).optional(),
 });
