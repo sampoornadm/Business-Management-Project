@@ -110,6 +110,17 @@ export default function TendersPage() {
   const canGenerateDocument = hasPermission(roleName, "tenders:generate_document");
   const hasActiveFilters = Boolean(debouncedSearch || conditions.length > 0);
 
+  // A view saved before a column existed doesn't list it, so it would never show up there:
+  // append such columns to the order (and show them when they are on by default).
+  function withNewColumns<V extends { visibleColumns: string[]; columnOrder: string[] }>(view: V): V {
+    const missing = TENDER_DEFAULT_ORDER.filter((key) => !view.columnOrder.includes(key));
+    return {
+      ...view,
+      columnOrder: [...view.columnOrder, ...missing],
+      visibleColumns: [...view.visibleColumns, ...missing.filter((key) => TENDER_DEFAULT_VISIBLE_KEYS.includes(key))],
+    };
+  }
+
   function applySavedView(id: string) {
     setActiveViewId(id);
     if (id === DEFAULT_VIEW_ID) {
@@ -119,15 +130,17 @@ export default function TendersPage() {
       setSorting([]);
       return;
     }
-    const view = savedViews.find((v) => v.id === id);
-    if (!view) return;
+    const found = savedViews.find((v) => v.id === id);
+    if (!found) return;
+    const view = withNewColumns(found);
     setConditions(view.filters);
     setVisibleKeys(view.visibleColumns);
     setColumnOrder(view.columnOrder);
     setSorting(view.sortBy ? [{ id: view.sortBy, desc: view.sortDir === "desc" }] : []);
   }
 
-  const activeView = savedViews.find((v) => v.id === activeViewId) ?? null;
+  const savedActiveView = savedViews.find((v) => v.id === activeViewId);
+  const activeView = savedActiveView ? withNewColumns(savedActiveView) : null;
   const hasUnsavedChanges =
     activeViewId === DEFAULT_VIEW_ID
       ? conditions.length > 0 ||
