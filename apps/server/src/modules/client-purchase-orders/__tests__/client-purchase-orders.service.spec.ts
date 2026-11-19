@@ -62,6 +62,10 @@ class FakeRepository implements IClientPurchaseOrdersRepository {
   async delete(id: string) {
     this.orders = this.orders.filter((order) => order.id !== id);
   }
+  shipped = new Map<string, number>();
+  async shippedQuantityByItem() {
+    return this.shipped;
+  }
 }
 
 describe("client PO checks", () => {

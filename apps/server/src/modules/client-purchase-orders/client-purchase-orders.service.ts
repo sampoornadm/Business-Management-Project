@@ -67,6 +67,7 @@ export function addDays(date: Date, days: number): Date {
 
 function toItemData(items: ClientPurchaseOrderItemInput[]): ClientPoItemData[] {
   return items.map((item, index) => ({
+    id: item.id,
     boqItemId: item.boqItemId ?? null,
     itemCode: item.itemCode ?? null,
     description: item.description,
@@ -207,6 +208,17 @@ export class ClientPurchaseOrdersService {
     if (input.poNumber && input.poNumber !== order.poNumber) {
       await this.assertPoNumberFree(input.poNumber, context.businessId, id);
     }
+    if (input.items) {
+      const shipped = await this.repository.shippedQuantityByItem(id);
+      for (const [itemId, quantity] of shipped) {
+        const kept = input.items.find((item) => item.id === itemId);
+        const line = order.items.find((item) => item.id === itemId);
+        if (!kept) throw new ConflictError(`"${line?.description ?? "A line"}" has been shipped and cannot be removed`);
+        if (kept.quantity < quantity) {
+          throw new ConflictError(`"${kept.description}" cannot go below the ${quantity} already shipped`);
+        }
+      }
+    }
     await this.repository.update(
       id,
       {
@@ -231,6 +243,9 @@ export class ClientPurchaseOrdersService {
 
   async delete(id: string, actorId: string, context: ScopedRequestContext): Promise<void> {
     const order = await this.getOrderOrThrow(id, context.businessId);
+    if ((await this.repository.shippedQuantityByItem(id)).size > 0) {
+      throw new ConflictError("This PO has shipments; delete them first");
+    }
     const documents = await this.attachmentsService.listByEntity(CLIENT_PO_ENTITY_TYPE, id);
     await Promise.all(documents.map((doc) => this.attachmentsService.deleteById(doc.id)));
     await this.repository.delete(id);

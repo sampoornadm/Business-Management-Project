@@ -37,3 +37,34 @@ Decisions made: client PO lives **inside the project** (no separate tab); board 
 - Integration: convert won tender → create client PO with PDF → overview returns tender/RFQ/vendor/PO data; non-won tender rejected.
 - Anonymised fixtures only (public repo).
 - `pnpm typecheck` (dev server stopped), `pnpm lint`, `pnpm test`; `graphify update .`. No browser check unless asked.
+
+## Phase B design (2026-11-19)
+
+**Data**
+- `PurchaseOrderItem.boqItemId` (unenforced snapshot ref): copied from `RfqItem.boqItemId` on create-from-RFQ, pickable on the manual PO form when a tender is chosen; backfilled for existing RFQ-sourced POs by matching description within the source RFQ. Vendor procurement ↔ client order are joined on boqItemId.
+- `Shipment` (per project, numbered 1..n): clientPurchaseOrderId, e-way bill no./date, vehicle, transporter, freightCost, dispatchedAt, grnNumber/grnDate, billId (unique FK to `Bill`), settledAt, notes. `ShipmentItem`: clientPoItemId (FK Restrict) + quantity. Documents via `AttachmentsService` (`entityType "Shipment"`, documentType EWAY_BILL / TECHNICAL / GRN / OTHER).
+- Client PO update now upserts lines by id (it used to delete + recreate), so a shipped line keeps its id; removing a shipped line is a 409.
+
+**Stage (derived, never stored)**: PREPARING → DISPATCHED (dispatchedAt) → GRN_RECEIVED (grnNumber) → BILLED (billId) → PAID (settledAt).
+
+**Endpoints**: `GET /projects/:id/supply` (per-BOQ-line progress: ordered, procured, received, dispatched, accepted + shipments); `POST /projects/:id/shipments`; `PATCH|DELETE /shipments/:id`; `POST /shipments/:id/dispatch|grn|bill|payments|documents|undo`. Bill reuses `BillsService.createBill` (client PO rates, GRN no./date). Payment = `Payment` entityType "Bill", direction RECEIVED, no cap at the bill total (bills carry no GST yet, and clients deduct TDS/LD), `settled` flag sets settledAt.
+
+**RBAC**: `shipments:read|create|update|delete` (Tender/Project manager, Accounts); bill route also needs `bills:create`, payment route `finance:create`.
+
+**UI**: project "Supply" tab: item progress table (with Receive on vendor POs via existing `GoodsReceiptDialog`) + a board of shipment cards in stage columns, each card's button performs the next stage in a dialog.
+
+## Phase C (built 2026-11-19)
+- Reports "Project Costing" became **Project Profit** (`GET /reports/project-costing?projectId=`, same report key/export).
+- Per project, derived on read: client PO value (Σ client PO lines), billed (Σ bills on the tender), received (Σ RECEIVED payments on those bills), vendor POs (Σ issued/received vendor PO lines on the tender), freight (Σ `Shipment.freightCost`), other costs (Σ project expenses + legacy labour entries).
+- Profit so far = received − total cost; expected profit = client PO value − total cost; margin % of received.
+- Cancelled projects left out. Old budget/variance columns dropped from the report (project budget field kept).
+- Project page gets a **Profit** tab (money in / money out / profit) from the same endpoint.
+- Known limit: freight recorded both on a shipment and as a TRANSPORT expense counts twice (UI note tells users to pick one).
+
+## Phase D (built 2026-11-19)
+- `POST /projects/:projectId/documents/read` (file + optional `kind`): reads an e-way bill, GRN or vendor invoice; nothing saved.
+- Kind = whichever title phrase appears first (each document quotes the others). Dialogs pass the kind explicitly.
+- **SAIL IISCO exception**: documents mentioning IISCO / Steel Authority of India go to `readIiscoDocument` (deterministic, per kind). No parser exists yet; user will supply sample files. Until then the AI model reads them, with a warning saying so.
+- Matching: e-way bill/GRN to the project's client PO by number, then to shipments waiting in Preparing/Dispatched (one = clear match; already-recorded numbers warn). Vendor invoice to the tender's vendor PO by number, with a total check.
+- UI: Supply tab "Read a document" opens the dispatch/GRN dialog prefilled with the file attached; both dialogs also get "Fill from file". Vendor invoice links to the vendor PO.
+- Not done: line quantities from documents, storing vendor invoices on the vendor PO, scanned-image OCR.

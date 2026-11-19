@@ -3,6 +3,7 @@ import { z } from "zod";
 const dateSchema = z.string().datetime().or(z.string().date());
 
 const itemSchema = z.object({
+  id: z.string().uuid().optional(),
   boqItemId: z.string().uuid().nullish(),
   itemCode: z.string().max(100).nullish(),
   description: z.string().min(1).max(2000),

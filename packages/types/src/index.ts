@@ -24,6 +24,7 @@ export * from "./report.js";
 export * from "./saved-view.js";
 export * from "./rfq.js";
 export * from "./settings.js";
+export * from "./shipment.js";
 export * from "./tag.js";
 export * from "./tender.js";
 export * from "./theme.js";

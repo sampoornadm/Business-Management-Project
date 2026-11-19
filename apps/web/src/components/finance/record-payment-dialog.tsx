@@ -3,6 +3,7 @@
 import { PAYMENT_METHODS } from "@bmp/types";
 import {
   Button,
+  Checkbox,
   Dialog,
   DialogClose,
   DialogContent,
@@ -28,6 +29,7 @@ export function RecordPaymentDialog({
   remainingAmount,
   onSubmit,
   isSubmitting,
+  closeOption,
 }: {
   remainingAmount: number;
   onSubmit: (input: {
@@ -35,8 +37,12 @@ export function RecordPaymentDialog({
     method: (typeof PAYMENT_METHODS)[number];
     bankAccountId?: string;
     referenceNumber?: string;
+    /** Only sent when `closeOption` is set: whether this payment closes the account. */
+    close?: boolean;
   }) => Promise<void>;
   isSubmitting?: boolean;
+  /** Label of an optional "this closes it" checkbox (checked by default), e.g. "Payment complete". */
+  closeOption?: string;
 }) {
   const { toast } = useToast();
   const bankAccountsQuery = useBankAccounts(true);
@@ -45,6 +51,7 @@ export function RecordPaymentDialog({
   const [method, setMethod] = useState<(typeof PAYMENT_METHODS)[number]>("CASH");
   const [bankAccountId, setBankAccountId] = useState("");
   const [referenceNumber, setReferenceNumber] = useState("");
+  const [close, setClose] = useState(true);
 
   async function handleSubmit() {
     const parsedAmount = Number(amount);
@@ -62,6 +69,7 @@ export function RecordPaymentDialog({
         method,
         bankAccountId: method === "CASH" ? undefined : bankAccountId,
         referenceNumber: referenceNumber || undefined,
+        ...(closeOption ? { close } : {}),
       });
       setOpen(false);
       setReferenceNumber("");
@@ -127,6 +135,12 @@ export function RecordPaymentDialog({
             <label className="text-sm font-medium">Reference number (optional)</label>
             <Input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
           </div>
+          {closeOption && (
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox checked={close} onCheckedChange={(checked) => setClose(checked === true)} />
+              {closeOption}
+            </label>
+          )}
         </div>
         <DialogFooter>
           <DialogClose asChild>

@@ -32,6 +32,8 @@ export type PurchaseOrderSortField = (typeof PURCHASE_ORDER_SORT_FIELDS)[number]
 
 export interface PurchaseOrderItemDto {
   id: string;
+  /** The tender BOQ line this buys; joins vendor procurement to the client's order. */
+  boqItemId: string | null;
   description: string;
   unit: string | null;
   quantity: number;
@@ -86,6 +88,7 @@ export interface PurchaseOrderDto extends PurchaseOrderListItemDto {
 }
 
 export interface CreatePurchaseOrderItemInput {
+  boqItemId?: string | null;
   description: string;
   unit?: string;
   quantity: number;

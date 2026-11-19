@@ -71,6 +71,10 @@ export const PERMISSION_KEYS = [
   "client_purchase_orders:read",
   "client_purchase_orders:update",
   "client_purchase_orders:delete",
+  "shipments:create",
+  "shipments:read",
+  "shipments:update",
+  "shipments:delete",
   "bills:create",
   "bills:read",
   "finance:create",
@@ -120,6 +124,7 @@ const TENDER_VIEW_BASELINE: PermissionKey[] = [
   "purchase_orders:read",
   "projects:read",
   "client_purchase_orders:read",
+  "shipments:read",
   "finance:read",
   "reports:read",
 ];
@@ -169,6 +174,9 @@ const TENDER_MANAGER_PERMISSIONS: PermissionKey[] = [
   "client_purchase_orders:create",
   "client_purchase_orders:update",
   "client_purchase_orders:delete",
+  "shipments:create",
+  "shipments:update",
+  "shipments:delete",
 ];
 
 // Estimators fill in tender details/upload documents but don't own
@@ -210,6 +218,9 @@ const PROJECT_MANAGER_PERMISSIONS: PermissionKey[] = [
   "client_purchase_orders:create",
   "client_purchase_orders:update",
   "client_purchase_orders:delete",
+  "shipments:create",
+  "shipments:update",
+  "shipments:delete",
 ];
 
 // Accounts owns the finance lifecycle end-to-end (spec: "Manages bills,
@@ -224,6 +235,9 @@ const ACCOUNTS_PERMISSIONS: PermissionKey[] = [
   "client_purchase_orders:create",
   "client_purchase_orders:update",
   "client_purchase_orders:delete",
+  "shipments:create",
+  "shipments:update",
+  "shipments:delete",
 ];
 
 const VIEWER_PERMISSIONS: PermissionKey[] = [

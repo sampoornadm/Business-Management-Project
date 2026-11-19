@@ -73,7 +73,8 @@ export function useSaveClientPurchaseOrder(projectId: string) {
       );
       return unwrap(uploaded.data);
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: key(projectId) }),
+    // The whole project: supply progress and KPIs read client PO lines too.
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["projects", projectId] }),
   });
 }
 
@@ -83,6 +84,7 @@ export function useDeleteClientPurchaseOrder(projectId: string) {
     mutationFn: async (orderId: string) => {
       await apiClient.delete(`/client-purchase-orders/${orderId}`);
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: key(projectId) }),
+    // The whole project: supply progress and KPIs read client PO lines too.
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["projects", projectId] }),
   });
 }

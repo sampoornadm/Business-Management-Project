@@ -34,6 +34,7 @@ const poListArgs = {
 export type PurchaseOrderListItem = Prisma.PurchaseOrderGetPayload<typeof poListArgs>;
 
 export interface CreatePurchaseOrderItemData {
+  boqItemId?: string | null;
   description: string;
   unit?: string | null;
   quantity: number;
@@ -121,6 +122,7 @@ export class PurchaseOrdersRepository implements IPurchaseOrdersRepository {
         data: data.items.map((item, index) => ({
           id: randomUUID(),
           purchaseOrderId: poId,
+          boqItemId: item.boqItemId ?? null,
           description: item.description,
           unit: item.unit ?? null,
           quantity: item.quantity,

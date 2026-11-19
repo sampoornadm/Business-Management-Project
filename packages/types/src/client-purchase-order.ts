@@ -64,6 +64,8 @@ export interface ProjectClientPurchaseOrdersDto {
 }
 
 export interface ClientPurchaseOrderItemInput {
+  /** Set when editing an existing line, so a shipped line keeps its identity. */
+  id?: string;
   boqItemId?: string | null;
   itemCode?: string | null;
   description: string;

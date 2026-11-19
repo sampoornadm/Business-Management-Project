@@ -22,9 +22,12 @@ import { useParams } from "next/navigation";
 
 import { ClientPurchaseOrdersTab } from "@/components/projects/client-purchase-orders-tab";
 import { ProjectOverviewTab } from "@/components/projects/project-overview-tab";
+import { ProjectProfitTab } from "@/components/projects/project-profit-tab";
+import { SupplyTab } from "@/components/projects/supply-tab";
 import { StatusBadge } from "@/components/status-badge";
 import { useProjectClientPurchaseOrders } from "@/hooks/use-client-purchase-orders";
 import { useProject, useProjectOverview } from "@/hooks/use-projects";
+import { useProjectSupply } from "@/hooks/use-shipments";
 import { useAuthStore } from "@/lib/auth-store";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { daysUntil, isPastDue } from "@/lib/deadline";
@@ -52,6 +55,7 @@ export default function ProjectDetailPage() {
   useBreadcrumbLabel(params.id, projectQuery.data?.name);
   const overviewQuery = useProjectOverview(params.id);
   const clientPosQuery = useProjectClientPurchaseOrders(params.id);
+  const supplyQuery = useProjectSupply(params.id);
 
   if (projectQuery.isLoading || !projectQuery.data) {
     return <PageSkeleton />;
@@ -133,6 +137,8 @@ export default function ProjectDetailPage() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="client-po">Client POs</TabsTrigger>
+          <TabsTrigger value="supply">Supply</TabsTrigger>
+          <TabsTrigger value="profit">Profit</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -148,6 +154,23 @@ export default function ProjectDetailPage() {
             canUpdate={hasPermission(roleName, "client_purchase_orders:update")}
             canDelete={hasPermission(roleName, "client_purchase_orders:delete")}
           />
+        </TabsContent>
+        <TabsContent value="supply">
+          <SupplyTab
+            projectId={project.id}
+            supply={supplyQuery.data}
+            orders={clientPos?.orders ?? []}
+            permissions={{
+              canCreate: hasPermission(roleName, "shipments:create"),
+              canUpdate: hasPermission(roleName, "shipments:update"),
+              canDelete: hasPermission(roleName, "shipments:delete"),
+              canBill: hasPermission(roleName, "shipments:update") && hasPermission(roleName, "bills:create"),
+              canPay: hasPermission(roleName, "shipments:update") && hasPermission(roleName, "finance:create"),
+            }}
+          />
+        </TabsContent>
+        <TabsContent value="profit">
+          <ProjectProfitTab projectId={project.id} />
         </TabsContent>
       </Tabs>
 

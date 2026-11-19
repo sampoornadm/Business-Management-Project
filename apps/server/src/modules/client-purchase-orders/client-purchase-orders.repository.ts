@@ -20,6 +20,8 @@ export interface ProjectForClientPo {
 }
 
 export interface ClientPoItemData {
+  /** An existing line's id (update keeps it); absent = new line. */
+  id?: string;
   boqItemId: string | null;
   itemCode: string | null;
   description: string;
@@ -47,9 +49,15 @@ export interface IClientPurchaseOrdersRepository {
     data: ClientPoData & { businessId: string; projectId: string; createdById: string },
     items: ClientPoItemData[],
   ): Promise<string>;
-  /** `items`, when given, replaces every line. */
+  /**
+   * `items`, when given, becomes the PO's full set of lines: lines with an id are updated in
+   * place, lines without one are created, and lines left out are deleted (a shipped line cannot
+   * be, its shipment items reference it with onDelete Restrict, so the transaction fails).
+   */
   update(id: string, data: Partial<ClientPoData>, items?: ClientPoItemData[]): Promise<void>;
   delete(id: string): Promise<void>;
+  /** Σ shipped quantity per line of the PO, over every shipment (dispatched or not). */
+  shippedQuantityByItem(clientPurchaseOrderId: string): Promise<Map<string, number>>;
 }
 
 export class ClientPurchaseOrdersRepository implements IClientPurchaseOrdersRepository {
@@ -111,20 +119,31 @@ export class ClientPurchaseOrdersRepository implements IClientPurchaseOrdersRepo
   }
 
   async update(id: string, data: Partial<ClientPoData>, items?: ClientPoItemData[]): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.clientPurchaseOrder.update({ where: { id }, data }),
-      ...(items
-        ? [
-            this.prisma.clientPurchaseOrderItem.deleteMany({ where: { clientPurchaseOrderId: id } }),
-            this.prisma.clientPurchaseOrderItem.createMany({
-              data: items.map((item) => ({ ...item, clientPurchaseOrderId: id })),
-            }),
-          ]
-        : []),
-    ]);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.clientPurchaseOrder.update({ where: { id }, data });
+      if (!items) return;
+      const keptIds = items.flatMap((item) => (item.id ? [item.id] : []));
+      await tx.clientPurchaseOrderItem.deleteMany({ where: { clientPurchaseOrderId: id, id: { notIn: keptIds } } });
+      for (const { id: itemId, ...line } of items) {
+        if (itemId) {
+          await tx.clientPurchaseOrderItem.updateMany({ where: { id: itemId, clientPurchaseOrderId: id }, data: line });
+        } else {
+          await tx.clientPurchaseOrderItem.create({ data: { ...line, clientPurchaseOrderId: id } });
+        }
+      }
+    });
   }
 
   async delete(id: string): Promise<void> {
     await this.prisma.clientPurchaseOrder.delete({ where: { id } });
+  }
+
+  async shippedQuantityByItem(clientPurchaseOrderId: string): Promise<Map<string, number>> {
+    const rows = await this.prisma.shipmentItem.groupBy({
+      by: ["clientPoItemId"],
+      where: { clientPoItem: { clientPurchaseOrderId } },
+      _sum: { quantity: true },
+    });
+    return new Map(rows.map((row) => [row.clientPoItemId, row._sum.quantity ?? 0]));
   }
 }

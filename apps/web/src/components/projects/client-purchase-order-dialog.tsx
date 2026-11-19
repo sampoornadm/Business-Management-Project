@@ -36,6 +36,8 @@ import { useExtractClientPurchaseOrder, useSaveClientPurchaseOrder } from "@/hoo
 const NOT_IN_BOQ = "__none__";
 
 interface DraftItem {
+  /** Set for a saved line, so editing keeps it (a shipped line must keep its id). */
+  id?: string;
   boqItemId: string;
   itemCode: string;
   description: string;
@@ -48,6 +50,7 @@ const emptyItem = (): DraftItem => ({ boqItemId: NOT_IN_BOQ, itemCode: "", descr
 
 function toDraft(item: Partial<ClientPurchaseOrderItemInput> & { description: string }): DraftItem {
   return {
+    id: item.id,
     boqItemId: item.boqItemId ?? NOT_IN_BOQ,
     itemCode: item.itemCode ?? "",
     description: item.description,
@@ -114,6 +117,7 @@ export function ClientPurchaseOrderDialog({
       prev.map((item, i) =>
         i === index
           ? {
+              id: item.id,
               boqItemId,
               itemCode: line.itemCode ?? "",
               description: item.description || line.description,
@@ -158,6 +162,7 @@ export function ClientPurchaseOrderDialog({
     const prepared = items
       .filter((item) => item.description.trim() && Number(item.quantity) > 0 && item.rate.trim())
       .map((item) => ({
+        id: item.id,
         boqItemId: item.boqItemId === NOT_IN_BOQ ? null : item.boqItemId,
         itemCode: item.itemCode.trim() || null,
         description: item.description.trim(),

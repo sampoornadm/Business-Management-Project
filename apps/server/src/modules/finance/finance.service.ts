@@ -348,7 +348,8 @@ export class FinanceService {
   private async validateAndCreatePayment(params: {
     entityType: PayableEntityType;
     entityId: string;
-    total: number;
+    /** null = no ceiling on the total paid. */
+    total: number | null;
     direction: "RECEIVED" | "PAID";
     input: CreatePaymentInput;
     actorId: string;
@@ -365,7 +366,7 @@ export class FinanceService {
       params.businessId,
     );
     const newTotalPaid = round2(alreadyPaid + params.input.amount);
-    if (newTotalPaid > params.total + EPSILON) {
+    if (params.total !== null && newTotalPaid > params.total + EPSILON) {
       throw new BadRequestError(
         `Payment would exceed the total amount owed (${params.total}); already paid ${alreadyPaid}`,
       );
@@ -435,6 +436,22 @@ export class FinanceService {
     const status: ExpenseStatus = newTotalPaid >= expense.amount - EPSILON ? "PAID" : "PARTIALLY_PAID";
     await this.financeRepository.updateExpense(expenseId, { status });
     return this.getExpense(expenseId, businessId);
+  }
+
+  /**
+   * The client's payment against a bill. Not capped at the bill total: bills carry no GST yet,
+   * and what the client actually pays can be above it (GST, freight) or below it (TDS, LD).
+   */
+  async recordBillPayment(billId: string, input: CreatePaymentInput, actorId: string, businessId: string): Promise<number> {
+    return this.validateAndCreatePayment({
+      entityType: "Bill",
+      entityId: billId,
+      total: null,
+      direction: "RECEIVED",
+      input,
+      actorId,
+      businessId,
+    });
   }
 
   async recordPurchaseOrderPayment(

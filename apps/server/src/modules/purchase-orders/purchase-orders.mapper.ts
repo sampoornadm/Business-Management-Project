@@ -15,6 +15,7 @@ import type { PurchaseOrderDetail, PurchaseOrderListItem } from "./purchase-orde
 function toItemDto(item: PurchaseOrderDetail["items"][number]): PurchaseOrderItemDto {
   return {
     id: item.id,
+    boqItemId: item.boqItemId,
     description: item.description,
     unit: item.unit,
     quantity: item.quantity,

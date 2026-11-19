@@ -53,6 +53,7 @@ model User {
   createdRfqs                 Rfq[]                  @relation("RfqCreatedBy")
   createdPurchaseOrders       PurchaseOrder[]        @relation("PurchaseOrderCreatedBy")
   createdClientPurchaseOrders ClientPurchaseOrder[]  @relation("ClientPurchaseOrderCreatedBy")
+  createdShipments            Shipment[]             @relation("ShipmentCreatedBy")
   receivedGoodsReceipts       GoodsReceipt[]         @relation("GoodsReceiptReceivedBy")
   givenVendorRatings          VendorRating[]         @relation("VendorRatingRatedBy")
   createdProjects             Project[]              @relation("ProjectCreatedBy")
@@ -152,6 +153,7 @@ model Business {
   rfqs                  Rfq[]
   purchaseOrders        PurchaseOrder[]
   clientPurchaseOrders  ClientPurchaseOrder[]
+  shipments             Shipment[]
   goodsReceipts         GoodsReceipt[]
   bankAccounts          BankAccount[]
   invoices              Invoice[]
@@ -1375,6 +1377,9 @@ model PurchaseOrderItem {
   amount           Float
   receivedQuantity Float         @default(0)
   sortOrder        Int           @default(0)
+  // Unenforced reference to the tender's BOQ line this buys (same convention as
+  // BillItem.boqItemId). It is how a project joins what we bought to what the client ordered.
+  boqItemId        String?
 
   goodsReceiptItems GoodsReceiptItem[]
 
@@ -1470,6 +1475,7 @@ model Project {
   bills                ProjectBill[]
   invoices             Invoice[]
   clientPurchaseOrders ClientPurchaseOrder[]
+  shipments            Shipment[]
   expenses             Expense[]
 
   createdAt DateTime @default(now())
@@ -1498,7 +1504,8 @@ model ClientPurchaseOrder {
   createdById String
   createdBy   User   @relation("ClientPurchaseOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  items ClientPurchaseOrderItem[]
+  items     ClientPurchaseOrderItem[]
+  shipments Shipment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1522,8 +1529,70 @@ model ClientPurchaseOrderItem {
   rate                  Float
   sortOrder             Int                 @default(0)
 
+  shipmentItems ShipmentItem[]
+
   @@index([clientPurchaseOrderId])
   @@map("client_purchase_order_items")
+}
+
+// One consignment sent to the client against one client PO: one e-way bill, one GRN, one bill.
+// Its stage is derived from which of these are filled (dispatchedAt → grnNumber → billId →
+// settledAt), never stored, so it cannot disagree with the data.
+model Shipment {
+  id                    String              @id @default(uuid())
+  businessId            String
+  business              Business            @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  projectId             String
+  project               Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clientPurchaseOrderId String
+  clientPurchaseOrder   ClientPurchaseOrder @relation(fields: [clientPurchaseOrderId], references: [id], onDelete: Restrict)
+  // 1, 2, 3… within the project.
+  number                Int
+
+  ewayBillNumber  String?
+  ewayBillDate    DateTime?
+  vehicleNumber   String?
+  transporterName String?
+  // What we pay the transporter; counted as a project cost in the profit report.
+  freightCost     Float?
+  dispatchedAt    DateTime?
+
+  grnNumber String?
+  grnDate   DateTime?
+
+  billId String? @unique
+  bill   Bill?   @relation(fields: [billId], references: [id], onDelete: SetNull)
+
+  // Set when the client's payment for this shipment is closed (in full or net of deductions).
+  settledAt DateTime?
+  notes     String?
+
+  createdById String
+  createdBy   User   @relation("ShipmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  items ShipmentItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, number])
+  @@index([businessId])
+  @@index([clientPurchaseOrderId])
+  @@map("shipments")
+}
+
+model ShipmentItem {
+  id             String                  @id @default(uuid())
+  shipmentId     String
+  shipment       Shipment                @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  // Restrict: a client PO line that has been shipped cannot be deleted out from under it.
+  clientPoItemId String
+  clientPoItem   ClientPurchaseOrderItem @relation(fields: [clientPoItemId], references: [id], onDelete: Restrict)
+  quantity       Float
+
+  @@unique([shipmentId, clientPoItemId])
+  @@index([clientPoItemId])
+  @@map("shipment_items")
 }
 
 enum MilestoneStatus {
@@ -1706,6 +1775,8 @@ model Bill {
   grnDate    DateTime?
 
   items BillItem[]
+
+  shipment Shipment?
 
   createdById String
   createdBy   User   @relation("BillCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
