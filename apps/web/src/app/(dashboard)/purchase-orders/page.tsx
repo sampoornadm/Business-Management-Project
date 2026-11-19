@@ -221,7 +221,7 @@ export default function PurchaseOrdersPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Purchase Orders"
+        title="Vendor POs"
         description="Track orders placed with vendors and their delivery status."
         actions={canCreate ? createPoButton : undefined}
       />

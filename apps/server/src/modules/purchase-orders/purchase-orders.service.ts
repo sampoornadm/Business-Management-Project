@@ -73,7 +73,7 @@ export class PurchaseOrdersService {
       tenderId?: string;
       expectedDeliveryDate?: Date;
       notes?: string;
-      items: Array<{ description: string; unit?: string; quantity: number; rate: number; sortOrder?: number }>;
+      items: Array<{ boqItemId?: string | null; description: string; unit?: string; quantity: number; rate: number; sortOrder?: number }>;
     },
     actorId: string,
     context: ScopedRequestContext,
@@ -91,6 +91,7 @@ export class PurchaseOrdersService {
     }
 
     const items: CreatePurchaseOrderItemData[] = input.items.map((item, index) => ({
+      boqItemId: input.tenderId ? (item.boqItemId ?? null) : null,
       description: item.description,
       unit: item.unit ?? null,
       quantity: item.quantity,
@@ -145,6 +146,7 @@ export class PurchaseOrdersService {
       const rate = selected.rate;
       const list = itemsByVendor.get(selected.vendorId) ?? [];
       list.push({
+        boqItemId: item.boqItemId,
         description: item.description,
         unit: item.unit,
         quantity: item.quantity,

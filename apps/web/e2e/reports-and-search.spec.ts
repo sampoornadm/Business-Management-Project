@@ -41,7 +41,7 @@ test.describe("Reports and search", () => {
     await expect(page.getByText("Win rate")).toBeVisible();
     await expect(page.getByText("Tenders by status")).toBeVisible();
 
-    for (const tab of ["Procurement Spend", "Project Costing", "Financial Summary", "Vendor Performance"]) {
+    for (const tab of ["Procurement Spend", "Project Profit", "Financial Summary", "Vendor Performance"]) {
       await page.getByRole("tab", { name: tab }).click();
       await page.waitForTimeout(300);
     }

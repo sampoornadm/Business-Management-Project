@@ -36,7 +36,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "RFQs", href: "/rfqs", icon: FileSpreadsheet, permission: "rfq:read" },
   { label: "Items", href: "/items", icon: Package, permission: "rfq:read" },
   {
-    label: "Purchase Orders",
+    label: "Vendor POs",
     href: "/purchase-orders",
     icon: ShoppingCart,
     permission: "purchase_orders:read",

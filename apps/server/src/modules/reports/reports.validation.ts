@@ -7,6 +7,10 @@ export const reportDateRangeQuerySchema = z.object({
 });
 export type ReportDateRangeQueryParsed = z.infer<typeof reportDateRangeQuerySchema>;
 
+export const projectCostingQuerySchema = z.object({
+  projectId: z.string().uuid().optional(),
+});
+
 export const exportReportParamsSchema = z.object({
   reportKey: z.enum(REPORT_KEYS),
 });

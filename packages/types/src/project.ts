@@ -196,3 +196,66 @@ export interface ListProjectsQuery {
   sortBy?: ProjectSortField;
   sortDir?: "asc" | "desc";
 }
+
+/** One vendor's reply to one RFQ of the project's tender. */
+export interface ProjectRfqVendorSummaryDto {
+  vendorId: string;
+  vendorName: string;
+  status: "INVITED" | "RESPONDED" | "DECLINED";
+  quotedItems: number;
+  /** Σ RFQ item quantity × quoted rate over the lines this vendor priced. */
+  quotedTotal: number;
+  /** Lines where this vendor's quote is the selected one. */
+  selectedItems: number;
+}
+
+export interface ProjectRfqSummaryDto {
+  id: string;
+  title: string;
+  status: "DRAFT" | "SENT" | "CLOSED" | "CANCELLED";
+  itemCount: number;
+  vendors: ProjectRfqVendorSummaryDto[];
+}
+
+export interface ProjectVendorPurchaseOrderSummaryDto {
+  id: string;
+  poNumber: string;
+  vendorId: string;
+  vendorName: string;
+  status: "DRAFT" | "ISSUED" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED";
+  totalAmount: number;
+  /** Σ received quantity × rate. */
+  receivedAmount: number;
+  expectedDeliveryDate: string | null;
+}
+
+export interface ProjectVendorSummaryDto {
+  id: string;
+  name: string;
+  rfqCount: number;
+  purchaseOrderCount: number;
+  /** Σ totals of this vendor's non-cancelled POs. */
+  purchaseOrderValue: number;
+}
+
+/** Everything the project screen shows about the tender it came from and its procurement. */
+export interface ProjectOverviewDto {
+  tender: {
+    id: string;
+    tenderNumber: string;
+    title: string;
+    clientName: string | null;
+    evaluationCriteria: string | null;
+    winningBidAmount: number | null;
+    submissionReference: string | null;
+    deliveryPeriodDays: number;
+    /** Lines won on an Individual-evaluation tender; 0 = whole tender. */
+    wonItemsCount: number;
+    wonItemsTotal: number | null;
+  };
+  rfqs: ProjectRfqSummaryDto[];
+  vendors: ProjectVendorSummaryDto[];
+  vendorPurchaseOrders: ProjectVendorPurchaseOrderSummaryDto[];
+  /** Σ non-cancelled vendor PO totals and Σ of what has been received against them. */
+  procurement: { orderedValue: number; receivedValue: number };
+}

@@ -9,7 +9,7 @@ import type {
   EmbeddedAttachmentRow,
   IReportsRepository,
   PaymentBasicRow,
-  ProjectBasicRow,
+  ProjectProfitSourceRow,
   PurchaseOrderForOnTimeRow,
   PurchaseOrderSpendRow,
 } from "../reports.repository.js";
@@ -22,9 +22,7 @@ class FakeReportsRepository implements IReportsRepository {
   tenderStatusCounts: { status: never; count: number }[] = [];
   tenderDates: { createdAt: Date; submissionDate: Date }[] = [];
   poSpendItems: PurchaseOrderSpendRow[] = [];
-  activeProjects: ProjectBasicRow[] = [];
-  poTotalsByTender: { tenderId: string; amount: number }[] = [];
-  laborTotalsByProject: { projectId: string; amount: number }[] = [];
+  profitSources: ProjectProfitSourceRow[] = [];
   payments: PaymentBasicRow[] = [];
   vendors: { id: string; name: string }[] = [];
   vendorRatings: { vendorId: string; rating: number }[] = [];
@@ -48,14 +46,8 @@ class FakeReportsRepository implements IReportsRepository {
   async findPurchaseOrderItemsForSpend(_businessId: string) {
     return this.poSpendItems;
   }
-  async findActiveProjectsBasic(_businessId: string) {
-    return this.activeProjects;
-  }
-  async findPurchaseOrderTotalsByTenderIds(_businessId: string) {
-    return this.poTotalsByTender;
-  }
-  async findLaborTotalsByProjectIds(_businessId: string) {
-    return this.laborTotalsByProject;
+  async findProjectProfitSources(_businessId: string, projectId?: string) {
+    return this.profitSources.filter((row) => !projectId || row.id === projectId);
   }
   async findPaymentsForSummary(_businessId: string) {
     return this.payments;
@@ -176,19 +168,22 @@ describe("ReportsService", () => {
     ]);
   });
 
-  it("computes project costing as budget minus PO and labor spend", async () => {
+  it("derives profit so far, expected profit and margin per project and overall", async () => {
     const repo = new FakeReportsRepository();
-    const tenderId = randomUUID();
-    const projectId = randomUUID();
-    repo.activeProjects = [
-      { id: projectId, name: "Highway Widening", status: "ACTIVE", budget: 500000, tenderId },
+    const base = { status: "ACTIVE", billed: 0, received: 0, vendorCost: 0, freight: 0, otherCosts: 0, clientPoValue: 0 };
+    repo.profitSources = [
+      { ...base, id: "p1", name: "Supply A", clientPoValue: 100000, billed: 60000, received: 50000, vendorCost: 40000, freight: 2000, otherCosts: 3000 },
+      { ...base, id: "p2", name: "Supply B", clientPoValue: 20000, vendorCost: 5000 },
     ];
-    repo.poTotalsByTender = [{ tenderId, amount: 200000 }];
-    repo.laborTotalsByProject = [{ projectId, amount: 50000 }];
     const service = new ReportsService(repo);
     const report = await service.getProjectCosting(businessId);
-    expect(report.projects[0]!.actualCost).toBe(250000);
-    expect(report.projects[0]!.variance).toBe(250000);
+
+    expect(report.projects[0]).toMatchObject({ totalCost: 45000, profit: 5000, expectedProfit: 55000, marginPercent: 10 });
+    expect(report.projects[1]).toMatchObject({ profit: -5000, expectedProfit: 15000, marginPercent: null });
+    expect(report.totals).toMatchObject({ clientPoValue: 120000, received: 50000, totalCost: 50000, profit: 0, marginPercent: 0 });
+
+    const one = await service.getProjectCosting(businessId, "p2");
+    expect(one.projects.map((p) => p.projectId)).toEqual(["p2"]);
   });
 
   it("buckets payments into monthly received/paid/net totals", async () => {

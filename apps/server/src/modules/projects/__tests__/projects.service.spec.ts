@@ -205,6 +205,10 @@ class FakeProjectsRepository implements IProjectsRepository {
   async sumPurchaseOrdersForTender() {
     return this.poTotal;
   }
+
+  async findOverviewData() {
+    return null;
+  }
 }
 
 class FakeTendersRepository implements Partial<ITendersRepository> {

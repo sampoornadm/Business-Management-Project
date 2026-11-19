@@ -38,34 +38,36 @@ model User {
   auditLogs               AuditLog[]               @relation("AuditLogActor")
   uploadedAttachments     Attachment[]             @relation("AttachmentUploadedBy")
 
-  createdTenders         Tender[]               @relation("TenderCreatedBy")
-  ratesLockedTenders     Tender[]               @relation("TenderRatesLockedBy")
-  tenderSubmissions      TenderSubmission[]     @relation("TenderSubmittedBy")
-  tenderAssignments      TenderAssignee[]       @relation("TenderAssignee")
-  tenderAssignmentsGiven TenderAssignee[]       @relation("TenderAssignedBy")
-  pinnedTenderNotes      TenderPinnedNote[]     @relation("TenderPinnedBy")
-  createdOrganizations   Organization[]         @relation("OrganizationCreatedBy")
-  notifications          Notification[]         @relation("NotificationRecipient")
-  savedViews             SavedView[]            @relation("SavedViewOwner")
-  createdBoqs            Boq[]                  @relation("BoqCreatedBy")
-  createdHistoricalRates HistoricalRate[]       @relation("HistoricalRateCreatedBy")
-  createdVendors         Vendor[]               @relation("VendorCreatedBy")
-  createdRfqs            Rfq[]                  @relation("RfqCreatedBy")
-  createdPurchaseOrders  PurchaseOrder[]        @relation("PurchaseOrderCreatedBy")
-  receivedGoodsReceipts  GoodsReceipt[]         @relation("GoodsReceiptReceivedBy")
-  givenVendorRatings     VendorRating[]         @relation("VendorRatingRatedBy")
-  createdProjects        Project[]              @relation("ProjectCreatedBy")
-  recordedMaterialUsages ProjectMaterialUsage[] @relation("ProjectMaterialRecordedBy")
-  recordedLaborEntries   ProjectLaborEntry[]    @relation("ProjectLaborRecordedBy")
-  createdProjectBills    ProjectBill[]          @relation("ProjectBillCreatedBy")
-  createdBankAccounts    BankAccount[]          @relation("BankAccountCreatedBy")
-  createdInvoices        Invoice[]              @relation("InvoiceCreatedBy")
-  createdBills           Bill[]                 @relation("BillCreatedBy")
-  createdExpenses        Expense[]              @relation("ExpenseCreatedBy")
-  recordedPayments       Payment[]              @relation("PaymentRecordedBy")
-  referenceDataImports   ReferenceDataImport[]  @relation("ReferenceDataImportTriggeredBy")
-  classificationRuns     ClassificationRun[]    @relation("ClassificationRunTriggeredBy")
-  settingsUpdated        Setting[]              @relation("SettingUpdatedBy")
+  createdTenders              Tender[]               @relation("TenderCreatedBy")
+  ratesLockedTenders          Tender[]               @relation("TenderRatesLockedBy")
+  tenderSubmissions           TenderSubmission[]     @relation("TenderSubmittedBy")
+  tenderAssignments           TenderAssignee[]       @relation("TenderAssignee")
+  tenderAssignmentsGiven      TenderAssignee[]       @relation("TenderAssignedBy")
+  pinnedTenderNotes           TenderPinnedNote[]     @relation("TenderPinnedBy")
+  createdOrganizations        Organization[]         @relation("OrganizationCreatedBy")
+  notifications               Notification[]         @relation("NotificationRecipient")
+  savedViews                  SavedView[]            @relation("SavedViewOwner")
+  createdBoqs                 Boq[]                  @relation("BoqCreatedBy")
+  createdHistoricalRates      HistoricalRate[]       @relation("HistoricalRateCreatedBy")
+  createdVendors              Vendor[]               @relation("VendorCreatedBy")
+  createdRfqs                 Rfq[]                  @relation("RfqCreatedBy")
+  createdPurchaseOrders       PurchaseOrder[]        @relation("PurchaseOrderCreatedBy")
+  createdClientPurchaseOrders ClientPurchaseOrder[]  @relation("ClientPurchaseOrderCreatedBy")
+  createdShipments            Shipment[]             @relation("ShipmentCreatedBy")
+  receivedGoodsReceipts       GoodsReceipt[]         @relation("GoodsReceiptReceivedBy")
+  givenVendorRatings          VendorRating[]         @relation("VendorRatingRatedBy")
+  createdProjects             Project[]              @relation("ProjectCreatedBy")
+  recordedMaterialUsages      ProjectMaterialUsage[] @relation("ProjectMaterialRecordedBy")
+  recordedLaborEntries        ProjectLaborEntry[]    @relation("ProjectLaborRecordedBy")
+  createdProjectBills         ProjectBill[]          @relation("ProjectBillCreatedBy")
+  createdBankAccounts         BankAccount[]          @relation("BankAccountCreatedBy")
+  createdInvoices             Invoice[]              @relation("InvoiceCreatedBy")
+  createdBills                Bill[]                 @relation("BillCreatedBy")
+  createdExpenses             Expense[]              @relation("ExpenseCreatedBy")
+  recordedPayments            Payment[]              @relation("PaymentRecordedBy")
+  referenceDataImports        ReferenceDataImport[]  @relation("ReferenceDataImportTriggeredBy")
+  classificationRuns          ClassificationRun[]    @relation("ClassificationRunTriggeredBy")
+  settingsUpdated             Setting[]              @relation("SettingUpdatedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -150,6 +152,8 @@ model Business {
   items                 Item[]
   rfqs                  Rfq[]
   purchaseOrders        PurchaseOrder[]
+  clientPurchaseOrders  ClientPurchaseOrder[]
+  shipments             Shipment[]
   goodsReceipts         GoodsReceipt[]
   bankAccounts          BankAccount[]
   invoices              Invoice[]
@@ -1373,6 +1377,9 @@ model PurchaseOrderItem {
   amount           Float
   receivedQuantity Float         @default(0)
   sortOrder        Int           @default(0)
+  // Unenforced reference to the tender's BOQ line this buys (same convention as
+  // BillItem.boqItemId). It is how a project joins what we bought to what the client ordered.
+  boqItemId        String?
 
   goodsReceiptItems GoodsReceiptItem[]
 
@@ -1462,12 +1469,14 @@ model Project {
   createdById String
   createdBy   User   @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  milestones     ProjectMilestone[]
-  materialUsages ProjectMaterialUsage[]
-  laborEntries   ProjectLaborEntry[]
-  bills          ProjectBill[]
-  invoices       Invoice[]
-  expenses       Expense[]
+  milestones           ProjectMilestone[]
+  materialUsages       ProjectMaterialUsage[]
+  laborEntries         ProjectLaborEntry[]
+  bills                ProjectBill[]
+  invoices             Invoice[]
+  clientPurchaseOrders ClientPurchaseOrder[]
+  shipments            Shipment[]
+  expenses             Expense[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1475,6 +1484,115 @@ model Project {
   @@index([businessId])
   @@index([status])
   @@map("projects")
+}
+
+// The client's PO for a won tender: which items we must supply, at what rate, by when. Lives
+// inside the Project (one project per tender, any number of POs — split or partial orders).
+// poValue is not stored: it is Σ item amounts, recomputed on read like PurchaseOrder totals.
+model ClientPurchaseOrder {
+  id              String   @id @default(uuid())
+  businessId      String
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // The client's own PO number, typed or extracted — not generated by us.
+  poNumber        String
+  poDate          DateTime
+  deliveryDueDate DateTime
+  notes           String?
+
+  createdById String
+  createdBy   User   @relation("ClientPurchaseOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  items     ClientPurchaseOrderItem[]
+  shipments Shipment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, poNumber])
+  @@index([projectId])
+  @@map("client_purchase_orders")
+}
+
+model ClientPurchaseOrderItem {
+  id                    String              @id @default(uuid())
+  clientPurchaseOrderId String
+  clientPurchaseOrder   ClientPurchaseOrder @relation(fields: [clientPurchaseOrderId], references: [id], onDelete: Cascade)
+  // Unenforced reference to the BOQ line this PO line orders — same snapshot convention as
+  // BillItem.boqItemId. Null = the client ordered something not in our BOQ.
+  boqItemId             String?
+  itemCode              String?
+  description           String
+  unit                  String?
+  quantity              Float
+  rate                  Float
+  sortOrder             Int                 @default(0)
+
+  shipmentItems ShipmentItem[]
+
+  @@index([clientPurchaseOrderId])
+  @@map("client_purchase_order_items")
+}
+
+// One consignment sent to the client against one client PO: one e-way bill, one GRN, one bill.
+// Its stage is derived from which of these are filled (dispatchedAt → grnNumber → billId →
+// settledAt), never stored, so it cannot disagree with the data.
+model Shipment {
+  id                    String              @id @default(uuid())
+  businessId            String
+  business              Business            @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  projectId             String
+  project               Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clientPurchaseOrderId String
+  clientPurchaseOrder   ClientPurchaseOrder @relation(fields: [clientPurchaseOrderId], references: [id], onDelete: Restrict)
+  // 1, 2, 3… within the project.
+  number                Int
+
+  ewayBillNumber  String?
+  ewayBillDate    DateTime?
+  vehicleNumber   String?
+  transporterName String?
+  // What we pay the transporter; counted as a project cost in the profit report.
+  freightCost     Float?
+  dispatchedAt    DateTime?
+
+  grnNumber String?
+  grnDate   DateTime?
+
+  billId String? @unique
+  bill   Bill?   @relation(fields: [billId], references: [id], onDelete: SetNull)
+
+  // Set when the client's payment for this shipment is closed (in full or net of deductions).
+  settledAt DateTime?
+  notes     String?
+
+  createdById String
+  createdBy   User   @relation("ShipmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  items ShipmentItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, number])
+  @@index([businessId])
+  @@index([clientPurchaseOrderId])
+  @@map("shipments")
+}
+
+model ShipmentItem {
+  id             String                  @id @default(uuid())
+  shipmentId     String
+  shipment       Shipment                @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  // Restrict: a client PO line that has been shipped cannot be deleted out from under it.
+  clientPoItemId String
+  clientPoItem   ClientPurchaseOrderItem @relation(fields: [clientPoItemId], references: [id], onDelete: Restrict)
+  quantity       Float
+
+  @@unique([shipmentId, clientPoItemId])
+  @@index([clientPoItemId])
+  @@map("shipment_items")
 }
 
 enum MilestoneStatus {
@@ -1657,6 +1775,8 @@ model Bill {
   grnDate    DateTime?
 
   items BillItem[]
+
+  shipment Shipment?
 
   createdById String
   createdBy   User   @relation("BillCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)

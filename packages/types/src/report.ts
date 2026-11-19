@@ -46,19 +46,38 @@ export interface ProcurementSpendReportDto {
   grandTotal: number;
 }
 
-export interface ProjectCostingReportRowDto {
+/** Money in and out of one project. Every figure is derived on read. */
+export interface ProjectProfitFiguresDto {
+  /** Σ client PO lines (quantity × rate). */
+  clientPoValue: number;
+  /** Σ bills raised on the project's tender. */
+  billed: number;
+  /** Σ client payments recorded against those bills. */
+  received: number;
+  /** Σ vendor PO lines on the tender, issued or received (drafts and cancelled left out). */
+  vendorCost: number;
+  /** Σ freight entered on the project's shipments. */
+  freight: number;
+  /** Σ expenses tagged to the project plus labour entries. */
+  otherCosts: number;
+  totalCost: number;
+  /** received − totalCost: what the project has actually made so far. */
+  profit: number;
+  /** clientPoValue − totalCost: what it makes if the client pays the PO in full. */
+  expectedProfit: number;
+  /** profit as a percentage of received; null until something is received. */
+  marginPercent: number | null;
+}
+
+export interface ProjectCostingReportRowDto extends ProjectProfitFiguresDto {
   projectId: string;
   name: string;
   status: string;
-  budget: number;
-  actualCost: number;
-  variance: number;
 }
 
 export interface ProjectCostingReportDto {
   projects: ProjectCostingReportRowDto[];
-  totalBudget: number;
-  totalActualCost: number;
+  totals: ProjectProfitFiguresDto;
 }
 
 export interface FinancialSummaryMonthDto {

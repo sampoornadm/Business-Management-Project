@@ -67,6 +67,14 @@ export const PERMISSION_KEYS = [
   "projects:read",
   "projects:update",
   "projects:delete",
+  "client_purchase_orders:create",
+  "client_purchase_orders:read",
+  "client_purchase_orders:update",
+  "client_purchase_orders:delete",
+  "shipments:create",
+  "shipments:read",
+  "shipments:update",
+  "shipments:delete",
   "bills:create",
   "bills:read",
   "finance:create",
@@ -115,6 +123,8 @@ const TENDER_VIEW_BASELINE: PermissionKey[] = [
   "rfq:read",
   "purchase_orders:read",
   "projects:read",
+  "client_purchase_orders:read",
+  "shipments:read",
   "finance:read",
   "reports:read",
 ];
@@ -159,6 +169,14 @@ const TENDER_MANAGER_PERMISSIONS: PermissionKey[] = [
   "rfq:create",
   "bills:create",
   "bills:read",
+  // The client's PO usually lands with whoever ran the tender; Project and Accounts
+  // record it too (it drives delivery and billing).
+  "client_purchase_orders:create",
+  "client_purchase_orders:update",
+  "client_purchase_orders:delete",
+  "shipments:create",
+  "shipments:update",
+  "shipments:delete",
 ];
 
 // Estimators fill in tender details/upload documents but don't own
@@ -197,6 +215,12 @@ const PROJECT_MANAGER_PERMISSIONS: PermissionKey[] = [
   "projects:create",
   "projects:update",
   "projects:delete",
+  "client_purchase_orders:create",
+  "client_purchase_orders:update",
+  "client_purchase_orders:delete",
+  "shipments:create",
+  "shipments:update",
+  "shipments:delete",
 ];
 
 // Accounts owns the finance lifecycle end-to-end (spec: "Manages bills,
@@ -208,6 +232,12 @@ const ACCOUNTS_PERMISSIONS: PermissionKey[] = [
   "finance:create",
   "finance:update",
   "finance:delete",
+  "client_purchase_orders:create",
+  "client_purchase_orders:update",
+  "client_purchase_orders:delete",
+  "shipments:create",
+  "shipments:update",
+  "shipments:delete",
 ];
 
 const VIEWER_PERMISSIONS: PermissionKey[] = [

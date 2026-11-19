@@ -25,6 +25,7 @@ import {
   TabsTrigger,
 } from "@bmp/ui";
 import { Clock, Download, Percent, Timer, Wallet } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
@@ -338,31 +339,44 @@ function ProjectCostingTab() {
   const reportQuery = useProjectCostingReport();
   const report = reportQuery.data;
   const chartData = report?.projects ?? [];
+  const totals = report?.totals;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="grid grid-cols-2 gap-4 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
           <div>
-            <p className="text-muted-foreground">Total budget</p>
-            <p className="text-lg font-semibold">{formatMoney(report?.totalBudget)}</p>
+            <p className="text-muted-foreground">Received from clients</p>
+            <p className="text-lg font-semibold">{formatMoney(totals?.received)}</p>
           </div>
           <div>
-            <p className="text-muted-foreground">Total actual cost</p>
-            <p className="text-lg font-semibold">{formatMoney(report?.totalActualCost)}</p>
+            <p className="text-muted-foreground">Total cost</p>
+            <p className="text-lg font-semibold">{formatMoney(totals?.totalCost)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Profit so far</p>
+            <p className={`text-lg font-semibold ${(totals?.profit ?? 0) < 0 ? "text-destructive" : ""}`}>
+              {formatMoney(totals?.profit)}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Expected profit</p>
+            <p className={`text-lg font-semibold ${(totals?.expectedProfit ?? 0) < 0 ? "text-destructive" : ""}`}>
+              {formatMoney(totals?.expectedProfit)}
+            </p>
           </div>
         </div>
         <ExportButtons reportKey="project-costing" />
       </div>
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium">Budget vs. actual by project</CardTitle>
+          <CardTitle className="text-sm font-medium">Received vs. cost by project</CardTitle>
         </CardHeader>
         <CardContent>
           {reportQuery.isLoading ? (
             <Skeleton className="h-64 w-full" />
           ) : chartData.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No active projects.</p>
+            <p className="text-sm text-muted-foreground">No projects yet.</p>
           ) : (
             <ResponsiveContainer width="100%" height={Math.max(120, chartData.length * 48)}>
               <BarChart
@@ -389,15 +403,8 @@ function ProjectCostingTab() {
                   {...chartTooltipStyle}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="budget" name="Budget" fill={CHART_COLORS.muted} radius={[0, 4, 4, 0]} maxBarSize={16} />
-                <Bar dataKey="actualCost" name="Actual cost" radius={[0, 4, 4, 0]} maxBarSize={16}>
-                  {chartData.map((row) => (
-                    <Cell
-                      key={row.projectId}
-                      fill={row.variance < 0 ? CHART_COLORS.destructive : CHART_COLORS.success}
-                    />
-                  ))}
-                </Bar>
+                <Bar dataKey="received" name="Received" fill={CHART_COLORS.success} radius={[0, 4, 4, 0]} maxBarSize={16} />
+                <Bar dataKey="totalCost" name="Cost" fill={CHART_COLORS.muted} radius={[0, 4, 4, 0]} maxBarSize={16} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -410,35 +417,51 @@ function ProjectCostingTab() {
               <TableRow>
                 <TableHead>Project</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Budget</TableHead>
-                <TableHead className="text-right">Actual cost</TableHead>
-                <TableHead className="text-right">Variance</TableHead>
+                <TableHead className="text-right">Client PO value</TableHead>
+                <TableHead className="text-right">Billed</TableHead>
+                <TableHead className="text-right">Received</TableHead>
+                <TableHead className="text-right">Vendor POs</TableHead>
+                <TableHead className="text-right">Freight</TableHead>
+                <TableHead className="text-right">Other costs</TableHead>
+                <TableHead className="text-right">Profit so far</TableHead>
+                <TableHead className="text-right">Expected profit</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {reportQuery.isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={5}>
+                  <TableCell colSpan={10}>
                     <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
               ) : (report?.projects.length ?? 0) === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
-                    No active projects.
+                  <TableCell colSpan={10} className="text-center text-sm text-muted-foreground">
+                    No projects yet.
                   </TableCell>
                 </TableRow>
               ) : (
                 report?.projects.map((row) => (
                   <TableRow key={row.projectId}>
-                    <TableCell>{row.name}</TableCell>
+                    <TableCell>
+                      <Link href={`/projects/${row.projectId}`} className="hover:underline">
+                        {row.name}
+                      </Link>
+                    </TableCell>
                     <TableCell>
                       <StatusBadge status={row.status} />
                     </TableCell>
-                    <TableCell className="text-right">{formatMoney(row.budget)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.actualCost)}</TableCell>
-                    <TableCell className={`text-right ${row.variance < 0 ? "text-destructive" : ""}`}>
-                      {formatMoney(row.variance)}
+                    <TableCell className="text-right">{formatMoney(row.clientPoValue)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(row.billed)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(row.received)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(row.vendorCost)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(row.freight)}</TableCell>
+                    <TableCell className="text-right">{formatMoney(row.otherCosts)}</TableCell>
+                    <TableCell className={`text-right ${row.profit < 0 ? "text-destructive" : ""}`}>
+                      {formatMoney(row.profit)}
+                    </TableCell>
+                    <TableCell className={`text-right ${row.expectedProfit < 0 ? "text-destructive" : ""}`}>
+                      {formatMoney(row.expectedProfit)}
                     </TableCell>
                   </TableRow>
                 ))
@@ -628,7 +651,7 @@ export default function ReportsPage() {
         <TabsList>
           <TabsTrigger value="tender-pipeline">Tender Pipeline</TabsTrigger>
           <TabsTrigger value="procurement-spend">Procurement Spend</TabsTrigger>
-          <TabsTrigger value="project-costing">Project Costing</TabsTrigger>
+          <TabsTrigger value="project-costing">Project Profit</TabsTrigger>
           <TabsTrigger value="financial-summary">Financial Summary</TabsTrigger>
           <TabsTrigger value="vendor-performance">Vendor Performance</TabsTrigger>
         </TabsList>
