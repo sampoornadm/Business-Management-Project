@@ -42,7 +42,7 @@ import {
   Textarea,
   useToast,
 } from "@bmp/ui";
-import { Pencil, Send, ShoppingCart, Trash2 } from "lucide-react";
+import { Copy, Pencil, Send, ShoppingCart, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -70,6 +70,7 @@ import { useVendors } from "@/hooks/use-vendors";
 import { useAuthStore } from "@/lib/auth-store";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { hasPermission } from "@/lib/permissions";
+import { buildRfqWhatsappText } from "@/lib/rfq-whatsapp-text";
 
 export default function RfqDetailPage() {
   const params = useParams<{ id: string }>();
@@ -224,6 +225,20 @@ export default function RfqDetailPage() {
 
   const rfq = rfqQuery.data;
   const isFinalized = rfq.status === "CLOSED" || rfq.status === "CANCELLED";
+  const whatsappText = buildRfqWhatsappText(
+    rfq.items,
+    (tenderQuery.data?.pinnedNotes ?? []).map((note) => note.lineText),
+    rfq.dueDate,
+  );
+
+  async function handleCopyWhatsappText() {
+    try {
+      await navigator.clipboard.writeText(whatsappText);
+      toast({ title: "Item list copied" });
+    } catch {
+      toast({ variant: "destructive", title: "Could not copy", description: "Select the text and copy it instead." });
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -275,6 +290,23 @@ export default function RfqDetailPage() {
                       <DialogTitle>Send RFQ</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <label htmlFor="rfq-whatsapp-text" className="text-sm font-medium">
+                            Item list for WhatsApp
+                          </label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Copy item list"
+                            onClick={handleCopyWhatsappText}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <Textarea id="rfq-whatsapp-text" rows={8} readOnly value={whatsappText} />
+                      </div>
                       <div className="space-y-1">
                         <label className="text-sm font-medium">Vendor</label>
                         <Select value={sendVendorId} onValueChange={setSendVendorId}>
