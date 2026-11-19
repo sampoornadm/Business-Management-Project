@@ -109,7 +109,9 @@ function Stage({ dot, dotClass, label, labelClass, hoverLabel, title, onClick, c
           >
             <span className={cn("min-w-0 overflow-hidden", labelClass)}>{label}</span>
           </span>
+          {/* Visual hint only: kept out of the button's accessible name, which stays the stage name. */}
           <span
+            aria-hidden="true"
             className={cn(
               "grid grid-cols-[0fr] opacity-0 transition-[grid-template-columns,opacity] duration-500 group-hover:grid-cols-[1fr] group-hover:opacity-100 motion-reduce:transition-none",
               EASE,
