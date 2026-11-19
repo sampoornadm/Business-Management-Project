@@ -12,7 +12,7 @@ const commitBoqItemSchema = z.object({
   tempId: z.string().min(1),
   parentTempId: z.string().min(1).optional(),
   itemCode: z.string().max(100).optional(),
-  description: z.string().min(1).max(1000),
+  description: z.string().min(1).max(5000),
   category: z.string().max(200).optional(),
   unit: z.string().max(50).optional(),
   quantity: z.number().nonnegative().optional(),
@@ -31,7 +31,7 @@ export type CommitBoqBody = z.infer<typeof commitBoqSchema>;
 export const createBoqItemSchema = z.object({
   parentId: z.string().uuid().optional(),
   itemCode: z.string().max(100).optional(),
-  description: z.string().min(1).max(1000),
+  description: z.string().min(1).max(5000),
   category: z.string().max(200).optional(),
   unit: z.string().max(50).optional(),
   quantity: z.number().nonnegative().optional(),
@@ -44,7 +44,7 @@ export type CreateBoqItemBody = z.infer<typeof createBoqItemSchema>;
 export const updateBoqItemSchema = z
   .object({
     itemCode: z.string().max(100).optional(),
-    description: z.string().min(1).max(1000).optional(),
+    description: z.string().min(1).max(5000).optional(),
     category: z.string().max(200).optional(),
     unit: z.string().max(50).optional(),
     quantity: z.number().nonnegative().optional(),

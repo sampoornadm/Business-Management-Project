@@ -3,7 +3,7 @@ import { z } from "zod";
 
 const createRfqItemSchema = z.object({
   boqItemId: z.string().uuid().optional(),
-  description: z.string().min(1).max(1000),
+  description: z.string().min(1).max(5000),
   unit: z.string().max(50).optional(),
   quantity: z.number().positive(),
   instructions: z.string().max(500).optional(),
