@@ -15,6 +15,8 @@ import {
   inviteVendorSchema,
   listItemPricesQuerySchema,
   listRfqsQuerySchema,
+  parseQuoteTextSchema,
+  saveQuotesSchema,
   selectQuoteSchema,
   suggestVendorsSchema,
   updateRfqSchema,
@@ -330,6 +332,52 @@ export function createRfqRouter(controller: RfqController): Router {
     uploadQuoteSheet,
     validate(importQuotesSchema),
     controller.importQuotes,
+  );
+
+  /**
+   * @openapi
+   * /rfqs/{id}/quotes/parse-text:
+   *   post:
+   *     tags: [RFQ]
+   *     summary: Read a vendor's pasted WhatsApp reply into proposed per-item quotes (no writes)
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Preview with one row per RFQ item plus unmatched lines }
+   */
+  router.post(
+    "/:id/quotes/parse-text",
+    authenticateMiddleware,
+    requirePermission("rfq:update"),
+    validate(parseQuoteTextSchema),
+    controller.parseQuoteText,
+  );
+
+  /**
+   * @openapi
+   * /rfqs/{id}/quotes/bulk:
+   *   post:
+   *     tags: [RFQ]
+   *     summary: Save several of one vendor's quotes at once (reviewed WhatsApp paste)
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Number of quotes saved }
+   */
+  router.post(
+    "/:id/quotes/bulk",
+    authenticateMiddleware,
+    requirePermission("rfq:update"),
+    validate(saveQuotesSchema),
+    controller.saveQuotes,
   );
 
   /**

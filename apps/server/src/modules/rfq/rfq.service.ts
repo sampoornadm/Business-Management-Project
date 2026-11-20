@@ -3,6 +3,9 @@ import {
   type ContactDto,
   type FinalizeRfqRatesResultDto,
   type InviteVendorPreviewDto,
+  type QuotePastePreviewDto,
+  type SaveQuotesResultDto,
+  type SaveQuotesRowInput,
   type ItemPriceHistoryDto,
   type PaginatedResult,
   type RecommendedVendorDto,
@@ -34,10 +37,10 @@ import type { ITendersRepository } from "../tenders/tenders.repository.js";
 import type { IUsersRepository } from "../users/users.repository.js";
 import type { IVendorsRepository } from "../vendors/vendors.repository.js";
 
-import { buildQuoteSheet, parseQuoteSheet } from "./quote-sheet.js";
+import type { QuotePasteAiReader } from "./quote-paste-ai.js";
+import { buildQuoteSheet, parseQuoteSheet, type ParsedQuoteRow } from "./quote-sheet.js";
 import { buildRfrDocx, buildRfrPdf, toRfrDocumentData } from "./rfq-document.js";
 import { toItemPriceHistoryDto, toRfqDto, toRfqListItemDto } from "./rfq.mapper.js";
-import { normalizeTechnicalDeviation } from "./technical-deviation.js";
 import type {
   CreateRfqData,
   IRfqRepository,
@@ -46,6 +49,8 @@ import type {
   RfqFilters,
   UpdateRfqData,
 } from "./rfq.repository.js";
+import { normalizeTechnicalDeviation } from "./technical-deviation.js";
+import { parseQuoteText, splitPasteLines } from "./whatsapp-quote-parser.js";
 
 const FINALIZED_STATUSES = new Set(["CLOSED", "CANCELLED"]);
 
@@ -62,6 +67,7 @@ export class RfqService {
     private readonly ratesRepository: IHistoricalRatesRepository,
     private readonly contactsService: ContactsService,
     private readonly itemsRepository: IItemsRepository,
+    private readonly quotePasteAi: QuotePasteAiReader,
   ) {}
 
   private async getDetailOrThrow(id: string, businessId: string): Promise<RfqDetail> {
@@ -372,37 +378,21 @@ export class RfqService {
     actorId: string,
     businessId: string,
   ): Promise<{ imported: number; errors: string[] }> {
-    const rfq = await this.getDetailOrThrow(rfqId, businessId);
-    if (FINALIZED_STATUSES.has(rfq.status)) {
-      throw new ConflictError("Cannot record quotes on a finalized RFQ");
-    }
-    const invite = rfq.vendorInvites.find((v) => v.vendor.id === vendorId);
-    if (!invite) throw new BadRequestError("Vendor was not invited to this RFQ");
+    const { rfq, invite } = await this.loadQuoteEntryContext(rfqId, vendorId, businessId);
 
     const { rows, errors } = await parseQuoteSheet(buffer);
     // Only ids that belong to THIS rfq. A sheet from another RFQ must not write here.
     const ownItemIds = new Set(rfq.items.map((i) => i.id));
 
-    let imported = 0;
-    for (const row of rows) {
-      if (!ownItemIds.has(row.rfqItemId)) {
+    const ownRows = rows
+      .filter((row) => {
+        if (ownItemIds.has(row.rfqItemId)) return true;
         errors.push(`${row.rfqItemId} is not an item on this RFQ`);
-        continue;
-      }
-      await this.rfqRepository.upsertQuote(row.rfqItemId, vendorId, {
-        rate: row.rate,
-        regretted: row.regretted,
-        make: row.make,
-        model: row.model,
-        technicalDeviation: normalizeTechnicalDeviation(row.technicalDeviation),
-      });
-      await this.autoSelectLowest(row.rfqItemId, businessId);
-      imported += 1;
-    }
-
-    if (imported > 0 && invite.status === "INVITED") {
-      await this.rfqRepository.updateVendorInviteStatus(rfqId, vendorId, "RESPONDED");
-    }
+        return false;
+      })
+      // A returned sheet is the vendor's whole reply for the line: a blank deviation cell clears it.
+      .map((row) => ({ ...row, technicalDeviation: row.technicalDeviation ?? "" }));
+    const imported = await this.writeVendorQuotes(rfqId, vendorId, invite.status, ownRows, businessId);
 
     await this.auditService.log({
       actorId,
@@ -413,6 +403,121 @@ export class RfqService {
     });
 
     return { imported, errors };
+  }
+
+  /**
+   * Shared write path for every multi-row quote entry (sheet import, WhatsApp paste): upsert,
+   * re-pick the lowest, and mark the vendor RESPONDED once anything landed.
+   */
+  private async writeVendorQuotes(
+    rfqId: string,
+    vendorId: string,
+    inviteStatus: string,
+    rows: Array<Pick<ParsedQuoteRow, "rfqItemId" | "rate" | "regretted"> & Partial<ParsedQuoteRow>>,
+    businessId: string,
+  ): Promise<number> {
+    for (const row of rows) {
+      await this.rfqRepository.upsertQuote(row.rfqItemId, vendorId, {
+        rate: row.regretted ? null : row.rate,
+        regretted: row.regretted,
+        make: row.make,
+        model: row.model,
+        // Undefined (paste) leaves an existing deviation alone; the sheet always sends its column.
+        technicalDeviation:
+          row.technicalDeviation === undefined ? undefined : normalizeTechnicalDeviation(row.technicalDeviation),
+      });
+      await this.autoSelectLowest(row.rfqItemId, businessId);
+    }
+    if (rows.length > 0 && inviteStatus === "INVITED") {
+      await this.rfqRepository.updateVendorInviteStatus(rfqId, vendorId, "RESPONDED");
+    }
+    return rows.length;
+  }
+
+  private async loadQuoteEntryContext(rfqId: string, vendorId: string, businessId: string) {
+    const rfq = await this.getDetailOrThrow(rfqId, businessId);
+    if (FINALIZED_STATUSES.has(rfq.status)) {
+      throw new ConflictError("Cannot record quotes on a finalized RFQ");
+    }
+    const invite = rfq.vendorInvites.find((v) => v.vendor.id === vendorId);
+    if (!invite) throw new BadRequestError("Vendor was not invited to this RFQ");
+    return { rfq, invite };
+  }
+
+  /**
+   * Reads a vendor's pasted WhatsApp reply into proposed per-item quotes. Writes nothing: the
+   * user reviews and edits the preview, then saves it through saveQuotes.
+   */
+  async previewQuotePaste(
+    rfqId: string,
+    vendorId: string,
+    text: string,
+    businessId: string,
+  ): Promise<QuotePastePreviewDto> {
+    const { rfq } = await this.loadQuoteEntryContext(rfqId, vendorId, businessId);
+    const items = rfq.items.map((item) => ({ description: item.description, quantity: item.quantity, unit: item.unit }));
+
+    const parsed = parseQuoteText(text, items);
+    const taken = new Set(parsed.matches.map((m) => m.itemIndex));
+    const ai = await this.quotePasteAi(items, parsed.unread, taken);
+    const byItem = new Map([...parsed.matches, ...ai.matches].map((m) => [m.itemIndex, m]));
+    const rawLines = splitPasteLines(text);
+
+    return {
+      items: rfq.items.map((item, index) => {
+        const current = item.quotes.find((q) => q.vendorId === vendorId);
+        const match = byItem.get(index);
+        return {
+          rfqItemId: item.id,
+          slNo: index + 1,
+          description: item.description,
+          unit: item.unit,
+          quantity: item.quantity,
+          currentRate: current?.rate ?? null,
+          currentRegretted: current?.regretted ?? false,
+          rate: match?.rate ?? null,
+          regretted: match?.regretted ?? false,
+          source: match?.source ?? null,
+          vendorLine: match ? (rawLines[match.lineIndex]?.trim() ?? null) : null,
+          vendorQuantity: match?.vendorQuantity ?? null,
+          warnings: match?.warnings ?? [],
+        };
+      }),
+      unmatchedLines: ai.remaining.map(({ lineIndex, text: lineText, reason }) => ({ lineIndex, text: lineText, reason })),
+      aiNotice: ai.notice,
+      gstNotice: parsed.gstMentioned ? "Vendor mentions GST — check whether rates include it" : null,
+    };
+  }
+
+  /** Saves the reviewed paste. Items not in `quotes` keep whatever quote they already had. */
+  async saveQuotes(
+    rfqId: string,
+    vendorId: string,
+    quotes: SaveQuotesRowInput[],
+    aiCount: number,
+    actorId: string,
+    businessId: string,
+  ): Promise<SaveQuotesResultDto> {
+    const { rfq, invite } = await this.loadQuoteEntryContext(rfqId, vendorId, businessId);
+    const ownItemIds = new Set(rfq.items.map((i) => i.id));
+    const foreign = quotes.find((q) => !ownItemIds.has(q.rfqItemId));
+    if (foreign) throw new BadRequestError(`${foreign.rfqItemId} is not an item on this RFQ`);
+
+    const rows = quotes.map((q) => ({
+      rfqItemId: q.rfqItemId,
+      rate: q.regretted ? null : (q.rate ?? null),
+      regretted: q.regretted === true,
+    }));
+    const imported = await this.writeVendorQuotes(rfqId, vendorId, invite.status, rows, businessId);
+
+    await this.auditService.log({
+      actorId,
+      action: "RFQ_QUOTES_PASTED",
+      entityType: "Rfq",
+      entityId: rfqId,
+      metadata: { vendorId, imported, aiCount },
+    });
+    return { imported };
   }
 
   async getComparison(rfqId: string, businessId: string): Promise<RfqComparisonDto> {

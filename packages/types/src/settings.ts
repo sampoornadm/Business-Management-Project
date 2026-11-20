@@ -19,11 +19,13 @@ export const SETTING_KEYS = [
   "PASSWORD_RESET_TOKEN_TTL_MINUTES",
   "EMAIL_VERIFICATION_TOKEN_TTL_HOURS",
   "HSN_SAC_AUTO_REFRESH_ENABLED",
+  "PROMPT_RFQ_QUOTE_PASTE",
 ] as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
-export type SettingValueType = "string" | "number" | "boolean";
+// "prompt" is a string edited as a multi-line template; see requiredMarkers.
+export type SettingValueType = "string" | "number" | "boolean" | "prompt";
 
 export interface SettingDto {
   key: SettingKey;
@@ -31,6 +33,9 @@ export interface SettingDto {
   label: string;
   group: string;
   value: string | number | boolean;
+  defaultValue: string | number | boolean;
+  /** Prompt settings only: `{{name}}` markers a saved value must keep. Empty otherwise. */
+  requiredMarkers: string[];
   isOverridden: boolean;
   updatedByName: string | null;
   updatedAt: string | null;

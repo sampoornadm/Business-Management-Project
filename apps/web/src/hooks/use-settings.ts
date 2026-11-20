@@ -28,3 +28,16 @@ export function useUpdateSetting() {
     },
   });
 }
+
+export function useResetSetting() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (key: SettingKey) => {
+      const response = await apiClient.delete<ApiResponse<SettingDto>>(`/settings/${key}`);
+      return unwrap(response.data);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+}

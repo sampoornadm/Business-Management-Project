@@ -1,12 +1,15 @@
 import type { SettingKey, SettingValueType } from "@bmp/types";
 
 import { env } from "../../config/env.js";
+import { RFQ_QUOTE_PASTE_DEFAULT_PROMPT } from "../../infra/llm/prompts.js";
 
 export interface SettingDefinition {
   type: SettingValueType;
   defaultValue: string | number | boolean;
   label: string;
   group: string;
+  /** Prompt settings only: markers a saved template must keep (see infra/llm/prompts.ts). */
+  requiredMarkers?: string[];
 }
 
 export const SETTING_DEFINITIONS: Record<SettingKey, SettingDefinition> = {
@@ -129,5 +132,12 @@ export const SETTING_DEFINITIONS: Record<SettingKey, SettingDefinition> = {
     defaultValue: true,
     label: "Automatically refresh HSN/SAC codes weekly from CBIC",
     group: "Reference Data",
+  },
+  PROMPT_RFQ_QUOTE_PASTE: {
+    type: "prompt",
+    defaultValue: RFQ_QUOTE_PASTE_DEFAULT_PROMPT,
+    label: "Vendor WhatsApp quote reader (RFQ)",
+    group: "AI prompts",
+    requiredMarkers: ["items", "lines"],
   },
 };

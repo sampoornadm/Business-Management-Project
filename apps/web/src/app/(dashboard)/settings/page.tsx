@@ -1,9 +1,23 @@
 "use client";
 
 import type { SettingDto } from "@bmp/types";
-import { Button, Card, CardContent, CardHeader, CardTitle, formatDateTime, Input, PageHeader, Skeleton, Switch, useToast } from "@bmp/ui";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  confirmAction,
+  formatDateTime,
+  Input,
+  PageHeader,
+  Skeleton,
+  Switch,
+  Textarea,
+  useToast,
+} from "@bmp/ui";
 import { Brain, CheckCircle2, CircleAlert, Loader2, RefreshCw, Upload, XCircle } from "lucide-react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 import {
   useCancelRebuild,
@@ -11,7 +25,7 @@ import {
   useRebuildClassifier,
 } from "@/hooks/use-classification";
 import { useHsnSacStatus, useRefreshHsnSac, useUploadHsnSac } from "@/hooks/use-reference-data";
-import { useSettings, useUpdateSetting } from "@/hooks/use-settings";
+import { useResetSetting, useSettings, useUpdateSetting } from "@/hooks/use-settings";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
 
@@ -264,6 +278,81 @@ function ClassificationCard({ canManage }: { canManage: boolean }) {
   );
 }
 
+function PromptControl({ setting, canManage }: { setting: SettingDto; canManage: boolean }) {
+  const { toast } = useToast();
+  const update = useUpdateSetting();
+  const reset = useResetSetting();
+  const [draft, setDraft] = useState(String(setting.value));
+  const dirty = draft !== setting.value;
+  const busy = update.isPending || reset.isPending;
+
+  async function save() {
+    try {
+      await update.mutateAsync({ key: setting.key, value: draft });
+      toast({ title: `Saved ${setting.label}` });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: `Could not save ${setting.label}`,
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  async function restoreDefault() {
+    const ok = await confirmAction({
+      title: "Reset prompt to default?",
+      description: "Your edited wording will be replaced by the built-in prompt.",
+      confirmLabel: "Reset prompt",
+    });
+    if (!ok) return;
+    try {
+      const restored = await reset.mutateAsync(setting.key);
+      setDraft(String(restored.value));
+      toast({ title: `${setting.label} reset to default` });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: `Could not reset ${setting.label}`,
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    }
+  }
+
+  return (
+    <div className="space-y-2 py-3">
+      <div>
+        <p className="text-sm">{setting.label}</p>
+        {setting.isOverridden && setting.updatedByName && (
+          <p className="text-xs text-muted-foreground">Customized by {setting.updatedByName}</p>
+        )}
+      </div>
+      <Textarea
+        className="min-h-[240px] font-mono text-xs"
+        value={draft}
+        disabled={!canManage || busy}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      <p className="text-xs text-muted-foreground">
+        Must keep {setting.requiredMarkers.map((m) => `{{${m}}}`).join(" and ")} — that is where the app inserts
+        the data. The answer format is fixed in code.
+      </p>
+      {canManage && (
+        <div className="flex flex-wrap justify-end gap-2">
+          {setting.isOverridden && (
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => void restoreDefault()}>
+              Reset to default
+            </Button>
+          )}
+          <Button size="sm" disabled={!dirty || busy} onClick={() => void save()}>
+            {update.isPending ? "Saving…" : "Save prompt"}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SettingControl({ setting, canManage }: { setting: SettingDto; canManage: boolean }) {
   const { toast } = useToast();
   const update = useUpdateSetting();
@@ -349,7 +438,11 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="divide-y">
               {settings.map((setting) => (
-                <SettingControl key={setting.key} setting={setting} canManage={canManage} />
+                setting.type === "prompt" ? (
+                  <PromptControl key={setting.key} setting={setting} canManage={canManage} />
+                ) : (
+                  <SettingControl key={setting.key} setting={setting} canManage={canManage} />
+                )
               ))}
             </CardContent>
           </Card>
