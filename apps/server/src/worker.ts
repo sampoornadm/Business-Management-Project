@@ -23,29 +23,42 @@ const incomingTendersWatcher = env.INCOMING_TENDERS_INGESTION_ENABLED
 const aiEnrichmentWorker = env.AI_ENRICHMENT_ENABLED ? startAiEnrichmentWorker() : undefined;
 const documentIndexingWorker = env.DOCUMENT_INDEXING_ENABLED ? startDocumentIndexingWorker() : undefined;
 
-// Idempotent: BullMQ dedupes repeatable jobs by pattern + jobId, so
-// re-registering on every worker boot is safe and required (there is no
-// separate one-time "seed the schedule" step in this deployment).
-await tenderReminderQueue.add(
+// Upgrading BullMQ to v6 removes legacy repeatable jobs (`add(..., { repeat })`), which v6 no
+// longer manages, so delete any left in Redis by older builds before registering the schedulers
+// below. Each scheduler's key is its job name; a legacy entry's key is a hash (or, from older v5
+// builds, `name:jobId:endDate:tz:pattern`), so `key !== name` finds exactly the legacy ones.
+// Without this the legacy entry keeps firing next to its scheduler and every reminder runs twice.
+// ponytail: remove this cleanup in the v6 upgrade (getRepeatableJobs is gone there), only after
+// every environment's worker has booted once with it.
+for (const queue of [tenderReminderQueue, hsnSacRefreshQueue]) {
+  for (const job of await queue.getRepeatableJobs()) {
+    if (job.key !== job.name) await queue.removeRepeatableByKey(job.key);
+  }
+}
+
+// Each schedule's id is its job name (one schedule per name; BullMQ types the id as a job name).
+// Upserting a job scheduler by id is idempotent, so registering on every worker boot is safe and
+// required (there is no separate one-time "seed the schedule" step in this deployment).
+await tenderReminderQueue.upsertJobScheduler(
   "check-deadlines",
-  {},
-  { repeat: { pattern: "0 7 * * *" }, jobId: "tender-deadline-check" },
+  { pattern: "0 7 * * *" },
+  { name: "check-deadlines", data: {} },
 );
 // Separate, more frequent schedule for the "1 hour before" reminder — day-level thresholds only
 // need checking once a day, but an hour-precision deadline needs checking often enough that no
 // tender's window is missed between runs.
-await tenderReminderQueue.add(
+await tenderReminderQueue.upsertJobScheduler(
   "check-hourly-deadlines",
-  {},
-  { repeat: { pattern: "*/15 * * * *" }, jobId: "tender-hourly-deadline-check" },
+  { pattern: "*/15 * * * *" },
+  { name: "check-hourly-deadlines", data: {} },
 );
 // Sundays 03:00 — this data changes rarely (GST Council notifications, not daily), so a weekly
 // cadence is deliberately not configurable via env; the per-run enable/disable toggle lives in
 // Settings (HSN_SAC_AUTO_REFRESH_ENABLED).
-await hsnSacRefreshQueue.add(
+await hsnSacRefreshQueue.upsertJobScheduler(
   "refresh",
-  {},
-  { repeat: { pattern: "0 3 * * 0" }, jobId: "hsn-sac-weekly-refresh" },
+  { pattern: "0 3 * * 0" },
+  { name: "refresh", data: {} },
 );
 
 logger.info(
