@@ -46,7 +46,20 @@ export function PortalFillButton({
   const start = useStartPortalFill();
   const [jobId, setJobId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const job = usePortalFillJob(jobId).data;
+  const jobQuery = usePortalFillJob(jobId);
+  const job = jobQuery.data;
+  const lostJob = jobQuery.isError;
+
+  // A server restart (it also closes the portal window) forgets the job; stop polling a job that is gone.
+  useEffect(() => {
+    if (!lostJob) return;
+    setJobId(null);
+    toast({
+      variant: "destructive",
+      title: "The portal fill stopped",
+      description: "The server restarted during the fill. Open the portal browser again and retry.",
+    });
+  }, [lostJob, toast]);
 
   const running = start.isPending || job?.status === "running";
   const progress = job?.progress ?? 0;

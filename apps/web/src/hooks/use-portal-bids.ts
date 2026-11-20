@@ -59,7 +59,8 @@ export function usePortalFillJob(jobId: string | null) {
       return unwrap(response.data);
     },
     enabled: Boolean(jobId),
-    refetchInterval: (query) => (query.state.data?.status === "running" || !query.state.data ? POLL_MS : false),
+    refetchInterval: (query) =>
+      query.state.error ? false : query.state.data?.status === "running" || !query.state.data ? POLL_MS : false,
   });
 }
 
