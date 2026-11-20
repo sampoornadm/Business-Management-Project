@@ -1,12 +1,13 @@
 "use client";
 
 import {
-  Badge,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  formatMoney,
   KpiGrid,
+  PageHeader,
   StatCard,
   Tabs,
   TabsContent,
@@ -20,21 +21,8 @@ import { CreateBankAccountDialog } from "@/components/finance/create-bank-accoun
 import { CreateExpenseDialog } from "@/components/finance/create-expense-dialog";
 import { CreateInvoiceDialog } from "@/components/finance/create-invoice-dialog";
 import { FinanceCharts } from "@/components/finance/finance-charts";
+import { StatusBadge } from "@/components/status-badge";
 import { useBankAccounts, useExpenses, useFinanceSummary, useInvoices } from "@/hooks/use-finance";
-
-const INVOICE_STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
-  DRAFT: "outline",
-  SENT: "secondary",
-  PARTIALLY_PAID: "secondary",
-  PAID: "success",
-  OVERDUE: "destructive",
-};
-
-const EXPENSE_STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
-  UNPAID: "outline",
-  PARTIALLY_PAID: "secondary",
-  PAID: "success",
-};
 
 export default function FinancePage() {
   const summaryQuery = useFinanceSummary();
@@ -46,12 +34,10 @@ export default function FinancePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Finance</h1>
-        <p className="text-sm text-muted-foreground">
-          Invoices, expenses, payments, and cash/bank balances.
-        </p>
-      </div>
+      <PageHeader
+        title="Finance"
+        description="Invoices, expenses, payments, and cash/bank balances."
+      />
 
       {/* 2 columns from lg, 4 from xl: with the sidebar open, 4 columns any earlier leave each card too
           narrow for a 7-figure amount. StatCard also wraps an over-long value inside itself. */}
@@ -60,28 +46,28 @@ export default function FinancePage() {
           label="Receivables"
           icon={HandCoins}
           isLoading={summaryQuery.isLoading}
-          value={summary ? summary.totalReceivables.toLocaleString() : "-"}
+          value={summary ? formatMoney(summary.totalReceivables) : "-"}
           hint="Invoiced, not yet received"
         />
         <StatCard
           label="Payables"
           icon={CreditCard}
           isLoading={summaryQuery.isLoading}
-          value={summary ? summary.totalPayables.toLocaleString() : "-"}
+          value={summary ? formatMoney(summary.totalPayables) : "-"}
           hint="Unpaid expenses and POs"
         />
         <StatCard
           label="Cash balance"
           icon={Wallet}
           isLoading={summaryQuery.isLoading}
-          value={summary ? summary.cashBalance.toLocaleString() : "-"}
+          value={summary ? formatMoney(summary.cashBalance) : "-"}
           hint="Cash received minus cash paid"
         />
         <StatCard
           label="Bank balances"
           icon={Landmark}
           isLoading={summaryQuery.isLoading}
-          value={summary ? bankTotal.toLocaleString() : "-"}
+          value={summary ? formatMoney(bankTotal) : "-"}
           hint={summary ? `${summary.bankBalances.length} account${summary.bankBalances.length === 1 ? "" : "s"}` : undefined}
         />
       </KpiGrid>
@@ -117,12 +103,10 @@ export default function FinancePage() {
                           {invoice.invoiceNumber} — {invoice.clientName}
                         </p>
                         <p className="break-words text-muted-foreground">
-                          {invoice.amountPaid.toLocaleString()} / {invoice.totalAmount.toLocaleString()} paid
+                          {formatMoney(invoice.amountPaid)} / {formatMoney(invoice.totalAmount)} paid
                         </p>
                       </div>
-                      <Badge variant={INVOICE_STATUS_VARIANT[invoice.status]} className="shrink-0">
-                        {invoice.status}
-                      </Badge>
+                      <StatusBadge status={invoice.status} className="shrink-0" />
                     </Link>
                   ))}
                 </div>
@@ -153,12 +137,10 @@ export default function FinancePage() {
                           {expense.category} — {expense.description}
                         </p>
                         <p className="break-words text-muted-foreground">
-                          {expense.amountPaid.toLocaleString()} / {expense.amount.toLocaleString()} paid
+                          {formatMoney(expense.amountPaid)} / {formatMoney(expense.amount)} paid
                         </p>
                       </div>
-                      <Badge variant={EXPENSE_STATUS_VARIANT[expense.status]} className="shrink-0">
-                        {expense.status}
-                      </Badge>
+                      <StatusBadge status={expense.status} className="shrink-0" />
                     </Link>
                   ))}
                 </div>
@@ -192,7 +174,7 @@ export default function FinancePage() {
                         </p>
                       </div>
                       <p className="max-w-[55%] break-words text-right font-semibold tabular-nums">
-                        {account.currentBalance.toLocaleString()}
+                        {formatMoney(account.currentBalance)}
                       </p>
                     </div>
                   ))}

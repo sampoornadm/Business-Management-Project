@@ -2,10 +2,12 @@
 
 import type { ProjectListItemDto } from "@bmp/types";
 import { PROJECT_STATUSES } from "@bmp/types";
-import { Badge, formatDate, SortableHeader } from "@bmp/ui";
+import { formatDate, formatMoney, SortableHeader } from "@bmp/ui";
 import type { FilterableColumnDef } from "@bmp/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
+
+import { StatusBadge } from "@/components/status-badge";
 
 export interface ProjectColumnConfig extends FilterableColumnDef {
   sortable: boolean;
@@ -13,13 +15,6 @@ export interface ProjectColumnConfig extends FilterableColumnDef {
   defaultVisible: boolean;
   cell: ColumnDef<ProjectListItemDto>["cell"];
 }
-
-const STATUS_VARIANT: Record<ProjectListItemDto["status"], "success" | "secondary" | "outline" | "destructive"> = {
-  ACTIVE: "success",
-  ON_HOLD: "secondary",
-  COMPLETED: "success",
-  CANCELLED: "destructive",
-};
 
 export const PROJECT_COLUMNS: ProjectColumnConfig[] = [
   {
@@ -43,7 +38,7 @@ export const PROJECT_COLUMNS: ProjectColumnConfig[] = [
     filterable: true,
     defaultVisible: true,
     enumOptions: PROJECT_STATUSES.map((s) => ({ value: s, label: s })),
-    cell: ({ row }) => <Badge variant={STATUS_VARIANT[row.original.status]}>{row.original.status}</Badge>,
+    cell: ({ row }) => <StatusBadge status={row.original.status} />,
   },
   {
     key: "budget",
@@ -52,7 +47,7 @@ export const PROJECT_COLUMNS: ProjectColumnConfig[] = [
     sortable: true,
     filterable: true,
     defaultVisible: true,
-    cell: ({ row }) => row.original.budget.toLocaleString(),
+    cell: ({ row }) => formatMoney(row.original.budget),
   },
   {
     key: "startDate",

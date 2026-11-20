@@ -231,6 +231,44 @@ Item Additional
 Description:`;
 
 describe("TenderExtractionService", () => {
+  describe("evaluation criteria", () => {
+    // The header-parsed path calls the LLM for nothing else, so any call here is the criteria fallback.
+    const run = async (wording: string, generateJson: GenerateJsonFn) => {
+      const extractText: ExtractTextFn = async (_buffer, _mime, options) =>
+        options?.layout ? `Evaluation Criteria     ${wording}\n` : IISCO_TEMPLATE_TEXT;
+      const service = new TenderExtractionService(
+        new FakeOrganizationsRepository(),
+        generateJson,
+        extractText,
+        fakeGenerateText,
+      );
+      return (await service.extractFromDocument(Buffer.from("%PDF-fake"), "application/pdf")).fields
+        .evaluationCriteria;
+    };
+    const neverAsked: GenerateJsonFn = async () => {
+      throw new Error("the AI should not be asked when the keywords match");
+    };
+
+    it("maps the document's wording by keyword without the AI", async () => {
+      expect(await run("Overall", neverAsked)).toBe("OVERALL");
+      expect(await run("Item wise", neverAsked)).toBe("INDIVIDUAL");
+    });
+
+    it("asks the AI to classify wording the keywords cannot place", async () => {
+      expect(await run("Lowest quote prevails", async () => ({ criteria: "INDIVIDUAL" }))).toBe("INDIVIDUAL");
+    });
+
+    it("leaves it blank when the AI is unsure, malformed or unavailable", async () => {
+      expect(await run("Lowest quote prevails", async () => ({ criteria: "UNKNOWN" }))).toBeUndefined();
+      expect(await run("Lowest quote prevails", async () => ({ nonsense: true }))).toBeUndefined();
+      expect(
+        await run("Lowest quote prevails", async () => {
+          throw new Error("ollama down");
+        }),
+      ).toBeUndefined();
+    });
+  });
+
   it("extracts fields deterministically for a recognized template and never calls the LLM", async () => {
     const organizationsRepository = new FakeOrganizationsRepository();
     const org = buildOrganization({ name: "IISCO STEEL PLANT" });

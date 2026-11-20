@@ -3,7 +3,7 @@ import { z } from "zod";
 
 const createRfqItemSchema = z.object({
   boqItemId: z.string().uuid().optional(),
-  description: z.string().min(1).max(1000),
+  description: z.string().min(1).max(5000),
   unit: z.string().max(50).optional(),
   quantity: z.number().positive(),
   instructions: z.string().max(500).optional(),
@@ -96,7 +96,7 @@ export const upsertRfqQuoteSchema = z
     make: z.string().max(120).optional(),
     model: z.string().max(120).optional(),
     quotedAt: z.coerce.date().optional(),
-    remarks: z.string().max(500).optional(),
+    technicalDeviation: z.string().max(500).optional(),
   })
   .refine((d) => d.regretted === true || d.rate !== undefined, {
     message: "Provide a rate, or mark the item as regretted",

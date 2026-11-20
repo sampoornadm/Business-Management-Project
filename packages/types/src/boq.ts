@@ -84,6 +84,8 @@ export interface BoqBaseRateSourceDto {
   make: string;
   model: string;
   quotedAt: string;
+  /** That vendor's technical deviation for this line, if any. */
+  technicalDeviation: string | null;
 }
 
 /** Markup applied when a base rate first lands on a BOQ item that has none yet. */

@@ -11,6 +11,7 @@ export const AUDIT_LOG_FILTER_COLUMNS: Record<AuditLogFilterField, FilterableCol
   action: { type: "enum", prismaPath: ["action"] },
   entityType: { type: "enum", prismaPath: ["entityType"], nullable: true },
   entityId: { type: "text", prismaPath: ["entityId"], nullable: true },
+  entityCode: { type: "text", prismaPath: ["entityCode"], nullable: true },
   ipAddress: { type: "text", prismaPath: ["ipAddress"], nullable: true },
 };
 
@@ -19,5 +20,6 @@ type OrderByBuilder = (dir: "asc" | "desc") => Prisma.AuditLogOrderByWithRelatio
 export const AUDIT_LOG_SORT_COLUMNS: Record<AuditLogSortField, OrderByBuilder> = {
   action: (dir) => ({ action: dir }),
   entityType: (dir) => ({ entityType: dir }),
+  entityCode: (dir) => ({ entityCode: dir }),
   createdAt: (dir) => ({ createdAt: dir }),
 };

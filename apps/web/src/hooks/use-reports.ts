@@ -40,11 +40,14 @@ export function useProcurementSpendReport(range: ReportDateRangeQuery) {
   });
 }
 
-export function useProjectCostingReport() {
+/** Profit per project; pass a projectId to get just that project. */
+export function useProjectCostingReport(projectId?: string) {
   return useQuery({
-    queryKey: ["reports", "project-costing"],
+    queryKey: ["reports", "project-costing", projectId ?? "all"],
     queryFn: async () => {
-      const response = await apiClient.get<ApiResponse<ProjectCostingReportDto>>("/reports/project-costing");
+      const response = await apiClient.get<ApiResponse<ProjectCostingReportDto>>("/reports/project-costing", {
+        params: { projectId },
+      });
       return unwrap(response.data);
     },
   });

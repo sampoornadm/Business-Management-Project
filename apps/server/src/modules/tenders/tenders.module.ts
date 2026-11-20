@@ -16,6 +16,7 @@ import { usersRepository } from "../users/users.module.js";
 import { extractDocumentText } from "./tender-extraction.parser.js";
 import type { GenerateTextFn } from "./tender-extraction.service.js";
 import { TenderExtractionService } from "./tender-extraction.service.js";
+import { TenderSubmissionsRepository } from "./tender-submissions.repository.js";
 import { TendersController } from "./tenders.controller.js";
 import { TendersRepository } from "./tenders.repository.js";
 import { createTendersRouter } from "./tenders.routes.js";
@@ -39,6 +40,7 @@ export const tendersService = new TendersService(
   new BoqRepository(prisma),
   new ItemsRepository(prisma),
   new HistoricalRatesRepository(prisma),
+  new TenderSubmissionsRepository(prisma),
 );
 // Adapts ollama.client's (prompt, model?, options?) to the service's own narrower (prompt,
 // options?) — the service never picks a model (always the env default), only ever a timeout.

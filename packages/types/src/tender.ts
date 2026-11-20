@@ -1,12 +1,15 @@
 import type { FilterCondition } from "./filtering.js";
 
-export const TENDER_STATUSES = ["DRAFT", "SUBMITTED", "WON", "LOST", "CANCELLED"] as const;
+// PRICE_OPENED: the client has opened the price bids and published every bidder's rates, but
+// has not said who gets the order. Our standing (L1, L2, ...) is known; the result is not.
+export const TENDER_STATUSES = ["DRAFT", "SUBMITTED", "PRICE_OPENED", "WON", "LOST", "CANCELLED"] as const;
 
 export type TenderStatus = (typeof TENDER_STATUSES)[number];
 
 export const TENDER_STATUS_LABELS: Record<TenderStatus, string> = {
   DRAFT: "Draft",
   SUBMITTED: "Submitted",
+  PRICE_OPENED: "Price opened",
   WON: "Won",
   LOST: "Lost",
   CANCELLED: "Cancelled",
@@ -18,15 +21,24 @@ export const TENDER_STATUS_LABELS: Record<TenderStatus, string> = {
  */
 export const TENDER_STATUS_TRANSITIONS: Record<TenderStatus, TenderStatus[]> = {
   DRAFT: ["SUBMITTED", "CANCELLED"],
-  SUBMITTED: ["WON", "LOST", "CANCELLED", "DRAFT"],
-  WON: ["SUBMITTED"],
-  LOST: ["SUBMITTED"],
+  // A result can still be recorded straight from Submitted: not every client publishes a price opening.
+  SUBMITTED: ["PRICE_OPENED", "WON", "LOST", "CANCELLED", "DRAFT"],
+  PRICE_OPENED: ["WON", "LOST", "CANCELLED", "SUBMITTED"],
+  WON: ["PRICE_OPENED", "SUBMITTED"],
+  LOST: ["PRICE_OPENED", "SUBMITTED"],
   CANCELLED: ["DRAFT", "SUBMITTED"],
 };
 
 export const TENDER_TERMINAL_STATUSES: TenderStatus[] = ["WON", "LOST", "CANCELLED"];
 
-const TENDER_STATUS_STAGE: Record<TenderStatus, number> = { DRAFT: 0, SUBMITTED: 1, WON: 2, LOST: 2, CANCELLED: 2 };
+const TENDER_STATUS_STAGE: Record<TenderStatus, number> = {
+  DRAFT: 0,
+  SUBMITTED: 1,
+  PRICE_OPENED: 2,
+  WON: 3,
+  LOST: 3,
+  CANCELLED: 3,
+};
 
 /** A move to an earlier stage (un-submitting, reopening a result) — needs tenders:revert_status. */
 export function isTenderStatusReversal(from: TenderStatus, to: TenderStatus): boolean {
@@ -41,6 +53,29 @@ export const TENDER_KIND_LABELS: Record<TenderKind, string> = {
   BUDGETARY: "Budgetary Quotation",
 };
 
+/** How the client picks winners: the whole bid (L1 overall gets the order) or item by item. */
+export const TENDER_EVALUATION_CRITERIA = ["OVERALL", "INDIVIDUAL"] as const;
+export type TenderEvaluationCriteria = (typeof TENDER_EVALUATION_CRITERIA)[number];
+export const TENDER_EVALUATION_CRITERIA_LABELS: Record<TenderEvaluationCriteria, string> = {
+  OVERALL: "Overall",
+  INDIVIDUAL: "Individual",
+};
+
+/**
+ * Maps the document's own wording onto the two criteria, or undefined when it is neither (the
+ * caller may then ask the AI). "Individual" is tested first: "item-wise, not overall" must not
+ * read as Overall.
+ */
+export function matchEvaluationCriteria(text: string | null | undefined): TenderEvaluationCriteria | undefined {
+  const value = text?.trim().toLowerCase();
+  if (!value) return undefined;
+  if (/individual|item[\s-]*wise|per[\s-]*item|each item|line[\s-]*item|separately/.test(value)) return "INDIVIDUAL";
+  if (/overall|all items|whole|total|lump|package|composite|combined|single order/.test(value)) {
+    return "OVERALL";
+  }
+  return undefined;
+}
+
 export const TENDER_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
 export type TenderPriority = (typeof TENDER_PRIORITIES)[number];
 
@@ -50,6 +85,7 @@ export const TENDER_FILTER_FIELDS = [
   "clientName",
   "status",
   "priority",
+  "evaluationCriteria",
   "department",
   "submissionDate",
 ] as const;
@@ -61,6 +97,7 @@ export const TENDER_SORT_FIELDS = [
   "clientName",
   "status",
   "priority",
+  "evaluationCriteria",
   "submissionDate",
   "createdAt",
   "assigneeCount",
@@ -177,6 +214,12 @@ export interface TenderListItemDto {
   estimatedCost: number | null;
   submissionDate: string | null;
   assigneeCount: number;
+  evaluationCriteria: TenderEvaluationCriteria | null;
+  /** Items won on an Individual-evaluation tender won on only some of them; 0 for a whole-tender win. */
+  wonItemCount: number;
+  /** Priceable BOQ lines when it was won on some of them; null when unknown (whole win, or older result). */
+  wonItemsTotal: number | null;
+  wonItemNames: string[];
   createdAt: string;
 }
 
@@ -185,6 +228,17 @@ export interface TenderLinkedBudgetaryDto {
   tenderNumber: string;
   title: string;
   updatedAt: string;
+}
+
+/** A BOQ line we won, as it stood when the result was recorded (the BOQ may change later). */
+export interface TenderWonItemDto {
+  boqItemId: string;
+  itemCode: string | null;
+  description: string;
+  unit: string | null;
+  quantity: number | null;
+  rate: number | null;
+  amount: number | null;
 }
 
 export interface TenderDto extends TenderListItemDto {
@@ -208,6 +262,8 @@ export interface TenderDto extends TenderListItemDto {
   dealingOfficerName: string | null;
   dealingOfficerEmail: string | null;
   dealingOfficerPhone: string | null;
+  /** The items we won, for an Individual-evaluation tender won on only some of them; empty otherwise. */
+  wonItems: TenderWonItemDto[];
   winnerName: string | null;
   winningBidAmount: number | null;
   lossReason: string | null;
@@ -250,6 +306,7 @@ export interface CreateTenderInput {
   dealingOfficerName?: string;
   dealingOfficerEmail?: string;
   dealingOfficerPhone?: string;
+  evaluationCriteria?: TenderEvaluationCriteria;
 }
 
 export type UpdateTenderInput = Partial<CreateTenderInput> & { convertedFromId?: string | null };
@@ -276,6 +333,7 @@ export interface TenderExtractionFields {
   dealingOfficerName?: string;
   dealingOfficerEmail?: string;
   dealingOfficerPhone?: string;
+  evaluationCriteria?: TenderEvaluationCriteria;
 }
 
 export interface ExtractedTenderItem {
@@ -314,6 +372,8 @@ export interface ChangeTenderStatusInput {
   winnerName?: string;
   winningBidAmount?: number;
   lossReason?: string;
+  /** On Won: the BOQ lines the order came for, when it is not the whole tender (Individual evaluation). */
+  wonItemIds?: string[];
   /** Required on DRAFT/CANCELLED → SUBMITTED for TENDER kind; kept from the last submission otherwise. */
   submissionReference?: string;
 }
@@ -360,6 +420,49 @@ export interface TenderStatusHistoryEntryDto {
   remarks: string | null;
   changedBy: { id: string; firstName: string; lastName: string } | null;
   changedAt: string;
+  /** Set when this status change was a fresh submission (DRAFT → SUBMITTED, …). */
+  submission: { number: number; reference: string | null; summary: string } | null;
+}
+
+/** One leaf BOQ line as frozen in a tender submission. */
+export interface TenderSubmissionLineDto {
+  boqItemId: string;
+  description: string;
+  unit: string | null;
+  quantity: number | null;
+  rate: number | null;
+  amount: number | null;
+  baseRate: number | null;
+  markupPercent: number | null;
+  vendorId: string | null;
+  vendorName: string | null;
+  hsnCode: string | null;
+  technicalDeviation: string | null;
+}
+
+export type SubmissionLineField =
+  | "rate"
+  | "baseRate"
+  | "markupPercent"
+  | "vendor"
+  | "quantity"
+  | "hsnCode"
+  | "technicalDeviation";
+
+/** A line present in both submissions, with the fields that differ. */
+export interface SubmissionLineDiff {
+  before: TenderSubmissionLineDto;
+  after: TenderSubmissionLineDto;
+  changed: SubmissionLineField[];
+}
+
+/** What changed between a submission and the one immediately before it. */
+export interface SubmissionChanges {
+  reference: { before: string | null; after: string | null } | null;
+  total: { before: number; after: number } | null;
+  lines: SubmissionLineDiff[];
+  added: TenderSubmissionLineDto[];
+  removed: TenderSubmissionLineDto[];
 }
 
 export interface TenderDashboardStatsDto {

@@ -21,7 +21,8 @@ export const PAYMENT_METHODS = ["CASH", "BANK_TRANSFER", "CHEQUE", "UPI", "CARD"
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 /** Entities a Payment can be recorded against — mirrors Attachment's entityType/entityId convention. */
-export const PAYABLE_ENTITY_TYPES = ["Invoice", "Expense", "PurchaseOrder"] as const;
+// "Bill": a client's payment for a shipment's bill (projects → supply).
+export const PAYABLE_ENTITY_TYPES = ["Invoice", "Expense", "PurchaseOrder", "Bill"] as const;
 export type PayableEntityType = (typeof PAYABLE_ENTITY_TYPES)[number];
 
 export interface BankAccountDto {

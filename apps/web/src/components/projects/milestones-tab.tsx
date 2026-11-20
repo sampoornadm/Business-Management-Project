@@ -2,11 +2,12 @@
 
 import { MILESTONE_STATUSES, type ProjectDto, type MilestoneStatus } from "@bmp/types";
 import {
-  Badge,
   Button,
   Card,
   CardContent,
+  confirmAction,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -30,14 +31,8 @@ import {
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
+import { StatusBadge } from "@/components/status-badge";
 import { useAddMilestone, useDeleteMilestone, useUpdateMilestone } from "@/hooks/use-projects";
-
-const STATUS_VARIANT: Record<MilestoneStatus, "success" | "secondary" | "outline" | "destructive"> = {
-  PENDING: "outline",
-  IN_PROGRESS: "secondary",
-  COMPLETED: "success",
-  DELAYED: "destructive",
-};
 
 function AddMilestoneDialog({ projectId }: { projectId: string }) {
   const { toast } = useToast();
@@ -94,8 +89,13 @@ function AddMilestoneDialog({ projectId }: { projectId: string }) {
           />
         </div>
         <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
           <Button onClick={handleSubmit} disabled={addMilestone.isPending}>
-            Add
+            Add milestone
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -163,9 +163,7 @@ export function MilestonesTab({ project }: { project: ProjectDto }) {
                       <SelectContent>
                         {MILESTONE_STATUSES.map((status) => (
                           <SelectItem key={status} value={status}>
-                            <Badge variant={STATUS_VARIANT[status]} className="mr-1">
-                              {status}
-                            </Badge>
+                            <StatusBadge status={status} className="mr-1" />
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -175,7 +173,13 @@ export function MilestonesTab({ project }: { project: ProjectDto }) {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => deleteMilestone.mutate(milestone.id)}
+                      onClick={async () => {
+                        const confirmed = await confirmAction({
+                          title: `Delete milestone "${milestone.title}"?`,
+                          confirmLabel: "Delete milestone",
+                        });
+                        if (confirmed) deleteMilestone.mutate(milestone.id);
+                      }}
                       aria-label="Delete milestone"
                     >
                       <Trash2 className="h-4 w-4" />

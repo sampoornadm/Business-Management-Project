@@ -6,6 +6,8 @@ export interface AuditLogDto {
   action: string;
   entityType: string | null;
   entityId: string | null;
+  /** Readable code of the entity (tender number, PO number, item code, …); null if unknown/deleted. */
+  entityCode: string | null;
   metadata: Record<string, unknown> | null;
   ipAddress: string | null;
   createdAt: string;
@@ -15,13 +17,20 @@ export interface AuditLogDto {
 // frontend column registry's static option lists) even though the DB columns are plain strings —
 // filterConditionSchema's `value` stays unconstrained either way, so a value outside those static
 // lists is simply never offered in the dropdown, never rejected server-side.
-export const AUDIT_LOG_FILTER_FIELDS = ["actorId", "action", "entityType", "entityId", "ipAddress"] as const;
+export const AUDIT_LOG_FILTER_FIELDS = [
+  "actorId",
+  "action",
+  "entityType",
+  "entityId",
+  "entityCode",
+  "ipAddress",
+] as const;
 export type AuditLogFilterField = (typeof AUDIT_LOG_FILTER_FIELDS)[number];
 
 // actorId is deliberately not sortable — sorting a relation by firstName alone (Prisma can't sort
 // by a concatenated "full name") is more misleading than useful, so it's filterable (exact id
 // match against a name picked from a dropdown) but not offered as a sort column.
-export const AUDIT_LOG_SORT_FIELDS = ["action", "entityType", "createdAt"] as const;
+export const AUDIT_LOG_SORT_FIELDS = ["action", "entityType", "entityCode", "createdAt"] as const;
 export type AuditLogSortField = (typeof AUDIT_LOG_SORT_FIELDS)[number];
 
 export interface ListAuditLogsQuery {

@@ -92,6 +92,53 @@ describe("Tender workflow (integration)", () => {
     expect(fetched.body.data.ratesLockedAt).not.toBeNull();
   });
 
+  it("two submissions produce a readable change log", async () => {
+    const createResponse = await request(app)
+      .post("/api/v1/tenders")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        tenderNumber: `TND-${randomUUID().slice(0, 8)}`,
+        title: "Change Log Tender",
+        clientId: organizationId,
+        submissionDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+    const tenderId = createResponse.body.data.id as string;
+    const added = await request(app)
+      .post(`/api/v1/tenders/${tenderId}/boq/items`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ description: "XLPE Cable 4C x16", unit: "m", quantity: 10, rate: 437 });
+    expect(added.status).toBe(201);
+    const boqItemId = added.body.data.items[0].id as string;
+    const status = (body: object) =>
+      request(app).patch(`/api/v1/tenders/${tenderId}/status`).set("Authorization", `Bearer ${accessToken}`).send(body);
+    const lock = (locked: boolean) =>
+      request(app)
+        .put(`/api/v1/tenders/${tenderId}/rates-lock`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ locked });
+
+    await lock(true);
+    expect((await status({ status: "SUBMITTED", submissionReference: "A" })).status).toBe(200);
+    expect((await status({ status: "DRAFT", remarks: "Re-pricing" })).status).toBe(200);
+    await lock(false);
+    const patched = await request(app)
+      .patch(`/api/v1/boq-items/${boqItemId}`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ rate: 415 });
+    expect(patched.status).toBe(200);
+    await lock(true);
+    expect((await status({ status: "SUBMITTED", submissionReference: "B" })).status).toBe(200);
+
+    const history = await request(app)
+      .get(`/api/v1/tenders/${tenderId}/status-history`)
+      .set("Authorization", `Bearer ${accessToken}`);
+    const newest = history.body.data.items[0];
+    expect(newest.submission.number).toBe(2);
+    expect(newest.submission.summary).toContain("(was A)");
+    expect(newest.submission.summary).toContain("Rates changed (1):");
+    expect(newest.submission.summary).toContain("₹437.00 → ₹415.00");
+  });
+
   it("creates a tender, advances its status through valid transitions, and records history", async () => {
     const createResponse = await request(app)
       .post("/api/v1/tenders")
@@ -340,6 +387,7 @@ describe("Tender workflow (integration)", () => {
           estimatedCost: 1_000_000,
           submissionDate: new Date().toISOString(),
           priority: "HIGH",
+          evaluationCriteria: "INDIVIDUAL",
         });
       alphaId = createAlpha.body.data.id;
 
@@ -383,6 +431,28 @@ describe("Tender workflow (integration)", () => {
       const ids = response.body.data.items.map((t: { id: string }) => t.id);
       expect(ids).toContain(betaId);
       expect(ids).not.toContain(alphaId);
+    });
+
+    it("filters and sorts tenders by evaluation criteria, with unstated ones last", async () => {
+      const filters = JSON.stringify([{ columnKey: "evaluationCriteria", operator: "is", value: "INDIVIDUAL" }]);
+      const filtered = await request(app)
+        .get("/api/v1/tenders")
+        .query({ filters, pageSize: 100 })
+        .set("Authorization", `Bearer ${accessToken}`);
+      expect(filtered.status).toBe(200);
+      const filteredIds = filtered.body.data.items.map((t: { id: string }) => t.id);
+      expect(filteredIds).toContain(alphaId);
+      expect(filteredIds).not.toContain(betaId);
+
+      for (const sortDir of ["asc", "desc"]) {
+        const sorted = await request(app)
+          .get("/api/v1/tenders")
+          .query({ sortBy: "evaluationCriteria", sortDir, pageSize: 100 })
+          .set("Authorization", `Bearer ${accessToken}`);
+        expect(sorted.status).toBe(200);
+        const ids: string[] = sorted.body.data.items.map((t: { id: string }) => t.id);
+        expect(ids.indexOf(alphaId)).toBeLessThan(ids.indexOf(betaId));
+      }
     });
 
     it("sorts tenders by title ascending", async () => {

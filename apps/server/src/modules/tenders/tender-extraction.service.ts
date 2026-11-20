@@ -1,13 +1,20 @@
 import { randomUUID } from "node:crypto";
 
-import type { TenderExtractionFields, TenderExtractionResultDto, TenderNotesJobDto } from "@bmp/types";
+import {
+  matchEvaluationCriteria,
+  TENDER_EVALUATION_CRITERIA,
+  type TenderEvaluationCriteria,
+  type TenderExtractionFields,
+  type TenderExtractionResultDto,
+  type TenderNotesJobDto,
+} from "@bmp/types";
 import { z } from "zod";
 
 import { env } from "../../config/env.js";
 import type { ExtractPdfTextOptions } from "../../shared/utils/pdf-text.js";
 import type { IOrganizationsRepository } from "../organizations/organizations.repository.js";
 
-import { parseIiscoHeaderFields } from "./tender-header.parser.js";
+import { parseEvaluationCriteria, parseIiscoHeaderFields } from "./tender-header.parser.js";
 import { parseIiscoRfqItems } from "./tender-item.parser.js";
 import type { ExtractedSection } from "./tender-notes-sections.parser.js";
 import { parseIiscoNoteSections } from "./tender-notes-sections.parser.js";
@@ -281,6 +288,20 @@ function rawSectionText(section: ExtractedSection): string {
   return `## ${section.heading}\n${section.text.replace(/\s+/g, " ").trim()}`;
 }
 
+const evaluationCriteriaSchema = z.object({ criteria: z.enum([...TENDER_EVALUATION_CRITERIA, "UNKNOWN"]) });
+
+/** Asked only when the document's wording is neither "overall" nor "individual" by keyword. */
+function buildEvaluationCriteriaPrompt(wording: string): string {
+  return `A tender document states how bids are evaluated, worded as: "${wording}"
+
+Decide which it means:
+- OVERALL: all items are compared together; the bidder with the lowest total gets the whole order.
+- INDIVIDUAL: each item is compared on its own; different bidders can win different items.
+- UNKNOWN: it does not clearly mean either.
+
+Respond with ONLY JSON: {"criteria": "OVERALL" | "INDIVIDUAL" | "UNKNOWN"}`;
+}
+
 export class TenderExtractionService {
   private readonly notesBudgetMs: number;
   private readonly notesJobs = new Map<string, NotesJob>();
@@ -450,6 +471,21 @@ export class TenderExtractionService {
     }
   }
 
+  /**
+   * The document's own wording as one of the two criteria: keyword match first, the AI by meaning
+   * only when that fails. Undefined when still unclear, or when Ollama is down — the owner picks.
+   */
+  private async resolveEvaluationCriteria(wording: string | undefined): Promise<TenderEvaluationCriteria | undefined> {
+    const matched = matchEvaluationCriteria(wording);
+    if (matched || !wording) return matched;
+    try {
+      const answer = evaluationCriteriaSchema.safeParse(await this.generateJson(buildEvaluationCriteriaPrompt(wording)));
+      return answer.success && answer.data.criteria !== "UNKNOWN" ? answer.data.criteria : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   async extractFromDocument(
     buffer: Buffer,
     mimeType: string,
@@ -505,7 +541,11 @@ export class TenderExtractionService {
       const { clientName, ...fields } = deterministic;
       const clientMatch = clientName ? await this.matchClient(clientName) : undefined;
       return {
-        fields: { ...fields, notes },
+        fields: {
+          ...fields,
+          notes,
+          evaluationCriteria: await this.resolveEvaluationCriteria(parseEvaluationCriteria(itemsText)),
+        },
         items,
         suggestedClientId: clientMatch?.suggestedClientId,
         suggestedClientName: clientMatch?.suggestedClientName,

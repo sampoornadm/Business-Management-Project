@@ -1,17 +1,12 @@
 "use client";
 
-import { Badge, Card, CardContent, CardHeader, CardTitle, formatDate, Skeleton, useToast } from "@bmp/ui";
+import { Card, CardContent, CardHeader, CardTitle, formatDate, formatMoney, PageHeader, PageSkeleton, useToast } from "@bmp/ui";
 import { useParams } from "next/navigation";
 
 import { RecordPaymentDialog } from "@/components/finance/record-payment-dialog";
+import { StatusBadge } from "@/components/status-badge";
 import { useExpense, useRecordExpensePayment } from "@/hooks/use-finance";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
-
-const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
-  UNPAID: "outline",
-  PARTIALLY_PAID: "secondary",
-  PAID: "success",
-};
 
 export default function ExpenseDetailPage() {
   const params = useParams<{ id: string }>();
@@ -21,7 +16,7 @@ export default function ExpenseDetailPage() {
   const recordPayment = useRecordExpensePayment(params.id);
 
   if (expenseQuery.isLoading || !expenseQuery.data) {
-    return <Skeleton className="h-64 w-full" />;
+    return <PageSkeleton />;
   }
 
   const expense = expenseQuery.data;
@@ -29,27 +24,32 @@ export default function ExpenseDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{expense.description}</h1>
-            <Badge variant={STATUS_VARIANT[expense.status]}>{expense.status}</Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {expense.category} · {formatDate(expense.expenseDate)}
-          </p>
-        </div>
-        {remaining > 0 && (
-          <RecordPaymentDialog
-            remainingAmount={remaining}
-            isSubmitting={recordPayment.isPending}
-            onSubmit={async (input) => {
-              await recordPayment.mutateAsync(input);
-              toast({ title: "Payment recorded" });
-            }}
-          />
-        )}
-      </div>
+      <PageHeader
+        title={expense.description}
+        badges={
+          <>
+            <StatusBadge status={expense.status} />
+          </>
+        }
+        actions={
+          <>
+            {remaining > 0 && (
+              <RecordPaymentDialog
+                remainingAmount={remaining}
+                isSubmitting={recordPayment.isPending}
+                onSubmit={async (input) => {
+                  await recordPayment.mutateAsync(input);
+                  toast({ title: "Payment recorded" });
+                }}
+              />
+            )}
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          {expense.category} · {formatDate(expense.expenseDate)}
+        </p>
+      </PageHeader>
 
       <Card>
         <CardHeader>
@@ -58,11 +58,11 @@ export default function ExpenseDetailPage() {
         <CardContent className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
           <div>
             <p className="text-muted-foreground">Amount</p>
-            <p className="font-semibold">{expense.amount.toLocaleString()}</p>
+            <p className="font-semibold">{formatMoney(expense.amount)}</p>
           </div>
           <div>
             <p className="text-muted-foreground">Paid</p>
-            <p>{expense.amountPaid.toLocaleString()}</p>
+            <p>{formatMoney(expense.amountPaid)}</p>
           </div>
         </CardContent>
       </Card>
@@ -79,7 +79,7 @@ export default function ExpenseDetailPage() {
               {expense.payments.map((payment) => (
                 <div key={payment.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
                   <div>
-                    <p className="font-medium">{payment.amount.toLocaleString()}</p>
+                    <p className="font-medium">{formatMoney(payment.amount)}</p>
                     <p className="text-muted-foreground">
                       {payment.method} · {formatDate(payment.paymentDate)}
                       {payment.referenceNumber ? ` · ${payment.referenceNumber}` : ""}

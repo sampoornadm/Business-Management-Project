@@ -1,6 +1,7 @@
+import { matchEvaluationCriteria } from "@bmp/types";
 import { describe, expect, it } from "vitest";
 
-import { parseIiscoHeaderFields } from "../tender-header.parser.js";
+import { parseEvaluationCriteria, parseIiscoHeaderFields } from "../tender-header.parser.js";
 
 // The real raw-text output of the actual `pdftotext` CLI (not a hand-typed
 // guess) for a real IISCO/SAIL "BID INVITATION" sample — TE No 1400000005,
@@ -214,5 +215,37 @@ describe("parseIiscoHeaderFields", () => {
 
     expect(fields!.dealingOfficerName).toBe("Officer One");
     expect(fields!.dealingOfficerEmail).toBe("officer.one@example.in");
+  });
+});
+
+describe("parseEvaluationCriteria", () => {
+  // Shape of real `pdftotext -layout` output for the header table.
+  const row = (value: string) =>
+    `RA Applicable                    No\nEvaluation Criteria              ${value}\nBid Submission Deadline          20.07.2026 15:00:00 Hrs\n`;
+
+  it("reads the value as the document words it", () => {
+    expect(parseEvaluationCriteria(row("Overall"))).toBe("Overall");
+    expect(parseEvaluationCriteria(row("Individual"))).toBe("Individual");
+  });
+
+  it("is undefined when the row is absent", () => {
+    expect(parseEvaluationCriteria("RA Applicable    No\n")).toBeUndefined();
+  });
+});
+
+describe("matchEvaluationCriteria", () => {
+  it.each([
+    ["Overall", "OVERALL"],
+    ["Overall (L1 on total)", "OVERALL"],
+    ["Individual", "INDIVIDUAL"],
+    ["Item wise", "INDIVIDUAL"],
+    ["Item-wise, not overall", "INDIVIDUAL"],
+    ["Lowest bidder for each item", "INDIVIDUAL"],
+  ])("reads %s", (wording, expected) => {
+    expect(matchEvaluationCriteria(wording)).toBe(expected);
+  });
+
+  it.each(["", "  ", "L1 basis", "Technical + commercial"])("leaves %j for the AI", (wording) => {
+    expect(matchEvaluationCriteria(wording)).toBeUndefined();
   });
 });

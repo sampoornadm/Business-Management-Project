@@ -1,6 +1,6 @@
 "use client";
 
-import { PageHeader, Skeleton, useToast } from "@bmp/ui";
+import { PageHeader, PageSkeleton, useToast } from "@bmp/ui";
 import { useParams, useRouter } from "next/navigation";
 
 import { TenderForm, toCreateTenderInput, type TenderFormValues } from "@/components/tenders/tender-form";
@@ -46,14 +46,14 @@ export default function EditTenderPage() {
   }
 
   if (tenderQuery.isLoading || !tenderQuery.data) {
-    return <Skeleton className="h-96 w-full max-w-3xl" />;
+    return <PageSkeleton className="max-w-3xl" />;
   }
 
   const tender = tenderQuery.data;
 
   return (
     <div className="max-w-3xl space-y-6">
-      <PageHeader title="Edit Tender" />
+      <PageHeader title="Edit tender" />
       <TenderForm
         defaultValues={{
           tenderNumber: tender.tenderNumber,
@@ -77,6 +77,7 @@ export default function EditTenderPage() {
           dealingOfficerName: tender.dealingOfficerName ?? "",
           dealingOfficerEmail: tender.dealingOfficerEmail ?? "",
           dealingOfficerPhone: tender.dealingOfficerPhone ?? "",
+          evaluationCriteria: tender.evaluationCriteria ?? "",
         }}
         onSubmit={handleSubmit}
         isSubmitting={updateTender.isPending}

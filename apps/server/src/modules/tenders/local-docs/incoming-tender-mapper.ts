@@ -59,6 +59,7 @@ export function buildDraftTenderData(
     dealingOfficerName: fields.dealingOfficerName ?? null,
     dealingOfficerEmail: fields.dealingOfficerEmail ?? null,
     dealingOfficerPhone: fields.dealingOfficerPhone ?? null,
+    evaluationCriteria: fields.evaluationCriteria ?? null,
     businessId,
     createdById,
   };

@@ -63,6 +63,33 @@ describe("PortalBrowser with a fake browser", () => {
     return { browser, launches, contexts };
   }
 
+  const STATEMENT_URL =
+    "https://srm.sailisp.co.in/irj/servlet/prt/portal/prtroot/pcd!3aportal_content!2fIISCO!2fIISCO_Iview!2fzsrm_dashboard_0?P_OBJ_ID=1400000013";
+  const quick = { timeoutMs: 20, pollMs: 5 };
+
+  it("opens a tender's comparative statement in a new tab of the portal window", async () => {
+    const { browser, contexts } = setup();
+    await expect(browser.readComparativeMatrix("1400000013", quick)).rejects.toThrow(/did not open/);
+    const tab = contexts[0]!.pageList[1]!;
+    expect(tab.gotos).toEqual([STATEMENT_URL]);
+    expect(tab.fronted).toBe(1);
+    expect(contexts[0]!.pageList[0]!.gotos).toEqual([]);
+  });
+
+  it("reloads the statement in the tab that already shows it instead of opening another", async () => {
+    const { browser, contexts } = setup();
+    await browser.readComparativeMatrix("1400000013", quick).catch(() => undefined);
+    await browser.readComparativeMatrix("1400000013", quick).catch(() => undefined);
+    expect(contexts[0]!.pageList).toHaveLength(2);
+    expect(contexts[0]!.pageList[1]!.gotos).toEqual([STATEMENT_URL, STATEMENT_URL]);
+  });
+
+  it("refuses anything that is not an RFx number", async () => {
+    const { browser, launches } = setup();
+    await expect(browser.readComparativeMatrix("1400000013&x=1", quick)).rejects.toThrow(/RFx number/);
+    expect(launches).toHaveLength(0);
+  });
+
   it("launches a visible window on the portal with the profile folder", async () => {
     const { browser, launches, contexts } = setup();
     await browser.open();

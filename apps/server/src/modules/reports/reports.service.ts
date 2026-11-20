@@ -3,6 +3,7 @@ import type {
   KpiDto,
   ProcurementSpendReportDto,
   ProjectCostingReportDto,
+  ProjectProfitFiguresDto,
   ReportKey,
   SearchResultItemDto,
   SearchResultsDto,
@@ -18,7 +19,7 @@ import { getCachedJson, setCachedJson } from "../../infra/redis/cache.js";
 import { round2 } from "../../shared/utils/math.js";
 import type { ExportableTable } from "../../shared/utils/table-export.js";
 
-import type { AttachmentMetadataRow, IReportsRepository } from "./reports.repository.js";
+import type { AttachmentMetadataRow, IReportsRepository, ProjectProfitSourceRow } from "./reports.repository.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -36,6 +37,25 @@ async function cached<T>(key: string, compute: () => Promise<T>): Promise<T> {
 
 function monthKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+type ProfitSources = Omit<ProjectProfitSourceRow, "id" | "name" | "status">;
+
+function profitFigures(sources: ProfitSources): ProjectProfitFiguresDto {
+  const totalCost = round2(sources.vendorCost + sources.freight + sources.otherCosts);
+  const profit = round2(sources.received - totalCost);
+  return {
+    clientPoValue: round2(sources.clientPoValue),
+    billed: round2(sources.billed),
+    received: round2(sources.received),
+    vendorCost: round2(sources.vendorCost),
+    freight: round2(sources.freight),
+    otherCosts: round2(sources.otherCosts),
+    totalCost,
+    profit,
+    expectedProfit: round2(sources.clientPoValue - totalCost),
+    marginPercent: sources.received > 0 ? round2((profit / sources.received) * 100) : null,
+  };
 }
 
 function average(values: number[]): number | null {
@@ -102,39 +122,19 @@ export class ReportsService {
     };
   }
 
-  async getProjectCosting(businessId: string): Promise<ProjectCostingReportDto> {
-    const projects = await this.reportsRepository.findActiveProjectsBasic(businessId);
-    const tenderIds = projects.map((p) => p.tenderId);
-    const projectIds = projects.map((p) => p.id);
-
-    const [poTotals, laborTotals] = await Promise.all([
-      this.reportsRepository.findPurchaseOrderTotalsByTenderIds(businessId, tenderIds),
-      this.reportsRepository.findLaborTotalsByProjectIds(businessId, projectIds),
-    ]);
-
-    const poByTender = new Map<string, number>();
-    for (const row of poTotals) poByTender.set(row.tenderId, round2((poByTender.get(row.tenderId) ?? 0) + row.amount));
-    const laborByProject = new Map<string, number>();
-    for (const row of laborTotals) {
-      laborByProject.set(row.projectId, round2((laborByProject.get(row.projectId) ?? 0) + row.amount));
-    }
-
-    const rows = projects.map((p) => {
-      const actualCost = round2((poByTender.get(p.tenderId) ?? 0) + (laborByProject.get(p.id) ?? 0));
-      return {
-        projectId: p.id,
-        name: p.name,
-        status: p.status,
-        budget: p.budget,
-        actualCost,
-        variance: round2(p.budget - actualCost),
-      };
-    });
-
+  async getProjectCosting(businessId: string, projectId?: string): Promise<ProjectCostingReportDto> {
+    const sources = await this.reportsRepository.findProjectProfitSources(businessId, projectId);
+    const total = (key: keyof ProfitSources) => sources.reduce((sum, row) => sum + row[key], 0);
     return {
-      projects: rows,
-      totalBudget: round2(rows.reduce((sum, r) => sum + r.budget, 0)),
-      totalActualCost: round2(rows.reduce((sum, r) => sum + r.actualCost, 0)),
+      projects: sources.map((row) => ({ projectId: row.id, name: row.name, status: row.status, ...profitFigures(row) })),
+      totals: profitFigures({
+        clientPoValue: total("clientPoValue"),
+        billed: total("billed"),
+        received: total("received"),
+        vendorCost: total("vendorCost"),
+        freight: total("freight"),
+        otherCosts: total("otherCosts"),
+      }),
     };
   }
 
@@ -381,20 +381,30 @@ export class ReportsService {
       case "project-costing": {
         const report = await this.getProjectCosting(businessId);
         return {
-          title: "Project Costing",
+          title: "Project Profit",
           columns: [
             { key: "name", header: "Project" },
             { key: "status", header: "Status" },
-            { key: "budget", header: "Budget" },
-            { key: "actualCost", header: "Actual Cost" },
-            { key: "variance", header: "Variance" },
+            { key: "clientPoValue", header: "Client PO value" },
+            { key: "billed", header: "Billed" },
+            { key: "received", header: "Received" },
+            { key: "vendorCost", header: "Vendor POs" },
+            { key: "freight", header: "Freight" },
+            { key: "otherCosts", header: "Other costs" },
+            { key: "profit", header: "Profit so far" },
+            { key: "expectedProfit", header: "Expected profit" },
           ],
           rows: report.projects.map((p) => ({
             name: p.name,
             status: p.status,
-            budget: p.budget,
-            actualCost: p.actualCost,
-            variance: p.variance,
+            clientPoValue: p.clientPoValue,
+            billed: p.billed,
+            received: p.received,
+            vendorCost: p.vendorCost,
+            freight: p.freight,
+            otherCosts: p.otherCosts,
+            profit: p.profit,
+            expectedProfit: p.expectedProfit,
           })),
         };
       }

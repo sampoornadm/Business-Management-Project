@@ -27,6 +27,47 @@ const projectDetailArgs = {
 
 export type ProjectDetail = Prisma.ProjectGetPayload<typeof projectDetailArgs>;
 
+const overviewTenderSelect = {
+  id: true,
+  tenderNumber: true,
+  title: true,
+  client: { select: { name: true } },
+  evaluationCriteria: true,
+  winningBidAmount: true,
+  submissionReference: true,
+  deliveryPeriodDays: true,
+  wonItems: true,
+  wonItemsTotal: true,
+} satisfies Prisma.TenderSelect;
+
+const overviewRfqArgs = {
+  select: {
+    id: true,
+    title: true,
+    status: true,
+    items: { select: { quantity: true, quotes: { select: { vendorId: true, rate: true, isSelected: true } } } },
+    vendorInvites: { select: { status: true, vendor: { select: { id: true, name: true } } } },
+  },
+} satisfies Prisma.RfqDefaultArgs;
+
+const overviewPurchaseOrderArgs = {
+  select: {
+    id: true,
+    poNumber: true,
+    status: true,
+    expectedDeliveryDate: true,
+    vendor: { select: { id: true, name: true } },
+    items: { select: { quantity: true, rate: true, receivedQuantity: true } },
+  },
+} satisfies Prisma.PurchaseOrderDefaultArgs;
+
+/** What the project screen's overview is built from: the tender and its procurement. */
+export interface ProjectOverviewData {
+  tender: Prisma.TenderGetPayload<{ select: typeof overviewTenderSelect }>;
+  rfqs: Prisma.RfqGetPayload<typeof overviewRfqArgs>[];
+  purchaseOrders: Prisma.PurchaseOrderGetPayload<typeof overviewPurchaseOrderArgs>[];
+}
+
 export interface CreateProjectData {
   tenderId: string;
   businessId: string;
@@ -149,6 +190,8 @@ export interface IProjectsRepository {
 
   sumBoqEstimateForTender(tenderId: string): Promise<number>;
   sumPurchaseOrdersForTender(tenderId: string): Promise<number>;
+
+  findOverviewData(tenderId: string, businessId: string): Promise<ProjectOverviewData | null>;
 }
 
 export class ProjectsRepository implements IProjectsRepository {
@@ -294,5 +337,18 @@ export class ProjectsRepository implements IProjectsRepository {
       _sum: { amount: true },
     });
     return result._sum.amount ?? 0;
+  }
+
+  async findOverviewData(tenderId: string, businessId: string): Promise<ProjectOverviewData | null> {
+    const [tender, rfqs, purchaseOrders] = await Promise.all([
+      this.prisma.tender.findFirst({ where: { id: tenderId, businessId }, select: overviewTenderSelect }),
+      this.prisma.rfq.findMany({ where: { tenderId, businessId }, orderBy: { createdAt: "asc" }, ...overviewRfqArgs }),
+      this.prisma.purchaseOrder.findMany({
+        where: { tenderId, businessId },
+        orderBy: { createdAt: "asc" },
+        ...overviewPurchaseOrderArgs,
+      }),
+    ]);
+    return tender ? { tender, rfqs, purchaseOrders } : null;
   }
 }

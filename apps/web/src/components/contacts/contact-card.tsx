@@ -1,7 +1,7 @@
 "use client";
 
 import type { ContactDto } from "@bmp/types";
-import { Badge, Button, Card, CardContent } from "@bmp/ui";
+import { Badge, Button, Card, CardContent, confirmAction } from "@bmp/ui";
 import { Mail, Phone, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -38,7 +38,18 @@ export function ContactCard({ contact, canUpdate, editTrigger, onDelete }: Conta
           {canUpdate && (
             <div className="flex shrink-0 gap-2">
               {editTrigger}
-              <Button size="sm" variant="ghost" onClick={onDelete}>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label="Delete contact"
+                onClick={async () => {
+                  const confirmed = await confirmAction({
+                    title: `Delete contact "${contact.name}"?`,
+                    confirmLabel: "Delete contact",
+                  });
+                  if (confirmed) void onDelete();
+                }}
+              >
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>

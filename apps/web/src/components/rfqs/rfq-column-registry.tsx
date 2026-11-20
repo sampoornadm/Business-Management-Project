@@ -1,10 +1,12 @@
 "use client";
 
 import { RFQ_STATUSES, type RfqListItemDto } from "@bmp/types";
-import { Badge, formatDate, SortableHeader } from "@bmp/ui";
+import { formatDate, SortableHeader } from "@bmp/ui";
 import type { FilterableColumnDef } from "@bmp/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
+
+import { StatusBadge } from "@/components/status-badge";
 
 export interface RfqColumnConfig extends FilterableColumnDef {
   sortable: boolean;
@@ -12,16 +14,6 @@ export interface RfqColumnConfig extends FilterableColumnDef {
   defaultVisible: boolean;
   cell: ColumnDef<RfqListItemDto>["cell"];
 }
-
-const RFQ_STATUS_VARIANT: Record<
-  RfqListItemDto["status"],
-  "success" | "secondary" | "outline" | "destructive"
-> = {
-  DRAFT: "outline",
-  SENT: "secondary",
-  CLOSED: "success",
-  CANCELLED: "destructive",
-};
 
 export const RFQ_COLUMNS: RfqColumnConfig[] = [
   {
@@ -46,7 +38,7 @@ export const RFQ_COLUMNS: RfqColumnConfig[] = [
     defaultVisible: true,
     enumOptions: RFQ_STATUSES.map((s) => ({ value: s, label: s })),
     cell: ({ row }) => (
-      <Badge variant={RFQ_STATUS_VARIANT[row.original.status]}>{row.original.status}</Badge>
+      <StatusBadge status={row.original.status} />
     ),
   },
   {

@@ -25,9 +25,12 @@ export interface EditableTreeColumn<TRow extends EditableTreeRow> {
   /** true/false for the whole column, or decided per row (e.g. only rows that have a value to edit). */
   editable?: boolean | ((row: TRow) => boolean);
   /** "textarea" wraps and auto-grows — use it for long free text that a single line can't show. */
-  inputType?: "text" | "number" | "textarea";
+  /** "money" is a rate/amount box shown in Indian accounting format (see `Input`'s `money`). */
+  inputType?: "text" | "number" | "money" | "textarea";
   getValue?: (row: TRow) => string | number | null;
   onCommit?: (row: TRow, value: string) => void;
+  /** Extra content under the cell's value, shown whether or not the cell is editable (a hint, a link). */
+  renderBelow?: (row: TRow) => React.ReactNode;
 }
 
 export interface EditableTreeTableProps<TRow extends EditableTreeRow> {
@@ -39,6 +42,8 @@ export interface EditableTreeTableProps<TRow extends EditableTreeRow> {
   /** Rows that fail this check render without a checkbox (e.g. category header rows). */
   isRowSelectable?: (row: TRow) => boolean;
   renderRowActions?: (row: TRow) => React.ReactNode;
+  /** Extra classes for a row, e.g. to tint the ones that matter. */
+  rowClassName?: (row: TRow) => string | undefined;
   emptyMessage?: string;
 }
 
@@ -138,6 +143,7 @@ function EditableCell<TRow extends EditableTreeRow>({
   return (
     <Input
       type={column.inputType === "number" ? "number" : "text"}
+      money={column.inputType === "money"}
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onBlur={commit}
@@ -162,6 +168,7 @@ export function EditableTreeTable<TRow extends EditableTreeRow>({
   onSelectionChange,
   isRowSelectable,
   renderRowActions,
+  rowClassName,
   emptyMessage = "No rows yet.",
 }: EditableTreeTableProps<TRow>) {
   const [expanded, setExpanded] = React.useState<Set<string>>(() => collectAllIds(data, new Set()));
@@ -267,7 +274,7 @@ export function EditableTreeTable<TRow extends EditableTreeRow>({
               const hasChildren = Boolean(row.children && row.children.length > 0);
               const rowSelectable = selectable && (isRowSelectable ? isRowSelectable(row) : true);
               return (
-                <TableRow key={row.id}>
+                <TableRow key={row.id} className={rowClassName?.(row)}>
                   {/* The serial number sits just left of whichever cell renders first in the
                       row (the checkbox when selectable, otherwise the expand control) — inline
                       within that same cell, not a separate column/header, and not absolutely
@@ -331,6 +338,7 @@ export function EditableTreeTable<TRow extends EditableTreeRow>({
                       ) : (
                         (column.render?.(row) ?? column.getValue?.(row) ?? "")
                       )}
+                      {column.renderBelow?.(row)}
                     </TableCell>
                   ))}
                   {renderRowActions && <TableCell className="w-10">{renderRowActions(row)}</TableCell>}

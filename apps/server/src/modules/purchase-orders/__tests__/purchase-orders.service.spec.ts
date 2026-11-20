@@ -37,6 +37,7 @@ class FakePurchaseOrdersRepository implements IPurchaseOrdersRepository {
       items: data.items.map((item, index) => ({
         id: randomUUID(),
         purchaseOrderId: id,
+        boqItemId: item.boqItemId ?? null,
         description: item.description,
         unit: item.unit ?? null,
         quantity: item.quantity,
@@ -299,6 +300,7 @@ describe("PurchaseOrdersService", () => {
       items: [
         {
           id: itemA,
+          boqItemId: "boq-cement",
           description: "OPC Cement",
           unit: "bag",
           quantity: 200,
@@ -323,6 +325,8 @@ describe("PurchaseOrdersService", () => {
     expect(vendorAPo.items).toHaveLength(1);
     expect(vendorBPo.items).toHaveLength(1);
     expect(vendorAPo.sourceRfqId).toBe(rfqId);
+    // The BOQ line travels from the RFQ line, so the project's supply view can count it.
+    expect(vendorAPo.items[0]!.boqItemId).toBe("boq-cement");
   });
 
   it("excludes items with no selected quote rather than failing the whole call", async () => {

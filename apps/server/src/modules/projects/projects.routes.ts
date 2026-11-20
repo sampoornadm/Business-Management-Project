@@ -76,6 +76,18 @@ export function createProjectsRouter(controller: ProjectsController): Router {
   );
 
   router.get("/:id", authenticateMiddleware, requirePermission("projects:read"), controller.getById);
+
+  /**
+   * @openapi
+   * /projects/{id}/overview:
+   *   get:
+   *     tags: [Projects]
+   *     summary: The project's tender summary, RFQ replies per vendor, vendors, and vendor POs with received value
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       200: { description: Project overview }
+   */
+  router.get("/:id/overview", authenticateMiddleware, requirePermission("projects:read"), controller.getOverview);
   router.patch(
     "/:id",
     authenticateMiddleware,

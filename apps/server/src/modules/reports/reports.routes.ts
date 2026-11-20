@@ -8,6 +8,7 @@ import type { ReportsController } from "./reports.controller.js";
 import {
   exportReportParamsSchema,
   exportReportQuerySchema,
+  projectCostingQuerySchema,
   reportDateRangeQuerySchema,
   searchQuerySchema,
 } from "./reports.validation.js";
@@ -33,6 +34,7 @@ export function createReportsRouter(controller: ReportsController): Router {
     "/project-costing",
     authenticateMiddleware,
     requirePermission("reports:read"),
+    validate(projectCostingQuerySchema, "query"),
     controller.getProjectCosting,
   );
   router.get(

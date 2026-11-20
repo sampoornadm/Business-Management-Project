@@ -37,6 +37,7 @@ import type { IVendorsRepository } from "../vendors/vendors.repository.js";
 import { buildQuoteSheet, parseQuoteSheet } from "./quote-sheet.js";
 import { buildRfrDocx, buildRfrPdf, toRfrDocumentData } from "./rfq-document.js";
 import { toItemPriceHistoryDto, toRfqDto, toRfqListItemDto } from "./rfq.mapper.js";
+import { normalizeTechnicalDeviation } from "./technical-deviation.js";
 import type {
   CreateRfqData,
   IRfqRepository,
@@ -277,7 +278,7 @@ export class RfqService {
       make?: string;
       model?: string;
       quotedAt?: Date;
-      remarks?: string;
+      technicalDeviation?: string;
     },
     actorId: string,
     businessId: string,
@@ -307,7 +308,10 @@ export class RfqService {
       make: input.make,
       model: input.model,
       quotedAt: input.quotedAt,
-      remarks: input.remarks,
+      // Untouched unless sent: the quote cell edits only the rate. The sheet import (below) always
+      // sends it, since a returned sheet is the vendor's whole reply for that line.
+      technicalDeviation:
+        input.technicalDeviation === undefined ? undefined : normalizeTechnicalDeviation(input.technicalDeviation),
     });
     if (invite.status === "INVITED") {
       await this.rfqRepository.updateVendorInviteStatus(item.rfqId, vendorId, "RESPONDED");
@@ -390,7 +394,7 @@ export class RfqService {
         regretted: row.regretted,
         make: row.make,
         model: row.model,
-        remarks: row.remarks,
+        technicalDeviation: normalizeTechnicalDeviation(row.technicalDeviation),
       });
       await this.autoSelectLowest(row.rfqItemId, businessId);
       imported += 1;

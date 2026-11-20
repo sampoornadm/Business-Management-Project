@@ -33,7 +33,8 @@ export class ReportsController {
   });
 
   getProjectCosting = asyncHandler(async (req, res) => {
-    const report = await this.reportsService.getProjectCosting(req.user!.businessId);
+    const projectId = typeof req.query.projectId === "string" ? req.query.projectId : undefined;
+    const report = await this.reportsService.getProjectCosting(req.user!.businessId, projectId);
     sendSuccess(res, report, "Project costing report retrieved");
   });
 

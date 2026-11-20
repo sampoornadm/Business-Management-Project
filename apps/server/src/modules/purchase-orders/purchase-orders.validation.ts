@@ -7,7 +7,8 @@ import {
 import { z } from "zod";
 
 const createPurchaseOrderItemSchema = z.object({
-  description: z.string().min(1).max(1000),
+  boqItemId: z.string().uuid().nullish(),
+  description: z.string().min(1).max(5000),
   unit: z.string().max(50).optional(),
   quantity: z.number().positive(),
   rate: z.number().nonnegative(),

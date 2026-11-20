@@ -6,6 +6,7 @@ import {
   CardContent,
   EmptyState,
   formatDateTime,
+  PageHeader,
   Skeleton,
   Tabs,
   TabsList,
@@ -13,8 +14,8 @@ import {
   useToast,
 } from "@bmp/ui";
 import { Bell } from "lucide-react";
-import { useTheme } from "next-themes";
 import Link from "next/link";
+import { useTheme } from "next-themes";
 import { useState } from "react";
 
 import {
@@ -47,15 +48,15 @@ export default function NotificationsPage() {
 
   return (
     <div className="max-w-3xl space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Notifications</h1>
-          <p className="text-sm text-muted-foreground">Everything that&apos;s happened that concerns you.</p>
-        </div>
-        <Button variant="outline" onClick={handleMarkAllRead} disabled={markAllRead.isPending}>
-          Mark all as read
-        </Button>
-      </div>
+      <PageHeader
+        title="Notifications"
+        description="Everything that's happened that concerns you."
+        actions={
+          <Button variant="outline" onClick={handleMarkAllRead} disabled={markAllRead.isPending}>
+            Mark all as read
+          </Button>
+        }
+      />
 
       {canSeeMultipleBusinesses && (
         <Tabs
@@ -140,7 +141,10 @@ export default function NotificationsPage() {
       )}
 
       {notificationsQuery.data && notificationsQuery.data.totalPages > 1 && (
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-2">
+          <span className="mr-2 text-sm text-muted-foreground">
+            Page {page} of {notificationsQuery.data.totalPages}
+          </span>
           <Button
             variant="outline"
             size="sm"

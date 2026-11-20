@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, formatDate, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast } from "@bmp/ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, formatDate, formatMoney, PageHeader, PageSkeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useToast } from "@bmp/ui";
 import { Download } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -16,12 +16,7 @@ export default function BillDetailPage() {
   useBreadcrumbLabel(params.id, billQuery.data?.billNumber);
 
   if (billQuery.isLoading || !billQuery.data) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   const bill = billQuery.data;
@@ -40,21 +35,24 @@ export default function BillDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{bill.billNumber}</h1>
-          <p className="text-sm text-muted-foreground">
-            {formatDate(bill.billDate)} ·{" "}
-            <Link href={`/tenders/${bill.tenderId}`} className="hover:underline">
-              {bill.tenderTitle}
-            </Link>{" "}
-            · {bill.clientName}
-          </p>
-        </div>
-        <Button variant="outline" onClick={() => void handleDownload()}>
-          <Download className="mr-2 h-4 w-4" /> Download PDF
-        </Button>
-      </div>
+      <PageHeader
+        title={bill.billNumber}
+        actions={
+          <>
+            <Button variant="outline" onClick={() => void handleDownload()}>
+              <Download className="mr-2 h-4 w-4" /> Download PDF
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          {formatDate(bill.billDate)} ·{" "}
+          <Link href={`/tenders/${bill.tenderId}`} className="hover:underline">
+            {bill.tenderTitle}
+          </Link>{" "}
+          · {bill.clientName}
+        </p>
+      </PageHeader>
 
       {bill.grnNumber && (
         <div className="text-sm">
@@ -85,16 +83,16 @@ export default function BillDetailPage() {
                   <TableCell>{item.description}</TableCell>
                   <TableCell>{item.unit ?? "-"}</TableCell>
                   <TableCell className="text-right tabular-nums">{item.quantity}</TableCell>
-                  <TableCell className="text-right tabular-nums">{item.rate.toLocaleString()}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatMoney(item.rate)}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">
-                    {item.amount.toLocaleString()}
+                    {formatMoney(item.amount)}
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
           <p className="mt-4 text-right text-lg font-semibold">
-            Total: {bill.total.toLocaleString()}
+            Total: {formatMoney(bill.total)}
           </p>
         </CardContent>
       </Card>

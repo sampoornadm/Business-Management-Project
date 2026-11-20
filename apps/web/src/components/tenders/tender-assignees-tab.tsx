@@ -129,6 +129,7 @@ export function TenderAssigneesTab({ tender }: { tender: TenderDto }) {
                 <Button
                   size="sm"
                   variant="ghost"
+                  aria-label="Remove assignee"
                   onClick={() => handleRemove(assignee.user.id)}
                   disabled={removeAssignee.isPending}
                 >

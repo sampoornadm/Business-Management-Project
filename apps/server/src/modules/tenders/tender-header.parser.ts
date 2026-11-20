@@ -79,6 +79,12 @@ function ddmmyyyyHmsToIso(value: string): string | undefined {
   return isoDate ? `${isoDate}T${timePart}` : undefined;
 }
 
+// Only the layout-mode text keeps this header row on one line ("Evaluation Criteria   Overall");
+// plain mode detaches the value from its label. Returns the value as the document words it.
+export function parseEvaluationCriteria(layoutText: string): string | undefined {
+  return layoutText.match(/^[ \t]*Evaluation Criteria[ \t]+(\S[^\n]*?)[ \t]*$/m)?.[1];
+}
+
 export interface ParsedIiscoHeaderFields extends TenderExtractionFields {
   clientName?: string;
 }

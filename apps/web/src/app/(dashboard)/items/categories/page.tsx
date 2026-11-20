@@ -7,6 +7,8 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  confirmAction,
+  PageHeader,
   Skeleton,
   useToast,
 } from "@bmp/ui";
@@ -56,14 +58,13 @@ export default function CategoriesPage() {
     const name = window.prompt("Rename category", node.name)?.trim();
     if (name && name !== node.name) void run(updateCategory.mutateAsync({ id: node.id, name }), "Could not rename");
   };
-  const remove = (node: CategoryNodeDto) => {
-    if (
-      window.confirm(
-        `Delete "${node.name}"${node.children.length ? " and its subcategories" : ""}? Items keep their price history but become unclassified.`,
-      )
-    ) {
-      void run(deleteCategory.mutateAsync(node.id), "Could not delete");
-    }
+  const remove = async (node: CategoryNodeDto) => {
+    const confirmed = await confirmAction({
+      title: `Delete "${node.name}"${node.children.length ? " and its subcategories" : ""}?`,
+      description: "Items keep their price history but become unclassified.",
+      confirmLabel: "Delete category",
+    });
+    if (confirmed) void run(deleteCategory.mutateAsync(node.id), "Could not delete");
   };
 
   const renderNode = (node: CategoryNodeDto, depth: number) => (
@@ -74,7 +75,7 @@ export default function CategoriesPage() {
       >
         <span className={depth === 0 ? "font-medium" : ""}>{node.name}</span>
         {canEdit && (
-          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="flex items-center gap-1 text-muted-foreground">
             {/* Two tiers today; only let top-level nodes gain children so the tree stays shallow. */}
             {depth === 0 && (
               <Button variant="ghost" size="sm" onClick={() => addChild(node.id)} title="Add subcategory">
@@ -84,7 +85,7 @@ export default function CategoriesPage() {
             <Button variant="ghost" size="sm" onClick={() => rename(node)} title="Rename">
               <Pencil className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => remove(node)} title="Delete">
+            <Button variant="ghost" size="sm" onClick={() => void remove(node)} title="Delete">
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
@@ -96,22 +97,22 @@ export default function CategoriesPage() {
 
   return (
     <div className="max-w-3xl space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <Link href="/items" className="text-sm text-muted-foreground hover:underline">
+      <PageHeader
+        title="Item categories"
+        description="The taxonomy the AI classifies items into. Edit it to fit your trades."
+        back={
+          <Link href="/items" className="hover:underline">
             ← Back to items
           </Link>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Item categories</h1>
-          <p className="text-sm text-muted-foreground">
-            The taxonomy the AI classifies items into. Edit it to fit your trades.
-          </p>
-        </div>
-        {canEdit && (
-          <Button onClick={addTop} disabled={createCategory.isPending}>
-            <Plus className="mr-2 h-4 w-4" /> Add trade
-          </Button>
-        )}
-      </div>
+        }
+        actions={
+          canEdit && (
+              <Button onClick={addTop} disabled={createCategory.isPending}>
+                <Plus className="mr-2 h-4 w-4" /> Add trade
+              </Button>
+          )
+        }
+      />
 
       <Card>
         <CardHeader>

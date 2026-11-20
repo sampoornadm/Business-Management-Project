@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  isSailRfxNumber,
   isTenderStatusReversal,
   TENDER_STATUS_LABELS,
   type ChangeTenderStatusInput,
@@ -8,8 +9,11 @@ import {
   type TenderStatus,
 } from "@bmp/types";
 import {
+  Badge,
   Button,
+  Checkbox,
   cn,
+  formatMoney,
   Input,
   Label,
   Popover,
@@ -22,9 +26,14 @@ import {
 import { Ban, Check, Minus, X } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 
+import { useFetchStatementAction } from "@/components/competitors/fetch-statement";
 import { useCurrentBoq } from "@/hooks/use-boq";
+import { lowestItemCodes } from "@/components/competitors/price-opening";
+import { useTenderStanding, useTenderStatement } from "@/hooks/use-competitors";
 import { useChangeTenderStatus, useTenderStatusHistory } from "@/hooks/use-tenders";
 import { canRevertTo } from "@/lib/tender-stepper";
+import { tenderStatusText } from "@/lib/tender-status";
+import { boqLeaves } from "@/lib/won-items";
 
 type Outcome = "WON" | "LOST" | "CANCELLED";
 
@@ -88,8 +97,32 @@ function Stage({ dot, dotClass, label, labelClass, hoverLabel, title, onClick, c
       >
         {dot}
       </span>
-      <span className={cn(labelClass, hoverLabel && "group-hover:hidden")}>{label}</span>
-      {hoverLabel && <span className="hidden font-medium text-primary group-hover:inline">{hoverLabel}</span>}
+      {hoverLabel ? (
+        // On hover the label collapses and the hover label opens (grid 0fr <-> 1fr), so the button
+        // grows rightward from its fixed left edge in one slow motion instead of snapping.
+        <span className="flex">
+          <span
+            className={cn(
+              "grid grid-cols-[1fr] transition-[grid-template-columns,opacity] duration-500 group-hover:grid-cols-[0fr] group-hover:opacity-0 motion-reduce:transition-none",
+              EASE,
+            )}
+          >
+            <span className={cn("min-w-0 overflow-hidden", labelClass)}>{label}</span>
+          </span>
+          {/* Visual hint only: kept out of the button's accessible name, which stays the stage name. */}
+          <span
+            aria-hidden="true"
+            className={cn(
+              "grid grid-cols-[0fr] opacity-0 transition-[grid-template-columns,opacity] duration-500 group-hover:grid-cols-[1fr] group-hover:opacity-100 motion-reduce:transition-none",
+              EASE,
+            )}
+          >
+            <span className="min-w-0 overflow-hidden font-medium text-primary">{hoverLabel}</span>
+          </span>
+        </span>
+      ) : (
+        <span className={labelClass}>{label}</span>
+      )}
     </button>
   );
 }
@@ -117,6 +150,10 @@ export interface TenderStatusTrackerProps {
   canChange: boolean;
   canRevert: boolean;
   canViewBoq: boolean;
+  /** May read the client's comparative statement from the portal once the bid is submitted. */
+  canFetchStatement?: boolean;
+  /** May see where we stand in the price opening (rank, lowest bidder). */
+  canViewStanding?: boolean;
 }
 
 /**
@@ -124,13 +161,23 @@ export interface TenderStatusTrackerProps {
  * Result circle opens into a Won / Lost / Cancelled band that collapses into the pick. Only
  * `canRevert` (admins) can click an earlier stage to move back; anyone gets a short Undo.
  */
-export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }: TenderStatusTrackerProps) {
+export function TenderStatusTracker({
+  tender,
+  canChange,
+  canRevert,
+  canViewBoq,
+  canFetchStatement = false,
+  canViewStanding = false,
+}: TenderStatusTrackerProps) {
   const { toast } = useToast();
   const changeStatus = useChangeTenderStatus(tender.id);
+  const fetchStatement = useFetchStatementAction(tender.id);
   const status = tender.status;
   const [bandOpen, setBandOpen] = useState(false);
   const [committing, setCommitting] = useState<Outcome | null>(null);
   const [formFor, setFormFor] = useState<TenderStatus | null>(null);
+  // Items ticked in the Won form; null until touched, when the lowest-quote items are the default.
+  const [pickedItems, setPickedItems] = useState<Set<string> | null>(null);
 
   // Reset the band once the new status lands. The Result slot keeps the same elements across
   // Submitted -> outcome, so the picked circle stays put while the others finish collapsing.
@@ -140,16 +187,33 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
     setBandOpen(false);
     setCommitting(null);
     setFormFor(null);
+    setPickedItems(null);
   }
 
   // A cancelled tender may never have been submitted; only its latest history row says so.
   const history = useTenderStatusHistory(status === "CANCELLED" ? tender.id : undefined, 1, 1);
   const submittedSkipped = status === "CANCELLED" && history.data?.items[0]?.fromStatus === "DRAFT";
   const reachedSubmitted = status !== "DRAFT" && !submittedSkipped;
-  const boq = useCurrentBoq(canViewBoq && status === "SUBMITTED" ? tender.id : undefined);
+  const awaitingResult = status === "SUBMITTED" || status === "PRICE_OPENED";
+  const boq = useCurrentBoq(canViewBoq && awaitingResult ? tender.id : undefined);
+  // What the price opening showed: fills in the Won/Lost form and tells whether that stage happened.
+  const standing = useTenderStanding(tender.id, canViewStanding && status !== "DRAFT").data ?? null;
+  const readsFromPortal = canFetchStatement && isSailRfxNumber(tender.tenderNumber);
+  // Item-wise tenders are won item by item: list the lines, our lowest quotes ticked first.
+  const individual = tender.evaluationCriteria === "INDIVIDUAL";
+  const statement = useTenderStatement(tender.id, individual && canViewStanding && awaitingResult).data ?? null;
+  const lowestCodes = statement ? lowestItemCodes(statement) : new Set<string>();
+  const wonCandidates = (boq.data ? boqLeaves(boq.data.items) : [])
+    .map((item) => ({ item, lowest: item.itemCode !== null && lowestCodes.has(item.itemCode) }))
+    .sort((a, b) => Number(b.lowest) - Number(a.lowest));
+  const askWonItems = formFor === "WON" && individual && wonCandidates.length > 0;
+  const pickedNow = pickedItems ?? new Set(wonCandidates.filter((c) => c.lowest).map((c) => c.item.id));
+  const pickedTotal = Math.round(
+    wonCandidates.filter((c) => pickedNow.has(c.item.id)).reduce((sum, c) => sum + (c.item.amount ?? 0), 0) * 100,
+  ) / 100;
   const itemsTotal = boq.data?.totalAmount ? Math.round(boq.data.totalAmount * 100) / 100 : undefined;
 
-  const busy = changeStatus.isPending || committing !== null;
+  const busy = changeStatus.isPending || committing !== null || fetchStatement.isPending;
   const ratesFinalized = tender.ratesLockedAt !== null;
   // A fresh submission (not undoing a Won/Lost result) records its reference number.
   const asksReference = formFor === "SUBMITTED" && (status === "DRAFT" || status === "CANCELLED");
@@ -174,6 +238,10 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
           </ToastAction>
         ),
       });
+      // The client publishes every bidder's rates once the tender is opened. The status is
+      // already saved; this follows on its own and reports through its own toasts.
+      // A result recorded straight from Submitted: pick up the statement too, if there is none yet.
+      if (readsFromPortal && (to === "WON" || to === "LOST") && !standing) void fetchStatement.run();
     } catch (error) {
       setCommitting(null);
       toast({
@@ -205,6 +273,7 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
     const text = (name: string) => (data.get(name) as string | null)?.trim() || undefined;
     const amount = text("winningBidAmount");
     const to = formFor;
+    const wonItemIds = askWonItems && to === "WON" ? [...pickedNow] : undefined;
     setFormFor(null);
     if (bandOpen && isOutcome(to)) {
       setBandOpen(false);
@@ -215,6 +284,7 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
       winnerName: text("winnerName"),
       winningBidAmount: amount ? Number(amount) : undefined,
       lossReason: text("lossReason"),
+      wonItemIds,
       submissionReference: text("submissionReference"),
     });
   }
@@ -254,7 +324,45 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
     submittedStage = <Stage {...COMPLETE} label="Submitted" {...revertProps("SUBMITTED")} />;
   }
 
-  const canOpenBand = status === "SUBMITTED" && canChange && !busy;
+  // For a SAIL ISP tender the stage is reached by reading the comparative statement (the server
+  // moves the tender on once it is saved); any other tender is simply marked.
+  function openPrices() {
+    if (readsFromPortal) void fetchStatement.run();
+    else void move("PRICE_OPENED");
+  }
+
+  let priceStage: ReactNode;
+  if (status === "PRICE_OPENED") {
+    priceStage = <Stage {...CURRENT} label="Price opened" />;
+  } else if (status === "SUBMITTED" && canChange) {
+    priceStage = (
+      <Stage
+        {...NEXT}
+        label="Price opened"
+        hoverLabel={readsFromPortal ? "Read price opening →" : "Mark Price opened →"}
+        title={readsFromPortal ? "Read the comparative statement from the portal" : undefined}
+        onClick={busy ? undefined : openPrices}
+      />
+    );
+  } else if (isOutcome(status) && reachedSubmitted) {
+    priceStage = <Stage {...(standing ? COMPLETE : SKIPPED)} label="Price opened" {...revertProps("PRICE_OPENED")} />;
+  } else {
+    priceStage = <Stage {...UPCOMING} label="Price opened" />;
+  }
+
+  // Won/Lost form defaults: what the price opening showed, editable before confirming.
+  const probableWinner = standing?.lowest && !standing.lowest.isSelf ? standing.lowest : null;
+  const winnerDefault = formFor === "WON" ? "Us" : (probableWinner?.name ?? "");
+  const amountDefault =
+    formFor === "WON"
+      ? askWonItems
+        ? pickedTotal
+        : (standing?.ourTotal ?? itemsTotal)
+      : probableWinner?.total;
+  const lossReasonDefault =
+    standing?.ourRank != null ? `L${standing.ourRank} of ${standing.bidders} at price opening` : "";
+
+  const canOpenBand = awaitingResult && canChange && !busy;
   const resultStage = (
     <span
       className={cn(
@@ -280,7 +388,11 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
           <Stage
             dot={outcome.icon}
             dotClass={outcome.dot}
-            label={TENDER_STATUS_LABELS[outcome.status]}
+            label={
+              outcome.status === "WON" && tender.wonItems.length > 0
+                ? tenderStatusText(tender).replace("Won ·", "Won in")
+                : TENDER_STATUS_LABELS[outcome.status]
+            }
             labelClass={cn("font-medium", outcome.label)}
             onClick={bandOpen ? () => setFormFor(outcome.status) : undefined}
             className={cn(bandOpen && "hover:bg-background", formFor === outcome.status && "bg-background shadow-sm")}
@@ -308,10 +420,12 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
   return (
     <Popover open={formFor !== null} onOpenChange={(open) => !open && setFormFor(null)}>
       <PopoverAnchor asChild>
-        <div className="inline-flex flex-wrap items-center">
+        <div className="inline-flex flex-nowrap items-center whitespace-nowrap">
           {draftStage}
           <Connector done={reachedSubmitted} />
           {submittedStage}
+          <Connector done={status === "PRICE_OPENED" || (isOutcome(status) && reachedSubmitted)} />
+          {priceStage}
           <Connector done={isOutcome(status) && reachedSubmitted} />
           {resultStage}
           {status === "DRAFT" && canChange && (
@@ -331,9 +445,9 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
           )}
         </div>
       </PopoverAnchor>
-      <PopoverContent className="w-72">
+      <PopoverContent className={cn("w-72", askWonItems && "w-96")}>
         {formFor && (
-          <form onSubmit={submitForm} className="space-y-3 text-sm">
+          <form key={formFor} onSubmit={submitForm} className="space-y-3 text-sm">
             <p className="font-medium">
               {reverting
                 ? `Move back to ${TENDER_STATUS_LABELS[formFor]}?`
@@ -362,6 +476,45 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
                 />
               </div>
             )}
+            {askWonItems && (
+              <div className="space-y-1">
+                <Label>Items we won</Label>
+                <ul className="max-h-48 divide-y overflow-y-auto rounded-md border">
+                  {wonCandidates.map(({ item, lowest }) => (
+                    <li key={item.id}>
+                      <label className="flex cursor-pointer items-start gap-2 p-2 text-xs hover:bg-muted/50">
+                        <Checkbox
+                          className="mt-0.5"
+                          checked={pickedNow.has(item.id)}
+                          onCheckedChange={(on) => {
+                            const next = new Set(pickedNow);
+                            if (on) next.add(item.id);
+                            else next.delete(item.id);
+                            setPickedItems(next);
+                          }}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block max-w-[24ch] truncate" title={item.description}>
+                            {item.description}
+                          </span>
+                          {item.rate !== null && (
+                            <span className="block truncate text-muted-foreground">
+                              {item.quantity !== null && `${item.quantity.toLocaleString("en-IN")} ${item.unit ?? ""} × `}
+                              {formatMoney(item.rate)}
+                            </span>
+                          )}
+                        </span>
+                        {lowest && <Badge variant="success">Lowest</Badge>}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted-foreground">
+                  {statement ? "Our lowest quotes at the price opening are ticked. " : ""}
+                  {pickedNow.size} selected.
+                </p>
+              </div>
+            )}
             {(formFor === "WON" || formFor === "LOST") && (
               <>
                 <div className="space-y-1">
@@ -369,9 +522,14 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
                   <Input
                     id="tracker-winner"
                     name="winnerName"
-                    defaultValue={formFor === "WON" ? "Us" : ""}
+                    defaultValue={winnerDefault}
                     placeholder="Winning bidder"
                   />
+                  {formFor === "LOST" && probableWinner && (
+                    <p className="text-xs text-muted-foreground">
+                      Probable winner: the lowest bidder at the price opening. Change it if the order went elsewhere.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="tracker-amount">Winning bid amount</Label>
@@ -381,10 +539,15 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
                     type="number"
                     step="0.01"
                     min="0"
-                    defaultValue={formFor === "WON" ? itemsTotal : undefined}
+                    key={askWonItems ? pickedTotal : "amount"}
+                    defaultValue={amountDefault}
                   />
-                  {formFor === "WON" && itemsTotal !== undefined && (
-                    <p className="text-xs text-muted-foreground">Filled in from the Items total.</p>
+                  {formFor === "WON" && amountDefault !== undefined && (
+                    <p className="text-xs text-muted-foreground">
+                      {askWonItems
+                        ? "Total of the ticked items."
+                        : standing?.ourTotal != null ? "Our total at the price opening." : "Filled in from the Items total."}
+                    </p>
                   )}
                 </div>
               </>
@@ -392,7 +555,12 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
             {formFor === "LOST" && (
               <div className="space-y-1">
                 <Label htmlFor="tracker-loss-reason">Reason lost</Label>
-                <Input id="tracker-loss-reason" name="lossReason" placeholder="e.g. L2 by 1.8%" />
+                <Input
+                  id="tracker-loss-reason"
+                  name="lossReason"
+                  defaultValue={lossReasonDefault}
+                  placeholder="e.g. L2 by 1.8%"
+                />
               </div>
             )}
             {formFor !== "LOST" && (
@@ -408,6 +576,7 @@ export function TenderStatusTracker({ tender, canChange, canRevert, canViewBoq }
               <Button
                 type="submit"
                 size="sm"
+                disabled={askWonItems && formFor === "WON" && pickedNow.size === 0}
                 variant={formFor === "LOST" ? "destructive" : formFor === "CANCELLED" ? "secondary" : "default"}
                 className={cn(formFor === "WON" && "bg-success text-success-foreground hover:bg-success/90")}
               >

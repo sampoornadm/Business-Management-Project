@@ -1,14 +1,16 @@
 "use client";
 
 import {
-  Badge,
   Button,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  confirmAction,
   formatDate,
-  Skeleton,
+  formatMoney,
+  PageHeader,
+  PageSkeleton,
   Table,
   TableBody,
   TableCell,
@@ -23,6 +25,7 @@ import { useParams } from "next/navigation";
 import { RecordPaymentDialog } from "@/components/finance/record-payment-dialog";
 import { GoodsReceiptDialog } from "@/components/purchase-orders/goods-receipt-dialog";
 import { VendorRatingWidget } from "@/components/purchase-orders/vendor-rating-widget";
+import { StatusBadge } from "@/components/status-badge";
 import {
   usePurchaseOrder,
   usePurchaseOrderPayments,
@@ -32,14 +35,6 @@ import {
 import { useAuthStore } from "@/lib/auth-store";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-store";
 import { hasPermission } from "@/lib/permissions";
-
-const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive"> = {
-  DRAFT: "outline",
-  ISSUED: "secondary",
-  PARTIALLY_RECEIVED: "secondary",
-  RECEIVED: "success",
-  CANCELLED: "destructive",
-};
 
 export default function PurchaseOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -69,6 +64,12 @@ export default function PurchaseOrderDetailPage() {
   }
 
   async function handleCancel() {
+    const confirmed = await confirmAction({
+      title: "Cancel this purchase order?",
+      description: "This can't be undone.",
+      confirmLabel: "Cancel order",
+    });
+    if (!confirmed) return;
     try {
       await updateStatus.mutateAsync({ status: "CANCELLED" });
       toast({ title: "Purchase order cancelled" });
@@ -82,54 +83,54 @@ export default function PurchaseOrderDetailPage() {
   }
 
   if (poQuery.isLoading || !poQuery.data) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   const po = poQuery.data;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{po.poNumber}</h1>
-            <Badge variant={STATUS_VARIANT[po.status]}>{po.status}</Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            <Link href={`/vendors/${po.vendor.id}`} className="hover:underline">
-              {po.vendor.name}
-            </Link>
-            {po.tenderId && (
-              <>
-                {" · "}
-                <Link href={`/tenders/${po.tenderId}`} className="hover:underline">
-                  View linked tender
-                </Link>
-              </>
-            )}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {canUpdate && po.status === "DRAFT" && (
+      <PageHeader
+        title={po.poNumber}
+        badges={
+          <>
+            <StatusBadge status={po.status} />
+          </>
+        }
+        actions={
+          <>
+            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+              {canUpdate && po.status === "DRAFT" && (
+                <>
+                  <Button variant="destructiveOutline" onClick={handleCancel} disabled={updateStatus.isPending}>
+                    Cancel order
+                  </Button>
+                  <Button onClick={handleIssue} disabled={updateStatus.isPending}>
+                    Issue order
+                  </Button>
+                </>
+              )}
+              {canReceive && (po.status === "ISSUED" || po.status === "PARTIALLY_RECEIVED") && (
+                <GoodsReceiptDialog purchaseOrderId={po.id} items={po.items} />
+              )}
+            </div>
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          <Link href={`/vendors/${po.vendor.id}`} className="hover:underline">
+            {po.vendor.name}
+          </Link>
+          {po.tenderId && (
             <>
-              <Button variant="outline" onClick={handleCancel} disabled={updateStatus.isPending}>
-                Cancel
-              </Button>
-              <Button onClick={handleIssue} disabled={updateStatus.isPending}>
-                Issue
-              </Button>
+              {" · "}
+              <Link href={`/tenders/${po.tenderId}`} className="hover:underline">
+                View linked tender
+              </Link>
             </>
           )}
-          {canReceive && (po.status === "ISSUED" || po.status === "PARTIALLY_RECEIVED") && (
-            <GoodsReceiptDialog purchaseOrderId={po.id} items={po.items} />
-          )}
-        </div>
-      </div>
+        </p>
+      </PageHeader>
 
       <Card>
         <CardHeader>
@@ -154,13 +155,13 @@ export default function PurchaseOrderDetailPage() {
                   <TableCell>{item.unit ?? "-"}</TableCell>
                   <TableCell className="text-right">{item.quantity}</TableCell>
                   <TableCell className="text-right">{item.receivedQuantity}</TableCell>
-                  <TableCell className="text-right">{item.rate.toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{item.amount.toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{formatMoney(item.rate)}</TableCell>
+                  <TableCell className="text-right">{formatMoney(item.amount)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-          <p className="mt-3 text-right text-sm font-medium">Total: {po.totalAmount.toLocaleString()}</p>
+          <p className="mt-3 text-right text-sm font-medium">Total: {formatMoney(po.totalAmount)}</p>
         </CardContent>
       </Card>
 
@@ -236,7 +237,7 @@ export default function PurchaseOrderDetailPage() {
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {paymentsQuery.data!.map((payment) => (
                   <div key={payment.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
-                    <p className="font-medium">{payment.amount.toLocaleString()}</p>
+                    <p className="font-medium">{formatMoney(payment.amount)}</p>
                     <p className="text-muted-foreground">
                       {payment.method} · {formatDate(payment.paymentDate)}
                     </p>

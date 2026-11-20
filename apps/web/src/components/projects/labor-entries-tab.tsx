@@ -6,12 +6,14 @@ import {
   Card,
   CardContent,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
   formatDate,
+  formatMoney,
   Input,
   Select,
   SelectContent,
@@ -123,11 +125,16 @@ function AddLaborEntryDialog({ projectId }: { projectId: string }) {
               onChange={(e) => setRatePerUnit(e.target.value)}
             />
           </div>
-          <p className="text-sm text-muted-foreground">Amount: {amount.toLocaleString()}</p>
+          <p className="text-sm text-muted-foreground">Amount: {formatMoney(amount)}</p>
         </div>
         <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
           <Button onClick={handleSubmit} disabled={addEntry.isPending}>
-            Record
+            Add entry
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -170,8 +177,8 @@ export function LaborEntriesTab({ projectId }: { projectId: string }) {
                   <TableCell>{entry.description}</TableCell>
                   <TableCell className="text-right">{entry.workerCount}</TableCell>
                   <TableCell className="text-right">{entry.units}</TableCell>
-                  <TableCell className="text-right">{entry.ratePerUnit.toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{entry.amount.toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{formatMoney(entry.ratePerUnit)}</TableCell>
+                  <TableCell className="text-right">{formatMoney(entry.amount)}</TableCell>
                   <TableCell>{formatDate(entry.entryDate)}</TableCell>
                 </TableRow>
               ))

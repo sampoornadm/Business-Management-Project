@@ -80,8 +80,8 @@ test.describe("Tender documents", () => {
     await expect(boqSection.getByText("v1", { exact: true })).toBeVisible();
 
     // Delete it — back to the empty-row state.
-    page.once("dialog", (dialog) => dialog.accept());
     await boqSection.getByRole("button", { name: "Delete file" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete file" }).click();
     await expect(boqSection.getByText("No file uploaded")).toBeVisible({ timeout: 10_000 });
 
     // A type that already has a file shows "Add another file" instead of a second empty row.

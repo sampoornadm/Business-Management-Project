@@ -7,12 +7,17 @@ export interface PurchaseOrderSpendRow {
   poCreatedAt: Date;
 }
 
-export interface ProjectBasicRow {
+/** Raw money totals for one project, summed in the repository; profit is derived in the service. */
+export interface ProjectProfitSourceRow {
   id: string;
   name: string;
   status: string;
-  budget: number;
-  tenderId: string;
+  clientPoValue: number;
+  billed: number;
+  received: number;
+  vendorCost: number;
+  freight: number;
+  otherCosts: number;
 }
 
 export interface PaymentBasicRow {
@@ -44,12 +49,7 @@ export interface IReportsRepository {
 
   findPurchaseOrderItemsForSpend(businessId: string, from?: Date, to?: Date): Promise<PurchaseOrderSpendRow[]>;
 
-  findActiveProjectsBasic(businessId: string): Promise<ProjectBasicRow[]>;
-  findPurchaseOrderTotalsByTenderIds(
-    businessId: string,
-    tenderIds: string[],
-  ): Promise<{ tenderId: string; amount: number }[]>;
-  findLaborTotalsByProjectIds(businessId: string, projectIds: string[]): Promise<{ projectId: string; amount: number }[]>;
+  findProjectProfitSources(businessId: string, projectId?: string): Promise<ProjectProfitSourceRow[]>;
 
   findPaymentsForSummary(businessId: string, from?: Date, to?: Date): Promise<PaymentBasicRow[]>;
 
@@ -125,40 +125,82 @@ export class ReportsRepository implements IReportsRepository {
     }));
   }
 
-  findActiveProjectsBasic(businessId: string): Promise<ProjectBasicRow[]> {
-    return this.prisma.project.findMany({
-      where: { businessId, status: { in: ["ACTIVE", "ON_HOLD"] } },
-      select: { id: true, name: true, status: true, budget: true, tenderId: true },
+  async findProjectProfitSources(businessId: string, projectId?: string): Promise<ProjectProfitSourceRow[]> {
+    const projects = await this.prisma.project.findMany({
+      where: { businessId, status: { not: "CANCELLED" }, ...(projectId ? { id: projectId } : {}) },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, status: true, tenderId: true },
     });
-  }
+    if (projects.length === 0) return [];
+    const projectIds = projects.map((p) => p.id);
+    const projectByTender = new Map(projects.map((p) => [p.tenderId, p.id]));
+    const tenderIds = [...projectByTender.keys()];
 
-  async findPurchaseOrderTotalsByTenderIds(
-    businessId: string,
-    tenderIds: string[],
-  ): Promise<{ tenderId: string; amount: number }[]> {
-    if (tenderIds.length === 0) return [];
-    const items = await this.prisma.purchaseOrderItem.findMany({
-      where: {
-        purchaseOrder: {
-          businessId,
-          tenderId: { in: tenderIds },
-          status: { in: ["ISSUED", "PARTIALLY_RECEIVED", "RECEIVED"] },
+    const [clientPoItems, bills, vendorPoItems, freight, expenses, labor] = await Promise.all([
+      this.prisma.clientPurchaseOrderItem.findMany({
+        where: { clientPurchaseOrder: { businessId, projectId: { in: projectIds } } },
+        select: { quantity: true, rate: true, clientPurchaseOrder: { select: { projectId: true } } },
+      }),
+      this.prisma.bill.findMany({
+        where: { businessId, tenderId: { in: tenderIds } },
+        select: { id: true, tenderId: true, items: { select: { quantity: true, rate: true } } },
+      }),
+      this.prisma.purchaseOrderItem.findMany({
+        where: {
+          purchaseOrder: {
+            businessId,
+            tenderId: { in: tenderIds },
+            status: { in: ["ISSUED", "PARTIALLY_RECEIVED", "RECEIVED"] },
+          },
         },
-      },
-      select: { amount: true, purchaseOrder: { select: { tenderId: true } } },
-    });
-    return items.map((item) => ({ tenderId: item.purchaseOrder.tenderId!, amount: item.amount }));
-  }
+        select: { amount: true, purchaseOrder: { select: { tenderId: true } } },
+      }),
+      this.prisma.shipment.groupBy({
+        by: ["projectId"],
+        where: { businessId, projectId: { in: projectIds } },
+        _sum: { freightCost: true },
+      }),
+      this.prisma.expense.groupBy({
+        by: ["projectId"],
+        where: { businessId, projectId: { in: projectIds } },
+        _sum: { amount: true },
+      }),
+      this.prisma.projectLaborEntry.groupBy({
+        by: ["projectId"],
+        where: { projectId: { in: projectIds } },
+        _sum: { amount: true },
+      }),
+    ]);
+    const payments = bills.length
+      ? await this.prisma.payment.groupBy({
+          by: ["entityId"],
+          where: { businessId, entityType: "Bill", direction: "RECEIVED", entityId: { in: bills.map((b) => b.id) } },
+          _sum: { amount: true },
+        })
+      : [];
+    const receivedByBill = new Map(payments.map((p) => [p.entityId, p._sum.amount ?? 0]));
 
-  async findLaborTotalsByProjectIds(
-    businessId: string,
-    projectIds: string[],
-  ): Promise<{ projectId: string; amount: number }[]> {
-    if (projectIds.length === 0) return [];
-    return this.prisma.projectLaborEntry.findMany({
-      where: { projectId: { in: projectIds }, project: { businessId } },
-      select: { projectId: true, amount: true },
-    });
+    const rows = new Map<string, ProjectProfitSourceRow>(
+      projects.map((p) => [
+        p.id,
+        { id: p.id, name: p.name, status: p.status, clientPoValue: 0, billed: 0, received: 0, vendorCost: 0, freight: 0, otherCosts: 0 },
+      ]),
+    );
+    const add = (projectId: string | null | undefined, key: keyof ProjectProfitSourceRow, amount: number) => {
+      const row = projectId ? rows.get(projectId) : undefined;
+      if (row) (row[key] as number) += amount;
+    };
+    for (const item of clientPoItems) add(item.clientPurchaseOrder.projectId, "clientPoValue", item.quantity * item.rate);
+    for (const bill of bills) {
+      const projectOfBill = projectByTender.get(bill.tenderId);
+      add(projectOfBill, "billed", bill.items.reduce((sum, item) => sum + item.quantity * item.rate, 0));
+      add(projectOfBill, "received", receivedByBill.get(bill.id) ?? 0);
+    }
+    for (const item of vendorPoItems) add(projectByTender.get(item.purchaseOrder.tenderId!), "vendorCost", item.amount);
+    for (const row of freight) add(row.projectId, "freight", row._sum.freightCost ?? 0);
+    for (const row of expenses) add(row.projectId, "otherCosts", row._sum.amount ?? 0);
+    for (const row of labor) add(row.projectId, "otherCosts", row._sum.amount ?? 0);
+    return [...rows.values()];
   }
 
   findPaymentsForSummary(businessId: string, from?: Date, to?: Date): Promise<PaymentBasicRow[]> {

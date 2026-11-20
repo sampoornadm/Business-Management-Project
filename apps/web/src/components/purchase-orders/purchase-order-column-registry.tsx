@@ -2,10 +2,12 @@
 
 import type { PurchaseOrderListItemDto } from "@bmp/types";
 import { PURCHASE_ORDER_STATUSES } from "@bmp/types";
-import { Badge, formatDate, SortableHeader } from "@bmp/ui";
+import { formatDate, formatMoney, SortableHeader } from "@bmp/ui";
 import type { FilterableColumnDef } from "@bmp/ui";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
+
+import { StatusBadge } from "@/components/status-badge";
 
 export interface PurchaseOrderColumnConfig extends FilterableColumnDef {
   sortable: boolean;
@@ -13,17 +15,6 @@ export interface PurchaseOrderColumnConfig extends FilterableColumnDef {
   defaultVisible: boolean;
   cell: ColumnDef<PurchaseOrderListItemDto>["cell"];
 }
-
-const STATUS_VARIANT: Record<
-  PurchaseOrderListItemDto["status"],
-  "success" | "secondary" | "outline" | "destructive"
-> = {
-  DRAFT: "outline",
-  ISSUED: "secondary",
-  PARTIALLY_RECEIVED: "secondary",
-  RECEIVED: "success",
-  CANCELLED: "destructive",
-};
 
 export const PURCHASE_ORDER_COLUMNS: PurchaseOrderColumnConfig[] = [
   {
@@ -56,7 +47,7 @@ export const PURCHASE_ORDER_COLUMNS: PurchaseOrderColumnConfig[] = [
     filterable: true,
     defaultVisible: true,
     enumOptions: PURCHASE_ORDER_STATUSES.map((s) => ({ value: s, label: s })),
-    cell: ({ row }) => <Badge variant={STATUS_VARIANT[row.original.status]}>{row.original.status}</Badge>,
+    cell: ({ row }) => <StatusBadge status={row.original.status} />,
   },
   {
     key: "totalAmount",
@@ -67,7 +58,7 @@ export const PURCHASE_ORDER_COLUMNS: PurchaseOrderColumnConfig[] = [
     sortable: false,
     filterable: false,
     defaultVisible: true,
-    cell: ({ row }) => row.original.totalAmount.toLocaleString(),
+    cell: ({ row }) => formatMoney(row.original.totalAmount),
   },
   {
     key: "expectedDeliveryDate",

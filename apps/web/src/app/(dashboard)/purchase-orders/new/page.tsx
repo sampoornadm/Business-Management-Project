@@ -7,7 +7,10 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  FormActions,
+  formatMoney,
   Input,
+  PageHeader,
   Select,
   SelectContent,
   SelectItem,
@@ -24,13 +27,18 @@ import {
 } from "@bmp/ui";
 import { Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
+import { useCurrentBoq } from "@/hooks/use-boq";
 import { useCreatePurchaseOrder } from "@/hooks/use-purchase-orders";
 import { useTenders } from "@/hooks/use-tenders";
 import { useVendors } from "@/hooks/use-vendors";
 
+const NO_BOQ_LINE = "__none__";
+
 interface DraftItem {
+  /** The tender BOQ line this buys; lets the project's supply view count it. */
+  boqItemId: string;
   description: string;
   unit: string;
   quantity: string;
@@ -38,7 +46,7 @@ interface DraftItem {
 }
 
 function emptyItem(): DraftItem {
-  return { description: "", unit: "", quantity: "", rate: "" };
+  return { boqItemId: NO_BOQ_LINE, description: "", unit: "", quantity: "", rate: "" };
 }
 
 export default function NewPurchaseOrderPage() {
@@ -53,6 +61,30 @@ export default function NewPurchaseOrderPage() {
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<DraftItem[]>([emptyItem()]);
+  const boqQuery = useCurrentBoq(tenderId || undefined);
+  // Only leaf lines are orderable; a parent heading is not.
+  const boqLines = useMemo(() => {
+    const all = boqQuery.data?.items ?? [];
+    const parents = new Set(all.map((item) => item.parentId).filter(Boolean));
+    return all.filter((item) => !parents.has(item.id));
+  }, [boqQuery.data]);
+
+  function pickBoqLine(index: number, boqItemId: string) {
+    const line = boqLines.find((candidate) => candidate.id === boqItemId);
+    setItems((prev) =>
+      prev.map((item, i) =>
+        i === index
+          ? {
+              ...item,
+              boqItemId,
+              description: item.description || line?.description || "",
+              unit: item.unit || line?.unit || "",
+              quantity: item.quantity || (line?.quantity != null ? String(line.quantity) : ""),
+            }
+          : item,
+      ),
+    );
+  }
 
   function updateItem(index: number, patch: Partial<DraftItem>) {
     setItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)));
@@ -76,6 +108,7 @@ export default function NewPurchaseOrderPage() {
     const preparedItems: CreatePurchaseOrderItemInput[] = items
       .filter((item) => item.description.trim() && item.quantity.trim() && item.rate.trim())
       .map((item) => ({
+        boqItemId: tenderId && item.boqItemId !== NO_BOQ_LINE ? item.boqItemId : null,
         description: item.description.trim(),
         unit: item.unit.trim() || undefined,
         quantity: Number(item.quantity),
@@ -106,11 +139,11 @@ export default function NewPurchaseOrderPage() {
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Create Purchase Order</h1>
-        <p className="text-sm text-muted-foreground">Place a direct order with a vendor.</p>
-      </div>
+    <div className="max-w-4xl space-y-6">
+      <PageHeader
+        title="Create purchase order"
+        description="Place a direct order with a vendor."
+      />
 
       <Card>
         <CardHeader>
@@ -135,7 +168,13 @@ export default function NewPurchaseOrderPage() {
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">Tender (optional)</label>
-              <Select value={tenderId || "__none__"} onValueChange={(v) => setTenderId(v === "__none__" ? "" : v)}>
+              <Select
+                value={tenderId || "__none__"}
+                onValueChange={(v) => {
+                  setTenderId(v === "__none__" ? "" : v);
+                  setItems((prev) => prev.map((item) => ({ ...item, boqItemId: NO_BOQ_LINE })));
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Not linked to a tender" />
                 </SelectTrigger>
@@ -177,6 +216,7 @@ export default function NewPurchaseOrderPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                {tenderId && <TableHead className="min-w-48">BOQ line</TableHead>}
                 <TableHead>Description</TableHead>
                 <TableHead className="w-28">Unit</TableHead>
                 <TableHead className="w-28">Quantity</TableHead>
@@ -187,6 +227,23 @@ export default function NewPurchaseOrderPage() {
             <TableBody>
               {items.map((item, index) => (
                 <TableRow key={index}>
+                  {tenderId && (
+                    <TableCell>
+                      <Select value={item.boqItemId} onValueChange={(value) => pickBoqLine(index, value)}>
+                        <SelectTrigger aria-label="BOQ line">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_BOQ_LINE}>Not a BOQ line</SelectItem>
+                          {boqLines.map((line) => (
+                            <SelectItem key={line.id} value={line.id}>
+                              {line.description.slice(0, 70)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                  )}
                   <TableCell>
                     <Input
                       value={item.description}
@@ -206,15 +263,14 @@ export default function NewPurchaseOrderPage() {
                   </TableCell>
                   <TableCell>
                     <Input
-                      type="number"
-                      step="0.01"
+                      money
                       value={item.rate}
                       onChange={(e) => updateItem(index, { rate: e.target.value })}
                     />
                   </TableCell>
                   <TableCell>
                     {items.length > 1 && (
-                      <Button size="sm" variant="ghost" onClick={() => removeItem(index)}>
+                      <Button size="sm" variant="ghost" aria-label="Remove item" onClick={() => removeItem(index)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     )}
@@ -223,13 +279,15 @@ export default function NewPurchaseOrderPage() {
               ))}
             </TableBody>
           </Table>
-          <p className="mt-3 text-right text-sm font-medium">Total: {total.toLocaleString()}</p>
+          <p className="mt-3 text-right text-sm font-medium">Total: {formatMoney(total)}</p>
         </CardContent>
       </Card>
 
-      <Button onClick={handleSubmit} disabled={createPo.isPending}>
-        {createPo.isPending ? "Creating…" : "Create Purchase Order"}
-      </Button>
+      <FormActions onCancel={() => window.history.back()}>
+        <Button onClick={handleSubmit} disabled={createPo.isPending}>
+          {createPo.isPending ? "Creating…" : "Create purchase order"}
+        </Button>
+      </FormActions>
     </div>
   );
 }

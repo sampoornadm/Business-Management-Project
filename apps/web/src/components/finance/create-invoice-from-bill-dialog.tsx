@@ -3,6 +3,7 @@
 import {
   Button,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -79,8 +80,13 @@ export function CreateInvoiceFromBillDialog({
           <Input placeholder="Client name" value={clientName} onChange={(e) => setClientName(e.target.value)} />
         </div>
         <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
           <Button onClick={handleSubmit} disabled={createInvoice.isPending}>
-            Create
+            Create invoice
           </Button>
         </DialogFooter>
       </DialogContent>

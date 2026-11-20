@@ -1,3 +1,4 @@
+import { matchEvaluationCriteria } from "@bmp/types";
 import type {
   TenderAssigneeDto,
   TenderCompetitorDto,
@@ -5,6 +6,7 @@ import type {
   TenderListItemDto,
   TenderPinnedNoteDto,
   TenderTagDto,
+  TenderWonItemDto,
 } from "@bmp/types";
 
 import type { ExportableTable } from "../../shared/utils/table-export.js";
@@ -15,6 +17,11 @@ import type {
   TenderDetail,
   TenderListItem,
 } from "./tenders.repository.js";
+
+function wonSummary(entity: Pick<TenderListItem, "wonItems" | "wonItemsTotal">) {
+  const won = Array.isArray(entity.wonItems) ? (entity.wonItems as unknown as TenderWonItemDto[]) : [];
+  return { wonItemCount: won.length, wonItemsTotal: entity.wonItemsTotal, wonItemNames: won.map((w) => w.description) };
+}
 
 export function toTenderListItemDto(entity: TenderListItem): TenderListItemDto {
   return {
@@ -31,6 +38,8 @@ export function toTenderListItemDto(entity: TenderListItem): TenderListItemDto {
     estimatedCost: entity.estimatedCost,
     submissionDate: entity.submissionDate ? entity.submissionDate.toISOString() : null,
     assigneeCount: entity._count.assignees,
+    evaluationCriteria: matchEvaluationCriteria(entity.evaluationCriteria) ?? null,
+    ...wonSummary(entity),
     createdAt: entity.createdAt.toISOString(),
   };
 }
@@ -105,6 +114,9 @@ export function toTenderDto(entity: TenderDetail): TenderDto {
     dealingOfficerName: entity.dealingOfficerName,
     dealingOfficerEmail: entity.dealingOfficerEmail,
     dealingOfficerPhone: entity.dealingOfficerPhone,
+    evaluationCriteria: matchEvaluationCriteria(entity.evaluationCriteria) ?? null,
+    ...wonSummary(entity),
+    wonItems: Array.isArray(entity.wonItems) ? (entity.wonItems as unknown as TenderWonItemDto[]) : [],
     winnerName: entity.winnerName,
     winningBidAmount: entity.winningBidAmount,
     lossReason: entity.lossReason,
