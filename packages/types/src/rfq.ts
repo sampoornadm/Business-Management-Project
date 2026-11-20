@@ -264,3 +264,57 @@ export interface InviteVendorPreviewDto {
 export interface InviteVendorInput extends InviteVendorPreviewInput {
   text: string;
 }
+
+// ---------------------------------------------------------------------------
+// WhatsApp quote paste: preview (no writes), then bulk save
+// ---------------------------------------------------------------------------
+
+export type QuotePasteSource = "serial" | "description" | "ai";
+
+export interface QuotePastePreviewItemDto {
+  rfqItemId: string;
+  slNo: number;
+  description: string;
+  unit: string | null;
+  quantity: number;
+  /** The vendor's existing quote on this item, if any. */
+  currentRate: number | null;
+  currentRegretted: boolean;
+  /** Proposed from the pasted text. */
+  rate: number | null;
+  regretted: boolean;
+  /** How the line was matched; null when nothing in the paste was for this item. */
+  source: QuotePasteSource | null;
+  vendorLine: string | null;
+  vendorQuantity: number | null;
+  warnings: string[];
+}
+
+export interface QuotePastePreviewDto {
+  items: QuotePastePreviewItemDto[];
+  unmatchedLines: Array<{ lineIndex: number; text: string; reason: string }>;
+  aiNotice: string | null;
+  gstNotice: string | null;
+}
+
+export interface ParseQuoteTextInput {
+  vendorId: string;
+  text: string;
+}
+
+export interface SaveQuotesRowInput {
+  rfqItemId: string;
+  rate?: number;
+  regretted?: boolean;
+}
+
+export interface SaveQuotesInput {
+  vendorId: string;
+  quotes: SaveQuotesRowInput[];
+  /** Rows that came from the AI reader — audit metadata only. */
+  aiCount: number;
+}
+
+export interface SaveQuotesResultDto {
+  imported: number;
+}

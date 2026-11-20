@@ -152,14 +152,18 @@ function matchDescription(leftover: string, items: PasteItem[], itemSpecs: strin
   return null;
 }
 
+/** The paste's raw lines, index = lineIndex everywhere in this module. */
+export function splitPasteLines(text: string): string[] {
+  return text.replace(/\r\n?/g, "\n").replace(/\u00a0/g, " ").split("\n");
+}
+
 export function parseQuoteText(text: string, items: PasteItem[]): ParsedQuoteText {
   const itemSpecs = items.map((item) => specNumbers(item.description));
   const matches: PasteMatch[] = [];
   const unread: UnreadLine[] = [];
   const claimedBy = new Map<number, number>(); // itemIndex -> lineIndex
 
-  const lines = text.replace(/\r\n?/g, "\n").replace(/ /g, " ").split("\n");
-  lines.forEach((raw, lineIndex) => {
+  splitPasteLines(text).forEach((raw, lineIndex) => {
     const line = raw.replace(WHATSAPP_HEADER, "").trim();
     if (!/\d/.test(line) && !REGRET.test(line)) return; // greetings, sign-offs
     const original = raw.trim();

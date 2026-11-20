@@ -19,6 +19,8 @@ import type {
   SuggestVendorsBody,
   UpdateRfqBody,
   UpsertRfqQuoteBody,
+  ParseQuoteTextBody,
+  SaveQuotesBody,
 } from "./rfq.validation.js";
 
 export class RfqController {
@@ -196,6 +198,30 @@ export class RfqController {
       req.user!.businessId,
     );
     sendSuccess(res, result, `Imported ${result.imported} quote(s)`);
+  });
+
+  parseQuoteText = asyncHandler(async (req, res) => {
+    const body = req.body as ParseQuoteTextBody;
+    const preview = await this.rfqService.previewQuotePaste(
+      req.params.id!,
+      body.vendorId,
+      body.text,
+      req.user!.businessId,
+    );
+    sendSuccess(res, preview, "Quote text read");
+  });
+
+  saveQuotes = asyncHandler(async (req, res) => {
+    const body = req.body as SaveQuotesBody;
+    const result = await this.rfqService.saveQuotes(
+      req.params.id!,
+      body.vendorId,
+      body.quotes,
+      body.aiCount,
+      req.user!.id,
+      req.user!.businessId,
+    );
+    sendSuccess(res, result, `Saved ${result.imported} quote(s)`);
   });
 
   comparison = asyncHandler(async (req, res) => {

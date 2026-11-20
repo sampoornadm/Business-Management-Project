@@ -23,6 +23,7 @@ import type { IHistoricalRatesRepository, VendorRateRow } from "../../rates/rate
 import type { ITendersRepository } from "../../tenders/tenders.repository.js";
 import type { IUsersRepository } from "../../users/users.repository.js";
 import type { IVendorsRepository, VendorItemTypeMatch } from "../../vendors/vendors.repository.js";
+import type { QuotePasteAiReader } from "../quote-paste-ai.js";
 import { buildQuoteSheet, ITEM_TABLE_HEADER_ROW } from "../quote-sheet.js";
 import type {
   CreateRfqData,
@@ -402,6 +403,7 @@ describe("RfqService", () => {
   let emailService: { queueRfqEmail: ReturnType<typeof vi.fn> };
   let auditService: AuditService;
   let service: RfqService;
+  let quotePasteAi: ReturnType<typeof vi.fn<QuotePasteAiReader>>;
   const actorId = randomUUID();
   const vendorA = randomUUID();
   const vendorB = randomUUID();
@@ -428,6 +430,7 @@ describe("RfqService", () => {
     });
     emailService = { queueRfqEmail: vi.fn().mockResolvedValue(undefined) };
     auditService = { log: vi.fn().mockResolvedValue(undefined) } as unknown as AuditService;
+    quotePasteAi = vi.fn<QuotePasteAiReader>(async (_items, lines) => ({ matches: [], remaining: lines, notice: null }));
     service = new RfqService(
       repository as unknown as IRfqRepository,
       tendersRepository as unknown as ITendersRepository,
@@ -440,6 +443,7 @@ describe("RfqService", () => {
       ratesRepository as unknown as IHistoricalRatesRepository,
       contactsService,
       itemsRepository as unknown as IItemsRepository,
+      quotePasteAi,
     );
   });
 
@@ -891,6 +895,133 @@ describe("RfqService", () => {
     await service.importQuotes(rfq.id, vendorB, buffer, actorId, businessId);
 
     expect(selectedVendor(await service.getById(rfq.id, businessId))).toBe(vendorB);
+  });
+
+  describe("WhatsApp quote paste", () => {
+    async function threeItemRfq() {
+      const rfq = await service.create(
+        {
+          title: "O ring RFQ",
+          items: [
+            { description: "O RING (12X1) MM", unit: "EA", quantity: 150 },
+            { description: "O RING (12X1.5) MM", unit: "EA", quantity: 150 },
+            { description: "O RING (16X1) MM", unit: "EA", quantity: 150 },
+          ],
+        },
+        actorId,
+        { businessId },
+      );
+      await repository.addVendorInvite(rfq.id, vendorA);
+      return rfq;
+    }
+
+    it("rejects a finalized RFQ before reading anything", async () => {
+      const rfq = await threeItemRfq();
+      await service.finalizeRates(rfq.id, actorId, businessId);
+      await expect(service.previewQuotePaste(rfq.id, vendorA, "1 - 10", businessId)).rejects.toThrow(ConflictError);
+      expect(quotePasteAi).not.toHaveBeenCalled();
+    });
+
+    it("rejects a vendor that was not invited", async () => {
+      const rfq = await threeItemRfq();
+      await expect(service.previewQuotePaste(rfq.id, vendorB, "1 - 10", businessId)).rejects.toThrow(BadRequestError);
+    });
+
+    it("previews every item in Sl No order with rule matches and the vendor's current quote", async () => {
+      const rfq = await threeItemRfq();
+      await service.upsertQuote(rfq.items[2]!.id, vendorA, { rate: 99 }, actorId, businessId);
+
+      const preview = await service.previewQuotePaste(
+        rfq.id,
+        vendorA,
+        "1\tO RING (12X1) MM\tEA\t150@10/-\n2 regret\nplus GST",
+        businessId,
+      );
+
+      expect(preview.items.map((i) => i.slNo)).toEqual([1, 2, 3]);
+      expect(preview.items[0]).toMatchObject({
+        rfqItemId: rfq.items[0]!.id,
+        rate: 10,
+        regretted: false,
+        source: "serial",
+        vendorLine: "1\tO RING (12X1) MM\tEA\t150@10/-",
+        vendorQuantity: 150,
+      });
+      expect(preview.items[1]).toMatchObject({ regretted: true, rate: null, source: "serial" });
+      expect(preview.items[2]).toMatchObject({ rate: null, source: null, currentRate: 99, vendorLine: null });
+      expect(preview.gstNotice).toBe("Vendor mentions GST — check whether rates include it");
+      expect(preview.aiNotice).toBeNull();
+    });
+
+    it("sends only unread lines to the AI with the rule-matched items marked taken", async () => {
+      const rfq = await threeItemRfq();
+      quotePasteAi.mockResolvedValueOnce({
+        matches: [{ itemIndex: 2, lineIndex: 1, rate: 12, regretted: false, vendorQuantity: null, source: "ai", warnings: [] }],
+        remaining: [],
+        notice: null,
+      });
+
+      const preview = await service.previewQuotePaste(rfq.id, vendorA, "1 - 10\nthe sixteen one is 12", businessId);
+
+      const [items, lines, taken] = quotePasteAi.mock.calls[0]!;
+      expect(items).toHaveLength(3);
+      expect(lines.map((l) => l.lineIndex)).toEqual([1]);
+      expect([...taken]).toEqual([0]);
+      expect(preview.items[2]).toMatchObject({ rate: 12, source: "ai", vendorLine: "the sixteen one is 12" });
+      expect(preview.unmatchedLines).toEqual([]);
+    });
+
+    it("lists lines nobody could read", async () => {
+      const rfq = await threeItemRfq();
+      quotePasteAi.mockResolvedValueOnce({
+        matches: [],
+        remaining: [{ lineIndex: 0, text: "same as last time 5", reason: "No rate found" }],
+        notice: "AI reader unavailable — 1 lines left for you to fill",
+      });
+      const preview = await service.previewQuotePaste(rfq.id, vendorA, "same as last time 5", businessId);
+      expect(preview.unmatchedLines).toEqual([{ lineIndex: 0, text: "same as last time 5", reason: "No rate found" }]);
+      expect(preview.aiNotice).toBe("AI reader unavailable — 1 lines left for you to fill");
+    });
+
+    it("saves pasted quotes, marks the invite RESPONDED and audits the paste", async () => {
+      const rfq = await threeItemRfq();
+      await service.upsertQuote(rfq.items[2]!.id, vendorA, { rate: 99 }, actorId, businessId);
+      vi.mocked(auditService.log).mockClear();
+
+      const result = await service.saveQuotes(
+        rfq.id,
+        vendorA,
+        [
+          { rfqItemId: rfq.items[0]!.id, rate: 10 },
+          { rfqItemId: rfq.items[1]!.id, regretted: true },
+        ],
+        1,
+        actorId,
+        businessId,
+      );
+
+      expect(result).toEqual({ imported: 2 });
+      const saved = await service.getById(rfq.id, businessId);
+      const quoteOf = (i: number) => saved.items[i]!.quotes.find((q) => q.vendorId === vendorA);
+      expect(quoteOf(0)).toMatchObject({ rate: 10, regretted: false });
+      expect(quoteOf(1)).toMatchObject({ rate: null, regretted: true });
+      expect(quoteOf(2)?.rate).toBe(99);
+      expect(saved.vendorInvites[0]!.status).toBe("RESPONDED");
+      expect(auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "RFQ_QUOTES_PASTED",
+          entityId: rfq.id,
+          metadata: { vendorId: vendorA, imported: 2, aiCount: 1 },
+        }),
+      );
+    });
+
+    it("refuses to save a quote for an item of another RFQ", async () => {
+      const rfq = await threeItemRfq();
+      await expect(
+        service.saveQuotes(rfq.id, vendorA, [{ rfqItemId: randomUUID(), rate: 10 }], 0, actorId, businessId),
+      ).rejects.toThrow(BadRequestError);
+    });
   });
 
   it("rejects selecting a quote id that doesn't belong to the given item", async () => {

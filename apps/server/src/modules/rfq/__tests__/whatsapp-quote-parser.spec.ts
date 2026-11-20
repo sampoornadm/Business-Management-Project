@@ -101,7 +101,7 @@ describe("parseQuoteText", () => {
   });
 
   it("handles CRLF, nbsp and WhatsApp headers", () => {
-    const match = rateByItem(`[20/11, 10:42 am] Supplier: 1 "O" RING (12X1) MM EA 150@10/-\r\n`).get(0);
+    const match = rateByItem(`[20/11, 10:42 am] Supplier: 1\u00a0"O" RING (12X1) MM EA 150@10/-\r\n`).get(0);
     expect(match).toMatchObject({ rate: 10, source: "serial", warnings: [] });
   });
 

@@ -113,6 +113,33 @@ export const importQuotesSchema = z.object({
 });
 export type ImportQuotesBody = z.infer<typeof importQuotesSchema>;
 
+export const parseQuoteTextSchema = z.object({
+  vendorId: z.string().uuid(),
+  text: z.string().trim().min(1, "Paste the vendor's message").max(20_000),
+});
+export type ParseQuoteTextBody = z.infer<typeof parseQuoteTextSchema>;
+
+export const saveQuotesSchema = z.object({
+  vendorId: z.string().uuid(),
+  aiCount: z.number().int().nonnegative(),
+  quotes: z
+    .array(
+      z
+        .object({
+          rfqItemId: z.string().uuid(),
+          rate: z.number().positive().optional(),
+          regretted: z.boolean().optional(),
+        })
+        // Exactly one: a price, or a regret. A regret is the absence of a price, never both.
+        .refine((q) => (q.regretted === true) !== (q.rate !== undefined), {
+          message: "Each row needs a rate or a regret, not both",
+        }),
+    )
+    .min(1)
+    .max(500),
+});
+export type SaveQuotesBody = z.infer<typeof saveQuotesSchema>;
+
 export const suggestVendorsSchema = z.object({
   boqItemIds: z.array(z.string().uuid()).min(1, "At least one item is required"),
 });
