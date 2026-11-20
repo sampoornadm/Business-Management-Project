@@ -7,6 +7,6 @@ export const settingKeyParamSchema = z.object({
 export type SettingKeyParam = z.infer<typeof settingKeyParamSchema>;
 
 export const updateSettingBodySchema = z.object({
-  value: z.union([z.string(), z.number(), z.boolean()]),
+  value: z.union([z.string().max(20_000), z.number(), z.boolean()]),
 });
 export type UpdateSettingBody = z.infer<typeof updateSettingBodySchema>;

@@ -18,4 +18,10 @@ export class SettingsController {
     const setting = await this.settingsService.set(key, body.value, req.user!.id);
     sendSuccess(res, setting, "Setting updated");
   });
+
+  reset = asyncHandler(async (req, res) => {
+    const { key } = req.params as unknown as SettingKeyParam;
+    const setting = await this.settingsService.reset(key, req.user!.id);
+    sendSuccess(res, setting, "Setting reset to default");
+  });
 }

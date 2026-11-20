@@ -28,6 +28,10 @@ class FakeSettingsRepository implements ISettingsRepository {
     this.rows.set(key, row);
     return row;
   }
+
+  async delete(key: string): Promise<void> {
+    this.rows.delete(key);
+  }
 }
 
 describe("SettingsService", () => {
@@ -80,5 +84,40 @@ describe("SettingsService", () => {
     expect(overridden.isOverridden).toBe(true);
     expect(notOverridden.value).toBe(0.75);
     expect(notOverridden.isOverridden).toBe(false);
+  });
+
+  describe("prompt settings", () => {
+    it("refuses a prompt missing a required marker, naming the missing ones", async () => {
+      const attempt = service.set("PROMPT_RFQ_QUOTE_PASTE", "no markers here", actorId);
+      await expect(attempt).rejects.toThrow(BadRequestError);
+      await expect(service.set("PROMPT_RFQ_QUOTE_PASTE", "no markers here", actorId)).rejects.toThrow(
+        /\{\{items\}\}.*\{\{lines\}\}/,
+      );
+      expect(repository.rows.has("PROMPT_RFQ_QUOTE_PASTE")).toBe(false);
+    });
+
+    it("stores a prompt that keeps every marker", async () => {
+      await service.set("PROMPT_RFQ_QUOTE_PASTE", "Items {{items}} Lines {{lines}}", actorId);
+      expect(await service.get<string>("PROMPT_RFQ_QUOTE_PASTE")).toBe("Items {{items}} Lines {{lines}}");
+    });
+
+    it("reset deletes the override, audits it, and returns the default", async () => {
+      await service.set("PROMPT_RFQ_QUOTE_PASTE", "Items {{items}} Lines {{lines}}", actorId);
+      const dto = await service.reset("PROMPT_RFQ_QUOTE_PASTE", actorId);
+
+      expect(repository.rows.has("PROMPT_RFQ_QUOTE_PASTE")).toBe(false);
+      expect(dto.isOverridden).toBe(false);
+      expect(dto.value).toBe(dto.defaultValue);
+      expect(auditLog).toHaveBeenLastCalledWith(
+        expect.objectContaining({ action: "SETTING_RESET", entityType: "Setting", entityId: "PROMPT_RFQ_QUOTE_PASTE" }),
+      );
+    });
+
+    it("exposes required markers and the prompt type in the DTO", async () => {
+      const dto = (await service.listAll()).find((s) => s.key === "PROMPT_RFQ_QUOTE_PASTE")!;
+      expect(dto.type).toBe("prompt");
+      expect(dto.group).toBe("AI prompts");
+      expect(dto.requiredMarkers).toEqual(["items", "lines"]);
+    });
   });
 });

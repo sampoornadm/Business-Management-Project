@@ -46,5 +46,28 @@ export function createSettingsRouter(controller: SettingsController): Router {
     controller.update,
   );
 
+  /**
+   * @openapi
+   * /settings/{key}:
+   *   delete:
+   *     tags: [Settings]
+   *     summary: Reset one system setting to its default
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: key
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Setting with its default value }
+   */
+  router.delete(
+    "/:key",
+    authenticateMiddleware,
+    requirePermission("settings:manage"),
+    validate(settingKeyParamSchema, "params"),
+    controller.reset,
+  );
+
   return router;
 }

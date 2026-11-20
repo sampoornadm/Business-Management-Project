@@ -15,6 +15,7 @@ export interface ISettingsRepository {
   findAll(): Promise<SettingRow[]>;
   findByKey(key: string): Promise<SettingRow | null>;
   upsert(key: string, value: string, updatedById: string): Promise<SettingRow>;
+  delete(key: string): Promise<void>;
 }
 
 export class SettingsRepository implements ISettingsRepository {
@@ -35,5 +36,9 @@ export class SettingsRepository implements ISettingsRepository {
       update: { value, updatedById },
       ...settingWithUpdaterArgs,
     });
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.prisma.setting.deleteMany({ where: { key } });
   }
 }
