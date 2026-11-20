@@ -45,7 +45,7 @@
     "nodemailer": "^6.9.16",
     "pdfkit": "^0.20.2",
     "pino": "^10.4.0",
-    "pino-http": "^10.4.0",
+    "pino-http": "^11.0.0",
     "pizzip": "^3.3.0",
     "playwright-core": "1.65.1",
     "prom-client": "^15.1.3",
