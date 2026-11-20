@@ -48,6 +48,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { QuoteCell } from "@/components/rfq/quote-cell";
+import { QuotePasteDialog } from "@/components/rfq/quote-paste-dialog";
 import { QuoteSheetActions } from "@/components/rfq/quote-sheet-actions";
 import { humanize, StatusBadge } from "@/components/status-badge";
 import { PinnedTenderNotes } from "@/components/tenders/pinned-tender-notes";
@@ -472,10 +473,16 @@ export default function RfqDetailPage() {
         <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
           <CardTitle className="text-base">Items & quotes</CardTitle>
           {canUpdate && !isFinalized && (
-            <QuoteSheetActions
-              rfqId={rfq.id}
-              vendors={rfq.vendorInvites.map((v) => ({ id: v.vendor.id, name: v.vendor.name }))}
-            />
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <QuotePasteDialog
+                rfqId={rfq.id}
+                vendors={rfq.vendorInvites.map((v) => ({ id: v.vendor.id, name: v.vendor.name }))}
+              />
+              <QuoteSheetActions
+                rfqId={rfq.id}
+                vendors={rfq.vendorInvites.map((v) => ({ id: v.vendor.id, name: v.vendor.name }))}
+              />
+            </div>
           )}
         </CardHeader>
         <CardContent>

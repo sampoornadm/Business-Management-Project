@@ -9,10 +9,14 @@ import type {
   InviteVendorPreviewInput,
   ListRfqsQuery,
   PaginatedResult,
+  ParseQuoteTextInput,
+  QuotePastePreviewDto,
   RfqComparisonDto,
   RfqDto,
   RfqListItemDto,
   RfqVendorSuggestionsDto,
+  SaveQuotesInput,
+  SaveQuotesResultDto,
   SelectQuoteInput,
   SuggestRfqVendorsInput,
   UpdateRfqInput,
@@ -185,6 +189,33 @@ export function useImportQuotes(rfqId: string) {
         `/rfqs/${rfqId}/quotes/import`,
         form,
       );
+      return unwrap(response.data);
+    },
+    onSuccess: () => {
+      invalidateRfq(queryClient, rfqId);
+      void queryClient.invalidateQueries({ queryKey: ["rfqs", rfqId, "comparison"] });
+    },
+  });
+}
+
+/** Reads a pasted WhatsApp reply into a preview. Writes nothing, so nothing to invalidate. */
+export function useParseQuoteText(rfqId: string) {
+  return useMutation({
+    mutationFn: async (input: ParseQuoteTextInput) => {
+      const response = await apiClient.post<ApiResponse<QuotePastePreviewDto>>(
+        `/rfqs/${rfqId}/quotes/parse-text`,
+        input,
+      );
+      return unwrap(response.data);
+    },
+  });
+}
+
+export function useSaveQuotes(rfqId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SaveQuotesInput) => {
+      const response = await apiClient.post<ApiResponse<SaveQuotesResultDto>>(`/rfqs/${rfqId}/quotes/bulk`, input);
       return unwrap(response.data);
     },
     onSuccess: () => {
