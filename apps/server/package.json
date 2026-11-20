@@ -34,7 +34,7 @@
     "docxtemplater": "^3.71.1",
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
-    "express-rate-limit": "^7.5.0",
+    "express-rate-limit": "^8.7.4",
     "file-type": "^19.6.0",
     "helmet": "^8.3.0",
     "hpp": "^0.2.3",
