@@ -687,11 +687,15 @@ describe("TenderExtractionService notes budget", () => {
     // may START: the first call gets the remaining budget as its own timeout.
     let calls = 0;
     // Honours the timeout it is given, like the real Ollama client's AbortSignal.timeout does —
-    // a fake that ignores it cannot catch an unbounded call.
+    // a fake that ignores it cannot catch an unbounded call. The abort lands a little after the
+    // timeout (as a real rejection does): a timer set to exactly the remaining budget can fire a
+    // few ms before Date.now() reaches the deadline on a loaded CI runner, and the service would
+    // then rightly start a second call with the leftover milliseconds.
     const slowGenerateText = async (_prompt: string, options?: { timeoutMs?: number }) => {
       calls += 1;
-      await new Promise((resolve) => setTimeout(resolve, Math.min(200, options?.timeoutMs ?? 200)));
-      if ((options?.timeoutMs ?? Infinity) < 200) throw new Error("aborted");
+      const aborts = (options?.timeoutMs ?? Infinity) < 200;
+      await new Promise((resolve) => setTimeout(resolve, aborts ? options!.timeoutMs! + 15 : 200));
+      if (aborts) throw new Error("aborted");
       return "cleaned";
     };
 
