@@ -16,7 +16,7 @@ export function missingMarkers(template: string, required: readonly string[]): s
   return required.filter((name) => !template.includes(`{{${name}}}`));
 }
 
-export const RFQ_QUOTE_PASTE_DEFAULT_PROMPT = `You read rates that a vendor sent on WhatsApp in reply to our request for quotation (RFQ).
+export const RFQ_QUOTE_PASTE_DEFAULT_PROMPT = `You read rates that a vendor sent as a text message in reply to our request for quotation (RFQ).
 
 These are the RFQ items, one per line, as "item number | description | quantity | unit":
 {{items}}

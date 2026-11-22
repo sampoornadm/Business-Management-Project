@@ -50,7 +50,7 @@ import type {
   UpdateRfqData,
 } from "./rfq.repository.js";
 import { normalizeTechnicalDeviation } from "./technical-deviation.js";
-import { parseQuoteText, splitPasteLines } from "./whatsapp-quote-parser.js";
+import { parseQuoteText, splitPasteLines } from "./text-quote-parser.js";
 
 const FINALIZED_STATUSES = new Set(["CLOSED", "CANCELLED"]);
 
@@ -406,7 +406,7 @@ export class RfqService {
   }
 
   /**
-   * Shared write path for every multi-row quote entry (sheet import, WhatsApp paste): upsert,
+   * Shared write path for every multi-row quote entry (sheet import, text quote paste): upsert,
    * re-pick the lowest, and mark the vendor RESPONDED once anything landed.
    */
   private async writeVendorQuotes(
@@ -445,7 +445,7 @@ export class RfqService {
   }
 
   /**
-   * Reads a vendor's pasted WhatsApp reply into proposed per-item quotes. Writes nothing: the
+   * Reads a vendor's pasted text reply into proposed per-item quotes. Writes nothing: the
    * user reviews and edits the preview, then saves it through saveQuotes.
    */
   async previewQuotePaste(

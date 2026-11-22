@@ -2,10 +2,10 @@ import { z } from "zod";
 
 import { renderPrompt } from "../../infra/llm/prompts.js";
 
-import type { PasteItem, PasteMatch, UnreadLine } from "./whatsapp-quote-parser.js";
+import type { PasteItem, PasteMatch, UnreadLine } from "./text-quote-parser.js";
 
 /**
- * AI fallback for the WhatsApp quote paste: only the lines the rule parser could not read go to
+ * AI fallback for the text quote paste: only the lines the rule parser could not read go to
  * the local model, in one call. Every answer is checked against the vendor's own text before it
  * is accepted — a small model inventing a price is the failure that matters, so a rate whose
  * number is not literally on that line is dropped, and the line stays for the user to fill.

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildRfqWhatsappText } from "./rfq-whatsapp-text";
+import { buildRfqItemListText } from "./rfq-item-list-text";
 
-describe("buildRfqWhatsappText", () => {
+describe("buildRfqItemListText", () => {
   it("lists items, then requirements, then the due date", () => {
-    const text = buildRfqWhatsappText(
+    const text = buildRfqItemListText(
       [
         { description: "TMT Steel", quantity: 1200, unit: "MT" },
         { description: "Cement", quantity: 50, unit: null },
@@ -29,7 +29,7 @@ describe("buildRfqWhatsappText", () => {
   });
 
   it("omits requirements and due date when there are none", () => {
-    const text = buildRfqWhatsappText([{ description: "Bolt", quantity: 4, unit: "Nos" }], [], null);
+    const text = buildRfqItemListText([{ description: "Bolt", quantity: 4, unit: "Nos" }], [], null);
 
     expect(text).toBe("Sl No. | Item Desc | Qty | UoM\n1 | Bolt | 4 | Nos");
   });

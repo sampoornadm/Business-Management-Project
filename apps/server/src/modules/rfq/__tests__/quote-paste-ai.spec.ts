@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createQuotePasteAiReader } from "../quote-paste-ai.js";
-import type { PasteItem, UnreadLine } from "../whatsapp-quote-parser.js";
+import type { PasteItem, UnreadLine } from "../text-quote-parser.js";
 
 const ITEMS: PasteItem[] = Array.from({ length: 13 }, (_, i) => ({
   description: i === 0 ? "O RING (12X1) MM" : `O RING (${i + 20}X2) MM`,

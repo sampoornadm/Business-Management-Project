@@ -15,7 +15,7 @@ import {
  * Requires a real Postgres + Redis reachable via .env.test. The pasted text here is fully
  * rule-readable, so Ollama is never called.
  */
-describe("RFQ WhatsApp quote paste (integration)", () => {
+describe("RFQ text quote paste (integration)", () => {
   const app = createApp();
   let testUser: IntegrationTestUser;
   let token: string;

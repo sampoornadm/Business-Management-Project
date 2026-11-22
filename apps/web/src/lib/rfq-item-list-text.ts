@@ -7,11 +7,11 @@ interface RfqTextItem {
 }
 
 /**
- * Plain-text item list for pasting into WhatsApp: one "Sl No. | Item Desc | Qty | UoM" line per
+ * Plain-text item list for pasting into a chat or text message: one "Sl No. | Item Desc | Qty | UoM" line per
  * item, then the tender's pinned requirements and the rate due date (each section omitted when
  * empty).
  */
-export function buildRfqWhatsappText(
+export function buildRfqItemListText(
   items: RfqTextItem[],
   pinnedNotes: string[],
   dueDate: string | null,

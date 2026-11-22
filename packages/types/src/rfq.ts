@@ -266,7 +266,7 @@ export interface InviteVendorInput extends InviteVendorPreviewInput {
 }
 
 // ---------------------------------------------------------------------------
-// WhatsApp quote paste: preview (no writes), then bulk save
+// Text quote paste: preview (no writes), then bulk save
 // ---------------------------------------------------------------------------
 
 export type QuotePasteSource = "serial" | "description" | "ai";

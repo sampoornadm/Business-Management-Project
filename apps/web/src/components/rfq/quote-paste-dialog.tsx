@@ -126,12 +126,12 @@ export function QuotePasteDialog({ rfqId, vendors }: { rfqId: string; vendors: {
     >
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
-          <MessageSquareText className="mr-2 h-4 w-4" /> Paste WhatsApp quote
+          <MessageSquareText className="mr-2 h-4 w-4" /> Paste text quote
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Paste WhatsApp quote</DialogTitle>
+          <DialogTitle>Paste text quote</DialogTitle>
           <DialogDescription>
             Paste the vendor&apos;s reply. Lines are matched to items by serial number or description; anything
             unclear goes to the AI reader. Nothing is saved until you review it.

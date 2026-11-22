@@ -1,9 +1,9 @@
 import { specNumbers } from "../../shared/utils/spec-match.js";
 
 /**
- * Reads a vendor's WhatsApp reply into per-item rates by rule, with no model involved. Lines it
+ * Reads a vendor's pasted text reply into per-item rates by rule, with no model involved. Lines it
  * cannot read are returned as `unread` for the AI fallback (quote-paste-ai.ts) — never guessed
- * here. Item i is "Sl No i+1", the same numbering buildRfqWhatsappText sends the vendor.
+ * here. Item i is "Sl No i+1", the same numbering buildRfqItemListText sends the vendor.
  *
  * The one failure this must never have is a rate silently landing on the wrong item, so a
  * serial number is cross-checked against the line's sizes, and a description match needs the
@@ -43,7 +43,8 @@ export interface ParsedQuoteText {
 
 const NUM = String.raw`(\d[\d,]*(?:\.\d+)?)`;
 const CURRENCY = String.raw`(?:\brs\.?|₹|\binr\b)`;
-const WHATSAPP_HEADER = /^\[[^\]]*\]\s*[^:]{1,60}:\s*/;
+// Chat-export prefix before a message, e.g. "[20/11, 10:42 am] Name: ".
+const CHAT_HEADER = /^\[[^\]]*\]\s*[^:]{1,60}:\s*/;
 // "1 ", "1.", "1)", "1 -", "1:", "1|", "1<tab>" — but not "10.5X3" or "150@10".
 const SERIAL = /^\s*(\d{1,3})(?:\.\s|\)|\s*[-:|]|\s+)/;
 const REGRET = /\bregret|\bnot\s+available\b|\bn\/a\b|\bna\b|\bnot\s+quoting\b|\bno\s+quote\b|\bnil\b/i;
@@ -164,7 +165,7 @@ export function parseQuoteText(text: string, items: PasteItem[]): ParsedQuoteTex
   const claimedBy = new Map<number, number>(); // itemIndex -> lineIndex
 
   splitPasteLines(text).forEach((raw, lineIndex) => {
-    const line = raw.replace(WHATSAPP_HEADER, "").trim();
+    const line = raw.replace(CHAT_HEADER, "").trim();
     if (!/\d/.test(line) && !REGRET.test(line)) return; // greetings, sign-offs
     const original = raw.trim();
 
