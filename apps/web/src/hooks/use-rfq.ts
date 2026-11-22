@@ -27,8 +27,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { unwrap } from "@/lib/api";
 import { apiClient } from "@/lib/axios";
 
-export function useRfqs(query: ListRfqsQuery) {
+export function useRfqs(query: ListRfqsQuery, options?: { enabled?: boolean }) {
   return useQuery({
+    ...options,
     queryKey: ["rfqs", query],
     queryFn: async () => {
       // axios's default params serializer turns a nested array of objects into

@@ -167,11 +167,11 @@ export default function EditRfqPage() {
             <Input value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">Due date (optional)</label>
+            <label className="text-sm font-medium">Due date</label>
             <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="max-w-xs" />
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">Instructions (optional)</label>
+            <label className="text-sm font-medium">Instructions</label>
             <Textarea rows={3} value={instructions} onChange={(e) => setInstructions(e.target.value)} />
           </div>
         </CardContent>

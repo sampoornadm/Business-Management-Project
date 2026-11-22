@@ -24,6 +24,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Textarea,
+  type TextareaProps,
   useToast,
 } from "@bmp/ui";
 import { Plus, Trash2 } from "lucide-react";
@@ -31,9 +33,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useCurrentBoq } from "@/hooks/use-boq";
-import { useCreateRfq, useSuggestRfqVendors } from "@/hooks/use-rfq";
-import { useTenders } from "@/hooks/use-tenders";
+import { useCreateRfq, useRfqs, useSuggestRfqVendors } from "@/hooks/use-rfq";
+import { useTender, useTenders } from "@/hooks/use-tenders";
 import { useVendors } from "@/hooks/use-vendors";
+import { suggestRfqTitle } from "@/lib/rfq-title";
 
 interface DraftItem {
   description: string;
@@ -50,6 +53,30 @@ function flattenBoqItems(items: BoqItemDto[]): BoqItemDto[] {
   return items.flatMap((item) => [item, ...flattenBoqItems(item.children)]);
 }
 
+/**
+ * Shows the whole description, wrapped. The hidden copy sets the height, so the box also refits
+ * when the column width changes, which sizing once from scrollHeight would miss.
+ */
+function DescriptionField({ value, ...props }: TextareaProps & { value: string }) {
+  return (
+    <div className="grid">
+      <span
+        aria-hidden
+        className="invisible col-start-1 row-start-1 whitespace-pre-wrap break-words border px-3 py-2 text-sm"
+      >
+        {value}{" "}
+      </span>
+      <Textarea
+        {...props}
+        value={value}
+        rows={1}
+        aria-label="Item description"
+        className="col-start-1 row-start-1 min-h-10 resize-none overflow-hidden"
+      />
+    </div>
+  );
+}
+
 export default function NewRfqPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -61,7 +88,8 @@ export default function NewRfqPage() {
   const tendersQuery = useTenders({ page: 1, pageSize: 100 });
   const vendorsQuery = useVendors({ page: 1, pageSize: 100, isActive: true });
 
-  const [title, setTitle] = useState("");
+  // null = not typed in yet, so the title follows the suggestion for the selected tender.
+  const [titleDraft, setTitleDraft] = useState<string | null>(null);
   const [tenderId, setTenderId] = useState<string>(initialTenderId);
   const [dueDate, setDueDate] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -71,6 +99,18 @@ export default function NewRfqPage() {
   const [boqItemDescriptions, setBoqItemDescriptions] = useState<Record<string, string>>({});
   const [vendorIds, setVendorIds] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<RfqVendorSuggestionsDto>();
+
+  const tenderQuery = useTender(tenderId || undefined);
+  const tenderRfqsQuery = useRfqs({ tenderId, pageSize: 100 }, { enabled: Boolean(tenderId) });
+  const suggestedTitle =
+    tenderId && tenderQuery.data && tenderRfqsQuery.data
+      ? suggestRfqTitle(
+          tenderQuery.data.tenderNumber,
+          tenderRfqsQuery.data.items.map((rfq) => rfq.title),
+          tenderRfqsQuery.data.totalItems,
+        )
+      : "";
+  const title = titleDraft ?? suggestedTitle;
 
   const boqQuery = useCurrentBoq(tenderId || undefined);
   const boqItems = boqQuery.data ? flattenBoqItems(boqQuery.data.items) : [];
@@ -165,7 +205,7 @@ export default function NewRfqPage() {
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Create RFQ"
         description="Request quotations from vendors for a set of items."
@@ -178,11 +218,11 @@ export default function NewRfqPage() {
         <CardContent className="space-y-4">
           <div className="space-y-1">
             <label className="text-sm font-medium">Title</label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Cement Supply RFQ" />
+            <Input value={title} onChange={(e) => setTitleDraft(e.target.value)} placeholder="Cement Supply RFQ" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-sm font-medium">Tender (optional)</label>
+              <label className="text-sm font-medium">Tender</label>
               <Select
                 value={tenderId || "__none__"}
                 onValueChange={(v) => {
@@ -204,12 +244,12 @@ export default function NewRfqPage() {
               </Select>
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">Due date (optional)</label>
+              <label className="text-sm font-medium">Due date</label>
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">Instructions (optional)</label>
+            <label className="text-sm font-medium">Instructions</label>
             <Input
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
@@ -217,7 +257,7 @@ export default function NewRfqPage() {
             />
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">Invite vendors (optional, can add later)</label>
+            <label className="text-sm font-medium">Invite vendors (can add later)</label>
             <MultiSelect
               options={(vendorsQuery.data?.items ?? []).map((v) => ({ value: v.id, label: v.name }))}
               selected={vendorIds}
@@ -301,7 +341,7 @@ export default function NewRfqPage() {
                           {/* Same wording the tender's BOQ shows — never item.normalizedName
                               (the AI's shortened rewrite), so an item reads identically here and
                               on the tender page. Still fully editable before sending. */}
-                          <Input
+                          <DescriptionField
                             value={boqItemDescriptions[item.id] ?? item.description}
                             onChange={(e) =>
                               setBoqItemDescriptions((prev) => ({ ...prev, [item.id]: e.target.value }))
@@ -360,8 +400,8 @@ export default function NewRfqPage() {
                 <TableBody>
                   {items.map((item, index) => (
                     <TableRow key={index}>
-                      <TableCell>
-                        <Input
+                      <TableCell className="min-w-[16rem]">
+                        <DescriptionField
                           value={item.description}
                           onChange={(e) => updateItem(index, { description: e.target.value })}
                           placeholder="OPC Cement"
