@@ -8,6 +8,12 @@ const DESCRIPTORS: Record<string, FilterableColumnDescriptor> = {
   status: { type: "enum", prismaPath: ["status"] },
   submissionDate: { type: "date", prismaPath: ["submissionDate"], nullable: true },
   assigneeCount: { type: "number", prismaPath: ["assigneeCount"] },
+  tenderNumber: {
+    type: "text",
+    prismaPath: ["tender", "tenderNumber"],
+    hasValuePath: ["tenderId"],
+    nullable: true,
+  },
 };
 
 describe("buildPrismaFilterWhere", () => {
@@ -156,5 +162,23 @@ describe("buildPrismaFilterWhere", () => {
       DESCRIPTORS,
     );
     expect(where).toEqual({});
+  });
+
+  it("uses hasValuePath for 'has_any_value' and prismaPath for everything else", () => {
+    expect(
+      buildPrismaFilterWhere([{ columnKey: "tenderNumber", operator: "has_any_value" }], DESCRIPTORS),
+    ).toEqual({ tenderId: { not: null } });
+    expect(
+      buildPrismaFilterWhere(
+        [{ columnKey: "tenderNumber", operator: "contains", value: "14" }],
+        DESCRIPTORS,
+      ),
+    ).toEqual({ tender: { tenderNumber: { contains: "14", mode: "insensitive" } } });
+  });
+
+  it("drops 'has_any_value' on a column that is not nullable", () => {
+    expect(
+      buildPrismaFilterWhere([{ columnKey: "clientName", operator: "has_any_value" }], DESCRIPTORS),
+    ).toEqual({});
   });
 });

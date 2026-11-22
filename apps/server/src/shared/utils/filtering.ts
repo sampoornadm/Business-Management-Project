@@ -4,6 +4,9 @@ export interface FilterableColumnDescriptor {
   type: FilterColumnType;
   prismaPath: string[];
   nullable?: boolean;
+  // Where "has any value" checks for null, when prismaPath's own field is required and only an
+  // optional relation on the way can be missing (Prisma rejects `not: null` on a required field).
+  hasValuePath?: string[];
 }
 
 // Mirrors packages/ui/src/lib/filterable-column.ts's OPERATORS_BY_TYPE. Server-owned rather than
@@ -99,9 +102,16 @@ export function buildPrismaFilterWhere(
     .map((filter) => {
       const descriptor = descriptors[filter.columnKey];
       if (!descriptor) return null;
+      // Same rule as packages/ui's operatorsFor: "has any value" only exists on nullable columns.
+      // On a required field Prisma rejects `not: null` (a 500), so drop it like any invalid pair.
+      if (filter.operator === "has_any_value" && !descriptor.nullable) return null;
       const predicate = buildPredicate(descriptor.type, filter.operator, filter.value);
       if (!predicate) return null;
-      return nestPath(descriptor.prismaPath, predicate);
+      const path =
+        filter.operator === "has_any_value" && descriptor.hasValuePath
+          ? descriptor.hasValuePath
+          : descriptor.prismaPath;
+      return nestPath(path, predicate);
     })
     .filter((clause): clause is Record<string, unknown> => clause !== null);
 
