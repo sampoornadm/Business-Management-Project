@@ -897,7 +897,7 @@ describe("RfqService", () => {
     expect(selectedVendor(await service.getById(rfq.id, businessId))).toBe(vendorB);
   });
 
-  describe("WhatsApp quote paste", () => {
+  describe("text quote paste", () => {
     async function threeItemRfq() {
       const rfq = await service.create(
         {

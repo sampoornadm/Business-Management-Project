@@ -136,7 +136,7 @@ export const SETTING_DEFINITIONS: Record<SettingKey, SettingDefinition> = {
   PROMPT_RFQ_QUOTE_PASTE: {
     type: "prompt",
     defaultValue: RFQ_QUOTE_PASTE_DEFAULT_PROMPT,
-    label: "Vendor WhatsApp quote reader (RFQ)",
+    label: "Vendor text quote reader (RFQ)",
     group: "AI prompts",
     requiredMarkers: ["items", "lines"],
   },

@@ -339,7 +339,7 @@ export function createRfqRouter(controller: RfqController): Router {
    * /rfqs/{id}/quotes/parse-text:
    *   post:
    *     tags: [RFQ]
-   *     summary: Read a vendor's pasted WhatsApp reply into proposed per-item quotes (no writes)
+   *     summary: Read a vendor's pasted text reply into proposed per-item quotes (no writes)
    *     security: [{ bearerAuth: [] }]
    *     parameters:
    *       - in: path
@@ -362,7 +362,7 @@ export function createRfqRouter(controller: RfqController): Router {
    * /rfqs/{id}/quotes/bulk:
    *   post:
    *     tags: [RFQ]
-   *     summary: Save several of one vendor's quotes at once (reviewed WhatsApp paste)
+   *     summary: Save several of one vendor's quotes at once (reviewed text quote paste)
    *     security: [{ bearerAuth: [] }]
    *     parameters:
    *       - in: path

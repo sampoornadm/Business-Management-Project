@@ -198,7 +198,7 @@ export function useImportQuotes(rfqId: string) {
   });
 }
 
-/** Reads a pasted WhatsApp reply into a preview. Writes nothing, so nothing to invalidate. */
+/** Reads a pasted text quote into a preview. Writes nothing, so nothing to invalidate. */
 export function useParseQuoteText(rfqId: string) {
   return useMutation({
     mutationFn: async (input: ParseQuoteTextInput) => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseQuoteText, type PasteItem } from "../whatsapp-quote-parser.js";
+import { parseQuoteText, type PasteItem } from "../text-quote-parser.js";
 
 // Anonymised shape of a real vendor reply: Sl No, description, unit, qty@rate/-, tab-separated.
 const SIZES = [
@@ -100,7 +100,7 @@ describe("parseQuoteText", () => {
     expect(match).toMatchObject({ rate: 10, source: "serial", warnings: [] });
   });
 
-  it("handles CRLF, nbsp and WhatsApp headers", () => {
+  it("handles CRLF, nbsp and chat-export headers", () => {
     const match = rateByItem(`[20/11, 10:42 am] Supplier: 1\u00a0"O" RING (12X1) MM EA 150@10/-\r\n`).get(0);
     expect(match).toMatchObject({ rate: 10, source: "serial", warnings: [] });
   });
