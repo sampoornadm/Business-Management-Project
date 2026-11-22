@@ -30,6 +30,23 @@ export const RFQ_COLUMNS: RfqColumnConfig[] = [
     ),
   },
   {
+    key: "tenderNumber",
+    label: "Tender Number",
+    type: "text",
+    sortable: true,
+    filterable: true,
+    nullable: true,
+    defaultVisible: true,
+    cell: ({ row }) =>
+      row.original.tenderId && row.original.tenderNumber ? (
+        <Link href={`/tenders/${row.original.tenderId}`} className="hover:underline">
+          {row.original.tenderNumber}
+        </Link>
+      ) : (
+        "-"
+      ),
+  },
+  {
     key: "status",
     label: "Status",
     type: "enum",

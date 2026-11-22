@@ -5,6 +5,12 @@ import type { FilterableColumnDescriptor } from "../../shared/utils/filtering.js
 
 export const RFQ_FILTER_COLUMNS: Record<RfqFilterField, FilterableColumnDescriptor> = {
   title: { type: "text", prismaPath: ["title"] },
+  tenderNumber: {
+    type: "text",
+    prismaPath: ["tender", "tenderNumber"],
+    hasValuePath: ["tenderId"],
+    nullable: true,
+  },
   status: { type: "enum", prismaPath: ["status"] },
   dueDate: { type: "date", prismaPath: ["dueDate"], nullable: true },
 };
@@ -16,6 +22,7 @@ type OrderByBuilder = (dir: "asc" | "desc") => Prisma.RfqOrderByWithRelationInpu
 // tenders.filter-columns.ts's assigneeCount).
 export const RFQ_SORT_COLUMNS: Record<RfqSortField, OrderByBuilder> = {
   title: (dir) => ({ title: dir }),
+  tenderNumber: (dir) => ({ tender: { tenderNumber: dir } }),
   status: (dir) => ({ status: dir }),
   dueDate: (dir) => ({ dueDate: dir }),
   itemCount: (dir) => ({ items: { _count: dir } }),

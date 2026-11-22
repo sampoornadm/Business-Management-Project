@@ -30,7 +30,10 @@ export type RfqDetail = Prisma.RfqGetPayload<typeof rfqDetailArgs>;
 export type RfqItemDetail = RfqDetail["items"][number];
 
 const rfqListArgs = {
-  include: { _count: { select: { items: true, vendorInvites: true } } },
+  include: {
+    _count: { select: { items: true, vendorInvites: true } },
+    tender: { select: { tenderNumber: true } },
+  },
 } satisfies Prisma.RfqDefaultArgs;
 
 export type RfqListItem = Prisma.RfqGetPayload<typeof rfqListArgs>;

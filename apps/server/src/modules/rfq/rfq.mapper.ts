@@ -53,6 +53,7 @@ export function toRfqListItemDto(entity: RfqListItem): RfqListItemDto {
     id: entity.id,
     title: entity.title,
     tenderId: entity.tenderId,
+    tenderNumber: entity.tender?.tenderNumber ?? null,
     status: entity.status,
     dueDate: entity.dueDate ? entity.dueDate.toISOString() : null,
     itemCount: entity._count.items,
@@ -113,6 +114,7 @@ export function toRfqDto(entity: RfqDetail): RfqDto {
 // showing it and then exporting silently drops it from the file.
 const RFQ_EXPORT_COLUMNS: { key: string; header: string }[] = [
   { key: "title", header: "Title" },
+  { key: "tenderNumber", header: "Tender Number" },
   { key: "status", header: "Status" },
   { key: "dueDate", header: "Due Date" },
   { key: "itemCount", header: "Items" },
@@ -122,6 +124,7 @@ const RFQ_EXPORT_COLUMNS: { key: string; header: string }[] = [
 function rfqExportRow(rfq: RfqListItemDto): Record<string, string | number> {
   return {
     title: rfq.title,
+    tenderNumber: rfq.tenderNumber ?? "",
     status: rfq.status,
     dueDate: rfq.dueDate ? rfq.dueDate.slice(0, 10) : "",
     itemCount: rfq.itemCount,
