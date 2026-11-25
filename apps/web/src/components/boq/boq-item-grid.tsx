@@ -331,6 +331,21 @@ export function BoqItemGrid({
     },
     ...(hasChargeLoads
       ? [
+          // Bidder's view only: what this line carries of the spread-in charges. Not on any
+          // exported document — the quotation shows just the rate that already includes it.
+          {
+            key: "chargeShare",
+            header: "Charges share",
+            align: "right",
+            getValue: (item) =>
+              item.chargeLoad && item.quantity !== null
+                ? formatMoney(Math.round(item.chargeLoad * item.quantity * 100) / 100)
+                : "",
+            renderBelow: (item) =>
+              item.chargeLoad ? (
+                <span className="block text-xs text-muted-foreground">{formatMoney(item.chargeLoad)} / unit</span>
+              ) : null,
+          } satisfies EditableTreeColumn<BoqItemDto>,
           {
             key: "rateWithCharges",
             header: "Rate incl. charges",
