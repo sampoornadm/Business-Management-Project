@@ -3,6 +3,17 @@ import type { FilterCondition } from "./filtering.js";
 export const RFQ_STATUSES = ["DRAFT", "SENT", "CLOSED", "CANCELLED"] as const;
 export type RfqStatus = (typeof RFQ_STATUSES)[number];
 
+/**
+ * One RFQ item as sent to vendors in the text item list: "1) Item desc - Qty - 150 EA". The text
+ * quote reader (server, text-quote-parser.ts) expects replies that echo this line plus a rate.
+ */
+export function formatRfqItemTextLine(
+  slNo: number,
+  item: { description: string; quantity: number; unit: string | null },
+): string {
+  return `${slNo}) ${item.description} - Qty - ${item.quantity}${item.unit ? ` ${item.unit}` : ""}`;
+}
+
 export const RFQ_FILTER_FIELDS = ["title", "tenderNumber", "status", "dueDate"] as const;
 export type RfqFilterField = (typeof RFQ_FILTER_FIELDS)[number];
 

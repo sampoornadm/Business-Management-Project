@@ -3,7 +3,8 @@ import { specNumbers } from "../../shared/utils/spec-match.js";
 /**
  * Reads a vendor's pasted text reply into per-item rates by rule, with no model involved. Lines it
  * cannot read are returned as `unread` for the AI fallback (quote-paste-ai.ts) — never guessed
- * here. Item i is "Sl No i+1", the same numbering buildRfqItemListText sends the vendor.
+ * here. Item i is "Sl No i+1", the same numbering buildRfqItemListText sends the vendor, whose
+ * lines (formatRfqItemTextLine, "1) desc - Qty - 150 EA") vendors usually echo with a rate added.
  *
  * The one failure this must never have is a rate silently landing on the wrong item, so a
  * serial number is cross-checked against the line's sizes, and a description match needs the
@@ -48,33 +49,62 @@ const CHAT_HEADER = /^\[[^\]]*\]\s*[^:]{1,60}:\s*/;
 // "1 ", "1.", "1)", "1 -", "1:", "1|", "1<tab>" — but not "10.5X3" or "150@10".
 const SERIAL = /^\s*(\d{1,3})(?:\.\s|\)|\s*[-:|]|\s+)/;
 const REGRET = /\bregret|\bnot\s+available\b|\bn\/a\b|\bna\b|\bnot\s+quoting\b|\bno\s+quote\b|\bnil\b/i;
+// The "Qty - 150 EA" part of our own sent line. The unit is letters only, so a number written
+// straight after it ("Qty - 50 Bag 380") is never taken for part of the unit.
+const QTY_ECHO = String.raw`\bqty\s*[-:]?\s*${NUM}\s*([a-z][a-z./ ]*?)?\s*`;
+// That line echoed back untouched — the vendor gave no rate for it.
+const BARE_ECHO = new RegExp(`${QTY_ECHO}$`, "i");
 const GST = /\bgst\b|\bincl(?:usive)?\b|\+\s*18\s*%|\bextra\b/i;
 // Words that can sit next to a bare price without being a description ("3 - 450 per mtr").
 const PRICE_WORDS = new Set([
   "rs", "inr", "rupees", "each", "per", "only", "nos", "no", "pcs", "pc", "ea", "mtr", "mtrs", "m",
-  "kg", "set", "sets", "unit", "rate", "regret", "regretted", "not", "available", "na", "nil", "quote", "quoting",
+  "kg", "set", "sets", "unit", "rate", "qty", "regret", "regretted", "not", "available", "na", "nil", "quote", "quoting",
 ]);
 
 interface PriceHit {
   rate: number;
   vendorQuantity: number | null;
+  vendorUnit: string | null;
   start: number;
   end: number;
 }
 
 const toNumber = (raw: string) => Number(raw.replace(/,/g, ""));
 
+// ponytail: small synonym list, extend when real pastes show a unit warning that isn't one
+const EACH_UNITS = new Set(["ea", "each", "no", "number", "pc", "piece", "unit", "set"]);
+const METRE_UNITS = new Set(["m", "mtr", "meter", "metre", "rmt", "rm"]);
+function unitKey(unit: string): string {
+  const key = unit.toLowerCase().replace(/[^a-z]/g, "").replace(/s$/, "");
+  if (EACH_UNITS.has(key)) return "each";
+  if (METRE_UNITS.has(key)) return "metre";
+  return key;
+}
+
+/** The line with our echoed "Qty - 150" taken out, so the quantity can't pass for a written rate. */
+export const withoutQtyEcho = (text: string) => text.replace(new RegExp(`\\bqty\\s*[-:]?\\s*${NUM}`, "i"), " ");
+
 /** Removes text[start, end) — one occurrence, so a size equal to the rate survives. */
 const cut = (text: string, start: number, end: number) => `${text.slice(0, start)} ${text.slice(end)}`;
 
 function findPrice(text: string): PriceHit | null {
-  const patterns: Array<{ re: RegExp; rateGroup: number; qtyGroup?: number }> = [
+  const patterns: Array<{ re: RegExp; rateGroup: number; qtyGroup?: number; unitGroup?: number }> = [
+    // Our sent line echoed back with a rate: "- Qty - 100 Mtr - 450", "@ Rs 450", "Rate: 450".
+    {
+      re: new RegExp(
+        `${QTY_ECHO}(?:[-:=@,]|(?=rate\\b|${CURRENCY}))\\s*(?:rate\\s*[-:=]?\\s*)?${CURRENCY}?\\s*${NUM}`,
+        "i",
+      ),
+      qtyGroup: 1,
+      unitGroup: 2,
+      rateGroup: 3,
+    },
     { re: new RegExp(`${NUM}\\s*@\\s*${CURRENCY}?\\s*${NUM}`, "i"), qtyGroup: 1, rateGroup: 2 },
     { re: new RegExp(`@\\s*${CURRENCY}?\\s*${NUM}`, "i"), rateGroup: 1 },
     { re: new RegExp(`${CURRENCY}\\s*${NUM}`, "i"), rateGroup: 1 },
     { re: new RegExp(`${NUM}\\s*\\/-`), rateGroup: 1 },
   ];
-  for (const { re, rateGroup, qtyGroup } of patterns) {
+  for (const { re, rateGroup, qtyGroup, unitGroup } of patterns) {
     const m = re.exec(text);
     if (!m) continue;
     const rate = toNumber(m[rateGroup]!);
@@ -82,6 +112,7 @@ function findPrice(text: string): PriceHit | null {
     return {
       rate,
       vendorQuantity: qtyGroup ? toNumber(m[qtyGroup]!) : null,
+      vendorUnit: (unitGroup && m[unitGroup]?.trim()) || null,
       start: m.index,
       end: m.index + m[0].length,
     };
@@ -93,7 +124,7 @@ function findPrice(text: string): PriceHit | null {
   if (cells.length >= 3 && last && new RegExp(`^${NUM}$`).test(last)) {
     const rate = toNumber(last);
     const start = text.lastIndexOf(last);
-    if (rate > 0) return { rate, vendorQuantity: null, start, end: start + last.length };
+    if (rate > 0) return { rate, vendorQuantity: null, vendorUnit: null, start, end: start + last.length };
   }
 
   // A bare price: exactly one number and nothing but price words around it ("3 - 450").
@@ -101,7 +132,7 @@ function findPrice(text: string): PriceHit | null {
   if (numbers.length === 1 && words(text).every((w) => PRICE_WORDS.has(w))) {
     const m = numbers[0]!;
     const rate = toNumber(m[1]!);
-    if (rate > 0) return { rate, vendorQuantity: null, start: m.index!, end: m.index! + m[0].length };
+    if (rate > 0) return { rate, vendorQuantity: null, vendorUnit: null, start: m.index!, end: m.index! + m[0].length };
   }
   return null;
 }
@@ -183,6 +214,7 @@ export function parseQuoteText(text: string, items: PasteItem[]): ParsedQuoteTex
     const regretted = REGRET.test(rest);
     const price = regretted ? null : findPrice(rest);
     if (!regretted && !price) {
+      if (BARE_ECHO.test(rest)) return; // our line sent back with no rate — not a quote, and not for the AI
       unread.push({ lineIndex, text: original, reason: "No rate found" });
       return;
     }
@@ -227,6 +259,11 @@ export function parseQuoteText(text: string, items: PasteItem[]): ParsedQuoteTex
     const asked = items[itemIndex]!.quantity;
     if (vendorQuantity !== null && vendorQuantity !== asked) {
       warnings.push(`Vendor quoted for ${vendorQuantity}, RFQ asks ${asked}`);
+    }
+    const vendorUnit = price?.vendorUnit ?? null;
+    const askedUnit = items[itemIndex]!.unit;
+    if (vendorUnit && askedUnit && unitKey(vendorUnit) !== unitKey(askedUnit)) {
+      warnings.push(`Vendor quoted per ${vendorUnit}, RFQ asks per ${askedUnit}`);
     }
     matches.push({ itemIndex, lineIndex, rate: price?.rate ?? null, regretted, vendorQuantity, source, warnings });
   });
