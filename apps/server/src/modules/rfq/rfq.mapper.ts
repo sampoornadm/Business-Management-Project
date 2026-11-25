@@ -8,6 +8,7 @@ import type {
 } from "@bmp/types";
 
 import type { ExportableTable } from "../../shared/utils/table-export.js";
+import { toAdditionalChargeDto } from "../boq/boq.mapper.js";
 
 import type { ItemPriceRow, RfqDetail, RfqItemDetail, RfqListItem } from "./rfq.repository.js";
 
@@ -98,6 +99,7 @@ export function toRfqDto(entity: RfqDetail): RfqDto {
     itemCount: entity.items.length,
     vendorCount: entity.vendorInvites.length,
     items: entity.items.map(toItemDto),
+    charges: entity.charges.map(toAdditionalChargeDto),
     vendorInvites: entity.vendorInvites.map(toVendorInviteDto),
     createdBy: {
       id: entity.createdBy.id,

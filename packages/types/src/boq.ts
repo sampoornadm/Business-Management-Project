@@ -73,8 +73,34 @@ export interface BoqItemDto {
   markupPercent: number | null;
   /** Which RFQ quote the base rate came from; null when it was never set or the quote is gone. */
   baseRateSource: BoqBaseRateSourceDto | null;
+  /** Per-unit share of the tender's spread-in additional charges already included in `rate`. */
+  chargeLoad: number | null;
   children: BoqItemDto[];
 }
+
+/**
+ * A whole-RFQ / whole-tender additional cost (test certificates, delivery, P&F...). vendorId null
+ * = our own cost. addToRates: spread into item rates by item value; false = its own quotation line.
+ */
+export interface AdditionalChargeDto {
+  id: string;
+  description: string;
+  amount: number;
+  addToRates: boolean;
+  vendorId: string | null;
+  vendorName: string | null;
+  /** Tender charges only: the RFQ whose "Finalize rates" copied it; null = added on the tender. */
+  sourceRfqId: string | null;
+}
+
+export interface AdditionalChargeInput {
+  description: string;
+  amount: number;
+  addToRates?: boolean;
+  vendorId?: string | null;
+}
+
+export type UpdateAdditionalChargeInput = Partial<AdditionalChargeInput>;
 
 export interface BoqBaseRateSourceDto {
   quoteId: string;
@@ -123,7 +149,12 @@ export interface BoqDto {
   isCurrent: boolean;
   createdBy: { id: string; firstName: string; lastName: string };
   items: BoqItemDto[];
+  /** Σ item amounts (spread-in charges included, since they are inside the rates). */
   totalAmount: number;
+  /** The tender's additional charges, both spread-in and separate. */
+  charges: AdditionalChargeDto[];
+  /** totalAmount + charges kept separate (addToRates false) — the quotation's grand total. */
+  grandTotal: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -194,6 +225,7 @@ export interface UpdateBoqItemInput {
   category?: string;
   unit?: string;
   quantity?: number;
+  /** Rate before additional charges (what markup produces); the spread-in share is added on top. */
   rate?: number;
   gstRate?: number;
   /** Empty string clears it back to unconfirmed; a non-empty value confirms + propagates. */

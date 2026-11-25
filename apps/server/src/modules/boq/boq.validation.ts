@@ -59,6 +59,19 @@ export const updateBoqItemSchema = z
   .refine((data) => Object.keys(data).length > 0, { message: "No fields to update" });
 export type UpdateBoqItemBody = z.infer<typeof updateBoqItemSchema>;
 
+/** A whole-tender (or whole-RFQ) additional cost. Positive: a discount is not a charge. */
+export const additionalChargeSchema = z.object({
+  description: z.string().trim().min(1).max(200),
+  amount: z.number().positive().max(1e12),
+  addToRates: z.boolean().optional(),
+});
+export type AdditionalChargeBody = z.infer<typeof additionalChargeSchema>;
+
+export const updateAdditionalChargeSchema = additionalChargeSchema
+  .partial()
+  .refine((data) => Object.keys(data).length > 0, { message: "No fields to update" });
+export type UpdateAdditionalChargeBody = z.infer<typeof updateAdditionalChargeSchema>;
+
 export const bulkUpdateBoqItemsSchema = z.object({
   itemIds: z.array(z.string().uuid()).min(1),
   markupPercent: z.number().min(-100).max(1000),

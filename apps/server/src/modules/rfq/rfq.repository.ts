@@ -23,6 +23,7 @@ const rfqDetailArgs = {
       include: { vendor: { select: vendorSummarySelect } },
       orderBy: { createdAt: "asc" },
     },
+    charges: { include: { vendor: { select: vendorSummarySelect } }, orderBy: { createdAt: "asc" } },
   },
 } satisfies Prisma.RfqDefaultArgs;
 
@@ -171,6 +172,16 @@ export interface IRfqRepository {
     filters: ItemPriceFilters,
   ): Promise<{ items: ItemPriceRow[]; totalItems: number }>;
   findBoqItemCategories(ids: string[]): Promise<{ id: string; category: string | null }[]>;
+  createCharge(rfqId: string, data: RfqChargeData): Promise<void>;
+  updateCharge(id: string, data: Partial<RfqChargeData>): Promise<void>;
+  deleteCharge(id: string): Promise<void>;
+}
+
+export interface RfqChargeData {
+  description: string;
+  amount: number;
+  addToRates: boolean;
+  vendorId: string | null;
 }
 
 export class RfqRepository implements IRfqRepository {
@@ -300,6 +311,19 @@ export class RfqRepository implements IRfqRepository {
 
   async updateStatus(id: string, status: RfqStatus): Promise<void> {
     await this.prisma.rfq.update({ where: { id }, data: { status } });
+  }
+
+  // Charge ids are checked against an already business-scoped RFQ's `charges` in the service.
+  async createCharge(rfqId: string, data: RfqChargeData): Promise<void> {
+    await this.prisma.rfqCharge.create({ data: { rfqId, ...data } });
+  }
+
+  async updateCharge(id: string, data: Partial<RfqChargeData>): Promise<void> {
+    await this.prisma.rfqCharge.update({ where: { id }, data });
+  }
+
+  async deleteCharge(id: string): Promise<void> {
+    await this.prisma.rfqCharge.delete({ where: { id } });
   }
 
   async selectQuote(rfqItemId: string, quoteId: string | null, manual: boolean): Promise<void> {

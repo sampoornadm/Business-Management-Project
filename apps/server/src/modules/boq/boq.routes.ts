@@ -8,11 +8,13 @@ import { createUploadMiddleware } from "../attachments/upload.middleware.js";
 
 import type { BoqController } from "./boq.controller.js";
 import {
+  additionalChargeSchema,
   bulkUpdateBoqItemsSchema,
   commitBoqSchema,
   compareBoqQuerySchema,
   confirmRateSourceSchema,
   createBoqItemSchema,
+  updateAdditionalChargeSchema,
   updateBoqItemSchema,
   upsertRateAnalysisSchema,
 } from "./boq.validation.js";
@@ -83,6 +85,65 @@ export function createBoqRouter(controller: BoqController): Router {
    *       201: { description: BOQ committed }
    */
   router.get("/:id/boq", authenticateMiddleware, requirePermission("boq:read"), controller.getCurrent);
+
+  /**
+   * @openapi
+   * /tenders/{id}/charges:
+   *   post:
+   *     tags: [BOQ]
+   *     summary: Add a whole-tender additional charge (spread into item rates or kept separate)
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       201: { description: The tender's charges }
+   */
+  router.post(
+    "/:id/charges",
+    authenticateMiddleware,
+    requirePermission("boq:update"),
+    validate(additionalChargeSchema),
+    controller.addCharge,
+  );
+
+  /**
+   * @openapi
+   * /tenders/{id}/charges/{chargeId}:
+   *   patch:
+   *     tags: [BOQ]
+   *     summary: Edit a tender additional charge (amount, description, add-to-rates)
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - { in: path, name: id, required: true, schema: { type: string } }
+   *       - { in: path, name: chargeId, required: true, schema: { type: string } }
+   *     responses:
+   *       200: { description: The tender's charges }
+   *   delete:
+   *     tags: [BOQ]
+   *     summary: Delete a tender additional charge
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - { in: path, name: id, required: true, schema: { type: string } }
+   *       - { in: path, name: chargeId, required: true, schema: { type: string } }
+   *     responses:
+   *       200: { description: The tender's charges }
+   */
+  router.patch(
+    "/:id/charges/:chargeId",
+    authenticateMiddleware,
+    requirePermission("boq:update"),
+    validate(updateAdditionalChargeSchema),
+    controller.updateCharge,
+  );
+  router.delete(
+    "/:id/charges/:chargeId",
+    authenticateMiddleware,
+    requirePermission("boq:update"),
+    controller.deleteCharge,
+  );
   router.post(
     "/:id/boq",
     authenticateMiddleware,

@@ -28,6 +28,7 @@ import { buildQuoteSheet, ITEM_TABLE_HEADER_ROW } from "../quote-sheet.js";
 import type {
   CreateRfqData,
   IRfqRepository,
+  RfqChargeData,
   RfqDetail,
   RfqFilters,
   RfqItemDetail,
@@ -65,6 +66,7 @@ class FakeRfqRepository implements IRfqRepository {
         quotes: [],
       })),
       vendorInvites: [],
+      charges: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     } as unknown as RfqDetail;
@@ -150,11 +152,25 @@ class FakeRfqRepository implements IRfqRepository {
     return invite ? { id: invite.id } : null;
   }
 
+  async createCharge(rfqId: string, data: RfqChargeData) {
+    const vendor = data.vendorId ? { id: data.vendorId, name: `Vendor ${data.vendorId.slice(0, 4)}` } : null;
+    (this.rfqs.get(rfqId)!.charges as unknown[]).push({ id: randomUUID(), rfqId, ...data, vendor, createdAt: new Date() });
+  }
+
+  async updateCharge(id: string, data: Partial<RfqChargeData>) {
+    for (const rfq of this.rfqs.values()) Object.assign(rfq.charges.find((c) => c.id === id) ?? {}, data);
+  }
+
+  async deleteCharge(id: string) {
+    for (const rfq of this.rfqs.values()) rfq.charges = rfq.charges.filter((c) => c.id !== id);
+  }
+
   async addVendorInvite(rfqId: string, vendorId: string) {
     const rfq = this.rfqs.get(rfqId);
     if (!rfq) throw new Error("not found");
     (rfq.vendorInvites as unknown[]).push({
       id: randomUUID(),
+      vendorId,
       vendor: { id: vendorId, name: `Vendor ${vendorId.slice(0, 4)}` },
       status: "INVITED",
       createdAt: new Date(),
@@ -354,6 +370,27 @@ class FakeBoqRepository implements Partial<IBoqRepository> {
 
   async setBaseRate(id: string, data: object) {
     Object.assign(this.items.get(id)!, data);
+  }
+
+  async findItemsByBoqId(boqId: string) {
+    return [...this.items.values()].filter((item) => item.boqId === boqId);
+  }
+
+  charges: { tenderId: string; sourceRfqId: string | null; amount: number; addToRates: boolean; vendorId: string | null; description: string }[] = [];
+
+  async findTenderCharges(tenderId: string) {
+    return this.charges.filter((charge) => charge.tenderId === tenderId) as never;
+  }
+
+  async replaceRfqTenderCharges(tenderId: string, rfqId: string, rows: Omit<(typeof this.charges)[number], "tenderId">[]) {
+    this.charges = [
+      ...this.charges.filter((charge) => !(charge.tenderId === tenderId && charge.sourceRfqId === rfqId)),
+      ...rows.map((row) => ({ tenderId, ...row })),
+    ];
+  }
+
+  async applyChargeLoads(updates: { id: string }[]) {
+    for (const { id, ...data } of updates) Object.assign(this.items.get(id)!, data);
   }
 }
 
@@ -1336,6 +1373,30 @@ describe("RfqService", () => {
       expect(boqRepository.items.get(boqItemId)).toMatchObject({ baseRate: 100, markupPercent: 15, rate: 115, amount: 1150 });
     });
 
+    it("copies own and buying-from vendors' charges to the tender and spreads them into rates", async () => {
+      const boqItemId = randomUUID();
+      boqItem(boqItemId);
+      const rfq = await tenderRfq([{ boqItemId, description: "OPC Cement" }]);
+      await service.upsertQuote(rfq.items[0]!.id, vendorA, { rate: 100 }, actorId, businessId);
+      await service.addCharge(rfq.id, { description: "Test certificate", amount: 115 }, actorId, businessId);
+      await service.addCharge(rfq.id, { description: "Delivery", amount: 50, vendorId: vendorA, addToRates: false }, actorId, businessId);
+      await service.addCharge(rfq.id, { description: "P&F", amount: 999, vendorId: vendorB }, actorId, businessId);
+
+      const result = await service.finalizeRates(rfq.id, actorId, businessId);
+
+      expect(result.tenderChargesCopied).toBe(2);
+      expect(boqRepository.charges.map((c) => c.description).sort()).toEqual(["Delivery", "Test certificate"]);
+      // 115 + 10% (115 own charge over a 1150 subtotal); the separate delivery charge stays out.
+      expect(boqRepository.items.get(boqItemId)).toMatchObject({ rate: 126.5, chargeLoad: 11.5, amount: 1265 });
+    });
+
+    it("rejects a charge from a vendor not invited to the RFQ", async () => {
+      const rfq = await tenderRfq([{ description: "OPC Cement" }]);
+      await expect(
+        service.addCharge(rfq.id, { description: "Delivery", amount: 10, vendorId: randomUUID() }, actorId, businessId),
+      ).rejects.toThrow(BadRequestError);
+    });
+
     it("keeps an item's existing markup on re-finalize", async () => {
       const boqItemId = randomUUID();
       boqItem(boqItemId, { baseRate: 90, markupPercent: 20 });
@@ -1393,7 +1454,7 @@ describe("RfqService", () => {
 
       const result = await service.finalizeRates(rfq.id, actorId, businessId);
 
-      expect(result).toEqual({ vendorRatesRecorded: 1, tenderItemsUpdated: 0, tenderItemsSkipped: 0, tenderLocked: false });
+      expect(result).toEqual({ vendorRatesRecorded: 1, tenderItemsUpdated: 0, tenderItemsSkipped: 0, tenderLocked: false, tenderChargesCopied: 0 });
       expect(ratesRepository.recorded[0]).toMatchObject({ sourceTenderId: null, isDefault: true, vendorId: vendorA });
     });
 

@@ -604,6 +604,7 @@ model Tender {
   comparativeStatement ComparativeStatement?
   boqs                 Boq[]
   rfqs                 Rfq[]
+  charges              TenderCharge[]
   purchaseOrders       PurchaseOrder[]
   bills                Bill[]
   submissions          TenderSubmission[]
@@ -936,6 +937,11 @@ model BoqItem {
   baseRateQuoteId String?
   baseRateQuote   RfqQuote? @relation(fields: [baseRateQuoteId], references: [id], onDelete: SetNull)
 
+  // Per-unit share of the tender's additional charges (TenderCharge.addToRates) already included
+  // in `rate`, so rate stays the client-facing figure every consumer reads. Rate before charges
+  // = rate - chargeLoad. Recomputed for the whole BOQ after every pricing write (boq-pricing.ts).
+  chargeLoad      Float?
+
   rateBreakdown       BoqItemRateBreakdown?
   comparativeBidItems ComparativeBidItem[]
 
@@ -1062,6 +1068,8 @@ model Vendor {
   itemTags        VendorItemTag[]
   rfqInvites      RfqVendor[]
   quotes          RfqQuote[]
+  rfqCharges      RfqCharge[]
+  tenderCharges   TenderCharge[]
   historicalRates HistoricalRate[]
   purchaseOrders  PurchaseOrder[]
   ratings         VendorRating[]
@@ -1118,6 +1126,7 @@ model Rfq {
   createdBy   User   @relation("RfqCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   items          RfqItem[]
+  charges        RfqCharge[]
   vendorInvites  RfqVendor[]
   purchaseOrders PurchaseOrder[]
 
@@ -1282,6 +1291,47 @@ model RfqVendor {
   @@unique([rfqId, vendorId])
   @@index([vendorId])
   @@map("rfq_vendors")
+}
+
+// Whole-RFQ additional cost (test certificates, delivery, P&F...), not tied to any item.
+// vendorId = the vendor who quoted it; null = our own cost. Copied to TenderCharge on
+// "Finalize rates" (own charges + charges of vendors with at least one selected quote).
+model RfqCharge {
+  id          String  @id @default(uuid())
+  rfqId       String
+  rfq         Rfq     @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  vendorId    String?
+  vendor      Vendor? @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  description String
+  amount      Float
+  // true = spread into item rates by item value; false = shown as its own line on the quotation.
+  addToRates  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([rfqId])
+  @@map("rfq_charges")
+}
+
+// Whole-tender additional cost. addToRates = spread into BoqItem rates in proportion to each
+// line's amount (BoqItem.chargeLoad); false = a separate line on the quotation and in the total.
+// sourceRfqId set = copied by that RFQ's "Finalize rates" (re-finalizing replaces those rows);
+// null = added by hand on the tender.
+model TenderCharge {
+  id          String  @id @default(uuid())
+  tenderId    String
+  tender      Tender  @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  vendorId    String?
+  vendor      Vendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  sourceRfqId String?
+  description String
+  amount      Float
+  addToRates  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([tenderId])
+  @@map("tender_charges")
 }
 
 model RfqQuote {

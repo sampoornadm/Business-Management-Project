@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type {
+  AdditionalChargeDto,
   BoqCompareDto,
   BoqCompareLineDto,
   BoqDto,
@@ -26,8 +27,8 @@ import type { IItemsRepository } from "../items/items.repository.js";
 import type { IHistoricalRatesRepository } from "../rates/rates.repository.js";
 import type { ITendersRepository } from "../tenders/tenders.repository.js";
 
-import { markupFromRate, rateFromMarkup } from "./boq-pricing.js";
-import { sumItemAmounts, toBoqDto, toBoqListItemDto } from "./boq.mapper.js";
+import { markupFromRate, rateFromMarkup, rebalanceChargeLoads } from "./boq-pricing.js";
+import { sumItemAmounts, toAdditionalChargeDto, toBoqDto, toBoqListItemDto } from "./boq.mapper.js";
 import { parseBoqFile } from "./boq.parser.js";
 import type {
   BoqItemWithBreakdown,
@@ -36,10 +37,12 @@ import type {
   UpsertRateBreakdownData,
 } from "./boq.repository.js";
 import type {
+  AdditionalChargeBody,
   BulkUpdateBoqItemsBody,
   CommitBoqBody,
   ConfirmRateSourceBody,
   CreateBoqItemBody,
+  UpdateAdditionalChargeBody,
   UpdateBoqItemBody,
   UpsertRateAnalysisBody,
 } from "./boq.validation.js";
@@ -74,10 +77,16 @@ export class BoqService {
     if (tender.ratesLockedAt) throw new ConflictError("Tender rates are finalized — unlock them to edit");
   }
 
-  private async assertBoqRatesUnlocked(boqId: string, businessId: string): Promise<void> {
+  /** Returns the BOQ's tender id, for the charge rebalance that follows the write. */
+  private async assertBoqRatesUnlocked(boqId: string, businessId: string): Promise<string> {
     const boq = await this.boqRepository.findBoqById(boqId, businessId);
     if (!boq) throw new NotFoundError("BOQ not found");
     await this.assertRatesUnlocked(boq.tenderId, businessId);
+    return boq.tenderId;
+  }
+
+  private rebalanceCharges(tenderId: string, businessId: string): Promise<void> {
+    return rebalanceChargeLoads(this.boqRepository, tenderId, businessId);
   }
 
   /**
@@ -207,6 +216,7 @@ export class BoqService {
       entityId: tenderId,
       metadata: { boqId, version, itemCount: rows.length, ...context },
     });
+    await this.rebalanceCharges(tenderId, businessId);
 
     await this.queueEnrichment(boqId, businessId);
 
@@ -217,15 +227,17 @@ export class BoqService {
     const boq = await this.boqRepository.findBoqById(boqId, businessId);
     if (!boq) throw new NotFoundError("BOQ not found");
     const items = await this.boqRepository.findItemsByBoqId(boqId);
-    return toBoqDto(boq, items);
+    // Charges belong to the tender and are spread over its current BOQ only; an old version's
+    // frozen rates say nothing about today's charges.
+    const charges = boq.isCurrent ? await this.boqRepository.findTenderCharges(boq.tenderId) : [];
+    return toBoqDto(boq, items, charges);
   }
 
   async getCurrentBoq(tenderId: string, businessId: string): Promise<BoqDto> {
     await this.assertTenderExists(tenderId, businessId);
     const boq = await this.boqRepository.findCurrentBoq(tenderId, businessId);
     if (!boq) throw new NotFoundError("This tender has no BOQ yet");
-    const items = await this.boqRepository.findItemsByBoqId(boq.id);
-    return toBoqDto(boq, items);
+    return this.buildBoqDto(boq.id, businessId);
   }
 
   async listVersions(tenderId: string, businessId: string): Promise<BoqListItemDto[]> {
@@ -254,15 +266,17 @@ export class BoqService {
     const existing = await this.boqRepository.findItemById(itemId, businessId);
     if (!existing) throw new NotFoundError("BOQ item not found");
     const { markupPercent: requestedMarkup, ...fields } = data;
-    if (fields.quantity !== undefined || fields.rate !== undefined || requestedMarkup !== undefined) {
-      await this.assertBoqRatesUnlocked(existing.boqId, businessId);
-    }
+    const pricingWrite = fields.quantity !== undefined || fields.rate !== undefined || requestedMarkup !== undefined;
+    const tenderId = pricingWrite ? await this.assertBoqRatesUnlocked(existing.boqId, businessId) : null;
 
     // A line priced from a vendor base rate keeps rate and markup in step: a new markup sets the
     // rate, a hand-typed rate sets the markup. Lines without a base rate ignore markup entirely.
     const quantity = fields.quantity !== undefined ? fields.quantity : existing.quantity;
     let rate = fields.rate !== undefined ? fields.rate : existing.rate;
     let markupPercent: number | null | undefined;
+    // A new rate (typed, or from markup) is the rate before additional charges; the rebalance
+    // below adds the line's share back on top.
+    const rateChanged = fields.rate !== undefined || (existing.baseRate !== null && requestedMarkup !== undefined);
     if (existing.baseRate !== null) {
       if (requestedMarkup !== undefined) {
         markupPercent = requestedMarkup;
@@ -281,7 +295,7 @@ export class BoqService {
 
     await this.boqRepository.updateItem(itemId, {
       ...fields,
-      ...(rate !== existing.rate ? { rate } : {}),
+      ...(rateChanged ? { rate, chargeLoad: null } : {}),
       ...(markupPercent !== undefined ? { markupPercent } : {}),
       amount,
       ...(hsnCode !== undefined ? { hsnCode, hsnCodeConfirmed } : {}),
@@ -293,6 +307,7 @@ export class BoqService {
       entityId: itemId,
       metadata: { boqId: existing.boqId, changes: data },
     });
+    if (tenderId) await this.rebalanceCharges(tenderId, businessId);
 
     if (hsnCode) {
       await this.propagateHsnToItem(existing, hsnCode, data.gstRate ?? existing.gstRate, actorId, businessId);
@@ -392,13 +407,14 @@ export class BoqService {
       entityId: item.id,
       metadata: { boqId: boq.id, description: data.description },
     });
+    await this.rebalanceCharges(tenderId, businessId);
     return this.buildBoqDto(boq.id, businessId);
   }
 
   async deleteItem(itemId: string, actorId: string, businessId: string): Promise<BoqDto> {
     const existing = await this.boqRepository.findItemById(itemId, businessId);
     if (!existing) throw new NotFoundError("BOQ item not found");
-    await this.assertBoqRatesUnlocked(existing.boqId, businessId);
+    const tenderId = await this.assertBoqRatesUnlocked(existing.boqId, businessId);
 
     await this.boqRepository.deleteItem(itemId);
     await this.auditService.log({
@@ -408,6 +424,7 @@ export class BoqService {
       entityId: itemId,
       metadata: { boqId: existing.boqId, description: existing.description },
     });
+    await this.rebalanceCharges(tenderId, businessId);
     return this.buildBoqDto(existing.boqId, businessId);
   }
 
@@ -424,7 +441,7 @@ export class BoqService {
     if (items.some((item) => item.boqId !== boqId)) {
       throw new BadRequestError("All selected items must belong to the same BOQ");
     }
-    await this.assertBoqRatesUnlocked(boqId, businessId);
+    const tenderId = await this.assertBoqRatesUnlocked(boqId, businessId);
 
     // Sets (not compounds) the markup on every selected line priced from a base rate; lines
     // priced by hand have nothing to mark up from and are skipped.
@@ -444,6 +461,7 @@ export class BoqService {
       entityId: boqId,
       metadata: { itemIds: input.itemIds, markupPercent: input.markupPercent, skipped },
     });
+    await this.rebalanceCharges(tenderId, businessId);
     return { ...(await this.buildBoqDto(boqId, businessId)), skipped };
   }
 
@@ -455,7 +473,7 @@ export class BoqService {
   ): Promise<BoqDto> {
     const existing = await this.boqRepository.findItemById(itemId, businessId);
     if (!existing) throw new NotFoundError("BOQ item not found");
-    await this.assertBoqRatesUnlocked(existing.boqId, businessId);
+    const tenderId = await this.assertBoqRatesUnlocked(existing.boqId, businessId);
 
     const baseCost =
       input.materialCost + input.laborCost + input.machineryCost + input.transportCost;
@@ -473,6 +491,7 @@ export class BoqService {
     await this.boqRepository.updateItem(itemId, {
       rate: computedRate,
       amount,
+      chargeLoad: null,
       ...(existing.baseRate !== null
         ? { markupPercent: markupFromRate(existing.baseRate, computedRate, existing.markupPercent) }
         : {}),
@@ -485,6 +504,7 @@ export class BoqService {
       entityId: itemId,
       metadata: { boqId: existing.boqId, computedRate },
     });
+    await this.rebalanceCharges(tenderId, businessId);
     return this.buildBoqDto(existing.boqId, businessId);
   }
 
@@ -503,7 +523,7 @@ export class BoqService {
     const existing = await this.boqRepository.findItemById(itemId, businessId);
     if (!existing) throw new NotFoundError("BOQ item not found");
 
-    await this.assertBoqRatesUnlocked(existing.boqId, businessId);
+    const tenderId = await this.assertBoqRatesUnlocked(existing.boqId, businessId);
     const rate = body.override?.rate ?? existing.suggestedRate;
     if (rate === null) throw new BadRequestError("This item has no AI-suggested rate to confirm");
     const rateSourceId = body.override?.rateSourceId ?? existing.aiRateSourceId;
@@ -527,6 +547,7 @@ export class BoqService {
         manualPick: Boolean(body.override),
       },
     });
+    await this.rebalanceCharges(tenderId, businessId);
     return this.buildBoqDto(existing.boqId, businessId);
   }
 
@@ -555,6 +576,70 @@ export class BoqService {
     });
     await this.boqRepository.rejectRateSource(itemId);
     return this.buildBoqDto(existing.boqId, businessId);
+  }
+
+  /** Charge added by hand on the tender (our own cost); RFQ-quoted ones arrive via Finalize rates. */
+  async addCharge(
+    tenderId: string,
+    input: AdditionalChargeBody,
+    actorId: string,
+    businessId: string,
+  ): Promise<AdditionalChargeDto[]> {
+    await this.assertRatesUnlocked(tenderId, businessId);
+    const row = { description: input.description, amount: input.amount, addToRates: input.addToRates ?? true };
+    await this.boqRepository.createTenderCharge(tenderId, { ...row, vendorId: null, sourceRfqId: null });
+    await this.auditService.log({
+      actorId,
+      action: "TENDER_CHARGE_ADDED",
+      entityType: "Tender",
+      entityId: tenderId,
+      metadata: row,
+    });
+    return this.afterChargeWrite(tenderId, businessId);
+  }
+
+  async updateCharge(
+    tenderId: string,
+    chargeId: string,
+    input: UpdateAdditionalChargeBody,
+    actorId: string,
+    businessId: string,
+  ): Promise<AdditionalChargeDto[]> {
+    await this.findChargeOrThrow(tenderId, chargeId, businessId);
+    await this.boqRepository.updateTenderCharge(chargeId, input);
+    await this.auditService.log({
+      actorId,
+      action: "TENDER_CHARGE_UPDATED",
+      entityType: "Tender",
+      entityId: tenderId,
+      metadata: { chargeId, changes: input },
+    });
+    return this.afterChargeWrite(tenderId, businessId);
+  }
+
+  async deleteCharge(tenderId: string, chargeId: string, actorId: string, businessId: string): Promise<AdditionalChargeDto[]> {
+    const charge = await this.findChargeOrThrow(tenderId, chargeId, businessId);
+    await this.boqRepository.deleteTenderCharge(chargeId);
+    await this.auditService.log({
+      actorId,
+      action: "TENDER_CHARGE_DELETED",
+      entityType: "Tender",
+      entityId: tenderId,
+      metadata: { chargeId, description: charge.description, amount: charge.amount },
+    });
+    return this.afterChargeWrite(tenderId, businessId);
+  }
+
+  private async findChargeOrThrow(tenderId: string, chargeId: string, businessId: string) {
+    await this.assertRatesUnlocked(tenderId, businessId);
+    const charge = await this.boqRepository.findTenderChargeById(chargeId, businessId);
+    if (!charge || charge.tenderId !== tenderId) throw new NotFoundError("Charge not found for this tender");
+    return charge;
+  }
+
+  private async afterChargeWrite(tenderId: string, businessId: string): Promise<AdditionalChargeDto[]> {
+    await this.rebalanceCharges(tenderId, businessId);
+    return (await this.boqRepository.findTenderCharges(tenderId)).map(toAdditionalChargeDto);
   }
 
   /**

@@ -69,6 +69,12 @@ const cut = (text: string, start: number, end: number) => `${text.slice(0, start
 
 function findPrice(text: string): PriceHit | null {
   const patterns: Array<{ re: RegExp; rateGroup: number; qtyGroup?: number }> = [
+    // Our own sent line echoed back with a rate: "... - Qty - 100 Mtr - 450".
+    {
+      re: new RegExp(`\\bqty\\s*[-:]\\s*${NUM}\\s*[a-z. ]*?\\s*[-:=@]\\s*${CURRENCY}?\\s*${NUM}`, "i"),
+      qtyGroup: 1,
+      rateGroup: 2,
+    },
     { re: new RegExp(`${NUM}\\s*@\\s*${CURRENCY}?\\s*${NUM}`, "i"), qtyGroup: 1, rateGroup: 2 },
     { re: new RegExp(`@\\s*${CURRENCY}?\\s*${NUM}`, "i"), rateGroup: 1 },
     { re: new RegExp(`${CURRENCY}\\s*${NUM}`, "i"), rateGroup: 1 },

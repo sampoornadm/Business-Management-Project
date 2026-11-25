@@ -1,6 +1,8 @@
 "use client";
 
 import type {
+  AdditionalChargeDto,
+  AdditionalChargeInput,
   ApiResponse,
   BoqCompareDto,
   BoqDto,
@@ -12,6 +14,7 @@ import type {
   CommitBoqInput,
   ConfirmBoqRateSourceInput,
   CreateBoqItemInput,
+  UpdateAdditionalChargeInput,
   UpdateBoqItemInput,
   UpsertBoqItemRateAnalysisInput,
 } from "@bmp/types";
@@ -191,4 +194,28 @@ export function useCompareBoq(tenderId: string | undefined, withTenderId: string
     },
     enabled: Boolean(tenderId) && Boolean(withTenderId),
   });
+}
+
+/** Whole-tender additional charges. Every write re-spreads the add-to-rates ones, so the BOQ is refetched. */
+export function useTenderCharges(tenderId: string) {
+  const queryClient = useQueryClient();
+  const onSuccess = () => invalidateBoq(queryClient, tenderId);
+  const base = `/tenders/${tenderId}/charges`;
+  return {
+    add: useMutation({
+      mutationFn: async (input: AdditionalChargeInput) =>
+        unwrap((await apiClient.post<ApiResponse<AdditionalChargeDto[]>>(base, input)).data),
+      onSuccess,
+    }),
+    update: useMutation({
+      mutationFn: async ({ id, ...input }: UpdateAdditionalChargeInput & { id: string }) =>
+        unwrap((await apiClient.patch<ApiResponse<AdditionalChargeDto[]>>(`${base}/${id}`, input)).data),
+      onSuccess,
+    }),
+    remove: useMutation({
+      mutationFn: async (id: string) =>
+        unwrap((await apiClient.delete<ApiResponse<AdditionalChargeDto[]>>(`${base}/${id}`)).data),
+      onSuccess,
+    }),
+  };
 }

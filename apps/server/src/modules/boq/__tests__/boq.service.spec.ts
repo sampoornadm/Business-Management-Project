@@ -16,6 +16,7 @@ import type { AuditService } from "../../audit/audit.service.js";
 import type { IItemsRepository } from "../../items/items.repository.js";
 import type { HistoricalRateMatch, IHistoricalRatesRepository } from "../../rates/rates.repository.js";
 import type { ITendersRepository } from "../../tenders/tenders.repository.js";
+import type { ChargeLoadUpdate } from "../boq-pricing.js";
 import type {
   BoqItemWithBreakdown,
   BoqWithCreator,
@@ -25,6 +26,8 @@ import type {
   CreateBoqItemData,
   IBoqRepository,
   UpdateBoqItemData,
+  TenderChargeRow,
+  TenderChargeWithVendor,
   UpdateBoqItemEnrichmentData,
   UpsertRateBreakdownData,
 } from "../boq.repository.js";
@@ -207,6 +210,36 @@ class FakeBoqRepository implements IBoqRepository {
     });
   }
 
+  charges: TenderChargeWithVendor[] = [];
+
+  async applyChargeLoads(updates: ChargeLoadUpdate[]) {
+    for (const { id, ...data } of updates) Object.assign(this.items.get(id)!, data);
+  }
+
+  async findTenderCharges(tenderId: string) {
+    return this.charges.filter((charge) => charge.tenderId === tenderId);
+  }
+
+  async findTenderChargeById(id: string, _businessId: string) {
+    return this.charges.find((charge) => charge.id === id) ?? null;
+  }
+
+  async createTenderCharge(tenderId: string, row: TenderChargeRow) {
+    this.charges.push({ id: randomUUID(), tenderId, ...row, vendor: null, createdAt: new Date() });
+  }
+
+  async updateTenderCharge(id: string, data: Partial<TenderChargeRow>) {
+    Object.assign(this.charges.find((charge) => charge.id === id)!, data);
+  }
+
+  async deleteTenderCharge(id: string) {
+    this.charges = this.charges.filter((charge) => charge.id !== id);
+  }
+
+  async replaceRfqTenderCharges(tenderId: string, rfqId: string, rows: TenderChargeRow[]) {
+    this.charges = this.charges.filter((charge) => !(charge.tenderId === tenderId && charge.sourceRfqId === rfqId));
+    for (const row of rows) await this.createTenderCharge(tenderId, row);
+  }
 }
 
 class FakeHistoricalRatesRepository implements Partial<IHistoricalRatesRepository> {
@@ -383,6 +416,32 @@ describe("BoqService", () => {
   function giveBaseRate(itemId: string, baseRate: number, markupPercent: number) {
     Object.assign(boqRepository.items.get(itemId)!, { baseRate, markupPercent, rate: round2(baseRate * (1 + markupPercent / 100)) });
   }
+
+  it("spreads add-to-rates charges by line value and keeps separate ones out of the rates", async () => {
+    const { excavation, backfilling } = await commitTwoItems(); // 3 × 50 + 40 × 20 = 950
+
+    await service.addCharge(tenderId, { description: "P&F", amount: 95 }, actorId, businessId); // +10%
+    let boq = await service.getCurrentBoq(tenderId, businessId);
+    const rateOf = (id: string) => boq.items.find((i) => i.id === id)!;
+    expect(rateOf(excavation)).toMatchObject({ rate: 55, chargeLoad: 5, amount: 165 });
+    expect(rateOf(backfilling)).toMatchObject({ rate: 22, chargeLoad: 2, amount: 880 });
+    expect(boq.grandTotal).toBe(1045);
+
+    // A hand-typed rate is before charges; the line's share goes back on top.
+    boq = await service.updateItem(excavation, { rate: 50 }, actorId, businessId);
+    expect(rateOf(excavation)).toMatchObject({ rate: 55, chargeLoad: 5 });
+
+    await service.updateCharge(tenderId, boq.charges[0]!.id, { addToRates: false }, actorId, businessId);
+    boq = await service.getCurrentBoq(tenderId, businessId);
+    expect(rateOf(excavation)).toMatchObject({ rate: 50, chargeLoad: null });
+    expect(boq.totalAmount).toBe(950);
+    expect(boq.grandTotal).toBe(1045);
+
+    tendersRepository.lockedTenderIds.add(tenderId);
+    await expect(service.addCharge(tenderId, { description: "Freight", amount: 10 }, actorId, businessId)).rejects.toThrow(
+      ConflictError,
+    );
+  });
 
   it("updateItem with markupPercent recomputes rate and amount from baseRate", async () => {
     const { excavation } = await commitTwoItems();

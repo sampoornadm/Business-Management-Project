@@ -26,7 +26,7 @@ import type { ScopedRequestContext } from "../../core/interfaces/request-context
 import type { EmailService } from "../../infra/mailer/email.service.js";
 import { round2 } from "../../shared/utils/math.js";
 import type { AuditService } from "../audit/audit.service.js";
-import { rateFromMarkup } from "../boq/boq-pricing.js";
+import { rateFromMarkup, rebalanceChargeLoads } from "../boq/boq-pricing.js";
 import type { IBoqRepository } from "../boq/boq.repository.js";
 import type { IBusinessesRepository } from "../businesses/businesses.repository.js";
 import type { ContactsService } from "../contacts/contacts.service.js";
@@ -44,11 +44,13 @@ import { toItemPriceHistoryDto, toRfqDto, toRfqListItemDto } from "./rfq.mapper.
 import type {
   CreateRfqData,
   IRfqRepository,
+  RfqChargeData,
   ItemPriceFilters,
   RfqDetail,
   RfqFilters,
   UpdateRfqData,
 } from "./rfq.repository.js";
+import type { RfqChargeBody, UpdateRfqChargeBody } from "./rfq.validation.js";
 import { normalizeTechnicalDeviation } from "./technical-deviation.js";
 import { parseQuoteText, splitPasteLines } from "./text-quote-parser.js";
 
@@ -766,6 +768,74 @@ export class RfqService {
   }
 
 
+  /** Whole-RFQ additional charge; a vendor's must be one invited to this RFQ. */
+  async addCharge(rfqId: string, input: RfqChargeBody, actorId: string, businessId: string): Promise<RfqDto> {
+    const rfq = await this.getEditableForCharges(rfqId, businessId);
+    const data: RfqChargeData = {
+      description: input.description,
+      amount: input.amount,
+      addToRates: input.addToRates ?? true,
+      vendorId: this.assertChargeVendor(rfq, input.vendorId ?? null),
+    };
+    await this.rfqRepository.createCharge(rfqId, data);
+    await this.auditService.log({ actorId, action: "RFQ_CHARGE_ADDED", entityType: "Rfq", entityId: rfqId, metadata: { ...data } });
+    return this.getById(rfqId, businessId);
+  }
+
+  async updateCharge(
+    rfqId: string,
+    chargeId: string,
+    input: UpdateRfqChargeBody,
+    actorId: string,
+    businessId: string,
+  ): Promise<RfqDto> {
+    const rfq = await this.getEditableForCharges(rfqId, businessId);
+    if (!rfq.charges.some((charge) => charge.id === chargeId)) throw new NotFoundError("Charge not found on this RFQ");
+    const data: Partial<RfqChargeData> = {
+      ...(input.description !== undefined ? { description: input.description } : {}),
+      ...(input.amount !== undefined ? { amount: input.amount } : {}),
+      ...(input.addToRates !== undefined ? { addToRates: input.addToRates } : {}),
+      ...(input.vendorId !== undefined ? { vendorId: this.assertChargeVendor(rfq, input.vendorId) } : {}),
+    };
+    await this.rfqRepository.updateCharge(chargeId, data);
+    await this.auditService.log({
+      actorId,
+      action: "RFQ_CHARGE_UPDATED",
+      entityType: "Rfq",
+      entityId: rfqId,
+      metadata: { chargeId, changes: data },
+    });
+    return this.getById(rfqId, businessId);
+  }
+
+  async deleteCharge(rfqId: string, chargeId: string, actorId: string, businessId: string): Promise<RfqDto> {
+    const rfq = await this.getEditableForCharges(rfqId, businessId);
+    const charge = rfq.charges.find((c) => c.id === chargeId);
+    if (!charge) throw new NotFoundError("Charge not found on this RFQ");
+    await this.rfqRepository.deleteCharge(chargeId);
+    await this.auditService.log({
+      actorId,
+      action: "RFQ_CHARGE_DELETED",
+      entityType: "Rfq",
+      entityId: rfqId,
+      metadata: { chargeId, description: charge.description, amount: charge.amount },
+    });
+    return this.getById(rfqId, businessId);
+  }
+
+  private async getEditableForCharges(rfqId: string, businessId: string): Promise<RfqDetail> {
+    const rfq = await this.getDetailOrThrow(rfqId, businessId);
+    if (FINALIZED_STATUSES.has(rfq.status)) throw new ConflictError("Reopen the RFQ to change its charges");
+    return rfq;
+  }
+
+  private assertChargeVendor(rfq: RfqDetail, vendorId: string | null): string | null {
+    if (vendorId !== null && !rfq.vendorInvites.some((invite) => invite.vendorId === vendorId)) {
+      throw new BadRequestError("That vendor is not invited to this RFQ");
+    }
+    return vendorId;
+  }
+
   /**
    * "Finalize rates": closes the RFQ, records every vendor's priced quote as that vendor's rate
    * for the inventory item (selected quote = default), and — when the RFQ belongs to a tender
@@ -811,7 +881,7 @@ export class RfqService {
 
     const tenderResult = rfq.tenderId
       ? await this.setTenderBaseRates(rfq, rfq.tenderId, businessId)
-      : { tenderItemsUpdated: 0, tenderItemsSkipped: 0, tenderLocked: false };
+      : { tenderItemsUpdated: 0, tenderItemsSkipped: 0, tenderLocked: false, tenderChargesCopied: 0 };
 
     await this.rfqRepository.updateStatus(rfqId, "CLOSED");
     const result: FinalizeRfqRatesResultDto = { vendorRatesRecorded, ...tenderResult };
@@ -833,7 +903,12 @@ export class RfqService {
     const linked = rfq.items.filter((item) => item.boqItemId);
     const tender = await this.tendersRepository.findById(tenderId, businessId);
     if (!tender || tender.ratesLockedAt) {
-      return { tenderItemsUpdated: 0, tenderItemsSkipped: linked.length, tenderLocked: Boolean(tender?.ratesLockedAt) };
+      return {
+        tenderItemsUpdated: 0,
+        tenderItemsSkipped: linked.length,
+        tenderLocked: Boolean(tender?.ratesLockedAt),
+        tenderChargesCopied: 0,
+      };
     }
     const currentBoq = await this.boqRepository.findCurrentBoq(tenderId, businessId);
     // boqItemId is client-supplied at RFQ creation (UUID-checked only); this business-scoped fetch
@@ -858,9 +933,32 @@ export class RfqService {
         markupPercent,
         rate,
         amount: boqItem.quantity !== null ? round2(boqItem.quantity * rate) : null,
+        chargeLoad: null,
       });
       tenderItemsUpdated += 1;
     }
-    return { tenderItemsUpdated, tenderItemsSkipped: linked.length - tenderItemsUpdated, tenderLocked: false };
+
+    // Our own charges always apply; a vendor's only when we are buying something from them.
+    const buyingFrom = new Set(
+      rfq.items.flatMap((item) => item.quotes.filter((q) => q.isSelected && !q.regretted && q.rate !== null)).map((q) => q.vendorId),
+    );
+    const charges = rfq.charges
+      .filter((charge) => charge.vendorId === null || buyingFrom.has(charge.vendorId))
+      .map((charge) => ({
+        description: charge.description,
+        amount: charge.amount,
+        addToRates: charge.addToRates,
+        vendorId: charge.vendorId,
+        sourceRfqId: rfq.id,
+      }));
+    await this.boqRepository.replaceRfqTenderCharges(tenderId, rfq.id, charges);
+    await rebalanceChargeLoads(this.boqRepository, tenderId, businessId);
+
+    return {
+      tenderItemsUpdated,
+      tenderItemsSkipped: linked.length - tenderItemsUpdated,
+      tenderLocked: false,
+      tenderChargesCopied: charges.length,
+    };
   }
 }

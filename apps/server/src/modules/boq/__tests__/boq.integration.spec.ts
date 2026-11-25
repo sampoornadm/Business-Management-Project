@@ -228,4 +228,44 @@ describe("BOQ upload/commit workflow (integration)", () => {
     await prisma.boq.deleteMany({ where: { id: isolationBoqId } });
     await prisma.tender.deleteMany({ where: { id: isolationTenderId } });
   });
+
+  it("spreads a tender charge into rates, keeps another business out, and drops it on delete", async () => {
+    const chargeTenderId = await createTender({ tenderNumber: `TND-BOQ-CHG-${randomUUID().slice(0, 8)}` });
+    await request(app)
+      .post(`/api/v1/tenders/${chargeTenderId}/boq`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ items: [{ tempId: "1", description: "Excavation", unit: "cum", quantity: 100, rate: 50 }] })
+      .expect(201);
+
+    const added = await request(app)
+      .post(`/api/v1/tenders/${chargeTenderId}/charges`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ description: "Test certificates", amount: 500 })
+      .expect(201);
+    const chargeId = added.body.data[0].id as string;
+
+    const boq = await request(app).get(`/api/v1/tenders/${chargeTenderId}/boq`).set("Authorization", `Bearer ${accessToken}`);
+    expect(boq.body.data.items[0]).toMatchObject({ rate: 55, chargeLoad: 5, amount: 5500 });
+    expect(boq.body.data.grandTotal).toBe(5500);
+
+    const otherLogin = await request(app).post("/api/v1/auth/login").send({ email: testUser.email, password: TEST_PASSWORD });
+    const switched = await request(app)
+      .post("/api/v1/auth/switch-business")
+      .set("Authorization", `Bearer ${otherLogin.body.data.accessToken}`)
+      .send({ businessId: testUser.secondBusinessId });
+    await request(app)
+      .delete(`/api/v1/tenders/${chargeTenderId}/charges/${chargeId}`)
+      .set("Authorization", `Bearer ${switched.body.data.accessToken as string}`)
+      .expect(404);
+
+    await request(app)
+      .delete(`/api/v1/tenders/${chargeTenderId}/charges/${chargeId}`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .expect(200);
+    const after = await request(app).get(`/api/v1/tenders/${chargeTenderId}/boq`).set("Authorization", `Bearer ${accessToken}`);
+    expect(after.body.data.items[0]).toMatchObject({ rate: 50, chargeLoad: null, amount: 5000 });
+
+    await prisma.boq.deleteMany({ where: { tenderId: chargeTenderId } });
+    await prisma.tender.deleteMany({ where: { id: chargeTenderId } });
+  });
 });

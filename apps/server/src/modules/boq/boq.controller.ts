@@ -8,7 +8,9 @@ import type {
   CommitBoqBody,
   CompareBoqQueryParsed,
   ConfirmRateSourceBody,
+  AdditionalChargeBody,
   CreateBoqItemBody,
+  UpdateAdditionalChargeBody,
   UpdateBoqItemBody,
   UpsertRateAnalysisBody,
 } from "./boq.validation.js";
@@ -39,6 +41,37 @@ export class BoqController {
   enrich = asyncHandler(async (req, res) => {
     await this.boqService.requestEnrichment(req.params.id!, req.params.boqId!, req.user!.businessId);
     sendSuccess(res, null, "BOQ enrichment queued", 202);
+  });
+
+  addCharge = asyncHandler(async (req, res) => {
+    const charges = await this.boqService.addCharge(
+      req.params.id!,
+      req.body as AdditionalChargeBody,
+      req.user!.id,
+      req.user!.businessId,
+    );
+    sendSuccess(res, charges, "Charge added", 201);
+  });
+
+  updateCharge = asyncHandler(async (req, res) => {
+    const charges = await this.boqService.updateCharge(
+      req.params.id!,
+      req.params.chargeId!,
+      req.body as UpdateAdditionalChargeBody,
+      req.user!.id,
+      req.user!.businessId,
+    );
+    sendSuccess(res, charges, "Charge updated");
+  });
+
+  deleteCharge = asyncHandler(async (req, res) => {
+    const charges = await this.boqService.deleteCharge(
+      req.params.id!,
+      req.params.chargeId!,
+      req.user!.id,
+      req.user!.businessId,
+    );
+    sendSuccess(res, charges, "Charge deleted");
   });
 
   getCurrent = asyncHandler(async (req, res) => {
