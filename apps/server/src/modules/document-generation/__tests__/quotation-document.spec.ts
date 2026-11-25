@@ -118,6 +118,10 @@ describe("generateQuotation", () => {
     const fakeBoqRepository = {
       findCurrentBoq: vi.fn().mockResolvedValue({ id: "boq-1" }),
       findItemsByBoqId: vi.fn().mockResolvedValue([item()]),
+      findTenderCharges: vi.fn().mockResolvedValue([
+        { description: "Delivery charges", amount: 500, addToRates: false },
+        { description: "Spread-in P&F", amount: 300, addToRates: true },
+      ]),
     };
 
     const { generateQuotation } = await import("../quotation-document.js");
@@ -131,7 +135,11 @@ describe("generateQuotation", () => {
 
     expect(result.mimeType).toBe("text/csv");
     expect(result.filename).toMatch(/^Quotation-TEN-001-\d{2}-\d{2}-\d{4}\.csv$/);
-    expect(result.buffer.toString("utf-8")).toContain("Widget");
+    const csv = result.buffer.toString("utf-8");
+    expect(csv).toContain("Widget");
+    // Separate charge prints as its own line; a spread-in one is already inside the rates.
+    expect(csv).toContain("Delivery charges");
+    expect(csv).not.toContain("Spread-in P&F");
     expect(fakeBoqRepository.findCurrentBoq).toHaveBeenCalledWith("tender-1", "business-1");
   });
 
@@ -148,6 +156,7 @@ describe("generateQuotation", () => {
     const fakeBoqRepository = {
       findCurrentBoq: vi.fn().mockResolvedValue({ id: "boq-1" }),
       findItemsByBoqId: vi.fn().mockResolvedValue([item()]),
+      findTenderCharges: vi.fn().mockResolvedValue([]),
     };
 
     const { generateQuotation } = await import("../quotation-document.js");

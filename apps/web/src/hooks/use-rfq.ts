@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  AdditionalChargeInput,
   ApiResponse,
   CreateRfqInput,
   FinalizeRfqRatesResultDto,
@@ -19,6 +20,7 @@ import type {
   SaveQuotesResultDto,
   SelectQuoteInput,
   SuggestRfqVendorsInput,
+  UpdateAdditionalChargeInput,
   UpdateRfqInput,
   UpsertRfqQuoteInput,
 } from "@bmp/types";
@@ -279,4 +281,27 @@ export function useReopenRfq(id: string) {
     },
     onSuccess: () => invalidateRfq(queryClient, id),
   });
+}
+
+/** Whole-RFQ additional charges (vendor-quoted or our own); copied to the tender on Finalize rates. */
+export function useRfqCharges(rfqId: string) {
+  const queryClient = useQueryClient();
+  const onSuccess = () => invalidateRfq(queryClient, rfqId);
+  const base = `/rfqs/${rfqId}/charges`;
+  return {
+    add: useMutation({
+      mutationFn: async (input: AdditionalChargeInput) =>
+        unwrap((await apiClient.post<ApiResponse<RfqDto>>(base, input)).data),
+      onSuccess,
+    }),
+    update: useMutation({
+      mutationFn: async ({ id, ...input }: UpdateAdditionalChargeInput & { id: string }) =>
+        unwrap((await apiClient.patch<ApiResponse<RfqDto>>(`${base}/${id}`, input)).data),
+      onSuccess,
+    }),
+    remove: useMutation({
+      mutationFn: async (id: string) => unwrap((await apiClient.delete<ApiResponse<RfqDto>>(`${base}/${id}`)).data),
+      onSuccess,
+    }),
+  };
 }

@@ -19,7 +19,7 @@ const TENDER_SHEET_FORMATS: TenderSheetFormat[] = ["pdf", "docx"];
 export class DocumentGenerationController {
   constructor(
     private readonly tendersRepository: ITendersRepository,
-    private readonly boqRepository: Pick<IBoqRepository, "findCurrentBoq" | "findItemsByBoqId">,
+    private readonly boqRepository: Pick<IBoqRepository, "findCurrentBoq" | "findItemsByBoqId" | "findTenderCharges">,
   ) {}
 
   generateUndertaking = asyncHandler(async (req, res) => {

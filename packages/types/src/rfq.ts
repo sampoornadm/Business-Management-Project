@@ -1,3 +1,4 @@
+import type { AdditionalChargeDto } from "./boq.js";
 import type { FilterCondition } from "./filtering.js";
 
 export const RFQ_STATUSES = ["DRAFT", "SENT", "CLOSED", "CANCELLED"] as const;
@@ -87,6 +88,8 @@ export interface RfqListItemDto {
 export interface RfqDto extends Omit<RfqListItemDto, "tenderNumber"> {
   instructions: string | null;
   items: RfqItemDto[];
+  /** Whole-RFQ additional charges (vendor-quoted or our own). */
+  charges: AdditionalChargeDto[];
   vendorInvites: RfqVendorInviteDto[];
   createdBy: { id: string; firstName: string; lastName: string };
   updatedAt: string;
@@ -180,6 +183,8 @@ export interface FinalizeRfqRatesResultDto {
   tenderItemsSkipped: number;
   /** True when the linked tender's rates were locked, so no tender item was touched. */
   tenderLocked: boolean;
+  /** Additional charges copied to the tender (own + selected vendors'); 0 when locked/no tender. */
+  tenderChargesCopied: number;
 }
 
 // One historical price observation: a single vendor's quote for one item, across every RFQ.

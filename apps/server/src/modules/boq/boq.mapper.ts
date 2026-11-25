@@ -1,8 +1,8 @@
-import type { BoqDto, BoqItemDto, BoqItemRateBreakdownDto, BoqListItemDto } from "@bmp/types";
+import type { AdditionalChargeDto, BoqDto, BoqItemDto, BoqItemRateBreakdownDto, BoqListItemDto } from "@bmp/types";
 
 import { round2 } from "../../shared/utils/math.js";
 
-import type { BoqItemWithBreakdown, BoqWithCreator } from "./boq.repository.js";
+import type { BoqItemWithBreakdown, BoqWithCreator, TenderChargeWithVendor } from "./boq.repository.js";
 
 function toRateBreakdownDto(
   entity: BoqItemWithBreakdown["rateBreakdown"],
@@ -67,6 +67,7 @@ export function buildBoqItemTree(items: BoqItemWithBreakdown[]): BoqItemDto[] {
             technicalDeviation: item.baseRateQuote.technicalDeviation,
           }
         : null,
+      chargeLoad: item.chargeLoad,
       children: [],
     });
   }
@@ -89,7 +90,40 @@ export function sumItemAmounts(items: BoqItemWithBreakdown[]): number {
   return round2(items.reduce((sum, item) => sum + (item.amount ?? 0), 0));
 }
 
-export function toBoqDto(boq: BoqWithCreator, items: BoqItemWithBreakdown[]): BoqDto {
+/** Shape shared by RfqCharge and TenderCharge rows (RfqCharge has no sourceRfqId). */
+export interface ChargeEntity {
+  id: string;
+  description: string;
+  amount: number;
+  addToRates: boolean;
+  vendorId: string | null;
+  vendor: { name: string } | null;
+  sourceRfqId?: string | null;
+}
+
+export function toAdditionalChargeDto(entity: ChargeEntity): AdditionalChargeDto {
+  return {
+    id: entity.id,
+    description: entity.description,
+    amount: entity.amount,
+    addToRates: entity.addToRates,
+    vendorId: entity.vendorId,
+    vendorName: entity.vendor?.name ?? null,
+    sourceRfqId: entity.sourceRfqId ?? null,
+  };
+}
+
+/** Charges kept separate from item rates — their own quotation lines, added to the total. */
+export function sumSeparateCharges(charges: { amount: number; addToRates: boolean }[]): number {
+  return round2(charges.filter((charge) => !charge.addToRates).reduce((sum, charge) => sum + charge.amount, 0));
+}
+
+export function toBoqDto(
+  boq: BoqWithCreator,
+  items: BoqItemWithBreakdown[],
+  charges: TenderChargeWithVendor[] = [],
+): BoqDto {
+  const totalAmount = sumItemAmounts(items);
   return {
     id: boq.id,
     tenderId: boq.tenderId,
@@ -103,7 +137,9 @@ export function toBoqDto(boq: BoqWithCreator, items: BoqItemWithBreakdown[]): Bo
       lastName: boq.createdBy.lastName,
     },
     items: buildBoqItemTree(items),
-    totalAmount: sumItemAmounts(items),
+    totalAmount,
+    charges: charges.map(toAdditionalChargeDto),
+    grandTotal: round2(totalAmount + sumSeparateCharges(charges)),
     createdAt: boq.createdAt.toISOString(),
     updatedAt: boq.updatedAt.toISOString(),
   };

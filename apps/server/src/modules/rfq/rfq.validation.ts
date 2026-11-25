@@ -1,6 +1,17 @@
 import { FILTER_OPERATORS, ITEM_PRICE_SORT_FIELDS, RFQ_FILTER_FIELDS, RFQ_SORT_FIELDS, RFQ_STATUSES } from "@bmp/types";
 import { z } from "zod";
 
+import { additionalChargeSchema } from "../boq/boq.validation.js";
+
+/** vendorId = the invited vendor who quoted it; null/absent = our own cost. */
+export const rfqChargeSchema = additionalChargeSchema.extend({ vendorId: z.string().uuid().nullable().optional() });
+export type RfqChargeBody = z.infer<typeof rfqChargeSchema>;
+
+export const updateRfqChargeSchema = rfqChargeSchema
+  .partial()
+  .refine((data) => Object.keys(data).length > 0, { message: "No fields to update" });
+export type UpdateRfqChargeBody = z.infer<typeof updateRfqChargeSchema>;
+
 const createRfqItemSchema = z.object({
   boqItemId: z.string().uuid().optional(),
   description: z.string().min(1).max(5000),

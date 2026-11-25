@@ -15,12 +15,14 @@ import type {
   InviteVendorPreviewBody,
   ListItemPricesQueryParsed,
   ListRfqsQueryParsed,
+  ParseQuoteTextBody,
+  RfqChargeBody,
+  SaveQuotesBody,
   SelectQuoteBody,
   SuggestVendorsBody,
   UpdateRfqBody,
+  UpdateRfqChargeBody,
   UpsertRfqQuoteBody,
-  ParseQuoteTextBody,
-  SaveQuotesBody,
 } from "./rfq.validation.js";
 
 export class RfqController {
@@ -239,6 +241,32 @@ export class RfqController {
       req.user!.businessId,
     );
     sendSuccess(res, rfq, "Quote selected");
+  });
+
+  addCharge = asyncHandler(async (req, res) => {
+    const rfq = await this.rfqService.addCharge(
+      req.params.id!,
+      req.body as RfqChargeBody,
+      req.user!.id,
+      req.user!.businessId,
+    );
+    sendSuccess(res, rfq, "Charge added", 201);
+  });
+
+  updateCharge = asyncHandler(async (req, res) => {
+    const rfq = await this.rfqService.updateCharge(
+      req.params.id!,
+      req.params.chargeId!,
+      req.body as UpdateRfqChargeBody,
+      req.user!.id,
+      req.user!.businessId,
+    );
+    sendSuccess(res, rfq, "Charge updated");
+  });
+
+  deleteCharge = asyncHandler(async (req, res) => {
+    const rfq = await this.rfqService.deleteCharge(req.params.id!, req.params.chargeId!, req.user!.id, req.user!.businessId);
+    sendSuccess(res, rfq, "Charge deleted");
   });
 
   finalizeRates = asyncHandler(async (req, res) => {

@@ -19,7 +19,8 @@ import { useState } from "react";
 
 import { BoqItemGrid } from "@/components/boq/boq-item-grid";
 import { BoqUploadPanel } from "@/components/boq/boq-upload-panel";
-import { useAddBoqItem, useBoqVersions, useCurrentBoq } from "@/hooks/use-boq";
+import { AdditionalChargesCard } from "@/components/charges/additional-charges-card";
+import { useAddBoqItem, useBoqVersions, useCurrentBoq, useTenderCharges } from "@/hooks/use-boq";
 import { useSetTenderRatesLock } from "@/hooks/use-tenders";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
@@ -142,6 +143,8 @@ export function TenderItemsTab({ tender }: { tender: TenderDto }) {
 
   const boqQuery = useCurrentBoq(tender.id);
   const versionsQuery = useBoqVersions(tender.id);
+  const charges = useTenderCharges(tender.id);
+  const canEditCharges = hasPermission(roleName, "boq:update") && !ratesLocked;
 
   const [showReupload, setShowReupload] = useState(false);
 
@@ -177,6 +180,11 @@ export function TenderItemsTab({ tender }: { tender: TenderDto }) {
               Version {boqQuery.data.version} · {versionsQuery.data?.length ?? 1} version(s)
             </span>
             <span className="text-sm font-medium">Total: {formatMoney(boqQuery.data.totalAmount)}</span>
+            {boqQuery.data.grandTotal !== boqQuery.data.totalAmount && (
+              <span className="text-sm font-medium">
+                Grand total (with separate charges): {formatMoney(boqQuery.data.grandTotal)}
+              </span>
+            )}
             {tender.wonItems.length > 0 && tender.winningBidAmount !== null && (
               <span className="text-sm font-medium text-success">
                 Order value: {formatMoney(tender.winningBidAmount)}
@@ -207,6 +215,15 @@ export function TenderItemsTab({ tender }: { tender: TenderDto }) {
         ratesLocked={ratesLocked}
         wonLineIds={wonLineIds(boqQuery.data.items, tender.wonItems)}
       />
+
+      {boqQuery.data.isCurrent && (
+        <AdditionalChargesCard
+          charges={boqQuery.data.charges}
+          mutations={charges}
+          editable={canEditCharges}
+          description="Costs for the whole tender, not per item. Ticked charges are spread into item rates in proportion to each item's value, after markup; unticked ones are printed as separate lines on the quotation and added to the total."
+        />
+      )}
     </div>
   );
 }

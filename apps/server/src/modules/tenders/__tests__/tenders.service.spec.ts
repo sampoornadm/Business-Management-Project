@@ -326,6 +326,10 @@ class FakeBoqRepository implements Partial<IBoqRepository> {
   async findItemsByBoqId(boqId: string) {
     return (this.itemsByTender.get(boqId.replace(/^boq-/, "")) ?? []) as never;
   }
+
+  async findTenderCharges(_tenderId: string) {
+    return [] as never;
+  }
 }
 
 class FakeItemsRepository implements Partial<IItemsRepository> {

@@ -6,7 +6,7 @@ import PizZip from "pizzip";
 
 import { NotFoundError } from "../../core/errors/HttpErrors.js";
 import { round2 } from "../../shared/utils/math.js";
-import { buildBoqItemTree } from "../boq/boq.mapper.js";
+import { buildBoqItemTree, sumSeparateCharges } from "../boq/boq.mapper.js";
 import type { IBoqRepository } from "../boq/boq.repository.js";
 import type { ITendersRepository } from "../tenders/tenders.repository.js";
 
@@ -188,6 +188,14 @@ export function buildQuotationPdf(
 
 type DocTendersRepository = Pick<ITendersRepository, "findForDocumentGeneration">;
 type DocBoqRepository = Pick<IBoqRepository, "findCurrentBoq" | "findItemsByBoqId">;
+type QuotationBoqRepository = DocBoqRepository & Pick<IBoqRepository, "findTenderCharges">;
+
+/** Charges kept separate from item rates print as their own lines under the items. */
+export function buildChargeRows(charges: { description: string; amount: number; addToRates: boolean }[]): QuotationRow[] {
+  return charges
+    .filter((charge) => !charge.addToRates)
+    .map((charge) => ({ slNo: "", description: charge.description, unit: "", quantity: "", rate: "", amount: formatNumber(charge.amount) }));
+}
 
 async function loadTenderBoq(
   tendersRepository: DocTendersRepository,
@@ -207,13 +215,16 @@ async function loadTenderBoq(
 
 export async function generateQuotation(
   tendersRepository: DocTendersRepository,
-  boqRepository: DocBoqRepository,
+  boqRepository: QuotationBoqRepository,
   tenderId: string,
   businessId: string,
   format: QuotationFormat,
 ): Promise<GeneratedQuotation> {
-  const { tender, items, rows } = await loadTenderBoq(tendersRepository, boqRepository, tenderId, businessId);
-  const totalAmount = round2(items.reduce((sum, item) => sum + (item.amount ?? 0), 0));
+  const loaded = await loadTenderBoq(tendersRepository, boqRepository, tenderId, businessId);
+  const { tender, items } = loaded;
+  const charges = await boqRepository.findTenderCharges(tenderId);
+  const rows = [...loaded.rows, ...buildChargeRows(charges)];
+  const totalAmount = round2(items.reduce((sum, item) => sum + (item.amount ?? 0), 0) + sumSeparateCharges(charges));
   const generatedDate = formatDate(new Date());
   const filenameBase = `Quotation-${tender.tenderNumber}-${generatedDate}`;
   const pinnedNotes = tender.pinnedNotes.map((note) => note.lineText);

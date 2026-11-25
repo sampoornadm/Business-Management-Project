@@ -47,6 +47,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { AdditionalChargesCard } from "@/components/charges/additional-charges-card";
 import { QuoteCell } from "@/components/rfq/quote-cell";
 import { QuotePasteDialog } from "@/components/rfq/quote-paste-dialog";
 import { QuoteSheetActions } from "@/components/rfq/quote-sheet-actions";
@@ -62,6 +63,7 @@ import {
   useRemoveRfqVendor,
   useAddRfqVendor,
   useRfq,
+  useRfqCharges,
   useRfqComparison,
   useSelectQuote,
   useUpsertRfqQuote,
@@ -99,6 +101,7 @@ export default function RfqDetailPage() {
   const previewInvite = usePreviewInviteVendor(params.id);
   const inviteVendorMutation = useInviteVendor(params.id);
   const finalizeRates = useFinalizeRfqRates(params.id);
+  const rfqCharges = useRfqCharges(params.id);
   const reopenRfq = useReopenRfq(params.id);
   const createPoFromRfq = useCreatePurchaseOrderFromRfq();
   const deleteRfq = useDeleteRfq();
@@ -165,7 +168,8 @@ export default function RfqDetailPage() {
       const result = await finalizeRates.mutateAsync();
       const tenderPart = rfqQuery.data?.tenderId
         ? ` · ${result.tenderItemsUpdated} tender item(s) got a base rate` +
-          (result.tenderItemsSkipped > 0 ? `, ${result.tenderItemsSkipped} skipped` : "")
+          (result.tenderItemsSkipped > 0 ? `, ${result.tenderItemsSkipped} skipped` : "") +
+          (result.tenderChargesCopied > 0 ? ` · ${result.tenderChargesCopied} additional charge(s) sent to the tender` : "")
         : "";
       toast({
         title: "Rates finalized",
@@ -551,6 +555,18 @@ export default function RfqDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      <AdditionalChargesCard
+        charges={rfq.charges}
+        mutations={rfqCharges}
+        editable={canUpdate && !isFinalized}
+        vendors={rfq.vendorInvites.map((invite) => invite.vendor)}
+        description={
+          rfq.tenderId
+            ? "Costs for the whole RFQ, not per item. On Finalize rates, your own charges and those of vendors you are buying from go to the tender."
+            : "Costs for the whole RFQ, not per item."
+        }
+      />
 
       {tenderQuery.data && tenderQuery.data.pinnedNotes.length > 0 && (
         <Card>

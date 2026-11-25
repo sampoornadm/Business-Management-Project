@@ -16,9 +16,11 @@ import {
   listItemPricesQuerySchema,
   listRfqsQuerySchema,
   parseQuoteTextSchema,
+  rfqChargeSchema,
   saveQuotesSchema,
   selectQuoteSchema,
   suggestVendorsSchema,
+  updateRfqChargeSchema,
   updateRfqSchema,
   upsertRfqQuoteSchema,
 } from "./rfq.validation.js";
@@ -471,6 +473,58 @@ export function createRfqRouter(controller: RfqController): Router {
    *       409: { description: RFQ is already finalized }
    */
   router.post("/:id/finalize-rates", authenticateMiddleware, requirePermission("rfq:update"), controller.finalizeRates);
+
+  /**
+   * @openapi
+   * /rfqs/{id}/charges:
+   *   post:
+   *     tags: [RFQ]
+   *     summary: Add a whole-RFQ additional charge (vendor-quoted or our own)
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - { in: path, name: id, required: true, schema: { type: string } }
+   *     responses:
+   *       201: { description: Updated RFQ }
+   *       409: { description: RFQ is finalized }
+   */
+  router.post(
+    "/:id/charges",
+    authenticateMiddleware,
+    requirePermission("rfq:update"),
+    validate(rfqChargeSchema),
+    controller.addCharge,
+  );
+
+  /**
+   * @openapi
+   * /rfqs/{id}/charges/{chargeId}:
+   *   patch:
+   *     tags: [RFQ]
+   *     summary: Edit an RFQ additional charge
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - { in: path, name: id, required: true, schema: { type: string } }
+   *       - { in: path, name: chargeId, required: true, schema: { type: string } }
+   *     responses:
+   *       200: { description: Updated RFQ }
+   *   delete:
+   *     tags: [RFQ]
+   *     summary: Delete an RFQ additional charge
+   *     security: [{ bearerAuth: [] }]
+   *     parameters:
+   *       - { in: path, name: id, required: true, schema: { type: string } }
+   *       - { in: path, name: chargeId, required: true, schema: { type: string } }
+   *     responses:
+   *       200: { description: Updated RFQ }
+   */
+  router.patch(
+    "/:id/charges/:chargeId",
+    authenticateMiddleware,
+    requirePermission("rfq:update"),
+    validate(updateRfqChargeSchema),
+    controller.updateCharge,
+  );
+  router.delete("/:id/charges/:chargeId", authenticateMiddleware, requirePermission("rfq:update"), controller.deleteCharge);
 
   /**
    * @openapi

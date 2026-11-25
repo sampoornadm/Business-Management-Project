@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import type { Prisma, PrismaClient } from "@bmp/database";
 
+import type { ChargeLoadUpdate } from "./boq-pricing.js";
+
 const creatorSummarySelect = { id: true, firstName: true, lastName: true } as const;
 
 const boqWithCreatorArgs = {
@@ -28,6 +30,20 @@ const boqItemWithBreakdownArgs = {
 } satisfies Prisma.BoqItemDefaultArgs;
 
 export type BoqItemWithBreakdown = Prisma.BoqItemGetPayload<typeof boqItemWithBreakdownArgs>;
+
+const tenderChargeArgs = {
+  include: { vendor: { select: { id: true, name: true } } },
+} satisfies Prisma.TenderChargeDefaultArgs;
+
+export type TenderChargeWithVendor = Prisma.TenderChargeGetPayload<typeof tenderChargeArgs>;
+
+export interface TenderChargeRow {
+  description: string;
+  amount: number;
+  addToRates: boolean;
+  vendorId: string | null;
+  sourceRfqId: string | null;
+}
 
 export interface CreateBoqItemRow {
   id: string;
@@ -69,6 +85,7 @@ export interface UpdateBoqItemData {
   remarks?: string | null;
   sortOrder?: number;
   markupPercent?: number | null;
+  chargeLoad?: number | null;
 }
 
 export interface CreateBoqItemData {
@@ -100,6 +117,7 @@ export interface SetBaseRateData {
   markupPercent: number;
   rate: number;
   amount: number | null;
+  chargeLoad: null;
 }
 
 export interface UpdateBoqItemEnrichmentData {
@@ -157,6 +175,14 @@ export interface IBoqRepository {
   rejectRateSource(id: string): Promise<void>;
   upsertRateBreakdown(itemId: string, data: UpsertRateBreakdownData): Promise<void>;
   sumAmountByBoqId(boqId: string): Promise<number>;
+  applyChargeLoads(updates: ChargeLoadUpdate[]): Promise<void>;
+  findTenderCharges(tenderId: string): Promise<TenderChargeWithVendor[]>;
+  findTenderChargeById(id: string, businessId: string): Promise<TenderChargeWithVendor | null>;
+  createTenderCharge(tenderId: string, row: TenderChargeRow): Promise<void>;
+  updateTenderCharge(id: string, data: Partial<Omit<TenderChargeRow, "sourceRfqId">>): Promise<void>;
+  deleteTenderCharge(id: string): Promise<void>;
+  /** Replaces the charges a given RFQ's "Finalize rates" copied earlier; hand-added rows stay. */
+  replaceRfqTenderCharges(tenderId: string, rfqId: string, rows: TenderChargeRow[]): Promise<void>;
 }
 
 export class BoqRepository implements IBoqRepository {
@@ -258,7 +284,7 @@ export class BoqRepository implements IBoqRepository {
       updates.map((update) =>
         this.prisma.boqItem.update({
           where: { id: update.id },
-          data: { rate: update.rate, amount: update.amount, markupPercent: update.markupPercent },
+          data: { rate: update.rate, amount: update.amount, markupPercent: update.markupPercent, chargeLoad: null },
         }),
       ),
     );
@@ -278,6 +304,7 @@ export class BoqRepository implements IBoqRepository {
       data: {
         rate: data.rate,
         amount: data.amount,
+        chargeLoad: null,
         suggestedRate: data.rate,
         aiSource: "historical",
         aiRateSourceId: data.rateSourceId,
@@ -314,5 +341,40 @@ export class BoqRepository implements IBoqRepository {
       _sum: { amount: true },
     });
     return result._sum.amount ?? 0;
+  }
+
+  async applyChargeLoads(updates: ChargeLoadUpdate[]): Promise<void> {
+    if (updates.length === 0) return;
+    await this.prisma.$transaction(
+      updates.map(({ id, ...data }) => this.prisma.boqItem.update({ where: { id }, data })),
+    );
+  }
+
+  findTenderCharges(tenderId: string): Promise<TenderChargeWithVendor[]> {
+    // tenderId always comes from an already business-scoped tender/BOQ lookup.
+    return this.prisma.tenderCharge.findMany({ where: { tenderId }, orderBy: { createdAt: "asc" }, ...tenderChargeArgs });
+  }
+
+  findTenderChargeById(id: string, businessId: string): Promise<TenderChargeWithVendor | null> {
+    return this.prisma.tenderCharge.findFirst({ where: { id, tender: { businessId } }, ...tenderChargeArgs });
+  }
+
+  async createTenderCharge(tenderId: string, row: TenderChargeRow): Promise<void> {
+    await this.prisma.tenderCharge.create({ data: { tenderId, ...row } });
+  }
+
+  async updateTenderCharge(id: string, data: Partial<Omit<TenderChargeRow, "sourceRfqId">>): Promise<void> {
+    await this.prisma.tenderCharge.update({ where: { id }, data });
+  }
+
+  async deleteTenderCharge(id: string): Promise<void> {
+    await this.prisma.tenderCharge.delete({ where: { id } });
+  }
+
+  async replaceRfqTenderCharges(tenderId: string, rfqId: string, rows: TenderChargeRow[]): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.tenderCharge.deleteMany({ where: { tenderId, sourceRfqId: rfqId } }),
+      this.prisma.tenderCharge.createMany({ data: rows.map((row) => ({ tenderId, ...row })) }),
+    ]);
   }
 }

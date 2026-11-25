@@ -26,6 +26,7 @@ import { round2 } from "../../shared/utils/math.js";
 import { toAttachmentDto } from "../attachments/attachments.mapper.js";
 import type { AttachmentsService } from "../attachments/attachments.service.js";
 import type { AuditService } from "../audit/audit.service.js";
+import { sumSeparateCharges } from "../boq/boq.mapper.js";
 import type { BoqItemWithBreakdown, IBoqRepository } from "../boq/boq.repository.js";
 import type { IBusinessesRepository } from "../businesses/businesses.repository.js";
 import { deriveCanonicalName } from "../items/items.helpers.js";
@@ -280,7 +281,11 @@ export class TendersService {
         const lines = toSubmissionLines(items);
         const snapshot: SubmissionSnapshot = {
           reference: reference ?? null,
-          totalAmount: round2(lines.reduce((sum, line) => sum + (line.amount ?? 0), 0)),
+          // The quoted grand total: item amounts plus additional charges kept off the rates.
+          totalAmount: round2(
+            lines.reduce((sum, line) => sum + (line.amount ?? 0), 0) +
+              sumSeparateCharges(await this.boqRepository.findTenderCharges(id)),
+          ),
           lines,
         };
         const number = (latest?.number ?? 0) + 1;

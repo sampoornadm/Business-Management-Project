@@ -218,6 +218,8 @@ export function BoqItemGrid({
     }
   }
 
+  // Spread-in additional charges sit inside item.rate; the editable Rate is the figure before them.
+  const hasChargeLoads = anyChargeLoad(boq.items);
   const columns: EditableTreeColumn<BoqItemDto>[] = [
     {
       key: "description",
@@ -311,11 +313,11 @@ export function BoqItemGrid({
     },
     {
       key: "rate",
-      header: "Rate",
+      header: hasChargeLoads ? "Rate before charges" : "Rate",
       align: "right",
       editable: canEditPricing,
       inputType: "money",
-      getValue: (item) => item.rate,
+      getValue: (item) => rateBeforeCharges(item),
       onCommit: (item, value) => void commitField(item, "rate", value),
       // Lowest rate a likely bidder is expected to quote for this item (see Competitors).
       renderBelow: (item) =>
@@ -327,6 +329,16 @@ export function BoqItemGrid({
           />
         ) : null,
     },
+    ...(hasChargeLoads
+      ? [
+          {
+            key: "rateWithCharges",
+            header: "Rate incl. charges",
+            align: "right",
+            getValue: (item) => (item.rate !== null ? formatMoney(item.rate) : ""),
+          } satisfies EditableTreeColumn<BoqItemDto>,
+        ]
+      : []),
     {
       key: "gstRate",
       header: "GST %",
@@ -540,4 +552,13 @@ export function BoqItemGrid({
       )}
     </div>
   );
+}
+
+function anyChargeLoad(items: BoqItemDto[]): boolean {
+  return items.some((item) => Boolean(item.chargeLoad) || anyChargeLoad(item.children));
+}
+
+function rateBeforeCharges(item: BoqItemDto): number | null {
+  if (item.rate === null) return null;
+  return Math.round((item.rate - (item.chargeLoad ?? 0)) * 100) / 100;
 }
