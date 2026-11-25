@@ -18,7 +18,7 @@ export function missingMarkers(template: string, required: readonly string[]): s
 
 export const RFQ_QUOTE_PASTE_DEFAULT_PROMPT = `You read rates that a vendor sent as a text message in reply to our request for quotation (RFQ).
 
-These are the RFQ items, one per line, as "item number | description | quantity | unit":
+These are the RFQ items exactly as we sent them to the vendor, one per line, as "item number) description - Qty - quantity unit":
 {{items}}
 
 These are the lines of the vendor's message that could not be read automatically. Each starts with its line id ("L" and a number):
@@ -27,6 +27,7 @@ These are the lines of the vendor's message that could not be read automatically
 For every line, decide which RFQ item it quotes for and the rate.
 Rules:
 - The rate is the price for ONE unit. In "150@10/-" or "150 @ Rs 10", 150 is the quantity and 10 is the rate.
+- Vendors often copy our item line and add their rate after it. In "3) Cement - Qty - 50 Bag - 380", 3 is the item number, 50 is the quantity and 380 is the rate. The number after "Qty" is never the rate; if a line has no other price, the rate is null.
 - Numbers inside a description are sizes or specifications (for example "12X1.5", "4C x 16", "25 mm"), never prices.
 - itemNumber is the number from the RFQ item list that the line refers to, matched by its serial number or by its description.
 - If the vendor says they cannot supply the item ("regret", "not available", "NA"), set regretted to true and rate to null.

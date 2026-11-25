@@ -15,9 +15,8 @@ describe("buildRfqItemListText", () => {
 
     expect(text).toBe(
       [
-        "Sl No. | Item Desc | Qty | UoM",
-        "1 | TMT Steel | 1200 | MT",
-        "2 | Cement | 50 | -",
+        "1) TMT Steel - Qty - 1200 MT",
+        "2) Cement - Qty - 50",
         "",
         "Requirements:",
         "- Delivery within 30 days",
@@ -31,6 +30,6 @@ describe("buildRfqItemListText", () => {
   it("omits requirements and due date when there are none", () => {
     const text = buildRfqItemListText([{ description: "Bolt", quantity: 4, unit: "Nos" }], [], null);
 
-    expect(text).toBe("Sl No. | Item Desc | Qty | UoM\n1 | Bolt | 4 | Nos");
+    expect(text).toBe("1) Bolt - Qty - 4 Nos");
   });
 });

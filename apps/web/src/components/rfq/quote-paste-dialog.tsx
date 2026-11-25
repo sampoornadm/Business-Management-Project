@@ -154,7 +154,7 @@ export function QuotePasteDialog({ rfqId, vendors }: { rfqId: string; vendors: {
             </Select>
             <Textarea
               className="min-h-[280px] font-mono text-xs"
-              placeholder={"1\tItem description\tEA\t150@10/-\n2 regret\n…"}
+              placeholder={"1) Item description - Qty - 150 EA - 10/-\n2) Item description - Qty - 20 Mtr - regret\n…"}
               value={text}
               onChange={(e) => setText(e.target.value)}
               maxLength={20_000}
