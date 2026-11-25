@@ -1,14 +1,17 @@
 import { z } from "zod";
 
+import { formatRfqItemTextLine } from "@bmp/types";
+
 import { renderPrompt } from "../../infra/llm/prompts.js";
 
-import type { PasteItem, PasteMatch, UnreadLine } from "./text-quote-parser.js";
+import { withoutQtyEcho, type PasteItem, type PasteMatch, type UnreadLine } from "./text-quote-parser.js";
 
 /**
  * AI fallback for the text quote paste: only the lines the rule parser could not read go to
  * the local model, in one call. Every answer is checked against the vendor's own text before it
  * is accepted — a small model inventing a price is the failure that matters, so a rate whose
- * number is not literally on that line is dropped, and the line stays for the user to fill.
+ * number is not literally on that line (outside our own echoed "Qty - 150") is dropped, and the
+ * line stays for the user to fill.
  */
 
 export type QuotePasteAiReader = (
@@ -63,7 +66,7 @@ export function createQuotePasteAiReader(deps: {
     let answer: z.infer<typeof answerSchema>;
     try {
       const prompt = renderPrompt(await deps.getTemplate(), {
-        items: items.map((it, i) => `${i + 1} | ${it.description} | ${it.quantity} | ${it.unit ?? "-"}`).join("\n"),
+        items: items.map((it, i) => formatRfqItemTextLine(i + 1, it)).join("\n"),
         lines: lines.map((l) => `L${l.lineIndex}: ${l.text}`).join("\n"),
       });
       answer = answerSchema.parse(await deps.generate(prompt, ANSWER_SCHEMA as unknown as Record<string, unknown>));
@@ -86,7 +89,7 @@ export function createQuotePasteAiReader(deps: {
       const itemIndex = a.itemNumber - 1;
       if (itemIndex < 0 || itemIndex >= items.length || taken.has(itemIndex)) continue;
       if (a.regretted === (a.rate !== null)) continue; // exactly one of rate / regret
-      if (a.rate !== null && !(a.rate > 0 && numbersOn(line.text).includes(a.rate))) continue;
+      if (a.rate !== null && !(a.rate > 0 && numbersOn(withoutQtyEcho(line.text)).includes(a.rate))) continue;
 
       taken.add(itemIndex);
       matched.add(line.lineIndex);

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { formatRfqItemTextLine } from "@bmp/types";
+
 import { parseQuoteText, type PasteItem } from "../text-quote-parser.js";
 
 // Anonymised shape of a real vendor reply: Sl No, description, unit, qty@rate/-, tab-separated.
@@ -120,5 +122,48 @@ describe("parseQuoteText", () => {
   it("warns when the vendor's quantity differs", () => {
     const match = rateByItem(`1\t"O" RING (12X1) MM\tEA\t100@10/-`).get(0);
     expect(match?.warnings).toContain("Vendor quoted for 100, RFQ asks 150");
+  });
+
+  describe("replies that echo our sent line (formatRfqItemTextLine)", () => {
+    const echo = (i: number, tail: string) => `${formatRfqItemTextLine(i + 1, ITEMS[i]!)}${tail}`;
+
+    it.each([" - 10", " - 10/-", " @ 10", " - Rs. 10 each", " Rs 10", " - Rate: 10", " Rate 10", ", 10"])(
+      "reads the rate in %j",
+      (tail) => {
+        const match = rateByItem(echo(1, tail)).get(1);
+        expect(match).toMatchObject({ rate: 10, vendorQuantity: 150, source: "serial", warnings: [] });
+      },
+    );
+
+    it("reads a regret", () => {
+      expect(rateByItem(echo(1, " - regret")).get(1)).toMatchObject({ rate: null, regretted: true });
+    });
+
+    it("skips an echoed line with no rate instead of sending it to the AI", () => {
+      const result = parseQuoteText(`${echo(0, " - 10")}\n${echo(1, "")}`, ITEMS);
+      expect(result.matches.map((m) => m.itemIndex)).toEqual([0]);
+      expect(result.unread).toEqual([]);
+    });
+
+    it("leaves a number written straight after the unit for the AI", () => {
+      expect(parseQuoteText(echo(1, " 10"), ITEMS).unread).toHaveLength(1);
+    });
+
+    it("warns when the vendor changed the quantity or the unit", () => {
+      const line = `2) "O" RING : ID X THICKNESS : (12X1.5) MM - Qty - 100 Kg - 10`;
+      expect(rateByItem(line).get(1)?.warnings).toEqual([
+        "Vendor quoted for 100, RFQ asks 150",
+        "Vendor quoted per Kg, RFQ asks per EA",
+      ]);
+    });
+
+    it("treats unit spellings of 'each' as the same unit", () => {
+      expect(rateByItem(`2) "O" RING (12X1.5) MM - Qty - 150 Nos - 10`).get(1)?.warnings).toEqual([]);
+    });
+
+    it("still cross-checks the serial against the description", () => {
+      const match = rateByItem(`1) "O" RING : ID X THICKNESS : (12X1.5) MM - Qty - 150 EA - 10`).get(1);
+      expect(match).toMatchObject({ itemIndex: 1, warnings: ["Serial 1 points at a different item"] });
+    });
   });
 });

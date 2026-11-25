@@ -30,7 +30,7 @@ describe("createQuotePasteAiReader", () => {
     const { read, generate } = reader({ lines: [] });
     await read(ITEMS, [LINE], new Set());
     const [prompt, schema] = generate.mock.calls[0]!;
-    expect(prompt).toContain("1 | O RING (12X1) MM | 150 | EA");
+    expect(prompt).toContain("1) O RING (12X1) MM - Qty - 150 EA");
     expect(prompt).toContain("L4: all 33mm ones 25 each");
     expect(schema).toMatchObject({ type: "object", required: ["lines"] });
   });
@@ -50,6 +50,12 @@ describe("createQuotePasteAiReader", () => {
     const result = await read(ITEMS, [LINE], new Set());
     expect(result.matches).toEqual([]);
     expect(result.remaining).toEqual([LINE]);
+  });
+
+  it("drops a rate that is only our echoed quantity", async () => {
+    const line = { ...LINE, text: "2) O RING (22X2) MM - Qty - 150 EA" };
+    const { read } = reader({ lines: [{ line: "L4", itemNumber: 2, rate: 150, regretted: false }] });
+    expect((await read(ITEMS, [line], new Set())).matches).toEqual([]);
   });
 
   it("matches rate digits ignoring commas", async () => {
