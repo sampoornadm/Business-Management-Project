@@ -121,9 +121,4 @@ describe("parseQuoteText", () => {
     const match = rateByItem(`1\t"O" RING (12X1) MM\tEA\t100@10/-`).get(0);
     expect(match?.warnings).toContain("Vendor quoted for 100, RFQ asks 150");
   });
-
-  it("reads our sent line echoed back with a bare rate", () => {
-    const match = rateByItem(`2) "O" RING : ID X THICKNESS : (12X1.5) MM - Qty - 150 EA - 10`).get(1);
-    expect(match).toMatchObject({ rate: 10, vendorQuantity: 150, source: "serial", warnings: [] });
-  });
 });

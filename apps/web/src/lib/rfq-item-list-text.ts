@@ -7,8 +7,8 @@ interface RfqTextItem {
 }
 
 /**
- * Plain-text item list for pasting into a chat or text message: one "<Sl No>) <Item Desc> - Qty - <Qty> <Unit>" line
- * per item, then the tender's pinned requirements and the rate due date (each section omitted when
+ * Plain-text item list for pasting into a chat or text message: one "Sl No. | Item Desc | Qty | UoM" line per
+ * item, then the tender's pinned requirements and the rate due date (each section omitted when
  * empty).
  */
 export function buildRfqItemListText(
@@ -17,9 +17,10 @@ export function buildRfqItemListText(
   dueDate: string | null,
 ): string {
   const sections = [
-    items
-      .map((item, i) => `${i + 1}) ${item.description} - Qty - ${item.quantity}${item.unit ? ` ${item.unit}` : ""}`)
-      .join("\n"),
+    [
+      "Sl No. | Item Desc | Qty | UoM",
+      ...items.map((item, i) => `${i + 1} | ${item.description} | ${item.quantity} | ${item.unit ?? "-"}`),
+    ].join("\n"),
   ];
   if (pinnedNotes.length > 0) {
     sections.push(["Requirements:", ...pinnedNotes.map((note) => `- ${note}`)].join("\n"));
