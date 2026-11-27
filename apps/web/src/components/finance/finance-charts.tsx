@@ -10,8 +10,6 @@ import {
   ComposedChart,
   Legend,
   Line,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -20,14 +18,12 @@ import {
 
 import { useCashBook, useExpenses, useFinanceSummary, useInvoices } from "@/hooks/use-finance";
 import { CHART_COLORS } from "@/lib/chart-colors";
-import {
-  buildCashFlowMonths,
-  formatCompact,
-  sumExpensesByCategory,
-  sumInvoicesByStatus,
-} from "@/lib/finance-charts";
+import { buildCashFlowMonths, formatCompact, sumExpensesByCategory, sumInvoicesByStatus } from "@/lib/finance-charts";
 
-const axisTick = { fontSize: 11, fill: "hsl(var(--muted-foreground))" } as const;
+const axisTick = {
+  fontSize: 11,
+  fill: "hsl(var(--muted-foreground))",
+} as const;
 const tooltipStyle = {
   contentStyle: {
     backgroundColor: "hsl(var(--popover))",
@@ -69,7 +65,10 @@ function ChartCard({
         {loading ? (
           <Skeleton className="w-full" style={{ height: CHART_HEIGHT }} />
         ) : empty ? (
-          <p className="flex items-center justify-center text-sm text-muted-foreground" style={{ height: CHART_HEIGHT }}>
+          <p
+            className="flex items-center justify-center text-sm text-muted-foreground"
+            style={{ height: CHART_HEIGHT }}
+          >
             {emptyText}
           </p>
         ) : (
@@ -119,10 +118,10 @@ export function FinanceCharts() {
               {...tooltipStyle}
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="received" name="Received" fill={CHART_COLORS.success} radius={[3, 3, 0, 0]} maxBarSize={28} />
-            <Bar dataKey="paid" name="Paid out" fill={CHART_COLORS.destructive} radius={[3, 3, 0, 0]} maxBarSize={28} />
-            {/* foreground, not primary/signal: some business themes are amber, which would make the net
-                line indistinguishable from the bars */}
+            <Bar dataKey="received" name="Received" fill={CHART_COLORS.primary} radius={[3, 3, 0, 0]} maxBarSize={28} />
+            <Bar dataKey="paid" name="Paid out" fill={CHART_COLORS.muted} radius={[3, 3, 0, 0]} maxBarSize={28} />
+            {/* foreground, not primary/signal: received bars already use primary, and some business
+                themes are amber, so either would blur into the bars */}
             <Line
               dataKey="net"
               name="Net"
@@ -167,31 +166,34 @@ export function FinanceCharts() {
 
       <ChartCard
         title="Invoices by status"
-        caption={sampleCaption("invoices", invoicesQuery.data?.items.length ?? 0, invoicesQuery.data?.totalItems ?? 0) ?? "Invoice value"}
+        caption={
+          sampleCaption("invoices", invoicesQuery.data?.items.length ?? 0, invoicesQuery.data?.totalItems ?? 0) ??
+          "Invoice value"
+        }
         loading={invoicesQuery.isLoading}
         empty={invoiceSlices.length === 0}
         emptyText="No invoices yet."
       >
-        <div className="flex flex-col gap-3" style={{ minHeight: CHART_HEIGHT }}>
-          <ResponsiveContainer width="100%" height={150}>
-            <PieChart>
-              <Pie
-                data={invoiceSlices}
-                dataKey="amount"
-                nameKey="label"
-                innerRadius={44}
-                outerRadius={70}
-                paddingAngle={2}
-                stroke="none"
-              >
-                {invoiceSlices.map((slice) => (
-                  <Cell key={slice.status} fill={slice.color} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value: number, name: string) => [money(value), name]} {...tooltipStyle} />
-            </PieChart>
-          </ResponsiveContainer>
-          <ul className="space-y-1 text-xs">
+        <div className="flex flex-col gap-4" style={{ minHeight: CHART_HEIGHT }}>
+          {/* One stacked bar for the share; the list below carries the labels and percentages. */}
+          <div
+            className="flex h-3 w-full gap-0.5 overflow-hidden rounded-sm"
+            role="img"
+            aria-label="Invoice value by status"
+          >
+            {invoiceSlices.map((slice) => (
+              <div
+                key={slice.status}
+                className="h-full"
+                style={{
+                  backgroundColor: slice.color,
+                  width: `${invoiceTotal > 0 ? (slice.amount / invoiceTotal) * 100 : 0}%`,
+                }}
+                title={`${slice.label}: ${money(slice.amount)}`}
+              />
+            ))}
+          </div>
+          <ul className="space-y-2 text-xs">
             {invoiceSlices.map((slice) => (
               <li key={slice.status} className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: slice.color }} />
@@ -210,7 +212,10 @@ export function FinanceCharts() {
       <ChartCard
         className="lg:col-span-2"
         title="Expenses by category"
-        caption={sampleCaption("expenses", expensesQuery.data?.items.length ?? 0, expensesQuery.data?.totalItems ?? 0) ?? "Paid vs still owed"}
+        caption={
+          sampleCaption("expenses", expensesQuery.data?.items.length ?? 0, expensesQuery.data?.totalItems ?? 0) ??
+          "Paid vs still owed"
+        }
         loading={expensesQuery.isLoading}
         empty={expenseBars.length === 0}
         emptyText="No expenses yet."

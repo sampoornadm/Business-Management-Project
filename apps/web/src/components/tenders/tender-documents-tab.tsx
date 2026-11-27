@@ -190,10 +190,10 @@ function DocumentTypeSection({
 
   return (
     <div role="group" aria-label={DOCUMENT_TYPE_LABELS[documentType]}>
-      <h3 className="flex items-center gap-1.5 px-4 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <h3 className="flex items-center gap-1.5 px-4 pt-3 text-xs font-medium text-muted-foreground">
         {DOCUMENT_TYPE_LABELS[documentType]}
         {flagged && !hasFiles && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium normal-case tracking-normal text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
             <AlertTriangle className="h-3 w-3" />
             Mentioned in notes
           </span>

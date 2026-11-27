@@ -75,14 +75,14 @@ export function TopbarSearch() {
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={handleKeyDown}
-        placeholder="Search..."
+        placeholder="Search"
         className="h-8 pl-8 text-sm"
         aria-label="Global search"
       />
       {showDropdown && (
         <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-md border bg-popover text-popover-foreground shadow-md">
           {searchQuery.isLoading ? (
-            <div className="px-3 py-3 text-sm text-muted-foreground">Searching...</div>
+            <div className="px-3 py-3 text-sm text-muted-foreground">Searching…</div>
           ) : results.length === 0 ? (
             <div className="px-3 py-3 text-sm text-muted-foreground">No results.</div>
           ) : (

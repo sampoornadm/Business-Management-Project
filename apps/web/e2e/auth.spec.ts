@@ -12,9 +12,9 @@ test.describe("Authentication", () => {
   test("logs in and lands on the dashboard with real widgets", async ({ page }) => {
     await login(page);
 
-    await expect(page.getByText(/Welcome back/i)).toBeVisible();
-    await expect(page.getByText("Total Users")).toBeVisible();
-    await expect(page.getByText("System Health")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+    await expect(page.getByText("Users", { exact: true })).toBeVisible();
+    await expect(page.getByText("File storage")).toBeVisible();
   });
 
   test("logs out via the user menu and redirects back to /login", async ({ page }) => {

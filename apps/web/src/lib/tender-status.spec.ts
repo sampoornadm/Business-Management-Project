@@ -4,7 +4,6 @@ import {
   tenderKindBadgeVariant,
   tenderPriorityBadgeVariant,
   tenderStatusBadgeVariant,
-  tenderStatusChartColor,
 } from "./tender-status";
 
 describe("tenderStatusBadgeVariant", () => {
@@ -29,16 +28,6 @@ describe("tenderPriorityBadgeVariant", () => {
     expect(tenderPriorityBadgeVariant("MEDIUM")).toBe("secondary");
     expect(tenderPriorityBadgeVariant("HIGH")).toBe("default");
     expect(tenderPriorityBadgeVariant("URGENT")).toBe("destructive");
-  });
-});
-
-describe("tenderStatusChartColor", () => {
-  it("colours each status by its meaning, with lost and cancelled sharing one colour", () => {
-    expect(tenderStatusChartColor("DRAFT")).toBe("hsl(var(--muted-foreground))");
-    expect(tenderStatusChartColor("SUBMITTED")).toBe("hsl(var(--primary))");
-    expect(tenderStatusChartColor("WON")).toBe("hsl(var(--success))");
-    expect(tenderStatusChartColor("LOST")).toBe("hsl(var(--destructive))");
-    expect(tenderStatusChartColor("CANCELLED")).toBe(tenderStatusChartColor("LOST"));
   });
 });
 

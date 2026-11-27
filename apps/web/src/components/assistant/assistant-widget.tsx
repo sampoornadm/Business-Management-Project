@@ -81,7 +81,7 @@ export function AssistantWidget() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open assistant"
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95"
+        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md transition-[background-color,transform] duration-150 hover:bg-primary/90 active:scale-[0.97]"
       >
         <Bot className="h-6 w-6" />
       </button>
@@ -89,7 +89,7 @@ export function AssistantWidget() {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex h-[36rem] w-[26rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
+    <div className="fixed bottom-6 right-6 z-50 flex h-[36rem] w-[26rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border bg-background shadow-lg">
       <div className="flex items-center justify-between border-b bg-primary px-4 py-3 text-primary-foreground">
         <div className="flex items-center gap-2">
           <Bot className="h-5 w-5" />
@@ -209,7 +209,7 @@ export function AssistantWidget() {
         </Button>
       </div>
 
-      <div className="flex items-center justify-between gap-2 border-t bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground">
+      <div className="flex items-center justify-between gap-2 border-t bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
         <span>Chat and context are kept until you start a new chat, refresh, or sign out.</span>
         {(messages.length > 0 || queryState) && (
           <button

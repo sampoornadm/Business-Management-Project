@@ -78,7 +78,7 @@ export default function FinancePage() {
         <TabsList>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
           <TabsTrigger value="expenses">Expenses</TabsTrigger>
-          <TabsTrigger value="bank-accounts">Bank Accounts</TabsTrigger>
+          <TabsTrigger value="bank-accounts">Bank accounts</TabsTrigger>
         </TabsList>
 
         <TabsContent value="invoices">
@@ -152,7 +152,7 @@ export default function FinancePage() {
         <TabsContent value="bank-accounts">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Bank Accounts</CardTitle>
+              <CardTitle className="text-base">Bank accounts</CardTitle>
               <CreateBankAccountDialog />
             </CardHeader>
             <CardContent className="space-y-2">

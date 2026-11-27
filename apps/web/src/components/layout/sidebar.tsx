@@ -4,7 +4,7 @@ import { Button, cn } from "@bmp/ui";
 import { ChevronsLeft, ChevronsRight, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
@@ -38,7 +38,7 @@ export function Sidebar({ mobileOpen, onMobileOpenChange }: SidebarProps) {
           "fixed inset-y-0 left-0 z-50 flex h-screen w-64 flex-col border-r bg-card transition-transform duration-200",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
           "md:static md:translate-x-0 md:transition-[width]",
-          collapsed ? "md:w-16" : "md:w-56",
+          collapsed ? "md:w-16" : "md:w-60",
         )}
       >
         <div className="flex h-14 items-center justify-between border-b px-4">
@@ -67,33 +67,42 @@ export function Sidebar({ mobileOpen, onMobileOpenChange }: SidebarProps) {
           </Button>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-          {items.map((item) => {
+          {items.map((item, index) => {
+            const showLabels = !collapsed || mobileOpen;
+            const startsSection = item.section !== undefined && item.section !== items[index - 1]?.section;
             const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "group flex items-center gap-3 rounded-md border-l-2 py-2 pl-[10px] pr-3 text-sm font-medium transition-colors",
-                  isActive
-                    ? "border-l-primary bg-primary/10 text-primary"
-                    : "border-l-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                )}
-                aria-label={item.label}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {(!collapsed || mobileOpen) && <span className="truncate md:inline">{item.label}</span>}
-                {collapsed && (
-                  // `fixed` with no offsets: stays beside its icon but escapes the nav's scroll clipping.
-                  <span
-                    aria-hidden="true"
-                    className="pointer-events-none fixed z-50 ml-12 hidden whitespace-nowrap rounded-md border bg-popover px-2 py-1 text-xs font-medium text-popover-foreground shadow-md md:group-hover:block md:group-focus-visible:block"
-                  >
-                    {item.label}
-                  </span>
-                )}
-              </Link>
+              <Fragment key={item.href}>
+                {startsSection &&
+                  (showLabels ? (
+                    <p className="px-3 pb-2 pt-6 text-xs font-medium text-muted-foreground">{item.section}</p>
+                  ) : (
+                    <div className="mx-3 my-3 border-t" aria-hidden="true" />
+                  ))}
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "group flex items-center gap-3 rounded-md border-l-2 py-2 pl-[10px] pr-3 text-sm font-medium transition-colors",
+                    isActive
+                      ? "border-l-primary bg-primary/10 text-primary"
+                      : "border-l-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  )}
+                  aria-label={item.label}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {showLabels && <span className="truncate md:inline">{item.label}</span>}
+                  {collapsed && (
+                    // `fixed` with no offsets: stays beside its icon but escapes the nav's scroll clipping.
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none fixed z-50 ml-12 hidden whitespace-nowrap rounded-md border bg-popover px-2 py-1 text-xs font-medium text-popover-foreground shadow-md md:group-hover:block md:group-focus-visible:block"
+                    >
+                      {item.label}
+                    </span>
+                  )}
+                </Link>
+              </Fragment>
             );
           })}
         </nav>

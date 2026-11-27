@@ -247,7 +247,7 @@ export default function VendorsPage() {
 
       <FilterBar>
         <Input
-          placeholder="Search by name..."
+          placeholder="Search by name"
           value={search}
           onChange={(event) => {
             setSearch(event.target.value);

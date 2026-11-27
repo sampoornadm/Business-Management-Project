@@ -67,7 +67,7 @@ export function RateMatchCandidatesDialog({
           <DialogTitle>Possible rate matches</DialogTitle>
         </DialogHeader>
         <div className="min-w-0 rounded-md bg-muted/50 p-3 text-sm">
-          <p className="text-xs font-medium uppercase text-muted-foreground">Matching against</p>
+          <p className="text-xs font-medium text-muted-foreground">Matching against</p>
           <p className="mt-1 whitespace-pre-wrap break-words">{itemDescription}</p>
         </div>
         <div className="min-w-0 space-y-2">

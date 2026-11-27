@@ -467,8 +467,25 @@ export interface SubmissionChanges {
   removed: TenderSubmissionLineDto[];
 }
 
+/** Won and lost tenders for one calendar month ("2026-11"), by the date the outcome was recorded. */
+export interface TenderOutcomeMonthDto {
+  month: string;
+  won: number;
+  lost: number;
+}
+
 export interface TenderDashboardStatsDto {
   totalActive: number;
   byStatus: Partial<Record<TenderStatus, number>>;
   upcomingDeadlines: TenderListItemDto[];
+  /** Submitted and price-opened tenders still waiting for a result. */
+  bidsInPlay: {
+    count: number;
+    /** Sum of each tender's latest recorded submission total. */
+    value: number;
+    /** Tenders in play with no recorded submission (submitted before snapshots existed); not in `value`. */
+    unrecordedCount: number;
+  };
+  /** The last 12 months, oldest first, current month last. */
+  outcomesByMonth: TenderOutcomeMonthDto[];
 }

@@ -30,7 +30,7 @@ const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(
           <Skeleton className="h-8 w-16" />
         ) : (
           <>
-            <div className="break-words font-mono text-xl font-bold leading-tight xl:text-2xl">{value}</div>
+            <div className="break-words font-mono text-xl font-medium leading-tight tabular-nums xl:text-2xl">{value}</div>
             {hint && <p className="mt-1 truncate text-xs text-muted-foreground">{hint}</p>}
           </>
         )}
