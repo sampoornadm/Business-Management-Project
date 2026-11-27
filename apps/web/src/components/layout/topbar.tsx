@@ -49,7 +49,9 @@ function Breadcrumbs() {
   const segments = pathname.split("/").filter((segment) => segment && segment !== "dashboard");
 
   return (
-    <nav className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+    // Hidden on phones: the header's right-hand controls fill ~all of a 390px width, so the
+    // breadcrumb would paint over them; every page's own PageHeader title says where you are.
+    <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1 text-sm text-muted-foreground sm:flex">
       <Link href="/dashboard" className="shrink-0 hover:text-foreground">
         Home
       </Link>
