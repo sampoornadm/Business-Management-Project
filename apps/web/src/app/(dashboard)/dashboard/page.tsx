@@ -1,28 +1,28 @@
 "use client";
 
 import { TENDER_STATUS_LABELS, type TenderStatus } from "@bmp/types";
-import { Badge, Card, CardContent, CardHeader, CardTitle, formatDate, KpiGrid, PageHeader, Skeleton, StatCard } from "@bmp/ui";
-import { Activity, Database, FileClock, FileText, HardDrive, Users2 } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+  Badge,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  formatDate,
+  KpiGrid,
+  PageHeader,
+  Skeleton,
+  StatCard,
+} from "@bmp/ui";
+import Link from "next/link";
 
+import { humanize } from "@/components/status-badge";
+import { BidOutlookCard } from "@/components/tenders/bid-outlook-card";
 import { useAuditLogs } from "@/hooks/use-audit-logs";
 import { useHealth } from "@/hooks/use-health";
 import { useTenderDashboardStats } from "@/hooks/use-tender-dashboard-stats";
 import { useUsers } from "@/hooks/use-users";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/permissions";
-import { tenderStatusChartColor } from "@/lib/tender-status";
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -34,18 +34,22 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function HealthDot({ ok }: { ok: boolean | undefined }) {
+function HealthDot({ ok, label }: { ok: boolean | undefined; label: string }) {
   return (
-    <span
-      className={`inline-block h-2 w-2 rounded-full ${
-        ok === undefined ? "bg-muted-foreground/40" : ok ? "bg-green-500" : "bg-destructive"
-      }`}
-    />
+    <span className="inline-flex items-center gap-2">
+      <span
+        className={`inline-block h-2 w-2 rounded-full ${
+          ok === undefined ? "bg-muted-foreground/40" : ok ? "bg-success" : "bg-destructive"
+        }`}
+        aria-hidden="true"
+      />
+      {label}
+      <span className="sr-only">{ok === undefined ? "checking" : ok ? "up" : "down"}</span>
+    </span>
   );
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const canReadAudit = hasPermission(user?.role.name, "audit:read");
   const canReadTenders = hasPermission(user?.role.name, "tenders:read");
@@ -54,115 +58,92 @@ export default function DashboardPage() {
   const healthQuery = useHealth();
   const tenderStatsQuery = useTenderDashboardStats();
 
-  const statusChartData = Object.entries(tenderStatsQuery.data?.byStatus ?? {}).map(([status, count]) => ({
-    status: status as TenderStatus,
-    label: TENDER_STATUS_LABELS[status as TenderStatus],
-    count,
-  }));
+  // Pipeline order (Draft first), not the arbitrary order the counts arrive in.
+  const byStatus = tenderStatsQuery.data?.byStatus ?? {};
+  const statusRows = (Object.keys(TENDER_STATUS_LABELS) as TenderStatus[])
+    .filter((status) => (byStatus[status] ?? 0) > 0)
+    .map((status) => ({ status, label: TENDER_STATUS_LABELS[status], count: byStatus[status] ?? 0 }));
+  const statusPeak = Math.max(1, ...statusRows.map((row) => row.count));
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={<>Welcome back, {user?.firstName}</>}
-        description={<>Here&apos;s what&apos;s happening in your workspace.</>}
-      />
+        title="Dashboard"
+        description={user?.role.name ? `Signed in as ${humanize(user.role.name)}` : undefined}
+      >
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <HealthDot ok={healthQuery.data?.postgres} label="Database" />
+          <HealthDot ok={healthQuery.data?.redis} label="Cache" />
+          <HealthDot ok={healthQuery.data?.s3} label="File storage" />
+        </div>
+      </PageHeader>
 
       <KpiGrid>
-        <StatCard
-          label="Total Users"
-          icon={Users2}
-          isLoading={usersQuery.isLoading}
-          value={usersQuery.data?.totalItems ?? 0}
-        />
+        <StatCard label="Users" isLoading={usersQuery.isLoading} value={usersQuery.data?.totalItems ?? 0} />
 
         {canReadTenders && (
           <StatCard
-            label="Active Tenders"
-            icon={FileText}
+            label="Active tenders"
             isLoading={tenderStatsQuery.isLoading}
             value={tenderStatsQuery.data?.totalActive ?? 0}
           />
         )}
 
-        <StatCard label="Your Role" icon={Activity} value={<Badge variant="secondary" className="font-sans">{user?.role.name}</Badge>} />
-
-        <StatCard
-          label="System Health"
-          icon={HardDrive}
-          value={
-            <div className="space-y-1 text-sm font-sans font-normal">
-              <div className="flex items-center gap-2">
-                <HealthDot ok={healthQuery.data?.postgres} /> Database
-              </div>
-              <div className="flex items-center gap-2">
-                <HealthDot ok={healthQuery.data?.redis} /> Cache
-              </div>
-              <div className="flex items-center gap-2">
-                <HealthDot ok={healthQuery.data?.s3} /> File storage
-              </div>
-            </div>
-          }
-        />
+        {canReadTenders && (
+          <StatCard
+            label="Due in the next 7 days"
+            isLoading={tenderStatsQuery.isLoading}
+            value={tenderStatsQuery.data?.upcomingDeadlines.length ?? 0}
+          />
+        )}
       </KpiGrid>
 
+      {canReadTenders && <BidOutlookCard stats={tenderStatsQuery.data} isLoading={tenderStatsQuery.isLoading} />}
+
       {canReadTenders && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card>
+        <div className="grid gap-4 lg:grid-cols-5">
+          <Card className="min-w-0 lg:col-span-2">
             <CardHeader>
-              <CardTitle className="text-sm font-medium">Tenders by Status</CardTitle>
+              <CardTitle className="text-sm font-medium">Tenders by status</CardTitle>
             </CardHeader>
             <CardContent>
               {tenderStatsQuery.isLoading ? (
-                <Skeleton className="h-64 w-full" />
-              ) : statusChartData.length === 0 ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-5 w-full" />
+                </div>
+              ) : statusRows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No tenders yet.</p>
               ) : (
-                <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={statusChartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis
-                      dataKey="label"
-                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                      angle={-30}
-                      textAnchor="end"
-                      height={70}
-                      interval={0}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                      width={28}
-                    />
-                    <Tooltip
-                      cursor={{ fill: "hsl(var(--muted))" }}
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--popover))",
-                        borderColor: "hsl(var(--border))",
-                        color: "hsl(var(--popover-foreground))",
-                        fontSize: 12,
-                        borderRadius: 6,
-                      }}
-                    />
-                    <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={40}>
-                      {statusChartData.map((entry) => (
-                        <Cell
-                          key={entry.status}
-                          fill={tenderStatusChartColor(entry.status)}
-                          cursor="pointer"
-                          onClick={() => router.push(`/tenders?status=${entry.status}`)}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                <ul className="space-y-1">
+                  {statusRows.map((row) => (
+                    <li key={row.status}>
+                      <Link
+                        href={`/tenders?status=${row.status}`}
+                        className="block rounded-md px-2 py-2 transition-colors hover:bg-accent"
+                      >
+                        <span className="flex items-baseline justify-between gap-2 text-sm">
+                          <span>{row.label}</span>
+                          <span className="font-mono tabular-nums text-muted-foreground">{row.count}</span>
+                        </span>
+                        <span className="mt-2 block h-1 rounded-full bg-muted">
+                          <span
+                            className="block h-full rounded-full bg-muted-foreground/40"
+                            style={{ width: `${(row.count / statusPeak) * 100}%` }}
+                          />
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
               )}
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center gap-2">
-              <FileClock className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-sm font-medium">Upcoming Deadlines (7 days)</CardTitle>
+          <Card className="min-w-0 lg:col-span-3">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Upcoming deadlines</CardTitle>
             </CardHeader>
             <CardContent>
               {tenderStatsQuery.isLoading ? (
@@ -185,13 +166,11 @@ export default function DashboardPage() {
                       <li key={tender.id} className="flex items-center justify-between gap-2 py-2 text-sm">
                         <Link href={`/tenders/${tender.id}`} className="min-w-0 flex-1 hover:underline">
                           <span className="block truncate font-medium">{tender.title}</span>
-                          <span className="font-mono text-xs text-muted-foreground">
-                            {tender.tenderNumber}
-                          </span>
+                          <span className="font-mono text-xs text-muted-foreground">{tender.tenderNumber}</span>
                         </Link>
                         <div className="flex shrink-0 items-center gap-2">
                           {dueSoon && <Badge variant="signal">Due soon</Badge>}
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs tabular-nums text-muted-foreground">
                             {formatDate(tender.submissionDate)}
                           </span>
                         </div>
@@ -207,9 +186,8 @@ export default function DashboardPage() {
 
       {canReadAudit && (
         <Card>
-          <CardHeader className="flex flex-row items-center gap-2">
-            <Database className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-medium">Recent Activity</CardTitle>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Recent activity</CardTitle>
           </CardHeader>
           <CardContent>
             {auditQuery.isLoading ? (
@@ -226,9 +204,7 @@ export default function DashboardPage() {
                       <span className="font-medium">
                         {log.actor ? `${log.actor.firstName} ${log.actor.lastName}` : "System"}
                       </span>{" "}
-                      <span className="text-muted-foreground">
-                        {log.action.replaceAll("_", " ").toLowerCase()}
-                      </span>
+                      <span className="text-muted-foreground">{log.action.replaceAll("_", " ").toLowerCase()}</span>
                     </span>
                     <span className="text-xs text-muted-foreground">{timeAgo(log.createdAt)}</span>
                   </li>

@@ -170,6 +170,9 @@ export interface ITendersRepository {
 
   countByStatus(businessId: string): Promise<Array<{ status: TenderStatus; count: number }>>;
   findUpcomingDeadlines(withinDays: number, businessId: string): Promise<TenderListItem[]>;
+  /** Latest submission total per submitted/price-opened tender; null where none was recorded. */
+  findInPlayBidTotals(businessId: string): Promise<Array<number | null>>;
+  findOutcomesSince(businessId: string, since: Date): Promise<Array<{ status: TenderStatus; statusChangedAt: Date }>>;
 }
 
 export class TendersRepository implements ITendersRepository {
@@ -385,6 +388,22 @@ export class TendersRepository implements ITendersRepository {
       ...tenderListArgs,
       orderBy: { submissionDate: "asc" },
       take: 10,
+    });
+  }
+
+  async findInPlayBidTotals(businessId: string): Promise<Array<number | null>> {
+    const rows = await this.prisma.tender.findMany({
+      where: { businessId, kind: "TENDER", status: { in: ["SUBMITTED", "PRICE_OPENED"] } },
+      select: { submissions: { select: { totalAmount: true }, orderBy: { number: "desc" }, take: 1 } },
+    });
+    return rows.map((row) => row.submissions[0]?.totalAmount ?? null);
+  }
+
+  findOutcomesSince(businessId: string, since: Date): Promise<Array<{ status: TenderStatus; statusChangedAt: Date }>> {
+    // statusChangedAt of a tender that is still Won/Lost is the day that outcome was recorded.
+    return this.prisma.tender.findMany({
+      where: { businessId, kind: "TENDER", status: { in: ["WON", "LOST"] }, statusChangedAt: { gte: since } },
+      select: { status: true, statusChangedAt: true },
     });
   }
 }

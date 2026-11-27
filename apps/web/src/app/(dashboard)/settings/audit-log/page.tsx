@@ -212,7 +212,7 @@ export default function AuditLogPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Audit Log"
+        title="Audit log"
         description="A record of security and business events across the platform."
       />
 

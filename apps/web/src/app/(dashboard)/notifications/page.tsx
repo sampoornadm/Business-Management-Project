@@ -89,7 +89,7 @@ export default function NotificationsPage() {
                   )}
                   <p className="text-sm font-medium">{notification.title}</p>
                   {showBusinessTag && (
-                    <span className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    <span className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs text-muted-foreground">
                       <span
                         className="h-1.5 w-1.5 rounded-full"
                         style={{ backgroundColor: `hsl(${THEME_COLORS[business.themeColor][mode].primary})` }}

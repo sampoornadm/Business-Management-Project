@@ -88,7 +88,7 @@ export function ContactCard({ contact, canUpdate, editTrigger, onDelete }: Conta
 
         {contact.notes && (
           <div className="max-w-3xl border-t pt-3">
-            <p className="text-xs font-medium uppercase text-muted-foreground">Notes</p>
+            <p className="text-xs font-medium text-muted-foreground">Notes</p>
             <p className="whitespace-pre-wrap text-sm">{contact.notes}</p>
           </div>
         )}

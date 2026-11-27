@@ -26,7 +26,7 @@ export function ContactSearchBar({ contacts, onFilteredChange }: ContactSearchBa
       <Input
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="Search contacts by name, department, or designation..."
+        placeholder="Search by name, department or designation"
         className="pl-9"
       />
     </div>

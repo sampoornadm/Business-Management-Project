@@ -296,6 +296,8 @@ describe("Tender workflow (integration)", () => {
     expect(
       secondBusinessStats.body.data.upcomingDeadlines.map((t: { id: string }) => t.id),
     ).not.toContain(tenderId);
+    expect(secondBusinessStats.body.data.bidsInPlay).toEqual({ count: 0, value: 0, unrecordedCount: 0 });
+    expect(secondBusinessStats.body.data.outcomesByMonth).toHaveLength(12);
 
     const firstBusinessStats = await request(app)
       .get("/api/v1/tenders/dashboard-stats")

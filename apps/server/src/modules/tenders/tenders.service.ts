@@ -8,6 +8,7 @@ import {
   type TenderDocumentChecklistDto,
   type TenderDto,
   type TenderListItemDto,
+  type TenderOutcomeMonthDto,
   type TenderStatus,
   type TenderStatusHistoryEntryDto,
   type TenderWonItemDto,
@@ -825,9 +826,13 @@ export class TendersService {
   }
 
   async getDashboardStats(businessId: string): Promise<TenderDashboardStatsDto> {
-    const [statusCounts, upcoming] = await Promise.all([
+    const now = new Date();
+    const [statusCounts, upcoming, inPlayTotals, outcomes] = await Promise.all([
       this.tendersRepository.countByStatus(businessId),
       this.tendersRepository.findUpcomingDeadlines(7, businessId),
+      this.tendersRepository.findInPlayBidTotals(businessId),
+      // 13 months back covers the 12 calendar months shown; buildOutcomeMonths drops the excess.
+      this.tendersRepository.findOutcomesSince(businessId, new Date(now.getTime() - 396 * 24 * 60 * 60 * 1000)),
     ]);
 
     const byStatus: Partial<Record<TenderStatus, number>> = {};
@@ -843,8 +848,40 @@ export class TendersService {
       totalActive,
       byStatus,
       upcomingDeadlines: upcoming.map(toTenderListItemDto),
+      bidsInPlay: {
+        count: inPlayTotals.length,
+        value: round2(inPlayTotals.reduce<number>((sum, total) => sum + (total ?? 0), 0)),
+        unrecordedCount: inPlayTotals.filter((total) => total === null).length,
+      },
+      outcomesByMonth: buildOutcomeMonths(outcomes, now),
     };
   }
+}
+
+// ponytail: fixed IST, same default as ASSISTANT_TIMEZONE; read env if a non-IST business appears.
+const OUTCOME_TIMEZONE = "Asia/Kolkata";
+const monthKeyFormat = new Intl.DateTimeFormat("en-CA", { timeZone: OUTCOME_TIMEZONE, year: "numeric", month: "2-digit" });
+const monthKey = (date: Date): string => monthKeyFormat.format(date).slice(0, 7);
+
+/** Won/lost counts for the 12 calendar months (IST) ending with `now`'s month, oldest first. */
+export function buildOutcomeMonths(
+  outcomes: Array<{ status: TenderStatus; statusChangedAt: Date }>,
+  now: Date,
+): TenderOutcomeMonthDto[] {
+  const [year, month] = monthKey(now).split("-").map(Number) as [number, number];
+  const months = new Map<string, TenderOutcomeMonthDto>();
+  for (let back = 11; back >= 0; back--) {
+    const index = year * 12 + (month - 1) - back;
+    const key = `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;
+    months.set(key, { month: key, won: 0, lost: 0 });
+  }
+  for (const outcome of outcomes) {
+    const bucket = months.get(monthKey(outcome.statusChangedAt));
+    if (!bucket) continue;
+    if (outcome.status === "WON") bucket.won += 1;
+    else if (outcome.status === "LOST") bucket.lost += 1;
+  }
+  return [...months.values()];
 }
 
 /** The current BOQ's leaf lines (no other line names them as parent), as a submission freezes them. */

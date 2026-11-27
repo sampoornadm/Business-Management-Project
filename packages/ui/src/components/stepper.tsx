@@ -37,10 +37,7 @@ export function Stepper({ steps, className }: StepperProps) {
                   {step.state === "complete" ? (
                     <Check className="h-4 w-4" />
                   ) : step.state === "current" ? (
-                    <span className="relative flex h-2 w-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-                    </span>
+                    <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
                   ) : (
                     index + 1
                   )}

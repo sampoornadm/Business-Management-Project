@@ -241,7 +241,7 @@ export default function UsersPage() {
 
       <FilterBar>
         <Input
-          placeholder="Search by name or email..."
+          placeholder="Search by name or email"
           value={search}
           onChange={(event) => {
             setSearch(event.target.value);

@@ -24,7 +24,7 @@ import {
   useToast,
 } from "@bmp/ui";
 import type { PaginationState, SortingState } from "@tanstack/react-table";
-import { Download, ListTree, Loader2, Package, SearchX, Sparkles } from "lucide-react";
+import { Download, ListTree, Loader2, Package, SearchX, Tags } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -269,7 +269,7 @@ export default function ItemsPage() {
           {classifyBatch.isPending ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
-            <Sparkles className="mr-2 h-4 w-4" />
+            <Tags className="mr-2 h-4 w-4" />
           )}
           {classifyBatch.isPending ? "Classifying…" : "Classify with AI"}
         </Button>
@@ -303,7 +303,7 @@ export default function ItemsPage() {
 
       <FilterBar>
         <Input
-          placeholder="Search items..."
+          placeholder="Search items"
           value={search}
           onChange={(event) => {
             setSearch(event.target.value);

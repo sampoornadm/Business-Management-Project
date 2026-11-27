@@ -296,7 +296,7 @@ export default function TendersPage() {
 
       <FilterBar>
         <Input
-          placeholder="Search by title or tender number..."
+          placeholder="Search by title or tender number"
           value={search}
           onChange={(event) => {
             setSearch(event.target.value);

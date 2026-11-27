@@ -31,7 +31,7 @@ import {
   TableRow,
   useToast,
 } from "@bmp/ui";
-import { AlertTriangle, Check, Loader2, Pencil, Sparkles } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Pencil, Tags } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
@@ -240,7 +240,7 @@ export default function ItemDetailPage() {
                 {classify.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                  <Sparkles className="mr-2 h-4 w-4" />
+                  <Tags className="mr-2 h-4 w-4" />
                 )}
                 {classify.isPending ? "Asking AI…" : "Suggest with AI"}
               </Button>

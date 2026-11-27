@@ -30,7 +30,7 @@ import type {
   UpdateCompetitorData,
   UpdateTenderData,
 } from "../tenders.repository.js";
-import { TendersService } from "../tenders.service.js";
+import { buildOutcomeMonths, TendersService } from "../tenders.service.js";
 
 const CLIENT_ID = randomUUID();
 const OTHER_CLIENT_ID = randomUUID();
@@ -265,6 +265,21 @@ class FakeTendersRepository implements Partial<ITendersRepository> {
           !["WON", "LOST", "CANCELLED"].includes(t.status),
       )
       .map((t) => ({ ...t, _count: { assignees: t.assignees.length } })) as never;
+  }
+
+  /** Test hook: latest submission total per tender id, standing in for the submissions relation. */
+  latestSubmissionTotals = new Map<string, number>();
+
+  async findInPlayBidTotals(businessId: string) {
+    return [...this.tenders.values()]
+      .filter((t) => t.businessId === businessId && ["SUBMITTED", "PRICE_OPENED"].includes(t.status))
+      .map((t) => this.latestSubmissionTotals.get(t.id) ?? null);
+  }
+
+  async findOutcomesSince(businessId: string, since: Date) {
+    return [...this.tenders.values()]
+      .filter((t) => t.businessId === businessId && ["WON", "LOST"].includes(t.status) && t.statusChangedAt >= since)
+      .map((t) => ({ status: t.status, statusChangedAt: t.statusChangedAt }));
   }
 }
 
@@ -895,6 +910,54 @@ describe("TendersService", () => {
     expect(stats.upcomingDeadlines.map((t) => t.id)).not.toContain(otherTender.id);
     expect(otherStats.totalActive).toBe(1);
     expect(otherStats.upcomingDeadlines.map((t) => t.id)).toContain(otherTender.id);
+  });
+
+  it("sums the latest submission of each tender in play and counts the ones with none recorded", async () => {
+    const priced = await service.create({ ...baseInput, tenderNumber: "TND-PRICED" }, ctx);
+    const unpriced = await service.create({ ...baseInput, tenderNumber: "TND-UNPRICED" }, ctx);
+    const won = await service.create({ ...baseInput, tenderNumber: "TND-WON" }, ctx);
+    tendersRepository.tenders.get(priced.id)!.status = "SUBMITTED";
+    tendersRepository.tenders.get(unpriced.id)!.status = "PRICE_OPENED";
+    tendersRepository.tenders.get(won.id)!.status = "WON";
+    tendersRepository.latestSubmissionTotals.set(priced.id, 125000.5);
+    tendersRepository.latestSubmissionTotals.set(won.id, 999999);
+
+    const stats = await service.getDashboardStats(BUSINESS_ID);
+
+    expect(stats.bidsInPlay).toEqual({ count: 2, value: 125000.5, unrecordedCount: 1 });
+    expect(stats.outcomesByMonth).toHaveLength(12);
+  });
+
+  describe("buildOutcomeMonths", () => {
+    it("buckets outcomes into the 12 IST months ending this month, oldest first", () => {
+      const now = new Date("2026-11-15T12:00:00Z");
+      const months = buildOutcomeMonths(
+        [
+          { status: "WON", statusChangedAt: new Date("2026-11-02T10:00:00Z") },
+          { status: "LOST", statusChangedAt: new Date("2026-11-20T10:00:00Z") },
+          // 31 Oct 20:00 UTC is already 1 Nov in IST.
+          { status: "WON", statusChangedAt: new Date("2026-10-31T20:00:00Z") },
+          { status: "LOST", statusChangedAt: new Date("2025-12-05T10:00:00Z") },
+          // Older than the window: dropped.
+          { status: "WON", statusChangedAt: new Date("2025-11-20T10:00:00Z") },
+        ],
+        now,
+      );
+
+      expect(months.map((m) => m.month)).toEqual([
+        "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05",
+        "2026-06", "2026-07", "2026-08", "2026-09", "2026-10", "2026-11",
+      ]);
+      expect(months.at(-1)).toEqual({ month: "2026-11", won: 2, lost: 1 });
+      expect(months.at(-2)).toEqual({ month: "2026-10", won: 0, lost: 0 });
+      expect(months[0]).toEqual({ month: "2025-12", won: 0, lost: 1 });
+    });
+
+    it("rolls back across the year boundary in January", () => {
+      const months = buildOutcomeMonths([], new Date("2027-01-10T00:00:00Z"));
+      expect(months[0]!.month).toBe("2026-02");
+      expect(months.at(-1)!.month).toBe("2027-01");
+    });
   });
 
   describe("budgetary quotations", () => {

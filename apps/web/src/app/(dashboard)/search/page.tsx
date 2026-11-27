@@ -37,7 +37,7 @@ export default function SearchPage() {
           autoFocus
           value={query}
           onChange={(e) => handleChange(e.target.value)}
-          placeholder="Search..."
+          placeholder="Search"
           className="pl-9"
         />
       </div>
@@ -47,7 +47,7 @@ export default function SearchPage() {
       ) : query.trim().length === 0 ? (
         <p className="text-sm text-muted-foreground">Start typing to search.</p>
       ) : searchQuery.isLoading ? (
-        <p className="text-sm text-muted-foreground">Searching...</p>
+        <p className="text-sm text-muted-foreground">Searching…</p>
       ) : results.length === 0 ? (
         <p className="text-sm text-muted-foreground">No results for &quot;{query}&quot;.</p>
       ) : (

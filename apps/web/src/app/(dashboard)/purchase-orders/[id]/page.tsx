@@ -201,7 +201,7 @@ export default function PurchaseOrderDetailPage() {
                       );
                     })}
                   </ul>
-                  {receipt.remarks && <p className="mt-1 italic">{receipt.remarks}</p>}
+                  {receipt.remarks && <p className="mt-1 text-muted-foreground">{receipt.remarks}</p>}
                 </div>
               ))}
             </div>

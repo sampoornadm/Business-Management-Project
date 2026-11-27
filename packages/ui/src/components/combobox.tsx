@@ -14,7 +14,7 @@ export interface ComboboxProps {
   className?: string;
 }
 
-export function Combobox({ options, value, onChange, placeholder = "Select...", className }: ComboboxProps) {
+export function Combobox({ options, value, onChange, placeholder = "Select", className }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
 
@@ -64,7 +64,7 @@ export function Combobox({ options, value, onChange, placeholder = "Select...", 
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search..."
+              placeholder="Search"
               className="flex h-8 w-full rounded-sm border border-input bg-background px-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             />
           </div>

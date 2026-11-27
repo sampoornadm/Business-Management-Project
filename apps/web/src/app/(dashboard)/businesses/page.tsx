@@ -233,7 +233,7 @@ export default function BusinessesPage() {
 
       <FilterBar>
         <Input
-          placeholder="Search by name..."
+          placeholder="Search by name"
           value={search}
           onChange={(event) => {
             setSearch(event.target.value);

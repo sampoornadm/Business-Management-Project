@@ -53,10 +53,6 @@ import {
   useVendorPerformanceReport,
 } from "@/hooks/use-reports";
 import { CHART_COLORS } from "@/lib/chart-colors";
-import { tenderStatusChartColor } from "@/lib/tender-status";
-
-const RECEIVED_COLOR = "#0072B2";
-const PAID_COLOR = "#E69F00";
 
 function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined) return "-";
@@ -73,7 +69,10 @@ function formatPercent(value: number | null | undefined): string {
   return `${value.toFixed(1)}%`;
 }
 
-const compactNumberFormatter = new Intl.NumberFormat("en-IN", { notation: "compact", maximumFractionDigits: 1 });
+const compactNumberFormatter = new Intl.NumberFormat("en-IN", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
 // Chart axes need short labels ("16L" not "1,600,000") or ticks overlap when the
 // value range is narrow relative to the chart's height — full precision stays in
 // the tooltip and the table below.
@@ -137,12 +136,7 @@ function KpiCards() {
 
   return (
     <KpiGrid className="md:grid-cols-4 lg:grid-cols-4">
-      <StatCard
-        label="Win rate"
-        icon={Percent}
-        isLoading={kpisQuery.isLoading}
-        value={formatPercent(kpis?.winRate)}
-      />
+      <StatCard label="Win rate" icon={Percent} isLoading={kpisQuery.isLoading} value={formatPercent(kpis?.winRate)} />
       <StatCard
         label="Avg BOQ turnaround"
         icon={Clock}
@@ -169,11 +163,15 @@ function TenderPipelineTab() {
   const router = useRouter();
   const reportQuery = useTenderPipelineReport();
   const report = reportQuery.data;
-  const chartData = (report?.byStatus ?? []).map((row) => ({
-    status: row.status as TenderStatus,
-    label: TENDER_STATUS_LABELS[row.status as TenderStatus] ?? row.status,
-    count: row.count,
-  }));
+  // Pipeline order (Draft first), not the arbitrary order the counts arrive in.
+  const statusOrder = Object.keys(TENDER_STATUS_LABELS);
+  const chartData = (report?.byStatus ?? [])
+    .map((row) => ({
+      status: row.status as TenderStatus,
+      label: TENDER_STATUS_LABELS[row.status as TenderStatus] ?? row.status,
+      count: row.count,
+    }))
+    .sort((a, b) => statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status));
 
   return (
     <div className="space-y-4">
@@ -207,23 +205,24 @@ function TenderPipelineTab() {
             <p className="text-sm text-muted-foreground">No tenders yet.</p>
           ) : (
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+              <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
                 <XAxis
-                  dataKey="label"
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                  angle={-30}
-                  textAnchor="end"
-                  height={80}
-                  interval={0}
+                  type="number"
+                  allowDecimals={false}
+                  tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
                 />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} width={28} />
+                <YAxis
+                  type="category"
+                  dataKey="label"
+                  tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                  width={96}
+                />
                 <Tooltip cursor={{ fill: "hsl(var(--muted))" }} {...chartTooltipStyle} />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                <Bar dataKey="count" fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]} maxBarSize={28}>
                   {chartData.map((entry) => (
                     <Cell
                       key={entry.status}
-                      fill={tenderStatusChartColor(entry.status)}
                       cursor="pointer"
                       onClick={() => router.push(`/tenders?status=${entry.status}`)}
                     />
@@ -403,7 +402,13 @@ function ProjectCostingTab() {
                   {...chartTooltipStyle}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="received" name="Received" fill={CHART_COLORS.success} radius={[0, 4, 4, 0]} maxBarSize={16} />
+                <Bar
+                  dataKey="received"
+                  name="Received"
+                  fill={CHART_COLORS.success}
+                  radius={[0, 4, 4, 0]}
+                  maxBarSize={16}
+                />
                 <Bar dataKey="totalCost" name="Cost" fill={CHART_COLORS.muted} radius={[0, 4, 4, 0]} maxBarSize={16} />
               </BarChart>
             </ResponsiveContainer>
@@ -489,7 +494,7 @@ function FinancialSummaryTab() {
       </div>
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium">Received vs. paid by month</CardTitle>
+          <CardTitle className="text-sm font-medium">Received vs paid by month</CardTitle>
         </CardHeader>
         <CardContent>
           {reportQuery.isLoading ? (
@@ -515,7 +520,7 @@ function FinancialSummaryTab() {
                 <Bar
                   dataKey="received"
                   name="Received"
-                  fill={RECEIVED_COLOR}
+                  fill={CHART_COLORS.primary}
                   radius={[4, 4, 0, 0]}
                   maxBarSize={32}
                   activeBar={{ fillOpacity: 0.75 }}
@@ -523,7 +528,7 @@ function FinancialSummaryTab() {
                 <Bar
                   dataKey="paid"
                   name="Paid"
-                  fill={PAID_COLOR}
+                  fill={CHART_COLORS.muted}
                   radius={[4, 4, 0, 0]}
                   maxBarSize={32}
                   activeBar={{ fillOpacity: 0.75 }}
@@ -540,9 +545,7 @@ function FinancialSummaryTab() {
 function VendorPerformanceTab() {
   const reportQuery = useVendorPerformanceReport();
   const report = reportQuery.data;
-  const chartData = (report?.vendors ?? [])
-    .filter((v) => v.onTimeDeliveryRate !== null)
-    .slice(0, 10);
+  const chartData = (report?.vendors ?? []).filter((v) => v.onTimeDeliveryRate !== null).slice(0, 10);
 
   return (
     <div className="space-y-4">
@@ -556,11 +559,7 @@ function VendorPerformanceTab() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={Math.max(120, chartData.length * 40)}>
-              <BarChart
-                data={chartData}
-                layout="vertical"
-                margin={{ top: 4, right: 24, left: 16, bottom: 4 }}
-              >
+              <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 24, left: 16, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
                 <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
                 <YAxis
@@ -649,11 +648,11 @@ export default function ReportsPage() {
 
       <Tabs defaultValue="tender-pipeline">
         <TabsList>
-          <TabsTrigger value="tender-pipeline">Tender Pipeline</TabsTrigger>
-          <TabsTrigger value="procurement-spend">Procurement Spend</TabsTrigger>
-          <TabsTrigger value="project-costing">Project Profit</TabsTrigger>
-          <TabsTrigger value="financial-summary">Financial Summary</TabsTrigger>
-          <TabsTrigger value="vendor-performance">Vendor Performance</TabsTrigger>
+          <TabsTrigger value="tender-pipeline">Tender pipeline</TabsTrigger>
+          <TabsTrigger value="procurement-spend">Procurement spend</TabsTrigger>
+          <TabsTrigger value="project-costing">Project profit</TabsTrigger>
+          <TabsTrigger value="financial-summary">Financial summary</TabsTrigger>
+          <TabsTrigger value="vendor-performance">Vendor performance</TabsTrigger>
         </TabsList>
         <TabsContent value="tender-pipeline">
           <TenderPipelineTab />
