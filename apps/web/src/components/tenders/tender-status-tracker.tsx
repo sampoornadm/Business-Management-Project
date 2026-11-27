@@ -469,7 +469,7 @@ export function TenderStatusTracker({
                 <Input
                   id="tracker-submission-reference"
                   name="submissionReference"
-                  defaultValue={tender.submissionReference ?? ""}
+                  defaultValue={tender.submissionReference ?? tender.portalResponseNumber ?? ""}
                   placeholder="e.g. bid / quotation reference"
                   required={tender.kind !== "BUDGETARY"}
                   maxLength={200}

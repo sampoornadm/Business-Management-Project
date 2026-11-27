@@ -41,6 +41,7 @@ const tenderDetailArgs = {
     tags: { include: { tag: true } },
     convertedFrom: { select: { id: true, tenderNumber: true, title: true, updatedAt: true } },
     ratesLockedBy: { select: actorSummarySelect },
+    portalBids: { where: { portalCode: "SAIL_ISP" }, select: { responseNumber: true } },
   },
 } satisfies Prisma.TenderDefaultArgs;
 

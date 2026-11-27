@@ -272,6 +272,8 @@ export interface TenderDto extends TenderListItemDto {
   ratesLockedByName: string | null;
   /** Reference number of the latest submission; prefilled on resubmission. */
   submissionReference: string | null;
+  /** SAIL ISP response number from the last portal fill; suggested as the submission reference. */
+  portalResponseNumber: string | null;
   convertedFrom: TenderLinkedBudgetaryDto | null;
   createdBy: { id: string; firstName: string; lastName: string };
   assignees: TenderAssigneeDto[];

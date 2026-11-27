@@ -75,6 +75,7 @@ function buildTender(overrides: Partial<TenderDetail> = {}): TenderDetail {
     ratesLockedAt: null,
     ratesLockedById: null,
     ratesLockedBy: null,
+    portalBids: [],
     submissionReference: null,
     createdAt: now,
     updatedAt: now,

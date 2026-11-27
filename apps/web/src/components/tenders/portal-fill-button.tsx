@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   useToast,
 } from "@bmp/ui";
+import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Globe, Loader2, TriangleAlert, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -43,6 +44,7 @@ export function PortalFillButton({
   variant?: "default" | "outline";
 }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const start = useStartPortalFill();
   const [jobId, setJobId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -67,8 +69,11 @@ export function PortalFillButton({
   // Open the popup once per job, when it stops running.
   const finished = job && job.status !== "running" ? job.id : null;
   useEffect(() => {
-    if (finished) setDialogOpen(true);
-  }, [finished]);
+    if (!finished) return;
+    setDialogOpen(true);
+    // The fill stored the portal response number; refetch so Mark Submitted suggests it.
+    void queryClient.invalidateQueries({ queryKey: ["tenders", tenderId] });
+  }, [finished, queryClient, tenderId]);
 
   async function handleClick() {
     try {

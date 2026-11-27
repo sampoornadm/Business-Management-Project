@@ -125,6 +125,7 @@ export function toTenderDto(entity: TenderDetail): TenderDto {
       ? `${entity.ratesLockedBy.firstName} ${entity.ratesLockedBy.lastName}`.trim()
       : null,
     submissionReference: entity.submissionReference,
+    portalResponseNumber: entity.portalBids[0]?.responseNumber ?? null,
     convertedFrom: entity.convertedFrom
       ? {
           id: entity.convertedFrom.id,
