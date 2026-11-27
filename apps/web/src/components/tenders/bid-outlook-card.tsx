@@ -42,6 +42,7 @@ export function BidOutlookCard({
   }
 
   const { bidsInPlay, outcomesByMonth } = stats;
+  const recorded = bidsInPlay.count - bidsInPlay.unrecordedCount;
   const won = outcomesByMonth.reduce((sum, m) => sum + m.won, 0);
   const lost = outcomesByMonth.reduce((sum, m) => sum + m.lost, 0);
   const winRate = won + lost > 0 ? Math.round((won / (won + lost)) * 100) : null;
@@ -56,17 +57,21 @@ export function BidOutlookCard({
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">Bid value in play</p>
             <p className="break-words font-mono text-3xl font-medium tabular-nums leading-none">
-              {formatMoney(bidsInPlay.value)}
+              {/* Nothing recorded is not the same as ₹0 quoted: show a dash, not a zero total. */}
+              {bidsInPlay.count > 0 && recorded === 0 ? "-" : formatMoney(bidsInPlay.value)}
             </p>
             <p className="text-sm text-muted-foreground">
               {bidsInPlay.count === 0
                 ? "No submitted tenders waiting for a result"
-                : `Quoted on ${bidsInPlay.count} ${bidsInPlay.count === 1 ? "tender" : "tenders"} waiting for a result`}
+                : `${bidsInPlay.count} ${bidsInPlay.count === 1 ? "tender" : "tenders"} waiting for a result`}
             </p>
             {bidsInPlay.unrecordedCount > 0 && (
               <p className="text-xs text-muted-foreground">
-                {bidsInPlay.unrecordedCount} of them {bidsInPlay.unrecordedCount === 1 ? "has" : "have"} no recorded
-                submission and {bidsInPlay.unrecordedCount === 1 ? "is" : "are"} not in this total
+                {recorded === 0
+                  ? "None has a recorded submission yet, so there is no total"
+                  : `Total covers ${recorded}; ${bidsInPlay.unrecordedCount} ${
+                      bidsInPlay.unrecordedCount === 1 ? "has" : "have"
+                    } no recorded submission`}
               </p>
             )}
           </div>
@@ -133,6 +138,9 @@ export function BidOutlookCard({
                   cursor={{ fill: "hsl(var(--muted))", opacity: 0.5 }}
                   labelFormatter={(key: string) => monthLabel(key, true)}
                   formatter={(value: number, name: string) => [Math.abs(value), name]}
+                  separator=": "
+                  // Item text in the popover colour: the lost series' 40%-opacity fill is unreadable as text.
+                  itemStyle={{ color: "hsl(var(--popover-foreground))" }}
                   contentStyle={{
                     backgroundColor: "hsl(var(--popover))",
                     borderColor: "hsl(var(--border))",

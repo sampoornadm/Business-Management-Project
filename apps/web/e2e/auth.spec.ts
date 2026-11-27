@@ -13,7 +13,7 @@ test.describe("Authentication", () => {
     await login(page);
 
     await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
-    await expect(page.getByText("Users", { exact: true })).toBeVisible();
+    await expect(page.getByText("Bid value in play")).toBeVisible();
     await expect(page.getByText("File storage")).toBeVisible();
   });
 

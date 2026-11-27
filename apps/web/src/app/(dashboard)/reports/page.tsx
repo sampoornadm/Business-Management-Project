@@ -163,11 +163,15 @@ function TenderPipelineTab() {
   const router = useRouter();
   const reportQuery = useTenderPipelineReport();
   const report = reportQuery.data;
-  const chartData = (report?.byStatus ?? []).map((row) => ({
-    status: row.status as TenderStatus,
-    label: TENDER_STATUS_LABELS[row.status as TenderStatus] ?? row.status,
-    count: row.count,
-  }));
+  // Pipeline order (Draft first), not the arbitrary order the counts arrive in.
+  const statusOrder = Object.keys(TENDER_STATUS_LABELS);
+  const chartData = (report?.byStatus ?? [])
+    .map((row) => ({
+      status: row.status as TenderStatus,
+      label: TENDER_STATUS_LABELS[row.status as TenderStatus] ?? row.status,
+      count: row.count,
+    }))
+    .sort((a, b) => statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status));
 
   return (
     <div className="space-y-4">
@@ -644,11 +648,11 @@ export default function ReportsPage() {
 
       <Tabs defaultValue="tender-pipeline">
         <TabsList>
-          <TabsTrigger value="tender-pipeline">Tender Pipeline</TabsTrigger>
-          <TabsTrigger value="procurement-spend">Procurement Spend</TabsTrigger>
-          <TabsTrigger value="project-costing">Project Profit</TabsTrigger>
-          <TabsTrigger value="financial-summary">Financial Summary</TabsTrigger>
-          <TabsTrigger value="vendor-performance">Vendor Performance</TabsTrigger>
+          <TabsTrigger value="tender-pipeline">Tender pipeline</TabsTrigger>
+          <TabsTrigger value="procurement-spend">Procurement spend</TabsTrigger>
+          <TabsTrigger value="project-costing">Project profit</TabsTrigger>
+          <TabsTrigger value="financial-summary">Financial summary</TabsTrigger>
+          <TabsTrigger value="vendor-performance">Vendor performance</TabsTrigger>
         </TabsList>
         <TabsContent value="tender-pipeline">
           <TenderPipelineTab />
